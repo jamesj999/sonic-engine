@@ -7,6 +7,11 @@ import java.util.Arrays;
  *
  * Patterns are defined using a common descriptor for SEGA patterns, which specifies properties such as how
  * the pattern is flipped. See PatternDesc for more information.
+ *
+ * Copy-on-write: when gameplay code mutates this chunk, it calls
+ * cowEnsureWritable(currentEpoch) to clone the internal patternDescs[] array
+ * if needed. This protects snapshot-captured chunk references from
+ * being clobbered by subsequent mutations.
  */
 public class Chunk {
     public static final int CHUNK_HEIGHT = 16;
@@ -15,9 +20,13 @@ public class Chunk {
     public static final int BYTES_PER_PATTERN = 2;
     public static final int CHUNK_SIZE_IN_ROM = PATTERNS_PER_CHUNK * BYTES_PER_PATTERN;
 
-    private final PatternDesc[] patternDescs;
+    private PatternDesc[] patternDescs;
     private int solidTileIndex;
     private int solidTileAltIndex;
+
+    // Epoch at which patternDescs was last cloned. If currentEpoch has moved
+    // forward, the next mutation will clone the array.
+    private long lastTouchedEpoch = 0L;
 
     // Default constructor
     public Chunk() {
@@ -94,5 +103,31 @@ public class Chunk {
         }
         solidTileIndex = state[PATTERNS_PER_CHUNK];
         solidTileAltIndex = state[PATTERNS_PER_CHUNK + 1];
+    }
+
+    /**
+     * Ensures this chunk's patternDescs array is writable for the current epoch.
+     * On first write per epoch, clones the array. Subsequent writes within the
+     * same epoch reuse the cloned array.
+     *
+     * Called before any gameplay mutation to protect snapshot references.
+     *
+     * @param currentEpoch the current snapshot epoch from the level
+     */
+    public void cowEnsureWritable(long currentEpoch) {
+        if (lastTouchedEpoch < currentEpoch) {
+            patternDescs = patternDescs.clone();
+            lastTouchedEpoch = currentEpoch;
+        }
+    }
+
+    /**
+     * Package-private accessor for the live patternDescs array (testing only).
+     * Marked as @VisibleForTesting: use only in test assertions.
+     *
+     * @return the internal PatternDesc array reference
+     */
+    PatternDesc[] patternDescsArrayForTest() {
+        return patternDescs;
     }
 }

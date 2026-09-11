@@ -18,7 +18,6 @@ package com.openggf.game.sonic1;
 public final class Sonic1ConveyorState {
 
     private static final int SPAWNER_SLOTS = 6;
-    private static Sonic1ConveyorState instance;
 
     /** f_conveyrev: global direction reversal flag. */
     private boolean reversed;
@@ -26,14 +25,7 @@ public final class Sonic1ConveyorState {
     /** v_obj63: per-spawner instantiation tracking (bit 0 of each byte). */
     private final boolean[] spawned = new boolean[SPAWNER_SLOTS];
 
-    private Sonic1ConveyorState() {
-    }
-
-    public static Sonic1ConveyorState getInstance() {
-        if (instance == null) {
-            instance = new Sonic1ConveyorState();
-        }
-        return instance;
+    public Sonic1ConveyorState() {
     }
 
     /**
@@ -90,5 +82,32 @@ public final class Sonic1ConveyorState {
     public void reset() {
         reversed = false;
         java.util.Arrays.fill(spawned, false);
+    }
+
+    /**
+     * Captures {@code f_conveyrev} / {@code v_obj63} for rewind restore.
+     * See {@link Sonic1ConveyorStateRewindAdapter}.
+     */
+    public Snapshot captureRewindState() {
+        return new Snapshot(reversed, spawned.clone());
+    }
+
+    /**
+     * Restores {@code f_conveyrev} / {@code v_obj63} from a rewind snapshot.
+     */
+    public void restoreRewindState(Snapshot snapshot) {
+        if (snapshot == null) {
+            reset();
+            return;
+        }
+        this.reversed = snapshot.reversed();
+        boolean[] restored = snapshot.spawned();
+        System.arraycopy(restored, 0, this.spawned, 0, Math.min(restored.length, this.spawned.length));
+    }
+
+    public record Snapshot(boolean reversed, boolean[] spawned) {
+        public Snapshot {
+            spawned = spawned == null ? new boolean[SPAWNER_SLOTS] : spawned.clone();
+        }
     }
 }

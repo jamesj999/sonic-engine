@@ -16,7 +16,7 @@ Check that your ROM files match these revisions:
 
 **Missing ROM file.** If the ROM file is not found in the working directory, the engine
 will show an error. Ensure the files are in the same directory as the JAR (or the project
-root if running from source). ROM filenames can be configured in `config.json` -- see
+root if running from source). ROM filenames can be configured in `config.yaml` -- see
 [Configuration](configuration.md).
 
 **Java version too old.** The engine requires Java 21 or later. Run `java -version` to
@@ -29,23 +29,23 @@ proprietary driver installed.
 
 ## No sound
 
-**Audio disabled in config.** Check that `AUDIO_ENABLED` is `true` (or absent, since
-`true` is the default) in `config.json`.
+**Audio disabled in config.** Check that `audio.enabled` is `true` (or absent, since
+`true` is the default) in `config.yaml`.
 
 **System audio driver issues.** The engine uses LWJGL's OpenAL backend. If your system
 audio is routed through an unusual driver or virtual device, playback may fail silently.
 Try updating your audio driver or switching to a different output device.
 
-**Audio internal rate mismatch.** If `AUDIO_INTERNAL_RATE_OUTPUT` is set to `true`, the
+**Audio internal rate mismatch.** If `audio.internalRateOutput` is set to `true`, the
 engine outputs at the YM2612 internal sample rate (~53 kHz), which some audio drivers
 cannot handle. Set it to `false` (the default).
 
 ## Game runs too fast or too slow
 
-**FPS setting.** The engine targets 60 FPS for NTSC (the default). If you have set `FPS`
+**FPS setting.** The engine targets 60 FPS for NTSC (the default). If you have set `display.fps`
 to a different value, the game will run faster or slower. Reset to `60`.
 
-**Region setting.** PAL mode (`"REGION": "PAL"`) runs at 50 Hz, which makes the game
+**Region setting.** PAL mode (`audio.region: "PAL"`) runs at 50 Hz, which makes the game
 approximately 17% slower than NTSC. This is accurate to the original hardware behavior,
 not a bug.
 
@@ -58,8 +58,9 @@ consuming GPU resources.
 **GPU driver issues.** Update your graphics driver to the latest version. The engine uses
 OpenGL 4.1 core profile features that may not work correctly with outdated drivers.
 
-**Scale factor.** If `SCALE` is set to an unusual value, the output may look incorrect.
-Reset to `1.0`.
+**Window sizing.** If `display.windowAutosize` is disabled and `debug.window.width` /
+`debug.window.height` are set to unusual values, the output may look incorrect. Re-enable
+autosize or reset the debug window dimensions.
 
 **Wrong ROM revision.** Some graphics data is loaded from specific ROM offsets. A different
 ROM revision will cause art to be loaded from wrong addresses, producing garbled tiles.
@@ -85,7 +86,8 @@ compared to the original. This is a known area for improvement.
 
 ## S3K zones beyond AIZ don't work properly
 
-S3K support is currently focused on Angel Island Zone. Other zones may load (tiles and
-layout visible) but will likely be missing objects, events, scroll handlers, and other
+S3K support is currently focused on playable route slices from Angel Island through
+Hydrocity, with CNZ/MGZ/ICZ work in progress. Other zones may load (tiles and layout
+visible) but will likely be missing objects, events, scroll handlers, and other
 zone-specific features. This is the expected state of the project, not a bug. See
 [Game Status](game-status.md) for details.

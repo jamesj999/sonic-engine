@@ -6,7 +6,10 @@ import com.openggf.game.sonic2.Sonic2ObjectArtKeys;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
+import com.openggf.level.objects.ObjectPlayerParticipationPolicy;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.Direction;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
@@ -18,7 +21,7 @@ import java.util.List;
  * Yellow arrow pads that boost Sonic's horizontal velocity when he runs over them.
  * Based on obj1B.asm from the Sonic 2 disassembly.
  */
-public class SpeedBoosterObjectInstance extends AbstractObjectInstance {
+public class SpeedBoosterObjectInstance extends AbstractObjectInstance implements RewindRecreatable {
 
     // Boost speed values from ROM (Obj1B_BoosterSpeeds)
     private static final int FAST_SPEED = 0x1000;
@@ -31,7 +34,7 @@ public class SpeedBoosterObjectInstance extends AbstractObjectInstance {
     private static final int MOVE_LOCK_FRAMES = 0x0F;
 
     // The boost speed for this instance (determined by subtype)
-    private final int boostSpeed;
+    private int boostSpeed;
 
     // Current mapping frame for rendering (toggles for blinking)
     private int mappingFrame = 0;
@@ -43,16 +46,34 @@ public class SpeedBoosterObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public SpeedBoosterObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new SpeedBoosterObjectInstance(ctx.spawn(), getName());
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // Animation: Toggle between frame 0 (visible) and frame 2 (empty)
         // ROM: move.b (Level_frame_counter+1).w,d0 / andi.b #2,d0 / move.b d0,mapping_frame(a0)
         // This masks bit 1 directly, producing 0 or 2
-        mappingFrame = frameCounter & 2;
+        mappingFrame = vIntRunCount & 2;
 
-        // Check collision with player
+        // ROM Obj1B_Main checks BOTH characters independently against the same
+        // +/-$10 box and boosts each grounded one via Obj1B_GiveBoost:
+        //   lea (MainCharacter).w,a1 ... bsr Obj1B_GiveBoost   (s2.asm:48179-48195)
+        //   lea (Sidekick).w,a1     ... bsr Obj1B_GiveBoost    (s2.asm:48196-48210)
+        // The engine previously only ran the box-check against the single main
+        // player, so CPU Tails was never boosted inside the booster box. Model
+        // the two ROM participation checks as "every active playable (main +
+        // sidekicks)" via the player-query layer (no zone/route carve-out).
         if (player != null) {
             checkPlayerCollision(player);
+        }
+        for (PlayableEntity candidate :
+                services().playerQuery().playersFor(ObjectPlayerParticipationPolicy.ALL_ENGINE_PLAYERS)) {
+            if (candidate instanceof AbstractPlayableSprite candidateSprite && candidateSprite != player) {
+                checkPlayerCollision(candidateSprite);
+            }
         }
     }
 
@@ -123,15 +144,20 @@ public class SpeedBoosterObjectInstance extends AbstractObjectInstance {
 
         player.setXSpeed((short) newXVel);
 
-        // ROM: move.w #$F,move_lock(a1)
-        // Engine uses setSpringing() for control locking behavior
-        player.setSpringing(MOVE_LOCK_FRAMES);
+        // ROM: move.w #$F,move_lock(a1) (s2.asm:48230) — set the move_lock
+        // timer, NOT a spring flag. This is the field the sidekick CPU follow
+        // logic respects (SidekickCpuController reads getMoveLockTimer()); the
+        // previous setSpringing() was a no-op for CPU Tails, so a boosted
+        // sidekick immediately resumed following the leader. For the main
+        // character both fields block grounded input identically
+        // (PlayableSpriteMovement line 382), so this is equivalent there.
+        player.setMoveLockTimer(MOVE_LOCK_FRAMES);
 
-        // ROM: move.w x_vel(a1),inertia(a1)
+        // ROM: move.w x_vel(a1),inertia(a1) (s2.asm:48231)
         player.setGSpeed((short) newXVel);
 
-        // Clear pushing status (ROM clears status bits)
-        // This is handled implicitly by the velocity change
+        // ROM: bclr #status.player.pushing,status(a1) (s2.asm:48234)
+        player.setPushing(false);
 
         playBoostSound();
     }

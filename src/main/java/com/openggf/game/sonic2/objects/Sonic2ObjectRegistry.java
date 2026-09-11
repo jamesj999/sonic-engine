@@ -1,13 +1,14 @@
 package com.openggf.game.sonic2.objects;
-import com.openggf.level.objects.ExplosionObjectInstance;
 
 import com.openggf.game.sonic2.audio.Sonic2Sfx;
 import com.openggf.game.sonic2.constants.Sonic2ObjectIds;
 import com.openggf.level.objects.boss.BossExplosionObjectInstance;
 import com.openggf.game.sonic2.objects.bosses.Sonic2MCZBossInstance;
+import com.openggf.game.sonic2.objects.bosses.Sonic2OOZBossInstance;
 import com.openggf.level.objects.AbstractObjectRegistry;
 import com.openggf.level.objects.ObjectFactory;
 import com.openggf.level.objects.ObjectInstance;
+import com.openggf.level.objects.ObjectSlotLayout;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.game.sonic2.objects.badniks.AsteronBadnikInstance;
 import com.openggf.game.sonic2.objects.badniks.AquisBadnikInstance;
@@ -34,13 +35,16 @@ import com.openggf.game.sonic2.objects.badniks.NebulaBadnikInstance;
 import com.openggf.game.sonic2.objects.badniks.TurtloidBadnikInstance;
 import com.openggf.game.sonic2.objects.badniks.BalkiryBadnikInstance;
 import com.openggf.game.sonic2.objects.badniks.CluckerBadnikInstance;
+import com.openggf.game.sonic2.objects.badniks.WFZStickBadnikInstance;
+import com.openggf.game.sonic2.objects.badniks.WFZUnknownBadnikInstance;
 import com.openggf.game.sonic2.objects.bosses.Sonic2EHZBossInstance;
 import com.openggf.game.sonic2.objects.bosses.Sonic2CPZBossInstance;
 import com.openggf.game.sonic2.objects.bosses.Sonic2ARZBossInstance;
-import com.openggf.level.LevelManager;
 import com.openggf.game.sonic2.objects.bosses.Sonic2CNZBossInstance;
 import com.openggf.game.sonic2.objects.bosses.Sonic2HTZBossInstance;
+import com.openggf.game.sonic2.objects.bosses.Sonic2DEZEggmanInstance;
 import com.openggf.game.sonic2.objects.bosses.Sonic2DeathEggRobotInstance;
+import com.openggf.game.sonic2.objects.bosses.Sonic2MTZBossInstance;
 import com.openggf.game.sonic2.objects.bosses.Sonic2MechaSonicInstance;
 import com.openggf.game.sonic2.objects.bosses.Sonic2WFZBossInstance;
 
@@ -81,6 +85,11 @@ public class Sonic2ObjectRegistry extends AbstractObjectRegistry {
         factories.put(objectId & 0xFF, factory);
     }
 
+    public boolean hasRegisteredFactory(int objectId) {
+        ensureLoaded();
+        return factories.containsKey(objectId & 0xFF);
+    }
+
     @Override
     public String getPrimaryName(int objectId) {
         ensureLoaded();
@@ -99,6 +108,16 @@ public class Sonic2ObjectRegistry extends AbstractObjectRegistry {
             return List.of();
         }
         return Collections.unmodifiableList(names);
+    }
+
+    @Override
+    public ObjectSlotLayout objectSlotLayout() {
+        return ObjectSlotLayout.SONIC_2;
+    }
+
+    @Override
+    public com.openggf.level.objects.ObjectWindowingStrategy objectWindowingStrategy() {
+        return S2ObjectWindowing.INSTANCE;
     }
 
     @Override
@@ -133,8 +152,11 @@ public class Sonic2ObjectRegistry extends AbstractObjectRegistry {
     @Override
     protected void registerDefaultFactories() {
         namesById.putAll(Sonic2ObjectRegistryData.NAMES_BY_ID);
-        // LayerSwitcher (0x03) is handled by PlaneSwitcherManager, not as a rendered object
-        registerFactory(Sonic2ObjectIds.LAYER_SWITCHER, (spawn, registry) -> null);
+        // LayerSwitcher (0x03) behavior is handled by ObjectManager.PlaneSwitchers,
+        // but the ROM still allocates Obj03 into an SST slot before MarkObjGone3.
+        registerFactory(Sonic2ObjectIds.LAYER_SWITCHER,
+                (spawn, registry) -> new Sonic2LayerSwitcherObjectInstance(
+                        spawn, registry.getPrimaryName(spawn.objectId())));
 
         registerFactory(Sonic2ObjectIds.SPRING,
                 (spawn, registry) -> new SpringObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
@@ -142,6 +164,8 @@ public class Sonic2ObjectRegistry extends AbstractObjectRegistry {
                 (spawn, registry) -> new SpikeObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
         registerFactory(Sonic2ObjectIds.MONITOR,
                 (spawn, registry) -> new MonitorObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
+        registerFactory(Sonic2ObjectIds.MONITOR_CONTENTS,
+                (spawn, registry) -> new MonitorContentsObjectInstance(spawn, null));
         registerFactory(Sonic2ObjectIds.CHECKPOINT,
                 (spawn, registry) -> new CheckpointObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
 
@@ -226,6 +250,10 @@ public class Sonic2ObjectRegistry extends AbstractObjectRegistry {
                 (spawn, registry) -> new FanObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
         registerFactory(Sonic2ObjectIds.OOZ_POPPING_PLATFORM,
                 (spawn, registry) -> new OOZPoppingPlatformObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
+        registerFactory(Sonic2ObjectIds.SLIDING_SPIKE,
+                (spawn, registry) -> new SlidingSpikeObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
+        registerFactory(Sonic2ObjectIds.OOZ_SPRING,
+                (spawn, registry) -> new OOZSpringObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
         registerFactory(Sonic2ObjectIds.SPIRAL,
                 (spawn, registry) -> new SpiralObjectInstance(spawn, registry.getPrimaryName(spawn.objectId())));
 
@@ -332,6 +360,9 @@ public class Sonic2ObjectRegistry extends AbstractObjectRegistry {
         // EHZ Boss (Object 0x56)
         registerFactory(Sonic2ObjectIds.EHZ_BOSS,
                 (spawn, registry) -> new Sonic2EHZBossInstance(spawn));
+        // OOZ Boss (Object 0x55)
+        registerFactory(Sonic2ObjectIds.OOZ_BOSS,
+                (spawn, registry) -> new Sonic2OOZBossInstance(spawn));
         // MCZ Boss (Object 0x57)
         registerFactory(Sonic2ObjectIds.MCZ_BOSS,
                 (spawn, registry) -> new Sonic2MCZBossInstance(spawn));
@@ -347,6 +378,9 @@ public class Sonic2ObjectRegistry extends AbstractObjectRegistry {
         // WFZ Boss (Object 0xC5) - Laser Platform Boss
         registerFactory(Sonic2ObjectIds.WFZ_BOSS,
                 (spawn, registry) -> new Sonic2WFZBossInstance(spawn));
+        // DEZ Eggman transition object (Object 0xC6)
+        registerFactory(Sonic2ObjectIds.DEZ_EGGMAN,
+                (spawn, registry) -> new Sonic2DEZEggmanInstance(spawn));
         // DEZ Death Egg Robot (Object 0xC7) - Final Boss
         registerFactory(Sonic2ObjectIds.DEATH_EGG_ROBOT,
                 (spawn, registry) -> new Sonic2DeathEggRobotInstance(spawn));
@@ -355,7 +389,7 @@ public class Sonic2ObjectRegistry extends AbstractObjectRegistry {
                 (spawn, registry) -> new BossExplosionObjectInstance(
                         spawn.x(),
                         spawn.y(),
-                        LevelManager.getInstance().getObjectRenderManager(),
+                        Sonic2ObjectIds.BOSS_EXPLOSION,
                         Sonic2Sfx.BOSS_EXPLOSION.id));
 
         // SwingingPlatform (Object 0x15) - chain-suspended platform in OOZ, ARZ, MCZ
@@ -559,10 +593,22 @@ public class Sonic2ObjectRegistry extends AbstractObjectRegistry {
                 (spawn, registry) -> new LateralCannonObjectInstance(spawn,
                         registry.getPrimaryName(spawn.objectId())));
 
+        // WFZ Stick (ObjBF) - unused rotating stick badnik in WFZ debug list
+        registerFactory(Sonic2ObjectIds.WFZ_STICK,
+                (spawn, registry) -> new WFZStickBadnikInstance(spawn));
+
+        // WFZ Unknown (ObjBB) - removed unused object retained in the ROM pointer table
+        registerFactory(Sonic2ObjectIds.WFZ_UNKNOWN,
+                (spawn, registry) -> new WFZUnknownBadnikInstance(spawn));
+
         // WFZ WallTurret (ObjB8) - wall-mounted turret that shoots projectiles
         registerFactory(Sonic2ObjectIds.WALL_TURRET,
                 (spawn, registry) -> new WallTurretObjectInstance(spawn,
                         registry.getPrimaryName(spawn.objectId())));
+
+        // WFZ VerticalLaser (ObjB7) - unused huge vertical laser, also spawned by ObjB6
+        registerFactory(Sonic2ObjectIds.VERTICAL_LASER,
+                (spawn, registry) -> new VerticalLaserObjectInstance(spawn, spawn.x(), spawn.y()));
 
         // WFZ SpeedLauncher (ObjC0) - catapult platform that launches player
         registerFactory(Sonic2ObjectIds.SPEED_LAUNCHER,
@@ -578,6 +624,12 @@ public class Sonic2ObjectRegistry extends AbstractObjectRegistry {
         registerFactory(Sonic2ObjectIds.RIVET,
                 (spawn, registry) -> new RivetObjectInstance(spawn,
                         registry.getPrimaryName(spawn.objectId())));
+
+        // WFZ Tornado smoke (ObjC3/ObjC4) - ObjC4 points to the same ROM routine
+        registerFactory(Sonic2ObjectIds.TORNADO_SMOKE,
+                (spawn, registry) -> new TornadoSmokeObjectInstance(spawn));
+        registerFactory(Sonic2ObjectIds.TORNADO_SMOKE_2,
+                (spawn, registry) -> new TornadoSmokeObjectInstance(spawn));
 
         // WFZ SmallMetalPform (ObjBD) - ascending/descending belt platform spawner
         registerFactory(Sonic2ObjectIds.SMALL_METAL_PFORM,

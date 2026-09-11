@@ -1,7 +1,7 @@
 package com.openggf.game;
 
-import org.junit.Test;
-import static org.junit.Assert.*;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class TestLevelLoadContext {
 
@@ -97,7 +97,7 @@ public class TestLevelLoadContext {
         assertTrue(ctx.hasCheckpoint());
         assertTrue(ctx.hasWaterState());
 
-        // Second: snapshot an inactive state — must clear all stale data
+        // Second: snapshot an inactive state â€” must clear all stale data
         CheckpointState inactive = new CheckpointState();
         ctx.snapshotCheckpoint(inactive);
         assertFalse(ctx.hasCheckpoint());
@@ -117,7 +117,7 @@ public class TestLevelLoadContext {
         ctx.snapshotCheckpoint(withWater);
         assertTrue(ctx.hasWaterState());
 
-        // Second: snapshot active but without water — water fields must clear
+        // Second: snapshot active but without water â€” water fields must clear
         CheckpointState noWater = new CheckpointState();
         noWater.restoreFromSaved(0x400, 0x500, 0x300, 0x400, 5);
         ctx.snapshotCheckpoint(noWater);
@@ -126,3 +126,5 @@ public class TestLevelLoadContext {
         assertEquals(0, ctx.getCheckpointWaterLevel());
     }
 }
+
+

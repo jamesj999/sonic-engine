@@ -1,5 +1,7 @@
 package com.openggf.game.sonic1;
 
+import java.util.Arrays;
+
 /**
  * Manages the f_switch state array from the Sonic 1 disassembly.
  * <p>
@@ -19,18 +21,10 @@ package com.openggf.game.sonic1;
 public final class Sonic1SwitchManager {
 
     private static final int SWITCH_COUNT = 16;
-    private static Sonic1SwitchManager instance;
 
     private final byte[] switchState = new byte[SWITCH_COUNT];
 
-    private Sonic1SwitchManager() {
-    }
-
-    public static Sonic1SwitchManager getInstance() {
-        if (instance == null) {
-            instance = new Sonic1SwitchManager();
-        }
-        return instance;
+    public Sonic1SwitchManager() {
     }
 
     /**
@@ -94,6 +88,39 @@ public final class Sonic1SwitchManager {
      * Reset all switch states. Called on level load.
      */
     public void reset() {
-        java.util.Arrays.fill(switchState, (byte) 0);
+        Arrays.fill(switchState, (byte) 0);
+    }
+
+    /**
+     * Captures all sixteen ROM switch bytes for a rewind keyframe.
+     */
+    public Snapshot captureRewindState() {
+        return new Snapshot(switchState);
+    }
+
+    /**
+     * Restores all sixteen ROM switch bytes before the next object update.
+     */
+    public void restoreRewindState(Snapshot snapshot) {
+        Arrays.fill(switchState, (byte) 0);
+        if (snapshot == null) {
+            return;
+        }
+        byte[] restored = snapshot.switchState();
+        System.arraycopy(restored, 0, switchState, 0, Math.min(restored.length, switchState.length));
+    }
+
+    /** Immutable, defensively copied f_switch payload. */
+    public record Snapshot(byte[] switchState) {
+        public Snapshot {
+            switchState = switchState == null
+                    ? new byte[SWITCH_COUNT]
+                    : Arrays.copyOf(switchState, SWITCH_COUNT);
+        }
+
+        @Override
+        public byte[] switchState() {
+            return switchState.clone();
+        }
     }
 }

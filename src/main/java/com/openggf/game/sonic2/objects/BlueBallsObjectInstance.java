@@ -7,6 +7,8 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
@@ -19,12 +21,14 @@ import java.util.List;
  * Blue balls that bounce up and down in CPZ tubes. They hurt the player on contact.
  * Multiple balls can be spawned from one object based on the subtype.
  * <p>
- * <b>Disassembly Reference:</b> s2.asm lines 47835-47969
+ * <b>Disassembly Reference:</b> s2.asm lines 48263-48397
  * <ul>
- *   <li>Obj1D_Init: line 47863 (initialization)</li>
- *   <li>Obj1D_Wait: line 47893 (waiting between bounces)</li>
- *   <li>Obj1D_MoveArc: line 47911 (arc motion)</li>
- *   <li>Obj1D_MoveStraight: line 47929 (straight motion)</li>
+ *   <li>Obj1D dispatch + Obj1D_Index routine table: lines 48263-48275</li>
+ *   <li>Obj1D_Init / Obj1D_InitBall: lines 48287-48336 (initialization)</li>
+ *   <li>Obj1D_Wait: lines 48339-48348 (waiting before first bounce)</li>
+ *   <li>Obj1D_MoveArc: lines 48351-48368 (arc motion, routine 4)</li>
+ *   <li>Obj1D_MoveStraight: lines 48370-48392 (straight motion, routine 8)</li>
+ *   <li>ObjectMove: lines 30185-30198</li>
  * </ul>
  *
  * <h3>ROM Constants</h3>
@@ -56,7 +60,7 @@ import java.util.List;
  *
  * @see SpeedBoosterObjectInstance Another CPZ-specific object
  */
-public class BlueBallsObjectInstance extends AbstractObjectInstance implements TouchResponseProvider {
+public class BlueBallsObjectInstance extends AbstractObjectInstance implements TouchResponseProvider, RewindRecreatable {
 
     // ========================================================================
     // ROM Constants
@@ -162,10 +166,10 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
     private int yVelocity;
 
     /** Initial/target Y position (returns here after bounce). */
-    private final int initialY;
+    private int initialY;
 
     /** Initial X position (for straight motion reset). */
-    private final int initialX;
+    private int initialX;
 
     /** X velocity delta direction (+/- ARC_X_VEL_DELTA). */
     private int xVelDelta;
@@ -180,16 +184,23 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
     private int waitTimer;
 
     /** Movement type: true = arc motion, false = straight motion. */
-    private final boolean arcMotion;
+    private boolean arcMotion;
 
     /** Whether this ball has already spawned siblings. */
     private boolean hasSpawnedSiblings;
 
     /** Number of siblings to spawn (from subtype low nibble). */
-    private final int siblingCount;
+    private int siblingCount;
 
     /** X-flip status (from Sonic's facing direction at spawn time, stored in renderFlags). */
-    private final boolean xFlipped;
+    private boolean xFlipped;
+
+    /**
+     * ROM routine-0 init has run. Placed Obj1D parents spend their first object
+     * pass in Obj1D_Init, which initializes/spawns and returns; children created
+     * by AllocateObjectAfterCurrent are already initialized by the parent.
+     */
+    private boolean initialized;
 
     public BlueBallsObjectInstance(ObjectSpawn spawn, String name) {
         super(spawn, name);
@@ -222,9 +233,15 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
         // (ROM: 0 - 1 = -1, which is negative, so skip wait)
         this.waitTimer = 0;
         this.hasSpawnedSiblings = false;
+        this.initialized = false;
 
         // Global instance tracking
         activeInstanceCount++;
+    }
+
+    @Override
+    public BlueBallsObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new BlueBallsObjectInstance(ctx.spawn(), getName());
     }
 
     /**
@@ -249,6 +266,7 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
         this.xDistance = xDistance;
         this.siblingCount = 0; // Siblings don't spawn more
         this.hasSpawnedSiblings = true; // Prevent future spawning
+        this.initialized = true;
         // Siblings start with staggered wait timer (3, 6, 9...)
         // They wait this many frames before firing
         this.waitTimer = initialWaitTimer;
@@ -265,7 +283,7 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // MarkObjGone check: destroy if too far from camera
         // ROM: s2.asm lines 29993-30011
@@ -275,10 +293,17 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
             return;
         }
 
-        // Spawn siblings on first update
-        if (!hasSpawnedSiblings && siblingCount > 0) {
-            spawnSiblings();
-            hasSpawnedSiblings = true;
+        // ROM Obj1D_Init (s2.asm:48341-48390) initializes all balls and returns
+        // without falling through into Obj1D_Wait. Children are constructed as
+        // already-initialized because the parent filled their SST fields before
+        // AllocateObjectAfterCurrent lets higher slots execute in the same pass.
+        if (!initialized) {
+            if (!hasSpawnedSiblings && siblingCount > 0) {
+                spawnSiblings();
+                hasSpawnedSiblings = true;
+            }
+            initialized = true;
+            return;
         }
 
         // State machine update
@@ -307,7 +332,15 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
      */
     private boolean checkMarkObjGone() {
         Camera camera = services().camera();
-        int cameraXCoarse = camera.getX() & 0xFF80;
+        // ROM parity: MarkObjGone compares against Camera_X_pos_coarse, which is the
+        // camera left edge shifted left by the 128px margin -- (cameraX - 128) & $FF80
+        // -- exactly like the engine's central out-of-range check
+        // (ObjectManager.isOutOfRangeS1). Using the bare camera left edge culled the
+        // object one chunk too early on the LEFT: on a backward/leftward approach
+        // (e.g. landing on the CPZ spring and holding left back to the X=0x1110
+        // cluster) the placement re-loaded the ball but it self-deleted the instant
+        // it appeared -- before the camera reached it -- so it never respawned.
+        int cameraXCoarse = (camera.getX() - 128) & 0xFF80;
         int objectXCoarse = (currentX >> 8) & 0xFF80;
 
         // Unsigned comparison: if difference > OFFSCREEN_DISTANCE, delete
@@ -343,26 +376,25 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
     }
 
     /**
-     * Wait state for straight motion: provides delay at apex.
+     * Initial wait state for straight-motion balls (ROM routine 6 = Obj1D_Wait).
      * <p>
-     * NOTE: The ROM's Obj1D_MoveStraight never returns to wait state - it bounces
-     * forever. We use wait state at apex as an implementation detail to achieve
-     * correct visual timing, but we do NOT play sound here since the ROM doesn't
-     * have this transition.
-     * <p>
-     * ROM sounds for straight motion per cycle: terminal velocity + bottom only.
+     * This is the SAME shared {@code Obj1D_Wait} routine used by arc balls
+     * (s2.asm:48339-48345): it decrements the stagger timer, and on underflow
+     * advances the routine by +2 (here: into MOVE_STRAIGHT), reloads the timer
+     * with $3B, and plays the gloop sound. After this one-time wait the ball
+     * enters MOVE_STRAIGHT and NEVER returns to a Wait routine -- ROM
+     * {@code Obj1D_MoveStraight} (s2.asm:48370-48392) bounces continuously with
+     * no routine change.
      */
     private void updateWaitStraight() {
         waitTimer--;
         if (waitTimer >= 0) {
             return; // Still waiting
         }
-        // Timer went negative - transition to motion
-        // Set timer for NEXT cycle
+        // Timer underflowed - advance into straight motion.
+        // ROM Obj1D_Wait reloads $3B and plays gloop (s2.asm:48343-48345).
         waitTimer = WAIT_DURATION;
-        // NO sound here - ROM's straight motion never returns to wait state,
-        // so this transition doesn't exist in the original. We only use it
-        // for timing purposes.
+        playGloopSound();
         state = STATE_MOVE_STRAIGHT;
     }
 
@@ -400,53 +432,62 @@ public class BlueBallsObjectInstance extends AbstractObjectInstance implements T
     }
 
     /**
-     * Straight motion: linear trajectory.
-     * ROM: Obj1D_MoveStraight at line 47929
-     *
-     * <p>Correct behavior cycle:
+     * Straight motion: continuous vertical bounce with apex/bottom X teleports.
+     * <p>
+     * Faithful port of ROM {@code Obj1D_MoveStraight} (routine 8),
+     * s2.asm:48370-48392. The ball bounces FOREVER -- it never returns to a
+     * Wait routine and never has a pause at the apex. Per frame:
      * <ol>
-     *   <li>Ball at left (initialX) goes UP</li>
-     *   <li>Ball reaches apex (y_vel == 0)</li>
-     *   <li>X teleports to right (initialX + xDistance)</li>
-     *   <li>59-frame delay (wait state) at apex</li>
-     *   <li>Ball falls DOWN on right side</li>
-     *   <li>Ball reaches bottom, resets to left - NO delay</li>
-     *   <li>Ball immediately goes UP again</li>
-     *   <li>Loop back to step 2</li>
+     *   <li>{@code ObjectMove}: x_pos += x_vel, y_pos += y_vel (x_vel stays 0 in
+     *       straight motion) -- s2.asm:48371, ObjectMove s2.asm:30185-30198.</li>
+     *   <li>{@code y_vel += $18} (gravity). If the new y_vel == 0 (apex),
+     *       teleport x_pos = blueballs_x_pos + blueballs_offset and CONTINUE the
+     *       same frame -- no pause, no return (s2.asm:48372-48376).</li>
+     *   <li>If y_vel == $180, play gloop (s2.asm:48378-48381).</li>
+     *   <li>If y_pos >= blueballs_y_pos (initialY), reset: y_vel = blueballs_y_vel
+     *       (-$480), x_pos = blueballs_x_pos, play gloop. NO routine change --
+     *       stay in MOVE_STRAIGHT (s2.asm:48383-48389).</li>
      * </ol>
+     * <p>
+     * The previous implementation invented a {@code STATE_WAIT_STRAIGHT} 59-frame
+     * apex pause plus an early {@code return}, neither of which exist in ROM.
+     * That shifted the whole bounce cycle and accumulated phase error over ~1900
+     * frames until a ball sat at the player's position and falsely registered a
+     * HURT touch (CPZ1 trace frame 1905). ROM keeps the straight column locked
+     * high near the apex (y~$021A) while the player passes underneath at y~$026C.
      */
     private void updateMoveStraight() {
-        // Apply velocities
+        // ObjectMove: advance position by current velocity (s2.asm:48371).
+        // x_vel is never set in straight motion, so only y moves; the X column
+        // is driven purely by the apex/bottom teleports below.
         currentX += xVelocity;
         currentY += yVelocity;
 
-        // Apply gravity
+        // y_vel += $18 gravity (s2.asm:48372).
         yVelocity += GRAVITY;
 
-        // At apex (y_vel == 0): teleport X and ENTER WAIT STATE
-        // The delay happens at the top of the arc, not the bottom
-        // ROM lines 47945-47948: x_pos = objoff_38 + objoff_3A (NO sound here)
+        // Apex: when the post-gravity y_vel hits exactly 0, teleport X to the far
+        // side and CONTINUE this frame -- ROM does NOT pause or return here
+        // (s2.asm:48373-48377).
         if (yVelocity == 0) {
             currentX = (initialX + xDistance) << 8;
-            // Note: ROM does NOT play sound at apex, only at terminal velocity and bottom
-            state = STATE_WAIT_STRAIGHT;  // Delay at apex
-            return;  // Don't continue motion this frame
         }
 
-        // Play sound at terminal velocity (ROM: cmpi.w #$180,y_vel)
+        // Terminal-velocity gloop (s2.asm:48378-48381).
         if (yVelocity == 0x180) {
             playGloopSound();
         }
 
-        // Reset at bottom - NO DELAY, immediately continue
+        // Bottom: y_pos >= blueballs_y_pos (initialY). ROM cmp/bhi skips the reset
+        // only while blueballs_y_pos > y_pos (s2.asm:48383-48389).
         int pixelY = currentY >> 8;
         if (pixelY >= initialY) {
-            // Reset for next bounce
+            // Reset y_vel = blueballs_y_vel (-$480) and x_pos = blueballs_x_pos,
+            // play gloop, and STAY in MOVE_STRAIGHT (no routine change).
             currentY = initialY << 8;
             currentX = initialX << 8;
             yVelocity = INITIAL_Y_VEL;
             playGloopSound();
-            // NO state change - stay in STATE_MOVE_STRAIGHT for immediate rise
         }
     }
 

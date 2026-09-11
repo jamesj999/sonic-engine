@@ -1,8 +1,8 @@
 package com.openggf.game.sonic1.objects;
 
 import com.openggf.tests.TestEnvironment;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import com.openggf.game.GameServices;
 import com.openggf.game.sonic1.constants.Sonic1AnimationIds;
 import com.openggf.level.objects.AbstractObjectInstance;
@@ -13,13 +13,13 @@ import com.openggf.level.objects.TestObjectServices;
 
 import java.lang.reflect.Field;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TestSonic1SmashBlockObjectInstance {
 
-    @Before
+    @BeforeEach
     public void setUp() {
         TestEnvironment.resetAll();
     }
@@ -162,3 +162,5 @@ public class TestSonic1SmashBlockObjectInstance {
     }
 
 }
+
+

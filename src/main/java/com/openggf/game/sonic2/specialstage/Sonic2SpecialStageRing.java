@@ -94,16 +94,18 @@ public class Sonic2SpecialStageRing extends Sonic2SpecialStageObject {
 
     /**
      * Called when the ring is collected by a player.
+     * @return true when this call transitions an active ring to collected
      */
-    public void collect() {
+    public boolean collect() {
         if (state != State.ACTIVE) {
-            return;
+            return false;
         }
 
         state = State.COLLECTED;
         animIndex = SPARKLE_ANIM;
         animFrame = 0;
         animTimer = 0;
+        return true;
     }
 
     @Override
@@ -149,5 +151,25 @@ public class Sonic2SpecialStageRing extends Sonic2SpecialStageObject {
      */
     public boolean isSparkle() {
         return state == State.COLLECTED;
+    }
+
+    @Override
+    Sonic2SpecialStageSnapshot.ObjectSnapshot captureRewindSnapshot() {
+        return new Sonic2SpecialStageSnapshot.ObjectSnapshot(
+                Sonic2SpecialStageSnapshot.SpecialStageObjectType.RING,
+                captureBaseRewindSnapshot(),
+                spinFrame,
+                null,
+                0,
+                0,
+                0,
+                0,
+                false,
+                false);
+    }
+
+    void restoreRewindSnapshot(Sonic2SpecialStageSnapshot.ObjectSnapshot snapshot) {
+        restoreBaseRewindSnapshot(snapshot.base());
+        spinFrame = snapshot.ringSpinFrame() != null ? snapshot.ringSpinFrame() : 0;
     }
 }

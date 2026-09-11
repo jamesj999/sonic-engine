@@ -17,6 +17,9 @@ public class Tails extends AbstractPlayableSprite {
 	}
 
 	public void draw() {
+		if (isHidden()) {
+			return;
+		}
 		// ROM: Obj05 (Tails' tails) renders independently of invulnerability blink
 		if (getTailsTailsController() != null) {
 			getTailsTailsController().draw();
@@ -24,7 +27,7 @@ public class Tails extends AbstractPlayableSprite {
 		// ROM: During hurt bounce (routine 4), DisplaySprite is called directly
 		// (always visible). Flashing only occurs after landing (routine 2) via
 		// Tails_Display: lsr.w #3,d0 / bcc = visible when (timer & 0x04) != 0.
-		if (!isHurt() && getInvulnerableFrames() > 0 && (getInvulnerableFrames() & 0x04) == 0) {
+		if (!shouldRefreshRenderFlagThisFrame()) {
 			// Still draw spindash dust even when blinking
 			if (getSpindashDustController() != null) {
 				getSpindashDustController().draw();
@@ -53,6 +56,12 @@ public class Tails extends AbstractPlayableSprite {
 	@Override
 	public SecondaryAbility getSecondaryAbility() {
 		return SecondaryAbility.FLY;
+	}
+
+	/** ROM: Obj02's roll handler is Tails_RollSpeed (s2.asm:40031, sonic3k.asm:28169). */
+	@Override
+	public boolean usesTailsRollSpeedRoutine() {
+		return true;
 	}
 
 	@Override

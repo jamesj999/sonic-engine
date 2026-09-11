@@ -6,9 +6,15 @@ import com.openggf.game.PlayableEntity;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
+import com.openggf.level.objects.ObjectPlayerParticipationPolicy;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.sprites.NativePositionOps;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
+import com.openggf.sprites.playable.ObjectControlState;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Logger;
 
@@ -42,7 +48,7 @@ import java.util.logging.Logger;
  * <b>Per-player state:</b> Uses objoff_30 (P1 grab flag), objoff_31 (P2 grab flag),
  * objoff_32 (P1 release delay), objoff_33 (P2 release delay).
  */
-public class GrabObjectInstance extends AbstractObjectInstance {
+public class GrabObjectInstance extends AbstractObjectInstance implements RewindRecreatable {
 
     private static final Logger LOGGER = Logger.getLogger(GrabObjectInstance.class.getName());
 
@@ -52,6 +58,7 @@ public class GrabObjectInstance extends AbstractObjectInstance {
 
     // ROM: cmpi.w #$10,d1 -> vertical range is 0 to 0x0F (16 pixels below object Y)
     private static final int GRAB_Y_RANGE = 0x10;
+    private static final int WIDTH_PIXELS = 0x18;
 
     // === Release Constants ===
     // ROM: move.b #18,2(a2) (normal) or move.b #60,2(a2) (if direction held)
@@ -61,6 +68,8 @@ public class GrabObjectInstance extends AbstractObjectInstance {
     // === Jump Velocity ===
     // ROM: move.w #-$300,y_vel(a1)
     private static final int RELEASE_Y_VELOCITY = -0x300;
+    private static final ObjectPlayerParticipationPolicy PLAYER_PARTICIPATION =
+            ObjectPlayerParticipationPolicy.MAIN_PLUS_ENGINE_SIDEKICKS_AS_NATIVE_P2_EXTENDED;
 
     // === Per-Player Grab State ===
     // ROM uses objoff_30 (player 1 byte) and objoff_31 (player 2 byte)
@@ -84,16 +93,34 @@ public class GrabObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
+    public GrabObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new GrabObjectInstance(ctx.spawn(), "Grab");
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         if (isDestroyed()) {
             return;
         }
 
-        // ROM: ObjD9_Main processes both players then calls MarkObjGone3
-        // Process player 1 (MainCharacter)
-        processPlayerInteraction(player, false);
-        // Note: Player 2 (Sidekick) state fields are in place for future support
+        // ROM: ObjD9_Main processes MainCharacter, then Sidekick.
+        List<PlayableEntity> participants = interactionParticipants(playerEntity);
+        for (int i = 0; i < participants.size(); i++) {
+            if (participants.get(i) instanceof AbstractPlayableSprite player) {
+                processPlayerInteraction(player, i != 0);
+            }
+        }
+    }
+
+    private List<PlayableEntity> interactionParticipants(PlayableEntity updatePlayer) {
+        List<PlayableEntity> participants = services().playerQuery().playersFor(PLAYER_PARTICIPATION);
+        if (updatePlayer != null && !participants.contains(updatePlayer)) {
+            ArrayList<PlayableEntity> withUpdatePlayer = new ArrayList<>(participants.size() + 1);
+            withUpdatePlayer.add(updatePlayer);
+            withUpdatePlayer.addAll(participants);
+            return withUpdatePlayer;
+        }
+        return participants;
     }
 
     /**
@@ -170,7 +197,7 @@ public class GrabObjectInstance extends AbstractObjectInstance {
 
         // Release the player
         // ROM: clr.b obj_control(a1)
-        player.setObjectControlled(false);
+        ObjectControlState.none().applyTo(player);
 
         // ROM: clr.b (a2)
         if (isPlayer2) {
@@ -287,8 +314,7 @@ public class GrabObjectInstance extends AbstractObjectInstance {
 
         // Snap player Y to object Y (X is left alone)
         // ROM: move.w y_pos(a0),y_pos(a1)
-        // Note: ROM sets center Y directly; engine uses top-left, so subtract half height
-        player.setY((short) (spawn.y() - player.getHeight() / 2));
+        NativePositionOps.writeYPosPreserveSubpixel(player, spawn.y());
 
         // Set animation to hanging pose
         // ROM: move.b #AniIDSonAni_Hang2,anim(a1)
@@ -296,7 +322,7 @@ public class GrabObjectInstance extends AbstractObjectInstance {
 
         // Lock player control (obj_control = 1, not full lock)
         // ROM: move.b #1,obj_control(a1)
-        player.setObjectControlled(true);
+        ObjectControlState.nativeBits0To6CpuAllowedMovementSuppressed().applyTo(player);
 
         // Mark as grabbed
         // ROM: move.b #1,(a2)
@@ -320,6 +346,12 @@ public class GrabObjectInstance extends AbstractObjectInstance {
     public int getPriorityBucket() {
         // ROM: move.b #4,priority(a0)
         return RenderPriority.clamp(4);
+    }
+
+    @Override
+    public int getOnScreenHalfWidth() {
+        // ROM ObjD9_Init sets width_pixels=$18 for MarkObjGone3/render bounds.
+        return WIDTH_PIXELS;
     }
 
     @Override

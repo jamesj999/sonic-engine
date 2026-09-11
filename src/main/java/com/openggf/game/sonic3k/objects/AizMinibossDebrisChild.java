@@ -6,6 +6,7 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnCoordinateZeroPairRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -20,15 +21,18 @@ import java.util.List;
  * - After wait: MoveSprite2 applies velocity + gravity ($38/frame)
  * - Slower aircraft (x_vel=$100) appear first, fastest ($200) last
  */
-public class AizMinibossDebrisChild extends AbstractObjectInstance {
+public class AizMinibossDebrisChild extends AbstractObjectInstance
+        implements SpawnCoordinateZeroPairRewindRecreatable {
     private int worldX;
     private int worldY;
     private int xFixed;
     private int yFixed;
-    private final int xVel;
+    // xVel/mappingFrame are non-final so the rewind field capturer reapplies them
+    // after spawn-coordinate recreate uses placeholders 0.
+    private int xVel;
     private int waitTimer;
     private boolean moving;
-    private final int mappingFrame;
+    private int mappingFrame;
 
     public AizMinibossDebrisChild(int x, int y, int xVel, int mappingFrame) {
         super(new ObjectSpawn(x, y, 0x90, 0, 0, false, 0), "AIZMinibossDebris");
@@ -44,7 +48,7 @@ public class AizMinibossDebrisChild extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (!moving) {
             // ROM: loc_68E7E → Obj_Wait, decrements $2E each frame

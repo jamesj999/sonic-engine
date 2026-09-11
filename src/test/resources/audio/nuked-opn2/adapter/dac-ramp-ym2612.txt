@@ -1,0 +1,162 @@
+type 3
+write 1 178 250
+write 1 50 33
+write 1 58 48
+write 1 54 16
+write 1 62 50
+write 1 82 31
+write 1 90 31
+write 1 86 31
+write 1 94 31
+write 1 98 5
+write 1 106 24
+write 1 102 5
+write 1 110 16
+write 1 114 11
+write 1 122 31
+write 1 118 16
+write 1 126 16
+write 1 130 31
+write 1 138 47
+write 1 134 79
+write 1 142 47
+write 1 66 13
+write 1 74 7
+write 1 70 4
+write 1 78 128
+write 1 166 34
+write 1 162 105
+write 1 182 192
+write 0 40 246
+render 64
+write 0 43 128
+write 0 42 0
+render 3
+write 0 42 4
+render 3
+write 0 42 8
+render 3
+write 0 42 12
+render 3
+write 0 42 16
+render 3
+write 0 42 20
+render 3
+write 0 42 24
+render 3
+write 0 42 28
+render 3
+write 0 42 32
+render 3
+write 0 42 36
+render 3
+write 0 42 40
+render 3
+write 0 42 44
+render 3
+write 0 42 48
+render 3
+write 0 42 52
+render 3
+write 0 42 56
+render 3
+write 0 42 60
+render 3
+write 0 42 64
+render 3
+write 0 42 68
+render 3
+write 0 42 72
+render 3
+write 0 42 76
+render 3
+write 0 42 80
+render 3
+write 0 42 84
+render 3
+write 0 42 88
+render 3
+write 0 42 92
+render 3
+write 0 42 96
+render 3
+write 0 42 100
+render 3
+write 0 42 104
+render 3
+write 0 42 108
+render 3
+write 0 42 112
+render 3
+write 0 42 116
+render 3
+write 0 42 120
+render 3
+write 0 42 124
+render 3
+write 0 42 128
+render 3
+write 0 42 132
+render 3
+write 0 42 136
+render 3
+write 0 42 140
+render 3
+write 0 42 144
+render 3
+write 0 42 148
+render 3
+write 0 42 152
+render 3
+write 0 42 156
+render 3
+write 0 42 160
+render 3
+write 0 42 164
+render 3
+write 0 42 168
+render 3
+write 0 42 172
+render 3
+write 0 42 176
+render 3
+write 0 42 180
+render 3
+write 0 42 184
+render 3
+write 0 42 188
+render 3
+write 0 42 192
+render 3
+write 0 42 196
+render 3
+write 0 42 200
+render 3
+write 0 42 204
+render 3
+write 0 42 208
+render 3
+write 0 42 212
+render 3
+write 0 42 216
+render 3
+write 0 42 220
+render 3
+write 0 42 224
+render 3
+write 0 42 228
+render 3
+write 0 42 232
+render 3
+write 0 42 236
+render 3
+write 0 42 240
+render 3
+write 0 42 244
+render 3
+write 0 42 248
+render 3
+write 0 42 252
+render 3
+write 0 43 0
+render 256

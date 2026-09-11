@@ -1,5 +1,6 @@
 package com.openggf.game.sonic1.objects;
 import com.openggf.game.PlayableEntity;
+import com.openggf.game.solid.SolidCheckpointBatch;
 
 import com.openggf.debug.DebugRenderContext;
 import com.openggf.game.sonic1.Sonic1SwitchManager;
@@ -8,11 +9,14 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
+import com.openggf.level.objects.ObjectLifetimeOps;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.SolidContact;
+import com.openggf.level.objects.SolidExecutionMode;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -49,7 +53,7 @@ import java.util.List;
  * Reference: docs/s1disasm/_incObj/30 MZ Large Green Glass Blocks.asm
  */
 public class Sonic1GlassBlockObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, SpawnRewindRecreatable {
 
     // --- Collision parameters ---
 
@@ -93,16 +97,16 @@ public class Sonic1GlassBlockObjectInstance extends AbstractObjectInstance
     // --- Object state ---
 
     // Whether this is the tall variant (subtypes 0-2) or short (subtypes 3-4)
-    private final boolean isTall;
+    private boolean isTall;
 
     // Movement subtype (low 3 bits of obSubtype, masked to 0-4)
-    private final int moveType;
+    private int moveType;
 
     // Full subtype byte for switch index extraction
-    private final int fullSubtype;
+    private int fullSubtype;
 
     // Block frame: 0 = tall, 2 = short
-    private final int blockFrame;
+    private int blockFrame;
 
     // Dynamic position
     private int x;
@@ -161,12 +165,6 @@ public class Sonic1GlassBlockObjectInstance extends AbstractObjectInstance
         this.playerStanding = false;
 
         updateDynamicSpawn(x, y);
-
-        // ROM: Glass_Main .Repeat loop spawns reflection via FindNextFreeObj
-        // during the object's first routine (construction). The pre-allocated
-        // slot mechanism ensures the parent already has its slot assigned,
-        // so allocateSlotAfter() correctly gives the child a HIGHER slot.
-        spawnReflection();
     }
 
     @Override
@@ -179,12 +177,18 @@ public class Sonic1GlassBlockObjectInstance extends AbstractObjectInstance
         return y;
     }
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
+        // ROM: the reflection child is allocated in Glass_Main (routine 0),
+        // after ObjPosLoad has already finished loading this frame's parents.
+        // Spawning it during construction lets it steal SST slots from later
+        // ObjPosLoad siblings in the same pass, which does not happen in S1.
+        if (reflectionChild == null) {
+            spawnReflection();
+        }
 
-        playerStanding = isPlayerRiding();
-
-        // Apply subtype movement (modifies glassDist)
+        // ROM order: Glass_Block012/34 runs Glass_Types first using the prior
+        // frame's standing latch (obStatus bit 3), then calls SolidObject at
+        // the updated Y to resolve this frame's contact.
         applyMovement();
 
         // Compute Y from base Y and glass_dist
@@ -192,6 +196,14 @@ public class Sonic1GlassBlockObjectInstance extends AbstractObjectInstance
         y = baseY - glassDist;
 
         updateDynamicSpawn(x, y);
+
+        SolidCheckpointBatch batch = checkpointAll();
+        playerStanding = hasStandingContact(batch);
+    }
+
+    @Override
+    public SolidExecutionMode solidExecutionMode() {
+        return SolidExecutionMode.MANUAL_CHECKPOINT;
     }
 
     @Override
@@ -216,10 +228,24 @@ public class Sonic1GlassBlockObjectInstance extends AbstractObjectInstance
     @Override
     public SolidObjectParams getSolidParams() {
         if (isTall) {
-            return new SolidObjectParams(HALF_WIDTH, TALL_HALF_HEIGHT_AIR, TALL_HALF_HEIGHT_GND);
+            return SolidObjectParams.of(HALF_WIDTH, TALL_HALF_HEIGHT_AIR, TALL_HALF_HEIGHT_GND);
         } else {
-            return new SolidObjectParams(HALF_WIDTH, SHORT_HALF_HEIGHT_AIR, SHORT_HALF_HEIGHT_GND);
+            return SolidObjectParams.of(HALF_WIDTH, SHORT_HALF_HEIGHT_AIR, SHORT_HALF_HEIGHT_GND);
         }
+    }
+
+    @Override
+    public boolean usesInclusiveRightEdge() {
+        // Glass_Block012/34 call SolidObject, whose unsigned horizontal reject
+        // uses `bhi`; equality at twice d1 remains inside the solid.
+        return true;
+    }
+
+    @Override
+    public boolean usesInstanceSolidStateLatchKey() {
+        // Oscillation/lowering rebuilds dynamicSpawn as y_pos changes, while
+        // the native pushing bit remains in this same Obj30 SST status byte.
+        return true;
     }
 
     @Override
@@ -230,8 +256,7 @@ public class Sonic1GlassBlockObjectInstance extends AbstractObjectInstance
 
     @Override
     public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        // Standing state is managed via isPlayerRiding() check in update()
+        // Standing state is driven via manual checkpoints in update().
     }
 
     @Override
@@ -251,7 +276,7 @@ public class Sonic1GlassBlockObjectInstance extends AbstractObjectInstance
             return false;
         }
         // out_of_range.w uses spawn X; checks d1 against #$2A0 (standard S1 range)
-        return isOnScreenX(spawn.x(), 320);
+        return isInRangeAt(spawn.x());
     }
 
     /**
@@ -288,8 +313,10 @@ public class Sonic1GlassBlockObjectInstance extends AbstractObjectInstance
     }
 
     /**
-     * Returns the current base Y. Used by the short-block reflection child
-     * (routine 8) which copies parent's baseY each frame.
+     * Returns the current base Y. Only remaining caller is the reflection's
+     * rewind relink distance heuristic (findLiveGlassBlockParentForRewind);
+     * the reflection's per-frame sync reads the parent's live getY() instead
+     * (ROM Glass_Reflect34 copies the parent's current obY, not the spawn baseline).
      */
     int getBaseY() {
         return baseY;
@@ -447,6 +474,40 @@ public class Sonic1GlassBlockObjectInstance extends AbstractObjectInstance
         // loc_B5EA: glass_dist is current value
     }
 
+    /**
+     * The pillar's SST {@code obActWid}.
+     *
+     * <p>{@code Glass_Main} sets {@code move.b #64/2,obActWid(a1)} for the
+     * pillar and only then overwrites it with {@code #32/2} for the reflection
+     * child (docs/s1disasm/_incObj/30 MZ Large Green Glass Blocks.asm:78,84).
+     * The pillar's own slot is child 0, reused via {@code movea.l a0,a1} at
+     * {@code :57}, and the shine is a separate instance here, so this class is
+     * always the pillar and always the wider value.
+     *
+     * <p>The byte is supplied here rather than at
+     * {@link #getBalanceWidthPixels()} because both of its ROM consumers want
+     * it. {@code BuildSprites} uses it as the horizontal on-screen cull bound,
+     * testing {@code obX - cameraX +/- obActWid} against 0 and 320
+     * (docs/s1disasm/_inc/BuildSprites.asm:49-58), and {@code Sonic_Balance}
+     * reads the same byte off the stood-on object
+     * (docs/s1disasm/_incObj/01 Sonic.asm:423). {@code getBalanceWidthPixels()}
+     * defaults to this accessor, so overriding it alone would have left the
+     * pillar culled at 16 where the ROM culls at 32. Neither is the rendered
+     * extent -- {@code Map_Glass} owns that -- nor the collision width, which
+     * is {@code #64/2+sonic_solid_width} = {@code $2B} at {@code :99,:117} and
+     * is modelled separately as {@link #HALF_WIDTH}.
+     *
+     * <p>Without the override the inherited 16 makes the balance test
+     * {@code d1 = player_x + width - object_x} read 16px lower than the ROM's,
+     * which puts a player standing anywhere in the pillar's left half below the
+     * {@code #4} left-edge threshold and starts the balancing animation where
+     * the ROM stands still (_incObj/01 Sonic.asm:425-433).
+     */
+    @Override
+    public int getOnScreenHalfWidth() {
+        return 64 / 2;
+    }
+
     // --- Helpers ---
 
     /**
@@ -457,39 +518,20 @@ public class Sonic1GlassBlockObjectInstance extends AbstractObjectInstance
      * Subtype gets addq.b #8 then andi.b #$F.
      */
     private void spawnReflection() {
-        var objectManager = services().objectManager();
-        if (objectManager == null) {
+        if (services().objectManager() == null) {
             return;
         }
 
         // Reflection subtype: addq.b #8,obSubtype(a1) / andi.b #$F,obSubtype(a1)
-        int reflectSubtype = ((fullSubtype + 8) & 0x0F);
+        final int reflectSubtype = ((fullSubtype + 8) & 0x0F);
+        final int mySlot = getSlotIndex();
 
-        reflectionChild = new Sonic1GlassReflectionInstance(
-                spawn, this, reflectSubtype, isTall);
-        // ROM: FindNextFreeObj allocates slot after glass block
-        int mySlot = getSlotIndex();
-        if (mySlot >= 0) {
-            int childSlot = objectManager.allocateSlotAfter(mySlot);
-            if (childSlot >= 0) {
-                reflectionChild.setSlotIndex(childSlot);
-            }
-        }
-        objectManager.addDynamicObject(reflectionChild);
-    }
-
-    /**
-     * Check if the object is within out-of-range distance from camera using given X.
-     * Matches the S1 out_of_range macro.
-     */
-    private boolean isOnScreenX(int objectX, int range) {
-        var camera = services().camera();
-        if (camera == null) {
-            return true;
-        }
-        int objRounded = objectX & 0xFF80;
-        int camRounded = (camera.getX() - 128) & 0xFF80;
-        int distance = (objRounded - camRounded) & 0xFFFF;
-        return distance <= (128 + 320 + 192);
+        reflectionChild = spawnFreeChild(() -> {
+            Sonic1GlassReflectionInstance child = new Sonic1GlassReflectionInstance(
+                    spawn, this, reflectSubtype, isTall);
+            // ROM: FindNextFreeObj allocates slot after glass block
+            ObjectLifetimeOps.assignFindNextFreeChildSlot(services().objectManager(), child, mySlot);
+            return child;
+        });
     }
 }

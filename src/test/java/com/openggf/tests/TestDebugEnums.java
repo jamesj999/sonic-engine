@@ -1,10 +1,10 @@
 package com.openggf.tests;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import com.openggf.debug.DebugOption;
 import com.openggf.debug.DebugState;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class TestDebugEnums {
     @Test
@@ -19,3 +19,5 @@ public class TestDebugEnums {
         assertEquals(DebugState.NONE, DebugState.BLOCKS_VIEW.next());
     }
 }
+
+

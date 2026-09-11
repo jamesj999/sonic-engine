@@ -9,6 +9,8 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -19,7 +21,7 @@ import java.util.List;
  * ROM Reference: s2.asm Obj5D (ROUTINE_CONTAINER = 0x10)
  * Swings back and forth, triggers gunk drops.
  */
-public class CPZBossContainer extends AbstractObjectInstance {
+public class CPZBossContainer extends AbstractObjectInstance implements RewindRecreatable {
 
     private static final int SUB_INIT = 0;
     private static final int SUB_MAIN = 2;
@@ -66,7 +68,13 @@ public class CPZBossContainer extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        Sonic2CPZBossInstance boss = CpzBossRewindLinks.nearestBoss(ctx);
+        return boss == null ? null : new CPZBossContainer(ctx.spawn(), boss);
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) {
             return;
@@ -242,10 +250,7 @@ public class CPZBossContainer extends AbstractObjectInstance {
         // Become a falling part ourselves
         var myMotion = randomPipeMotion();
         ObjectSpawn partSpawn = new ObjectSpawn(x, y, Sonic2ObjectIds.CPZ_BOSS, 0, renderFlags, false, 0);
-        CPZBossFallingPart part = new CPZBossFallingPart(partSpawn, 0x20, myMotion.xVel(), myMotion.timer());
-        if (services().objectManager() != null) {
-            services().objectManager().addDynamicObject(part);
-        }
+        spawnChild(() -> new CPZBossFallingPart(partSpawn, 0x20, myMotion.xVel(), myMotion.timer()));
         setDestroyed(true);
     }
 
@@ -255,8 +260,7 @@ public class CPZBossContainer extends AbstractObjectInstance {
         }
         floorSpawned = true;
         ObjectSpawn floorSpawn = new ObjectSpawn(x, y, Sonic2ObjectIds.CPZ_BOSS, 0, renderFlags, false, 0);
-        CPZBossContainerFloor floor = new CPZBossContainerFloor(floorSpawn, mainBoss, this, false);
-        services().objectManager().addDynamicObject(floor);
+        spawnChild(() -> new CPZBossContainerFloor(floorSpawn, mainBoss, this, false));
     }
 
     private void spawnContainerExtend() {
@@ -265,8 +269,7 @@ public class CPZBossContainer extends AbstractObjectInstance {
         }
         extendSpawned = true;
         ObjectSpawn extendSpawn = new ObjectSpawn(x, y, Sonic2ObjectIds.CPZ_BOSS, 0, renderFlags, false, 0);
-        CPZBossContainerExtend extend = new CPZBossContainerExtend(extendSpawn, mainBoss, this);
-        services().objectManager().addDynamicObject(extend);
+        spawnChild(() -> new CPZBossContainerExtend(extendSpawn, mainBoss, this));
     }
 
     private void spawnContainerFloor2() {
@@ -274,8 +277,7 @@ public class CPZBossContainer extends AbstractObjectInstance {
             return;
         }
         ObjectSpawn floorSpawn = new ObjectSpawn(x, y, Sonic2ObjectIds.CPZ_BOSS, 0, renderFlags, false, 0);
-        CPZBossContainerFloor floor = new CPZBossContainerFloor(floorSpawn, mainBoss, this, true);
-        services().objectManager().addDynamicObject(floor);
+        spawnChild(() -> new CPZBossContainerFloor(floorSpawn, mainBoss, this, true));
     }
 
     private void spawnContainerPiece(int offset) {
@@ -285,8 +287,7 @@ public class CPZBossContainer extends AbstractObjectInstance {
         int pieceX = x + ((renderFlags & 1) != 0 ? -offset : offset);
         ObjectSpawn pieceSpawn = new ObjectSpawn(pieceX, y + 8, Sonic2ObjectIds.CPZ_BOSS, 0, renderFlags, false, 0);
         var motion = randomPipeMotion();
-        CPZBossFallingPart piece = new CPZBossFallingPart(pieceSpawn, 0x21, motion.xVel(), motion.timer());
-        services().objectManager().addDynamicObject(piece);
+        spawnChild(() -> new CPZBossFallingPart(pieceSpawn, 0x21, motion.xVel(), motion.timer()));
     }
 
     private Sonic2Rng.PipeShardMotion randomPipeMotion() {

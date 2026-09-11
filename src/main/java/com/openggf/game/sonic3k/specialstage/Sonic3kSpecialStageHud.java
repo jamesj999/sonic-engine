@@ -84,6 +84,18 @@ public class Sonic3kSpecialStageHud {
     public int getDisplayedSphereCount() { return displayedSphereCount; }
     public int getDisplayedRingCount() { return displayedRingCount; }
 
+    Sonic3kSpecialStageSnapshot.HudSnapshot captureRewindSnapshot() {
+        return new Sonic3kSpecialStageSnapshot.HudSnapshot(
+                sphereHudDirty, ringHudDirty, displayedSphereCount, displayedRingCount);
+    }
+
+    void restoreRewindSnapshot(Sonic3kSpecialStageSnapshot.HudSnapshot snapshot) {
+        sphereHudDirty = snapshot.sphereHudDirty();
+        ringHudDirty = snapshot.ringHudDirty();
+        displayedSphereCount = snapshot.displayedSphereCount();
+        displayedRingCount = snapshot.displayedRingCount();
+    }
+
     public void clearSphereDirty() { sphereHudDirty = false; }
     public void clearRingDirty() { ringHudDirty = false; }
 }

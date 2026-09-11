@@ -5,8 +5,15 @@ import com.openggf.data.Rom;
 import com.openggf.data.RomByteReader;
 import com.openggf.game.ZoneFeatureProvider;
 import com.openggf.game.ZoneFeatureRenderer;
+import com.openggf.game.render.SpecialRenderEffect;
+import com.openggf.game.render.SpecialRenderEffectContext;
+import com.openggf.game.render.SpecialRenderEffectRegistry;
+import com.openggf.game.render.SpecialRenderEffectStage;
+import com.openggf.game.LevelEventProvider;
 import com.openggf.game.sonic2.constants.Sonic2ObjectIds;
+import com.openggf.game.sonic2.constants.Sonic2AnimationIds;
 import com.openggf.game.sonic2.objects.CPZPylonObjectInstance;
+import com.openggf.game.sonic2.render.HtzEarthquakeBgOverlayEffect;
 import com.openggf.game.sonic2.scroll.Sonic2ZoneConstants;
 import com.openggf.graphics.GraphicsManager;
 import com.openggf.graphics.ShaderProgram;
@@ -18,7 +25,7 @@ import com.openggf.game.sonic2.bumpers.CNZBumperManager;
 import com.openggf.game.sonic2.bumpers.CNZBumperSpawn;
 import com.openggf.game.sonic2.slotmachine.CNZSlotMachineManager;
 import com.openggf.game.sonic2.slotmachine.CNZSlotMachineRenderer;
-import com.openggf.graphics.GLCommand;
+import com.openggf.graphics.GLCommandable;
 import com.openggf.level.objects.ObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
@@ -57,10 +64,37 @@ public class Sonic2ZoneFeatureProvider implements ZoneFeatureProvider {
     private WaterSurfaceManager waterSurfaceManager;
     private int currentZone = -1;
     private int currentAct = -1;
+    private boolean wfzWindTunnelActive;
+    private boolean wfzWindTunnelHolding;
 
     // Deferred slot machine renders (queued during object phase, rendered after tilemap)
     // Each entry: {worldX, worldY, offsetX, offsetY} - offset values are from cage to display
-    private final java.util.List<int[]> pendingSlotRenders = new java.util.ArrayList<>();
+    private static final int SLOT_RENDER_STRIDE = 4;
+    private int[] pendingSlotRenders = new int[16];
+    private int pendingSlotRenderCount;
+    private final SpecialRenderEffect cnzSlotOverlayEffect = new SpecialRenderEffect() {
+        @Override
+        public SpecialRenderEffectStage stage() {
+            return SpecialRenderEffectStage.AFTER_FOREGROUND;
+        }
+
+        @Override
+        public void render(SpecialRenderEffectContext context) {
+            renderCnzSlotOverlay(context.camera());
+        }
+    };
+    private final SpecialRenderEffect htzEarthquakeBgOverlayEffect = new HtzEarthquakeBgOverlayEffect();
+    private final SpecialRenderEffect waterSurfaceEffect = new SpecialRenderEffect() {
+        @Override
+        public SpecialRenderEffectStage stage() {
+            return SpecialRenderEffectStage.AFTER_SPRITES;
+        }
+
+        @Override
+        public void render(SpecialRenderEffectContext context) {
+            renderWaterSurface(context.camera(), context.frameCounter());
+        }
+    };
 
     @Override
     public void initZoneFeatures(Rom rom, int zoneIndex, int actIndex, int cameraX) throws IOException {
@@ -123,7 +157,7 @@ public class Sonic2ZoneFeatureProvider implements ZoneFeatureProvider {
         if (cnzSlotMachineRenderer == null) {
             cnzSlotMachineRenderer = new CNZSlotMachineRenderer();
         }
-        GraphicsManager graphicsManager = GraphicsManager.getInstance();
+        GraphicsManager graphicsManager = GameServices.graphics();
         if (!graphicsManager.isHeadlessMode()) {
             // Lazily initialize the shader
             if (cnzSlotsShaderProgram == null && graphicsManager.isGlInitialized()) {
@@ -237,32 +271,69 @@ public class Sonic2ZoneFeatureProvider implements ZoneFeatureProvider {
      * @param offsetY Y offset from cage center to slot display top-left
      */
     public void requestSlotRender(int worldX, int worldY, int offsetX, int offsetY) {
-        pendingSlotRenders.add(new int[]{worldX, worldY, offsetX, offsetY});
+        int offset = pendingSlotRenderCount * SLOT_RENDER_STRIDE;
+        if (offset + SLOT_RENDER_STRIDE > pendingSlotRenders.length) {
+            pendingSlotRenders = java.util.Arrays.copyOf(pendingSlotRenders, pendingSlotRenders.length * 2);
+        }
+        pendingSlotRenders[offset] = worldX;
+        pendingSlotRenders[offset + 1] = worldY;
+        pendingSlotRenders[offset + 2] = offsetX;
+        pendingSlotRenders[offset + 3] = offsetY;
+        pendingSlotRenderCount++;
     }
+
+    int[] pendingSlotRenderStorage() { return pendingSlotRenders; }
+    int pendingSlotRenderCount() { return pendingSlotRenderCount; }
+    void clearPendingSlotRenders() { pendingSlotRenderCount = 0; }
 
     @Override
     public void render(Camera camera, int frameCounter) {
-        if (waterSurfaceManager != null && waterSurfaceManager.isInitialized()) {
-            waterSurfaceManager.render(camera, frameCounter);
-        }
-        // Note: Slot machine rendering moved to renderAfterForeground() so it appears
-        // behind sprites but on top of the corrupted foreground tiles
+        // Water surfaces now render through the staged special render effect registry.
     }
 
     @Override
     public void renderAfterForeground(Camera camera) {
-        // Queue slot machine display commands (executed during flush, after high-priority foreground but before sprites)
-        if (!pendingSlotRenders.isEmpty() && cnzSlotMachineRenderer != null && cnzSlotMachineRenderer.isInitialized()) {
-            GraphicsManager graphicsManager = GraphicsManager.getInstance();
+        // Slot rendering is now dispatched through the staged special render effect
+        // registry. This remains as a compatibility no-op for the provider hook.
+    }
+
+    @Override
+    public void registerSpecialRenderEffects(SpecialRenderEffectRegistry registry, int zoneIndex, int actIndex) {
+        if (zoneIndex == Sonic2ZoneConstants.ROM_ZONE_CNZ) {
+            registry.register(cnzSlotOverlayEffect);
+        }
+        if (zoneIndex == Sonic2ZoneConstants.ROM_ZONE_HTZ) {
+            registry.register(htzEarthquakeBgOverlayEffect);
+        }
+        if ((zoneIndex == Sonic2ZoneConstants.ROM_ZONE_CPZ && actIndex == 1)
+                || zoneIndex == Sonic2ZoneConstants.ROM_ZONE_ARZ) {
+            registry.register(waterSurfaceEffect);
+        }
+    }
+
+    private void renderWaterSurface(Camera camera, int frameCounter) {
+        if (waterSurfaceManager != null && waterSurfaceManager.isInitialized()) {
+            waterSurfaceManager.render(camera, frameCounter);
+        }
+    }
+
+    private void renderCnzSlotOverlay(Camera camera) {
+        if (pendingSlotRenderCount == 0) {
+            return;
+        }
+        try {
+            if (cnzSlotMachineRenderer != null && cnzSlotMachineRenderer.isInitialized()) {
+            GraphicsManager graphicsManager = GameServices.graphics();
             if (!graphicsManager.isHeadlessMode() && cnzSlotMachineManager != null) {
                 Integer paletteTextureId = graphicsManager.getCombinedPaletteTextureId();
                 if (paletteTextureId != null) {
-                    for (int[] pos : pendingSlotRenders) {
-                        int screenX = pos[0] - camera.getX();
-                        int screenY = pos[1] - camera.getY();
-                        int offsetX = pos[2];
-                        int offsetY = pos[3];
-                        GLCommand cmd = cnzSlotMachineRenderer.createRenderCommand(
+                    for (int i = 0; i < pendingSlotRenderCount; i++) {
+                        int pos = i * SLOT_RENDER_STRIDE;
+                        int screenX = pendingSlotRenders[pos] - camera.getX();
+                        int screenY = pendingSlotRenders[pos + 1] - camera.getY();
+                        int offsetX = pendingSlotRenders[pos + 2];
+                        int offsetY = pendingSlotRenders[pos + 3];
+                        GLCommandable cmd = cnzSlotMachineRenderer.createRenderCommand(
                                 cnzSlotMachineManager,
                                 screenX,
                                 screenY,
@@ -276,7 +347,9 @@ public class Sonic2ZoneFeatureProvider implements ZoneFeatureProvider {
                     }
                 }
             }
-            pendingSlotRenders.clear();
+            }
+        } finally {
+            clearPendingSlotRenders();
         }
     }
 
@@ -289,13 +362,110 @@ public class Sonic2ZoneFeatureProvider implements ZoneFeatureProvider {
     }
 
     @Override
+    public void updatePrePhysics(AbstractPlayableSprite player, int cameraX, int zoneIndex) {
+        if (zoneIndex == Sonic2ZoneConstants.ROM_ZONE_WFZ) {
+            updateWfzPrePhysicsLevelEvents();
+            updateWfzWindTunnel(player);
+        } else {
+            wfzWindTunnelActive = false;
+        }
+    }
+
+    @Override
+    public void updateAfterObjectExecution(AbstractPlayableSprite player, int cameraX, int zoneIndex) {
+        if (zoneIndex != Sonic2ZoneConstants.ROM_ZONE_CNZ || cnzSlotMachineManager == null) {
+            return;
+        }
+        // Level_MainLoop runs RunObjects before DeformBgLayer (s2.asm:5095,
+        // 5098); DeformBgLayer dispatches LevEvents_CNZ and its SlotMachine
+        // call (s2.asm:15175, 21511-21512). ObjD6 therefore observes the
+        // previous SlotMachine result during this frame's object pass, while
+        // SlotMachine reads the V_int_run_count published by that same pass.
+        // LevelManager invokes this callback for each playable, but the ROM
+        // routine is zone-global. CNZSlotMachineManager suppresses the second
+        // callback for the same V-int count.
+        cnzSlotMachineManager.update();
+    }
+
+    private void updateWfzPrePhysicsLevelEvents() {
+        LevelEventProvider provider = GameServices.module().getLevelEventProvider();
+        if (provider instanceof Sonic2LevelEventManager events) {
+            events.getWfzEvents().updatePrePhysicsControlLock();
+        }
+    }
+
+    private void updateWfzWindTunnel(AbstractPlayableSprite player) {
+        if (player == null) {
+            wfzWindTunnelActive = false;
+            return;
+        }
+
+        int x = player.getCentreX() & 0xFFFF;
+        int y = player.getCentreY() & 0xFFFF;
+        if (!isInsideWfzWindTunnel(x, y)) {
+            leaveWfzWindTunnel(player);
+            return;
+        }
+        // ObjC1 sets WindTunnel_holding_flag while the player hangs from the
+        // plating. WindTunnel returns immediately at that gate: it neither
+        // reapplies Float2 nor runs the leave path's Walk/flag clear.
+        if (wfzWindTunnelHolding) {
+            return;
+        }
+        if (player.isHurt()
+                || player.getDead()) {
+            leaveWfzWindTunnel(player);
+            return;
+        }
+
+        // ROM WindTunnel (s2.asm:5474-5524): this level-event routine runs
+        // before Obj01_Control. It nudges the player left, forces airborne
+        // wind velocity, then normal airborne input immediately adjusts x_vel.
+        wfzWindTunnelActive = true;
+        player.shiftX(-4);
+        player.setXSpeed((short) -0x400);
+        player.setYSpeed((short) 0);
+        player.setAnimationId(Sonic2AnimationIds.FLOAT2);
+        player.setAir(true);
+        if (player.isUpPressed()) {
+            player.shiftY(-1);
+        }
+        if (player.isDownPressed()) {
+            player.shiftY(1);
+        }
+    }
+
+    private void leaveWfzWindTunnel(AbstractPlayableSprite player) {
+        if (wfzWindTunnelActive) {
+            player.setAnimationId(Sonic2AnimationIds.WALK);
+        }
+        wfzWindTunnelActive = false;
+    }
+
+    public void setWfzWindTunnelHolding(boolean holding) {
+        wfzWindTunnelHolding = holding;
+    }
+
+    public boolean isWfzWindTunnelHolding() {
+        return wfzWindTunnelHolding;
+    }
+
+    private boolean isInsideWfzWindTunnel(int x, int y) {
+        return (x >= 0x1510 && x < 0x1AF0 && y >= 0x0400 && y < 0x0580)
+                || (x >= 0x20F0 && x < 0x2500 && y >= 0x0618 && y < 0x0680);
+    }
+
+    @Override
     public void update(AbstractPlayableSprite player, int cameraX, int zoneIndex) {
+        // CNZ map bumpers run from updateAfterPlayablePhysics so their bounce
+        // velocity is visible to later playable slots in the same frame.
+    }
+
+    @Override
+    public void updateAfterPlayablePhysics(AbstractPlayableSprite player, int cameraX, int zoneIndex) {
         if (zoneIndex == Sonic2ZoneConstants.ROM_ZONE_CNZ) {
             if (cnzBumperManager != null) {
                 cnzBumperManager.update(player, cameraX, zoneIndex);
-            }
-            if (cnzSlotMachineManager != null) {
-                cnzSlotMachineManager.update();
             }
         }
     }
@@ -304,6 +474,7 @@ public class Sonic2ZoneFeatureProvider implements ZoneFeatureProvider {
     public void reset() {
         cnzBumperManager = null;
         cnzSlotMachineManager = null;
+        clearPendingSlotRenders();
         if (cnzSlotMachineRenderer != null) {
             cnzSlotMachineRenderer.cleanup();
             cnzSlotMachineRenderer = null;
@@ -314,6 +485,8 @@ public class Sonic2ZoneFeatureProvider implements ZoneFeatureProvider {
         }
         cpzPylon = null;
         waterSurfaceManager = null;
+        wfzWindTunnelActive = false;
+        wfzWindTunnelHolding = false;
         currentZone = -1;
         currentAct = -1;
     }
@@ -334,6 +507,13 @@ public class Sonic2ZoneFeatureProvider implements ZoneFeatureProvider {
     @Override
     public int getWaterLevel(int zoneIndex, int actIndex) {
         return GameServices.water().getWaterLevelY(zoneIndex, actIndex);
+    }
+
+    @Override
+    public float getWaterlineOffset(int zoneIndex, int actIndex) {
+        // S2's palette split follows the visual water level. The separately
+        // rendered surface strip must not move the sprite palette boundary.
+        return 0.0f;
     }
 
     @Override

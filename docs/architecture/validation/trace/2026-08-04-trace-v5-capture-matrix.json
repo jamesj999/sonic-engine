@@ -1,0 +1,740 @@
+{
+  "capture": {
+    "batch_root": "tools/bizhawk-headless/.scratch/trace-v5-task9-phase-a-*",
+    "estimated_peak_bytes": 4100000000,
+    "mode": "trace",
+    "output_template": "captures/{id}",
+    "required_free_space_multiplier": 1.25,
+    "runner": "tools/bizhawk-headless/run.sh"
+  },
+  "format": "openggf-trace-v5-capture-matrix-v1",
+  "freeze": {
+    "development_baseline": "3573af57be947284a1f8398c7b4b4e05a8b12f14",
+    "fixture_inventory": {
+      "aggregate_sha256": "04851c0a146eeb101a0ce0d76c78ba9c861a4eb3d6c9ff50612c84112d868790",
+      "file_count": 981,
+      "path": "docs/architecture/validation/trace/2026-08-04-trace-v5-postinstall-inventory.json"
+    },
+    "native_artifact": {
+      "path": "tools/bizhawk-headless/bin/Release/BizHawk.Headless.Gpgx.exe",
+      "sha256": "1320f95be8f8210a1a1b6f5ef5c6dcff9a5abeca91507e397f7ad1b38b106bb0",
+      "size": 359936
+    },
+    "native_test_artifact": {
+      "path": "tools/bizhawk-headless/bin/Release/BizHawk.Headless.Gpgx.Tests.exe",
+      "sha256": "9c62ad733ad08a8db875093316a5abb8588b8b6b636d18fa8d6f6ad7da591fc1",
+      "size": 620032
+    },
+    "source_commit": "93f0abb81dc216f5ab6fee998db75e9eb4410379",
+    "source_diff_base_commit": "36be0aa44e4e1db9d2d586fff984e52ffd4fe053",
+    "source_diff_sha256": "127f9ef3cd8269dac419625a737ec4d56b7e9b66e0e57a5262208e008f33ff05"
+  },
+  "roms": {
+    "s1": {
+      "crc32": "AFE05EEE",
+      "environment": "S1_ROM_PATH",
+      "filename": "Sonic The Hedgehog (W) (REV01) [!].gen",
+      "sha1": "69E102855D4389C3FD1A8F3DC7D193F8EEE5FE5B",
+      "sha256": "1b7f6635bd713f37f3c2f44f302b872c2e3c5f56e63637918dad4637146900fd"
+    },
+    "s2": {
+      "crc32": "7B905383",
+      "environment": "S2_ROM_PATH",
+      "filename": "Sonic The Hedgehog 2 (W) (REV01) [!].gen",
+      "sha1": "8BCA5DCEF1AF3E00098666FD892DC1C2A76333F9",
+      "sha256": "193bc4064ce0daf27ea9e908ed246d87ec576cc294833badebb590b6ad8e8f6b"
+    },
+    "s3k": {
+      "crc32": "63522553",
+      "environment": "S3K_ROM_PATH",
+      "filename": "Sonic and Knuckles & Sonic 3 (W) [!].gen",
+      "sha1": "CFBF98C36C776677290A872547AC47C53D2761D6",
+      "sha256": "fba0677fde9f76df93f3e98d6310d8af68b9847bde16e253d73cd4dd8134ed23"
+    }
+  },
+  "rows": [
+    {
+      "game": "s1",
+      "id": "s1-ghz1",
+      "mappings": [
+        {
+          "destination": "s1/ghz1_fullrun",
+          "source": ""
+        }
+      ],
+      "movie": "s1/ghz1_fullrun/ghz1_fullrun.bk2",
+      "movie_sha256": "dced61b2d3a3346b2ecd62254140497ef2827374c1de8597780f91e39ca0dcea",
+      "selectors": []
+    },
+    {
+      "game": "s1",
+      "id": "s1-mz1",
+      "mappings": [
+        {
+          "destination": "s1/mz1_fullrun",
+          "source": ""
+        }
+      ],
+      "movie": "s1/mz1_fullrun/s1-mz1.bk2",
+      "movie_sha256": "30ec610949961b5862321ad419be34ce8d4dbecc815ceef688114af3c5657cf8",
+      "selectors": []
+    },
+    {
+      "game": "s1",
+      "id": "s1-complete",
+      "mappings": [
+        {"destination": "s1/ghz1_completerun", "source": "ghz1"},
+        {"destination": "s1/ghz2_completerun", "source": "ghz2"},
+        {"destination": "s1/ghz3_completerun", "source": "ghz3"},
+        {"destination": "s1/mz1_completerun", "source": "mz1"},
+        {"destination": "s1/mz2_completerun", "source": "mz2"},
+        {"destination": "s1/mz3_completerun", "source": "mz3"},
+        {"destination": "s1/syz1_completerun", "source": "syz1"},
+        {"destination": "s1/syz2_completerun", "source": "syz2"},
+        {"destination": "s1/syz3_completerun", "source": "syz3"},
+        {"destination": "s1/lz1_completerun", "source": "lz1"},
+        {"destination": "s1/lz2_completerun", "source": "lz2"},
+        {"destination": "s1/lz3_completerun", "source": "lz3"},
+        {"destination": "s1/sbz3_completerun", "source": "lz4"},
+        {"destination": "s1/slz1_completerun", "source": "slz1"},
+        {"destination": "s1/slz2_completerun", "source": "slz2"},
+        {"destination": "s1/slz3_completerun", "source": "slz3"},
+        {"destination": "s1/sbz1_completerun", "source": "sbz1"},
+        {"destination": "s1/sbz2_completerun", "source": "sbz2"},
+        {"destination": "s1/fz_completerun", "source": "sbz3"}
+      ],
+      "movie": "s1/_movies/s1-complete-run.bk2",
+      "movie_sha256": "f744c814d8e00d6c367f7fe83bb663cab123b5a4ed385a320d71b74d63146bde",
+      "selectors": [
+        "--trace-profile",
+        "complete_run"
+      ]
+    },
+    {
+      "game": "s1",
+      "id": "s1-maze-run",
+      "mappings": [
+        {
+          "destination": "s1/runs/s1-ghz-maze-roundtrip",
+          "source": ""
+        },
+        {
+          "allow_duplicate": true,
+          "destination": "s1/special_stage",
+          "source": "ss"
+        }
+      ],
+      "movie": "s1/runs/s1-ghz-maze-roundtrip/s1-ghz-maze-roundtrip.bk2",
+      "movie_sha256": "68e56a8db849e24afd95c038e789d05e3ac100d1d49e350a7191db1fce60053f",
+      "selectors": [
+        "--run-id",
+        "s1-ghz-maze-roundtrip"
+      ]
+    },
+    {
+      "game": "s1",
+      "id": "s1-emeralds-run",
+      "mappings": [
+        {
+          "destination": "s1/runs/s1-sonic-complete-withemeralds",
+          "source": ""
+        }
+      ],
+      "movie": "s1/runs/s1-sonic-complete-withemeralds/sonic1-complete-withemeralds.bk2",
+      "movie_sha256": "f2e817936d07b2b1f2b80d61451f174189509a2817da2b2349ce0e19b8a5567b",
+      "selectors": [
+        "--run-id",
+        "s1-sonic-complete-withemeralds"
+      ]
+    },
+    {
+      "credits": {
+        "observation_id": "s1-credits-a",
+        "raw_sidecar": "raw/s1-credits-a.jsonl"
+      },
+      "game": "s1",
+      "id": "s1-credits-a",
+      "mappings": [
+        {"destination": "s1/credits_00_ghz1", "source": "00_ghz1_credits_demo_1"},
+        {"destination": "s1/credits_01_mz2", "source": "01_mz2_credits_demo"},
+        {"destination": "s1/credits_02_syz3", "source": "02_syz3_credits_demo"},
+        {"destination": "s1/credits_03_lz3", "source": "03_lz3_credits_demo"},
+        {"destination": "s1/credits_04_slz3", "source": "04_slz3_credits_demo"},
+        {"destination": "s1/credits_05_sbz1", "source": "05_sbz1_credits_demo"},
+        {"destination": "s1/credits_06_sbz2", "source": "06_sbz2_credits_demo"},
+        {"destination": "s1/credits_07_ghz1b", "source": "07_ghz1_credits_demo_2"}
+      ],
+      "movie": null,
+      "movie_sha256": null,
+      "selectors": [
+        "--trace-profile",
+        "credits_demo",
+        "--credits-target",
+        "all"
+      ]
+    },
+    {
+      "credits": {
+        "observation_id": "s1-credits-b",
+        "raw_sidecar": "raw/s1-credits-b.jsonl"
+      },
+      "game": "s1",
+      "id": "s1-credits-b",
+      "mappings": [],
+      "movie": null,
+      "movie_sha256": null,
+      "selectors": [
+        "--trace-profile",
+        "credits_demo",
+        "--credits-target",
+        "all"
+      ]
+    },
+    {
+      "game": "s2",
+      "id": "s2-ehz1",
+      "mappings": [
+        {
+          "destination": "s2/ehz1_fullrun",
+          "source": ""
+        }
+      ],
+      "movie": "s2/ehz1_fullrun/s2-ehz1.bk2",
+      "movie_sha256": "db310fa5e70a3cbaca4bafb06d98509894df920e4ab267d3e22db3f530104eed",
+      "selectors": [
+        "--trace-profile",
+        "gameplay_unlock"
+      ]
+    },
+    {
+      "game": "s2",
+      "id": "s2-arz-0",
+      "mappings": [
+        {
+          "destination": "s2/arz",
+          "source": ""
+        }
+      ],
+      "movie": "s2/arz/s2-lvl-select-ARZ.bk2",
+      "movie_sha256": "258a9441727d3746ca55d0a697a9613e5e0cfa94464b06afc6b3930a7eaffc11",
+      "selectors": [
+        "--trace-profile",
+        "level_gated_reset_aware",
+        "--gameplay-segment",
+        "0"
+      ]
+    },
+    {
+      "game": "s2",
+      "id": "s2-arz-1",
+      "mappings": [
+        {
+          "destination": "s2/arz2",
+          "source": ""
+        }
+      ],
+      "movie": "s2/arz/s2-lvl-select-ARZ.bk2",
+      "movie_sha256": "258a9441727d3746ca55d0a697a9613e5e0cfa94464b06afc6b3930a7eaffc11",
+      "selectors": [
+        "--trace-profile",
+        "level_gated_reset_aware",
+        "--gameplay-segment",
+        "1"
+      ]
+    },
+    {
+      "game": "s2",
+      "id": "s2-cnz-0",
+      "mappings": [
+        {
+          "destination": "s2/cnz",
+          "source": ""
+        }
+      ],
+      "movie": "s2/cnz/s2-lvl-select-CNZ.bk2",
+      "movie_sha256": "fd84ccd7851d687b0ec2459152076b8a7bcb6f2a15c9bc2c72cdcef79d11db15",
+      "selectors": [
+        "--trace-profile",
+        "level_gated_reset_aware",
+        "--gameplay-segment",
+        "0"
+      ]
+    },
+    {
+      "game": "s2",
+      "id": "s2-cnz-1",
+      "mappings": [
+        {
+          "destination": "s2/cnz2",
+          "source": ""
+        }
+      ],
+      "movie": "s2/cnz/s2-lvl-select-CNZ.bk2",
+      "movie_sha256": "fd84ccd7851d687b0ec2459152076b8a7bcb6f2a15c9bc2c72cdcef79d11db15",
+      "selectors": [
+        "--trace-profile",
+        "level_gated_reset_aware",
+        "--gameplay-segment",
+        "1"
+      ]
+    },
+    {
+      "game": "s2",
+      "id": "s2-cpz-0",
+      "mappings": [
+        {
+          "destination": "s2/cpz",
+          "source": ""
+        }
+      ],
+      "movie": "s2/cpz/s2-lvl-select-CPZ.bk2",
+      "movie_sha256": "7e28cf822d5dbbe64646965cd857f264bf51d3349075af94db1a818cac7311e4",
+      "selectors": [
+        "--trace-profile",
+        "level_gated_reset_aware",
+        "--gameplay-segment",
+        "0"
+      ]
+    },
+    {
+      "game": "s2",
+      "id": "s2-cpz-1",
+      "mappings": [
+        {
+          "destination": "s2/cpz2",
+          "source": ""
+        }
+      ],
+      "movie": "s2/cpz/s2-lvl-select-CPZ.bk2",
+      "movie_sha256": "7e28cf822d5dbbe64646965cd857f264bf51d3349075af94db1a818cac7311e4",
+      "selectors": [
+        "--trace-profile",
+        "level_gated_reset_aware",
+        "--gameplay-segment",
+        "1"
+      ]
+    },
+    {
+      "game": "s2",
+      "id": "s2-htz-0",
+      "mappings": [
+        {
+          "destination": "s2/htz",
+          "source": ""
+        }
+      ],
+      "movie": "s2/htz/s2-lvl-select-HTZ.bk2",
+      "movie_sha256": "44c55e255313e0731a405284575afe138843392f152f8f46ef8d7fc14a05daaa",
+      "selectors": [
+        "--trace-profile",
+        "level_gated_reset_aware",
+        "--gameplay-segment",
+        "0"
+      ]
+    },
+    {
+      "game": "s2",
+      "id": "s2-htz-1",
+      "mappings": [
+        {
+          "destination": "s2/htz2",
+          "source": ""
+        }
+      ],
+      "movie": "s2/htz/s2-lvl-select-HTZ.bk2",
+      "movie_sha256": "44c55e255313e0731a405284575afe138843392f152f8f46ef8d7fc14a05daaa",
+      "selectors": [
+        "--trace-profile",
+        "level_gated_reset_aware",
+        "--gameplay-segment",
+        "1"
+      ]
+    },
+    {
+      "game": "s2",
+      "id": "s2-mcz-0",
+      "mappings": [
+        {
+          "destination": "s2/mcz",
+          "source": ""
+        }
+      ],
+      "movie": "s2/mcz/s2-lvl-select-MCZ.bk2",
+      "movie_sha256": "b5424fc931bd6cbe343c1c2595e06bd9a488ef779f0987a29252e5bfddb92dfd",
+      "selectors": [
+        "--trace-profile",
+        "level_gated_reset_aware",
+        "--gameplay-segment",
+        "0"
+      ]
+    },
+    {
+      "game": "s2",
+      "id": "s2-mcz-1",
+      "mappings": [
+        {
+          "destination": "s2/mcz2",
+          "source": ""
+        }
+      ],
+      "movie": "s2/mcz/s2-lvl-select-MCZ.bk2",
+      "movie_sha256": "b5424fc931bd6cbe343c1c2595e06bd9a488ef779f0987a29252e5bfddb92dfd",
+      "selectors": [
+        "--trace-profile",
+        "level_gated_reset_aware",
+        "--gameplay-segment",
+        "1"
+      ]
+    },
+    {
+      "game": "s2",
+      "id": "s2-ooz-0",
+      "mappings": [
+        {
+          "destination": "s2/ooz",
+          "source": ""
+        }
+      ],
+      "movie": "s2/ooz/s2-lvl-select-OOZ.bk2",
+      "movie_sha256": "5ea2c45e3c7672a758959e3a13a70c7fb0bd65761acf0cc0ee904b660759c3eb",
+      "selectors": [
+        "--trace-profile",
+        "level_gated_reset_aware",
+        "--gameplay-segment",
+        "0"
+      ]
+    },
+    {
+      "game": "s2",
+      "id": "s2-ooz-1",
+      "mappings": [
+        {
+          "destination": "s2/ooz2",
+          "source": ""
+        }
+      ],
+      "movie": "s2/ooz/s2-lvl-select-OOZ.bk2",
+      "movie_sha256": "5ea2c45e3c7672a758959e3a13a70c7fb0bd65761acf0cc0ee904b660759c3eb",
+      "selectors": [
+        "--trace-profile",
+        "level_gated_reset_aware",
+        "--gameplay-segment",
+        "1"
+      ]
+    },
+    {
+      "game": "s2",
+      "id": "s2-mtz-0",
+      "mappings": [
+        {
+          "destination": "s2/mtz",
+          "source": ""
+        }
+      ],
+      "movie": "s2/mtz/s2-lvl-select-MTZ.bk2",
+      "movie_sha256": "7381a5e1d64094f7ade780bb60f63cb2e65b67db36bee96453071476d1dcd322",
+      "selectors": [
+        "--trace-profile",
+        "level_gated_reset_aware",
+        "--gameplay-segment",
+        "0"
+      ]
+    },
+    {
+      "game": "s2",
+      "id": "s2-mtz-1",
+      "mappings": [
+        {
+          "destination": "s2/mtz2",
+          "source": ""
+        }
+      ],
+      "movie": "s2/mtz/s2-lvl-select-MTZ.bk2",
+      "movie_sha256": "7381a5e1d64094f7ade780bb60f63cb2e65b67db36bee96453071476d1dcd322",
+      "selectors": [
+        "--trace-profile",
+        "level_gated_reset_aware",
+        "--gameplay-segment",
+        "1"
+      ]
+    },
+    {
+      "game": "s2",
+      "id": "s2-mtz-2",
+      "mappings": [
+        {
+          "destination": "s2/mtz3",
+          "source": ""
+        }
+      ],
+      "movie": "s2/mtz/s2-lvl-select-MTZ.bk2",
+      "movie_sha256": "7381a5e1d64094f7ade780bb60f63cb2e65b67db36bee96453071476d1dcd322",
+      "selectors": [
+        "--trace-profile",
+        "level_gated_reset_aware",
+        "--gameplay-segment",
+        "2"
+      ]
+    },
+    {
+      "game": "s2",
+      "id": "s2-dez",
+      "mappings": [
+        {
+          "destination": "s2/dez_ending",
+          "source": ""
+        }
+      ],
+      "movie": "s2/dez_ending/s2-lvl-select-DEZ-Ending.bk2",
+      "movie_sha256": "b9da5105004d9efd9f613b8e54c5eb4df56fba13172c2e2fd916c08b5132882d",
+      "selectors": [
+        "--trace-profile",
+        "level_gated_reset_aware",
+        "--gameplay-segment",
+        "0"
+      ]
+    },
+    {
+      "game": "s2",
+      "id": "s2-scz",
+      "mappings": [
+        {
+          "destination": "s2/scz",
+          "source": ""
+        }
+      ],
+      "movie": "s2/scz/s2-lvl-select-SCZ.bk2",
+      "movie_sha256": "13e27a032e3c55a3f3fba8247bf0103b1bfad7202f45c473e25ae07dd4398342",
+      "selectors": [
+        "--trace-profile",
+        "level_gated_reset_aware",
+        "--gameplay-segment",
+        "0"
+      ]
+    },
+    {
+      "game": "s2",
+      "id": "s2-wfz",
+      "mappings": [
+        {
+          "destination": "s2/wfz",
+          "source": ""
+        }
+      ],
+      "movie": "s2/wfz/s2-lvl-select-WFZ.bk2",
+      "movie_sha256": "7fa8452d17d13636f8ad4f26bdab989e8a8e8db8b3d16c4d68bdc1d32460c842",
+      "selectors": [
+        "--trace-profile",
+        "level_gated_reset_aware",
+        "--gameplay-segment",
+        "0"
+      ]
+    },
+    {
+      "game": "s2",
+      "id": "s2-special-stage",
+      "mappings": [
+        {
+          "destination": "s2/special_stage",
+          "source": ""
+        }
+      ],
+      "movie": "s2/special_stage/s2-lvl-select-special-stage.bk2",
+      "movie_sha256": "b2a5edccdf14f986e25d635929d92b2d1bd2d16b1f2da0af9f1814c113ddcc8b",
+      "selectors": [
+        "--trace-profile",
+        "s2_special_stage"
+      ]
+    },
+    {
+      "game": "s2",
+      "id": "s2-halfpipe-run",
+      "mappings": [
+        {
+          "destination": "s2/runs/s2-ehz-halfpipe-roundtrip",
+          "source": ""
+        }
+      ],
+      "movie": "s2/runs/s2-ehz-halfpipe-roundtrip/s2-ehz-halfpipe-roundtrip.bk2",
+      "movie_sha256": "afc95984a7eb69b6464df0364e96554a97fa7d59ca7c12a66ed00ac1fb3f4446",
+      "selectors": [
+        "--run-id",
+        "s2-ehz-halfpipe-roundtrip",
+        "--effective-movie-length",
+        "22612"
+      ]
+    },
+    {
+      "game": "s2",
+      "id": "s2-emeralds-run",
+      "mappings": [
+        {
+          "destination": "s2/runs/s2-sonic-tails-complete-emeralds",
+          "source": ""
+        }
+      ],
+      "movie": "s2/runs/s2-sonic-tails-complete-emeralds/sonic-2-sonic-tails-complete-emeralds.bk2",
+      "movie_sha256": "e850798f882b8c580aad148bc97cb50f260cae1d336dd649fe2f4dfae6796aa5",
+      "selectors": [
+        "--run-id",
+        "s2-sonic-tails-complete-emeralds"
+      ]
+    },
+    {
+      "game": "s3k",
+      "id": "s3k-aiz",
+      "mappings": [
+        {
+          "destination": "s3k/aiz1_to_hcz_fullrun",
+          "source": ""
+        }
+      ],
+      "movie": "s3k/aiz1_to_hcz_fullrun/s3-aiz1-2-sonictails.bk2",
+      "movie_sha256": "6837de0f67db7eb68f20b6f6df6a2872713a613d8b4dbc804847209c16b56e97",
+      "selectors": [
+        "--trace-profile",
+        "aiz_end_to_end",
+        "--load-queue-state"
+      ]
+    },
+    {
+      "game": "s3k",
+      "id": "s3k-cnz",
+      "mappings": [
+        {
+          "destination": "s3k/cnz",
+          "source": ""
+        }
+      ],
+      "movie": "s3k/cnz/s3k-cnz-sonic-tails.bk2",
+      "movie_sha256": "09bd6fa87f41ed85113254f80c5cbadcc31bbdb43605389933e2836339c9c340",
+      "selectors": [
+        "--trace-profile",
+        "level_gated_reset_aware",
+        "--load-queue-state"
+      ]
+    },
+    {
+      "game": "s3k",
+      "id": "s3k-mgz",
+      "mappings": [
+        {
+          "destination": "s3k/mgz",
+          "source": ""
+        }
+      ],
+      "movie": "s3k/mgz/s3k-mgz-sonic-tails.bk2",
+      "movie_sha256": "fd576d4096c9208742162449e756491d1030decae28d52ae7c93a4d249d60c02",
+      "selectors": [
+        "--trace-profile",
+        "level_gated_reset_aware",
+        "--load-queue-state"
+      ]
+    },
+    {
+      "game": "s3k",
+      "id": "s3k-complete",
+      "mappings": [
+        {"destination": "s3k/aiz_completerun", "source": "aiz"},
+        {"destination": "s3k/hcz_completerun", "source": "hcz"},
+        {"destination": "s3k/mgz_completerun", "source": "mgz"},
+        {"destination": "s3k/cnz_completerun", "source": "cnz"},
+        {"destination": "s3k/icz_completerun", "source": "icz"},
+        {"destination": "s3k/lbz_completerun", "source": "lbz"},
+        {"destination": "s3k/mhz_completerun", "source": "mhz"},
+        {"destination": "s3k/fbz_completerun", "source": "fbz"},
+        {"destination": "s3k/soz_completerun", "source": "soz"},
+        {"destination": "s3k/lrz_completerun", "source": "lrz"},
+        {"destination": "s3k/hpz22_completerun", "source": "hpz22"},
+        {"destination": "s3k/hpz_completerun", "source": "hpz"},
+        {"destination": "s3k/ssz_completerun", "source": "ssz"},
+        {"destination": "s3k/dez_completerun", "source": "dez23"},
+        {"destination": "s3k/ddz_completerun", "source": "ddz"}
+      ],
+      "movie": "s3k/_movies/s3k-complete-sonic-tails.bk2",
+      "movie_sha256": "82eabfbc65e33c160ce209baa1ca3f967cb677fe22350bc100625d8c41a8e1bf",
+      "selectors": [
+        "--trace-profile",
+        "complete_run",
+        "--load-queue-state"
+      ]
+    },
+    {
+      "game": "s3k",
+      "id": "s3k-multibonus-c",
+      "mappings": [
+        {
+          "destination": "s3k/runs/s3k-multibonus",
+          "source": ""
+        },
+        {
+          "allow_duplicate": true,
+          "destination": "s3k/special_stage",
+          "source": "ss"
+        },
+        {
+          "allow_duplicate": true,
+          "destination": "s3k/bonus_gumball",
+          "source": "gumball"
+        },
+        {
+          "allow_duplicate": true,
+          "destination": "s3k/bonus_pachinko",
+          "source": "pachinko"
+        },
+        {
+          "allow_duplicate": true,
+          "destination": "s3k/bonus_slots",
+          "source": "slots"
+        }
+      ],
+      "movie": "s3k/_movies/s3-knux-multibonus-ss.bk2",
+      "movie_sha256": "d7485e13f427d1b335cbbb3c405ff6136a77326239b79d3aed61e902078af45c",
+      "selectors": [
+        "--run-id",
+        "s3k-multibonus",
+        "--load-queue-state"
+      ]
+    },
+    {
+      "game": "s3k",
+      "id": "s3k-multibonus-b",
+      "mappings": [
+        {
+          "destination": "s3k/runs/s3-knux-multibonus-ss",
+          "source": ""
+        }
+      ],
+      "movie": "s3k/_movies/s3-knux-multibonus-ss.bk2",
+      "movie_sha256": "d7485e13f427d1b335cbbb3c405ff6136a77326239b79d3aed61e902078af45c",
+      "selectors": [
+        "--run-id",
+        "s3-knux-multibonus-ss",
+        "--load-queue-state"
+      ]
+    },
+    {
+      "game": "s3k",
+      "id": "s3k-knuckles-superemeralds",
+      "mappings": [
+        {
+          "destination": "s3k/runs/s3k-knuckles-complete-superemeralds",
+          "source": ""
+        }
+      ],
+      "movie": "s3k/_movies/s3k-knuckles-complete-superemeralds.bk2",
+      "movie_sha256": "aa892856df22b7bb1fe5accb48db10b90dc26845d1dccee90352da30349f53cc",
+      "selectors": [
+        "--run-id",
+        "s3k-knuckles-complete-superemeralds",
+        "--load-queue-state"
+      ]
+    }
+  ],
+  "static_input_suffixes": [
+    ".bk2"
+  ],
+  "static_paths": [
+    "s3k/hardware-timing-publication.tsv"
+  ]
+}

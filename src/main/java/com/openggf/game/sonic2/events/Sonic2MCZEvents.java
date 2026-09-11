@@ -29,6 +29,7 @@ public class Sonic2MCZEvents extends Sonic2ZoneEvents {
 
     @Override
     public void update(int act, int frameCounter) {
+        retryPendingPlc();
         if (act == 0) {
             // Act 1: No dynamic events (ROM: LevEvents_MCZ1 just returns)
             return;
@@ -61,6 +62,7 @@ public class Sonic2MCZEvents extends Sonic2ZoneEvents {
                     bossSpawnDelay = 0;
                     // ROM: Fade out music
                     audio().fadeOutMusic();
+                    requestSonic2Plc(Sonic2Constants.PLC_MCZ_BOSS);
                     // ROM: PalLoad_Now Pal_MCZ_B -> palette line 1 (s2.asm:21447-21448)
                     loadBossPalette(1, Sonic2Constants.PAL_MCZ_BOSS_ADDR);
                 }
@@ -91,10 +93,6 @@ public class Sonic2MCZEvents extends Sonic2ZoneEvents {
                 // ROM: Update minX to camera X (prevent backtracking)
                 camera().setMinX(camera().getX());
                 syncSidekickBoundsToCamera();
-
-                if (mczBoss != null && mczBoss.isDefeated()) {
-                    eventRoutine += 2;
-                }
             }
             default -> {
                 // No more routines

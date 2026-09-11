@@ -59,7 +59,7 @@ public class Sonic3kSpecialStagePalette {
             byte[] knuxPatch = dataLoader.getKnuxPalettePatch();
             if (knuxPatch != null) {
                 for (int c = 0; c < 8 && (c * 2 + 1) < knuxPatch.length; c++) {
-                    palettes[0].colors[c + 8].fromSegaFormat(knuxPatch, c * 2);
+                    palettes[0].getColor(c + 8).fromSegaFormat(knuxPatch, c * 2);
                 }
             }
         }
@@ -77,7 +77,7 @@ public class Sonic3kSpecialStagePalette {
             if (stagePaletteData.length >= 38) {
                 for (int c = 0; c < 3; c++) {
                     int offset = 32 + c * 2;
-                    palettes[2].colors[c + 8].fromSegaFormat(stagePaletteData, offset);
+                    palettes[2].getColor(c + 8).fromSegaFormat(stagePaletteData, offset);
                 }
             }
         }
@@ -138,7 +138,7 @@ public class Sonic3kSpecialStagePalette {
         // ROM: lea (Normal_palette_line_4+$10).w,a2
         if (palOffset + 16 <= stagePaletteData.length) {
             for (int c = 0; c < 8 && (palOffset + c * 2 + 1) < stagePaletteData.length; c++) {
-                palettes[3].colors[c + 8].fromSegaFormat(stagePaletteData, palOffset + c * 2);
+                palettes[3].getColor(c + 8).fromSegaFormat(stagePaletteData, palOffset + c * 2);
             }
         }
     }
@@ -154,7 +154,28 @@ public class Sonic3kSpecialStagePalette {
         int offset = (stageIndex & 7) * 8;
         // Apply to palette line 3, colors 2-5
         for (int c = 0; c < 4 && (offset + c * 2 + 1) < emeraldData.length; c++) {
-            palettes[3].colors[c + 2].fromSegaFormat(emeraldData, offset + c * 2);
+            palettes[3].getColor(c + 2).fromSegaFormat(emeraldData, offset + c * 2);
+        }
+    }
+
+    public void fadeTowardWhiteOneStep(int step) {
+        for (Palette palette : palettes) {
+            if (palette == null) {
+                continue;
+            }
+            for (int c = 0; c < 16; c++) {
+                Palette.Color color = palette.getColor(c);
+                int r = color.r & 0xFF;
+                int g = color.g & 0xFF;
+                int b = color.b & 0xFF;
+                if (r < 255) {
+                    color.r = (byte) Math.min(255, r + step);
+                } else if (g < 255) {
+                    color.g = (byte) Math.min(255, g + step);
+                } else if (b < 255) {
+                    color.b = (byte) Math.min(255, b + step);
+                }
+            }
         }
     }
 
@@ -168,5 +189,18 @@ public class Sonic3kSpecialStagePalette {
 
     public Palette getPalette(int line) {
         return palettes[line & 3];
+    }
+
+    Sonic3kSpecialStageSnapshot.PaletteSnapshot captureRewindSnapshot() {
+        return new Sonic3kSpecialStageSnapshot.PaletteSnapshot(
+                palettes,
+                stagePaletteData != null ? stagePaletteData.clone() : null,
+                fadeActive);
+    }
+
+    void restoreRewindSnapshot(Sonic3kSpecialStageSnapshot.PaletteSnapshot snapshot) {
+        Sonic3kSpecialStageSnapshot.copyPalettesInto(snapshot.palettes(), palettes);
+        stagePaletteData = snapshot.stagePaletteData() != null ? snapshot.stagePaletteData().clone() : null;
+        fadeActive = snapshot.fadeActive();
     }
 }

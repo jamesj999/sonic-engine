@@ -94,6 +94,25 @@ public final class CommonPlacementParser {
      * @return sorted, immutable list of object spawns
      */
     public static List<ObjectSpawn> parseObjectRecords(RomByteReader rom, int startAddr) {
+        return parseObjectRecords(rom, startAddr, true);
+    }
+
+    /**
+     * Parses object placement records while optionally retaining the source
+     * order from the ROM list.
+     *
+     * <p>S3K's loader groups records by 0x80 X-chunk, but walks records within
+     * a chunk in their original list order. The placement manager performs the
+     * chunk grouping itself, so S3K must retain that source order here. S1 and
+     * S2 keep the historical full-X ordering through the default overload.
+     *
+     * @param rom read-only ROM data
+     * @param startAddr address of the first object record
+     * @param sortByX whether to return records in ascending full-X order
+     * @return immutable list of object spawns
+     */
+    public static List<ObjectSpawn> parseObjectRecords(
+            RomByteReader rom, int startAddr, boolean sortByX) {
         List<ObjectSpawn> spawns = new ArrayList<>();
         int cursor = startAddr;
 
@@ -114,7 +133,9 @@ public final class CommonPlacementParser {
             cursor += OBJECT_RECORD_SIZE;
         }
 
-        spawns.sort(Comparator.comparingInt(ObjectSpawn::x));
+        if (sortByX) {
+            spawns.sort(Comparator.comparingInt(ObjectSpawn::x));
+        }
         return List.copyOf(spawns);
     }
 }

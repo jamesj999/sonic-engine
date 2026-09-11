@@ -8,10 +8,14 @@ import com.openggf.debug.DebugOverlayManager;
 import com.openggf.debug.DebugOverlayToggle;
 import com.openggf.game.PlayableEntity;
 import com.openggf.graphics.GLCommand;
+import com.openggf.level.objects.ObjectPlayerParticipationPolicy;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.sprites.animation.SpriteAnimationProfile;
 import com.openggf.sprites.animation.ScriptedVelocityAnimationProfile;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
+import com.openggf.sprites.playable.SidekickCpuController;
 
 import java.util.List;
 
@@ -44,7 +48,7 @@ import java.util.List;
  * in the opposite direction, state resets and the OPPOSITE action is applied.
  * </p>
  */
-public class ForcedSpinObjectInstance extends BoxObjectInstance {
+public class ForcedSpinObjectInstance extends BoxObjectInstance implements RewindRecreatable {
 
     // Width lookup table from disassembly word_211E8
     private static final int[] WIDTH_TABLE = {0x20, 0x40, 0x80, 0x100};
@@ -61,9 +65,9 @@ public class ForcedSpinObjectInstance extends BoxObjectInstance {
     private static final float DISABLE_G = 0.0f;
     private static final float DISABLE_B = 0.0f;
 
-    private final boolean verticalMode;    // bit 2 of subtype: 0=horizontal, 1=vertical
-    private final int triggerWidth;        // half-width from WIDTH_TABLE
-    private final boolean xFlipped;        // x_flip bit from spawn (determines action direction)
+    private boolean verticalMode;    // bit 2 of subtype: 0=horizontal, 1=vertical
+    private int triggerWidth;        // half-width from WIDTH_TABLE
+    private boolean xFlipped;        // x_flip bit from spawn (determines action direction)
 
     // Per-character crossing state (true = player is past the trigger line)
     // Matches objoff_34 (Sonic) and objoff_35 (Tails) from disassembly
@@ -90,7 +94,12 @@ public class ForcedSpinObjectInstance extends BoxObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public ForcedSpinObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new ForcedSpinObjectInstance(ctx.spawn(), getName());
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (player == null) {
             return;
@@ -105,9 +114,9 @@ public class ForcedSpinObjectInstance extends BoxObjectInstance {
         // Check for Sonic (main player)
         checkPlayerCrossing(player, true);
 
-        // Check for sidekick(s) if present
-        for (PlayableEntity sidekick : services().sidekicks()) {
-            checkPlayerCrossing((AbstractPlayableSprite) sidekick, false);
+        AbstractPlayableSprite nativeP2 = nativeP2OrNull(player);
+        if (nativeP2 != null && !isHorizontalSidekickFlightAutoRecovery(nativeP2)) {
+            checkPlayerCrossing(nativeP2, false);
         }
     }
 
@@ -132,16 +141,33 @@ public class ForcedSpinObjectInstance extends BoxObjectInstance {
             sonicPastTrigger = playerX > objX;
         }
 
-        // Initialize sidekick state similarly if present
-        for (PlayableEntity sidekick : services().sidekicks()) {
-            int sidekickX = sidekick.getCentreX();
-            int sidekickY = sidekick.getCentreY();
+        AbstractPlayableSprite nativeP2 = nativeP2OrNull(player);
+        if (nativeP2 != null) {
+            int sidekickX = nativeP2.getCentreX();
+            int sidekickY = nativeP2.getCentreY();
             if (verticalMode) {
                 tailsPastTrigger = sidekickY > objY;
             } else {
                 tailsPastTrigger = sidekickX > objX;
             }
         }
+    }
+
+    private AbstractPlayableSprite nativeP2OrNull(AbstractPlayableSprite nativeP1) {
+        for (PlayableEntity candidate : services().playerQuery().playersFor(ObjectPlayerParticipationPolicy.NATIVE_P1_P2)) {
+            if (candidate != nativeP1 && candidate instanceof AbstractPlayableSprite sprite) {
+                return sprite;
+            }
+        }
+        return null;
+    }
+
+    private boolean isHorizontalSidekickFlightAutoRecovery(AbstractPlayableSprite player) {
+        SidekickCpuController controller = player.getCpuController();
+        return !verticalMode
+                && player.isCpuControlled()
+                && controller != null
+                && controller.getDiagnosticRomCpuRoutine() == 0x04;
     }
 
     /**
@@ -254,21 +280,30 @@ public class ForcedSpinObjectInstance extends BoxObjectInstance {
      * 4. Play roll sound
      */
     private void enablePinballMode(AbstractPlayableSprite player) {
-        // Enable pinball mode flag - this prevents rolling from being cleared
+        // S2 aliases Obj84 pinball_mode to spindash_flag. Keep the engine's
+        // separate fields in sync so later Tails_UpdateSpindash paths can
+        // consume the same ROM byte after forced rolling ends.
         player.setPinballMode(true);
+        player.setSpindash(true);
 
         // If already rolling, no need to do anything else
         if (player.getRolling()) {
             return;
         }
 
+        short centreX = player.getCentreX();
+        short centreY = player.getCentreY();
         // Force into rolling state
-        // setRolling(true) handles radii and visual dimensions but NOT Y position
+        // setRolling(true) handles radii and visual dimensions.
         player.setRolling(true);
+        // ROM Obj84 writes radii/status/anim and adds 5 to y_pos only; it
+        // never adjusts x_pos. The engine's generic wall-mode roll transition
+        // changes width, so preserve the ROM centre X for this object path.
+        player.setCentreXPreserveSubpixel(centreX);
 
-        // Adjust Y position for roll height change (ROM: addq.w #5,y_pos)
-        // ROM uses center coordinates (+5 radius diff), our engine uses top-left (+10 height diff)
-        player.setY((short) (player.getY() + player.getRollHeightAdjustment()));
+        // ROM Obj84 loc_212C4 applies a fixed addq.w #5,y_pos(a1) after
+        // setting rolling radii, for Sonic and Tails alike (docs/s2disasm/s2.asm:46377-46495).
+        player.setCentreYPreserveSubpixel((short) (centreY + 5));
 
         // Set roll animation
         forceRollAnimation(player);
@@ -284,6 +319,7 @@ public class ForcedSpinObjectInstance extends BoxObjectInstance {
      */
     private void disablePinballMode(AbstractPlayableSprite player) {
         player.setPinballMode(false);
+        player.setSpindash(false);
     }
 
     /**

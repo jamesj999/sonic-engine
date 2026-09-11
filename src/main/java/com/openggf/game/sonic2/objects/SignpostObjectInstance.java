@@ -1,16 +1,27 @@
 package com.openggf.game.sonic2.objects;
+import com.openggf.audio.GameMusic;
 import com.openggf.game.PlayableEntity;
+import com.openggf.game.sonic2.resources.Sonic2PlcService;
+import com.openggf.game.sonic2.Sonic2LevelEventManager;
+import com.openggf.game.PlayerCharacter;
 import com.openggf.level.objects.BoxObjectInstance;
 import com.openggf.level.objects.SignpostSparkleObjectInstance;
 
 import com.openggf.camera.Camera;
-import com.openggf.game.sonic2.audio.Sonic2Music;
+import com.openggf.game.CollisionModel;
+import com.openggf.game.session.ActiveGameplayTeamResolver;
 import com.openggf.game.sonic2.audio.Sonic2Sfx;
+import com.openggf.game.sonic2.scroll.Sonic2ZoneConstants;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
+import com.openggf.level.objects.ObjectAnimationState;
+import com.openggf.level.objects.ObjectLifetimeOps;
 import com.openggf.level.objects.ObjectManager;
+import com.openggf.level.objects.PostPlayerUpdateHook;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -31,42 +42,32 @@ import java.util.logging.Logger;
  * <li>Spawn results screen (Obj3A), play end-level jingle</li>
  * </ol>
  */
-public class SignpostObjectInstance extends BoxObjectInstance {
+public class SignpostObjectInstance extends BoxObjectInstance implements PostPlayerUpdateHook, RewindRecreatable {
     private static final Logger LOGGER = Logger.getLogger(SignpostObjectInstance.class.getName());
 
     // Routine states (matching ROM)
     private static final int STATE_IDLE = 0;
     private static final int STATE_SPINNING = 2;
     private static final int STATE_WALK_OFF = 4;
+    private static final int STATE_DONE = 6;
 
-    // Mapping frame indices matching obj0D_a.asm (ROM order from loadMappingFrames):
-    // 0 = Sonic final face (tiles $22+$2E, wide) — held by Ani_obj0D anim 3: $0F,$00,$FF
-    // 1 = Tails face (tiles $3A+$3E+hflip) — held by anim 4: $0F,$01,$FF
-    // 2 = Eggman front face (tiles 0, h-flip) — held by anim 0: $0F,$02,$FF (initial state)
-    // 3 = Spin transition A (tile $0C, 4x4)
-    // 4 = Edge/thin view (tile $1C)
-    // 5 = Spin transition B (tile $0C, h-flipped)
-    private static final int FRAME_SONIC = 0;
-    private static final int FRAME_TAILS = 1;
+    // Animation IDs from Ani_obj0D.
+    private static final int ANIM_IDLE = 0;
+    private static final int ANIM_SPIN_1 = 1;
+    private static final int ANIM_SPIN_2 = 2;
+    private static final int ANIM_FINAL_SONIC = 3;
+    private static final int ANIM_FINAL_TAILS = 4;
+
+    // Mapping frame 2 is Eggman front-face in the signpost mapping table.
     private static final int FRAME_EGGMAN = 2;
-    private static final int FRAME_SPIN_A = 3;
-    private static final int FRAME_SIDE_ON = 4;
-    private static final int FRAME_SPIN_B = 5;
 
-    // Spin timing
-    private static final int SPIN_FRAME_DELAY = 2;
-    private static final int SPIN_CYCLES = 3;
+    // ROM: Obj0D_Main_State2 resets obj0D_spinframe to 60 after every expiry.
+    // Because the counter starts at 0 on activation, the first step happens on
+    // the activation frame, then the next two advances occur 61 frames apart.
+    private static final int SPIN_CYCLE_FRAMES = 60;
 
     // ROM: Obj0D_Main_State3 - player must pass Camera_Max_X_pos + $128 to trigger results
     private static final int WALK_OFF_OFFSET = 0x128;
-
-    // Spinning animation frame sequence matching Ani_obj0D anim 1:
-    // $01, $02,$03,$04,$05, $01,$03,$04,$05, $00,$03,$04,$05, $FF
-    private static final int[] SPIN_FRAMES = {
-            FRAME_EGGMAN, FRAME_SPIN_A, FRAME_SIDE_ON, FRAME_SPIN_B,
-            FRAME_TAILS, FRAME_SPIN_A, FRAME_SIDE_ON, FRAME_SPIN_B,
-            FRAME_SONIC, FRAME_SPIN_A, FRAME_SIDE_ON, FRAME_SPIN_B
-    };
 
     // Sparkle effect timing and positions (from s2.asm Obj0D_RingSparklePositions)
     private static final int SPARKLE_SPAWN_DELAY = 11;
@@ -77,17 +78,24 @@ public class SignpostObjectInstance extends BoxObjectInstance {
 
     private int routineState = STATE_IDLE;
     private int mappingFrame = FRAME_EGGMAN;
-    private int animTimer = 0;
-    private int spinFrameIndex = 0;
-    private int spinCycleCount = 0;
+    private ObjectAnimationState animationState;
+    private int currentAnimId = ANIM_IDLE;
+    private int finalAnimId = ANIM_FINAL_SONIC;
+    private int spinTimer = 0;
     private int sparkleTimer = 0;
     private int sparkleIndex = 0;
+    private int walkOffEnteredVIntRunCount = Integer.MIN_VALUE;
 
     private boolean resultsSpawned = false;
     private boolean initialized;
 
     public SignpostObjectInstance(ObjectSpawn spawn, String name) {
         super(spawn, name, 24, 40, 0.3f, 0.8f, 0.3f, false);
+    }
+
+    @Override
+    public SignpostObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new SignpostObjectInstance(ctx.spawn(), "Signpost");
     }
 
     private void ensureInitialized() {
@@ -105,21 +113,26 @@ public class SignpostObjectInstance extends BoxObjectInstance {
         // ROM check: if (Current_Act != 0 && Current_ZoneAndAct != metropolis_zone_act_2)
         // metropolis_zone_act_2 = (7 << 8) | 1 = 0x0701
         if (currentAct > 0) {
-            boolean isMTZAct2 = (currentZone == 7 && currentAct == 1);
+            boolean isMTZAct2 = (currentZone == Sonic2ZoneConstants.ROM_ZONE_MTZ && currentAct == 1);
             if (!isMTZAct2) {
                 // Mark as remembered to prevent respawning, then destroy
                 // This prevents the spawn-destroy cycle every frame
                 ObjectManager objMgr = services().objectManager();
-                if (objMgr != null) {
-                    objMgr.markRemembered(spawn);
-                }
+                ObjectLifetimeOps.markSpawnRemembered(objMgr, spawn);
                 setDestroyed(true);
             }
         }
+
+        finalAnimId = resolveFinalAnimId();
+        ObjectRenderManager renderManager = services().renderManager();
+        animationState = new ObjectAnimationState(
+                renderManager != null ? renderManager.getSignpostAnimations() : null,
+                ANIM_IDLE,
+                FRAME_EGGMAN);
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         ensureInitialized();
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // Don't update if destroyed (disabled in Act 2+)
@@ -132,9 +145,31 @@ public class SignpostObjectInstance extends BoxObjectInstance {
         }
 
         switch (routineState) {
-            case STATE_IDLE -> checkPlayerPass(player);
-            case STATE_SPINNING -> updateSpinning();
-            case STATE_WALK_OFF -> updateWalkOff(player);
+            case STATE_IDLE -> {
+                // Obj0D_Main falls through into Obj0D_Main_State2 on the same
+                // frame that the signpost is activated.
+                if (checkPlayerPass(player)) {
+                    updateSpinning(vIntRunCount);
+                }
+            }
+            case STATE_SPINNING -> updateSpinning(vIntRunCount);
+            case STATE_WALK_OFF -> {
+                // Inline-order modules (S2/S3K collision-model path) already run
+                // ExecuteObjects after playable movement, so the regular object
+                // update sees Sonic's post-physics state directly.
+                if (usesInlineWalkOffUpdate(player)) {
+                    updateWalkOff(player);
+                }
+            }
+            case STATE_DONE -> {
+                // ROM: Obj0D_Main_StateNull. The signpost remains visible but
+                // no longer drives control or spawns follow-up objects.
+            }
+        }
+
+        if (animationState != null) {
+            animationState.update();
+            mappingFrame = animationState.getMappingFrame();
         }
     }
 
@@ -146,14 +181,16 @@ public class SignpostObjectInstance extends BoxObjectInstance {
      * cmpi.w #$20,d0
      * bhs.s  ...           ; skip if >= $20 (player too far past)
      */
-    private void checkPlayerPass(AbstractPlayableSprite player) {
+    private boolean checkPlayerPass(AbstractPlayableSprite player) {
         int dx = player.getCentreX() - spawn.x();
         if (dx >= 0 && dx < 0x20) {
-            activateSignpost(player);
+            activateSignpost();
+            return true;
         }
+        return false;
     }
 
-    private void activateSignpost(AbstractPlayableSprite player) {
+    private void activateSignpost() {
         LOGGER.info("Signpost activated at X=" + spawn.x());
 
         try {
@@ -171,12 +208,10 @@ public class SignpostObjectInstance extends BoxObjectInstance {
         }
 
         routineState = STATE_SPINNING;
-        spinFrameIndex = 0;
-        spinCycleCount = 0;
-        animTimer = 0;
+        spinTimer = 0;
         sparkleTimer = 0;
         sparkleIndex = 0;
-        mappingFrame = SPIN_FRAMES[0];
+        setAnimationId(ANIM_IDLE);
     }
 
     /**
@@ -193,65 +228,111 @@ public class SignpostObjectInstance extends BoxObjectInstance {
         }
     }
 
-    private void updateSpinning() {
-        // Update animation frame
-        animTimer++;
-        if (animTimer >= SPIN_FRAME_DELAY) {
-            animTimer = 0;
-            spinFrameIndex++;
-
-            if (spinFrameIndex >= SPIN_FRAMES.length) {
-                spinFrameIndex = 0;
-                spinCycleCount++;
-
-                if (spinCycleCount >= SPIN_CYCLES) {
-                    mappingFrame = FRAME_SONIC;
-                    routineState = STATE_WALK_OFF;
-                    LOGGER.fine("Signpost spin complete, entering walk-off state");
-                    return;
-                }
+    private void updateSpinning(int vIntRunCount) {
+        // ROM: subq.w #1,obj0D_spinframe(a0) / bpl.s ...
+        spinTimer--;
+        if (spinTimer < 0) {
+            spinTimer = SPIN_CYCLE_FRAMES;
+            int nextAnimId = currentAnimId + 1;
+            if (nextAnimId >= ANIM_FINAL_SONIC) {
+                routineState = STATE_WALK_OFF;
+                walkOffEnteredVIntRunCount = vIntRunCount;
+                setAnimationId(finalAnimId);
+                LOGGER.fine("Signpost spin complete, entering walk-off state");
+            } else {
+                setAnimationId(nextAnimId);
             }
-
-            mappingFrame = SPIN_FRAMES[spinFrameIndex];
         }
 
-        // Spawn sparkle effects
-        spawnSparkleIfReady();
+        // ROM continues into the sparkle countdown even on the frame that
+        // routine_secondary advances out of State2.
+        updateSparkleCountdown();
     }
 
-    private void spawnSparkleIfReady() {
-        sparkleTimer++;
-        if (sparkleTimer >= SPARKLE_SPAWN_DELAY) {
-            sparkleTimer = 0;
-
-            int[] offset = SPARKLE_POSITIONS[sparkleIndex];
-            int sparkleX = spawn.x() + offset[0];
-            int sparkleY = spawn.y() + offset[1];
-
-            SignpostSparkleObjectInstance sparkle = new SignpostSparkleObjectInstance(sparkleX, sparkleY);
-            ObjectManager objectManager = services().objectManager();
-            if (objectManager != null) {
-                objectManager.addDynamicObject(sparkle);
-            }
-
-            // Cycle through positions (ROM: addq.b #2, andi.b #$E => 0,2,4,6,0,2...)
-            sparkleIndex = (sparkleIndex + 1) % SPARKLE_POSITIONS.length;
+    @Override
+    public void updatePostPlayer(int frameCounter, PlayableEntity playerEntity) {
+        if (!(playerEntity instanceof AbstractPlayableSprite player)) {
+            return;
         }
+        if (usesInlineWalkOffUpdate(player)) {
+            return;
+        }
+        if (routineState != STATE_WALK_OFF || frameCounter <= walkOffEnteredVIntRunCount) {
+            return;
+        }
+        updateWalkOff(player);
+    }
+
+    private boolean usesInlineWalkOffUpdate(AbstractPlayableSprite player) {
+        return player != null
+                && player.getGameRules() != null
+                && player.getGameRules().collision() != null
+                && player.getGameRules().collision().collisionModel() == CollisionModel.DUAL_PATH;
+    }
+
+    private void updateSparkleCountdown() {
+        // ROM: subq.w #1,objoff_32(a0) / move.w #$B,objoff_32(a0) when expired.
+        sparkleTimer--;
+        if (sparkleTimer >= 0) {
+            return;
+        }
+        sparkleTimer = SPARKLE_SPAWN_DELAY;
+
+        int[] offset = SPARKLE_POSITIONS[sparkleIndex];
+        int sparkleX = spawn.x() + offset[0];
+        int sparkleY = spawn.y() + offset[1];
+
+        spawnFreeChild(() -> new SignpostSparkleObjectInstance(sparkleX, sparkleY));
+
+        // ROM stores the byte offset into Obj0D_RingSparklePositions, so
+        // addq.b #2 / andi.b #$E advances through the eight x/y pairs.
+        sparkleIndex = (sparkleIndex + 1) % SPARKLE_POSITIONS.length;
+    }
+
+    private void setAnimationId(int animId) {
+        currentAnimId = animId;
+        if (animationState != null) {
+            animationState.setAnimId(animId);
+            animationState.resetFrameIndex();
+        }
+    }
+
+    private int resolveFinalAnimId() {
+        String mainCharacter = ActiveGameplayTeamResolver.resolveMainCharacterCode(services().configuration());
+        return "tails".equalsIgnoreCase(mainCharacter) ? ANIM_FINAL_TAILS : ANIM_FINAL_SONIC;
     }
 
     /**
      * ROM: Obj0D_Main_State3 (s2.asm:34593-34621)
      * <p>
      * Each frame:
-     * 1. If player is airborne, skip control lock (wait for landing)
+     * 1. If player is airborne, skip the Control_Locked / forced-right writes
+     *    (fixBugs = 0 branch) but still run the x_pos test
      * 2. Otherwise set Control_Locked and force right input
      * 3. Check: player_center_x >= Camera_Max_X_pos + $128 → trigger end of act
      */
     private void updateWalkOff(AbstractPlayableSprite player) {
-        // ROM: btst #status.player.in_air — only lock controls when grounded
+        // fixBugs conditional (docs/s2disasm/s2.asm:34815-34838). The
+        // disassembly is built with fixBugs = 0 (s2.asm:27), which is what the
+        // shipped REV01 ROM does, so the engine takes the UNFIXED branch:
+        //
+        //   fixBugs = 0 (taken): "btst #status.player.in_air,... / bne.s
+        //       loc_19434" -- an airborne player skips ONLY the Control_Locked /
+        //       Ctrl_1_Logical writes and falls straight through to the x_pos
+        //       test, so Load_EndOfAct can and does trigger mid-air.
+        //   fixBugs = 1 (not taken): "bne.w return_194D0" -- returns outright,
+        //       so both the control lock and the results trigger wait for a
+        //       landing. The fix exists because the un-fixed path lets the
+        //       player dodge the control lock by jumping at the right edge.
+        //
+        // The engine previously returned early here, i.e. it implemented the
+        // bug-fixed branch, which deferred Load_EndOfAct until Sonic landed.
         if (!player.getAir()) {
-            player.setForceInputRight(true);
-            player.setControlLocked(true);
+            // Obj0D runs after Sonic's own slot in ExecuteObjects, so its
+            // Control_Locked / Ctrl_1_Logical writes affect the next frame's
+            // player control pass, not the current one.
+            player.queueForceInputRightForNextFrame(true);
+            player.queueControlLockedForNextFrame(true);
         }
 
         // ROM: move.w (MainCharacter+x_pos).w,d0
@@ -269,11 +350,22 @@ public class SignpostObjectInstance extends BoxObjectInstance {
     }
 
     private void spawnResultsScreen(AbstractPlayableSprite player) {
+        if (!queueResultsPlc()) {
+            return;
+        }
         resultsSpawned = true;
+        routineState = STATE_DONE;
         LOGGER.info("Player off-screen, triggering end of act sequence");
 
+        // ROM Obj0D_Main_State3 sets global Control_Locked and Ctrl_1_Logical
+        // to force the walk-off, then jumps straight into Load_EndOfAct without
+        // clearing either latch. The forced-right deceleration therefore
+        // persists into the first results frames until later gameplay code
+        // overwrites the logical pad state. Keep the engine's stored walk-off
+        // state latched here instead of clearing it at results spawn.
+
         try {
-            services().playMusic(Sonic2Music.ACT_CLEAR.id);
+            services().playMusic(GameMusic.ACT_CLEAR);
         } catch (Exception e) {
             LOGGER.warning("Failed to play stage clear music: " + e.getMessage());
         }
@@ -284,12 +376,25 @@ public class SignpostObjectInstance extends BoxObjectInstance {
         boolean allRingsCollected = services().areAllRingsCollected();
 
         // Spawn the results screen
-        ResultsScreenObjectInstance resultsScreen = new ResultsScreenObjectInstance(
-                elapsedSeconds, ringCount, actNumber, allRingsCollected);
-        ObjectManager objectManager = services().objectManager();
-        if (objectManager != null) {
-            objectManager.addDynamicObject(resultsScreen);
+        if (services().objectManager() != null) {
+            spawnFreeChild(() -> new ResultsScreenObjectInstance(
+                    elapsedSeconds, ringCount, actNumber, allRingsCollected));
             LOGGER.info("Results screen spawned");
+        }
+    }
+
+    private boolean queueResultsPlc() {
+        try {
+            Sonic2PlcService plc = services().gameModule().getGameService(Sonic2PlcService.class);
+            if (plc != null) {
+                Sonic2LevelEventManager events = services().gameModule()
+                        .getGameService(Sonic2LevelEventManager.class);
+                plc.transact(Sonic2PlcService.replaceOperation(events != null && events.getPlayerCharacter() == PlayerCharacter.TAILS_ALONE
+                        ? 66 : 38));
+            }
+            return true;
+        } catch (Exception ignored) {
+            return false;
         }
     }
 

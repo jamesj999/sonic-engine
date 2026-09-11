@@ -9,6 +9,10 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreateObjectLinks;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.RomObjectCodePointerProvider;
 import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
@@ -24,12 +28,13 @@ import java.util.List;
  * animates a floor overlay that periodically appears and disappears. When the
  * parent reaches mapping frame 5, a solid child object is spawned that provides
  * collision ({@code SolidObjectFull}) and renders the water border visual
- * (Map_AIZDisappearingFloor2). The child is destroyed when the parent's
+ * (Map_AIZDisappearingFloor2). The child moves off-screen when the parent's
  * mapping frame returns to 3 during the reappear sequence.
  * <p>
  * ROM references: Obj_AIZDisappearingFloor (sonic3k.asm:58320).
  */
-public class AizDisappearingFloorObjectInstance extends AbstractObjectInstance {
+public class AizDisappearingFloorObjectInstance extends AbstractObjectInstance
+        implements RewindRecreatable {
 
     // ===== Period lookup table (word_2A232) =====
     private static final int[] PERIOD_TABLE = {
@@ -52,10 +57,10 @@ public class AizDisappearingFloorObjectInstance extends AbstractObjectInstance {
     private static final int PRIORITY = 5;
 
     // ===== Instance state =====
-    private final int x;
-    private final int y;
-    private final int periodMask;    // $32(a0)
-    private final int phaseOffset;   // $34(a0)
+    private int x;
+    private int y;
+    private int periodMask;    // $32(a0)
+    private int phaseOffset;   // $34(a0)
 
     private int animIndex;           // 0 = idle, 1 = cycle
     private int animStep;
@@ -77,9 +82,24 @@ public class AizDisappearingFloorObjectInstance extends AbstractObjectInstance {
         this.phaseOffset = upperNibble << shift;
     }
 
+    @Override
+    public AizDisappearingFloorObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new AizDisappearingFloorObjectInstance(ctx.spawn());
+    }
+
+    private int levelFrameCounter(int fallbackCounter) {
+        // Obj_AIZDisappearingFloor reads Level_frame_counter, not
+        // V_int_run_count (sonic3k.asm:58373-58375). LevelManager stores the
+        // previous completed frame until the current Process_Sprites pass, so
+        // the value visible to this object is its counter plus one.
+        return services().levelManager() != null
+                ? services().levelManager().getFrameCounter()
+                : fallbackCounter;
+    }
+
     // ROM: sonic3k.asm:58343-58353
-    private void applyInitTimingCheck(int frameCounter) {
-        int masked = (frameCounter + phaseOffset) & periodMask;
+    private void applyInitTimingCheck(int levelFrameCounter) {
+        int masked = (levelFrameCounter + phaseOffset) & periodMask;
         if (masked == 0) return;
         int diff = masked - 0xC8;
         if (diff >= 0) return;
@@ -90,14 +110,15 @@ public class AizDisappearingFloorObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
+        int levelFrameCounter = levelFrameCounter(vIntRunCount);
         if (!initApplied) {
             initApplied = true;
-            applyInitTimingCheck(frameCounter);
+            applyInitTimingCheck(levelFrameCounter);
         }
 
         // ROM: sonic3k.asm:58358-58368
-        int masked = (frameCounter + phaseOffset) & periodMask;
+        int masked = (levelFrameCounter + phaseOffset) & periodMask;
         if (masked == 0) {
             animIndex = 1;
             animStep = 0;
@@ -172,21 +193,39 @@ public class AizDisappearingFloorObjectInstance extends AbstractObjectInstance {
     /**
      * ROM-faithful child object spawned at parent mapping frame 5.
      * Provides {@code SolidObjectFull} collision and renders the water border
-     * visual (Map_AIZDisappearingFloor2). Destroyed when parent reaches frame 3.
+     * visual (Map_AIZDisappearingFloor2). Moved off-screen when the parent
+     * reaches frame 3.
      * <p>
      * ROM references: loc_2A36C (sonic3k.asm:58395-58414).
      */
     static class BorderChild extends AbstractObjectInstance
-            implements SolidObjectProvider, SolidObjectListener {
+            implements SolidObjectProvider, SolidObjectListener, RewindRecreatable, RomObjectCodePointerProvider {
+
+        /**
+         * Word 0 of this object's S3K SST holds its live ROM code pointer.
+         * ROM {@code Obj_AIZDisappearingFloor} is installed from the S3K object pointer table at
+         * {@code $0002A252} (table read from the user-supplied ROM; the
+         * label is defined at docs/skdisasm/sonic3k.asm:58325).
+         * Its whole code block lies in one bank, so the HIGH word that
+         * {@code sub_13EFC} latches into {@code Tails_CPU_interact} and compares
+         * on the next off-screen on-object frame is {@code $0002}
+         * (docs/skdisasm/sonic3k.asm:26816-26843).
+         */
+        @Override
+        public int romObjectCodePointerHighWord() {
+            return 0x0002;
+        }
+
 
         // ROM: move.w #$2B,d1 / move.w #$18,d2 / move.w #$19,d3
         private static final int HALF_WIDTH = 0x2B;
         private static final int HALF_HEIGHT_AIR = 0x18;
         private static final int HALF_HEIGHT_GROUND = 0x19;
         private static final int FRAME_DELAY = 3;
+        private static final int HIDDEN_X = 0x7FF0;
 
-        private final int x;
-        private final int y;
+        private int x;
+        private int y;
         private final AizDisappearingFloorObjectInstance parent;
         private int frame;
         private int timer;
@@ -201,8 +240,26 @@ public class AizDisappearingFloorObjectInstance extends AbstractObjectInstance {
         }
 
         @Override
+        public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+            AizDisappearingFloorObjectInstance restoredParent =
+                    RewindRecreateObjectLinks.nearestLiveObject(
+                            ctx, AizDisappearingFloorObjectInstance.class);
+            return restoredParent == null ? null : new BorderChild(ctx.spawn(), restoredParent);
+        }
+
+        @Override
         public SolidObjectParams getSolidParams() {
-            return new SolidObjectParams(HALF_WIDTH, HALF_HEIGHT_AIR, HALF_HEIGHT_GROUND);
+            return SolidObjectParams.of(HALF_WIDTH, HALF_HEIGHT_AIR, HALF_HEIGHT_GROUND);
+        }
+
+        @Override
+        public int getTopLandingHalfWidth(PlayableEntity player, int collisionHalfWidth) {
+            // ROM Solid_Landed / loc_1E154 (sonic3k.asm:41611-41621) re-reads
+            // width_pixels(a0) for the landing X gate. The border child is
+            // spawned with width_pixels = $28 (sonic3k.asm:58390) while its
+            // solid call passes d1 = $2B (sonic3k.asm:58413-58418), so the
+            // default d1 - $B = $20 heuristic is 8px too narrow.
+            return 0x28;
         }
 
         @Override
@@ -210,11 +267,12 @@ public class AizDisappearingFloorObjectInstance extends AbstractObjectInstance {
         }
 
         @Override
-        public void update(int frameCounter, PlayableEntity playerEntity) {
-            // ROM: cmpi.b #3,mapping_frame(a1) — check parent
+        public void update(int vIntRunCount, PlayableEntity playerEntity) {
+            // ROM: cmpi.b #3,mapping_frame(a1) / move.w #$7FF0,x_pos(a0)
+            // The child is moved off-screen, not deleted. SolidObjectFull still
+            // runs below, which clears a continued ride on the same frame.
             if (parent.mappingFrame == 3) {
-                setDestroyed(true);
-                return;
+                x = HIDDEN_X;
             }
             // ROM: subq.b #1,anim_frame_timer(a0); bpl.s loc_2A394
             timer--;

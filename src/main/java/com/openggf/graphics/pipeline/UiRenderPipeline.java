@@ -10,13 +10,17 @@ import com.openggf.sprites.playable.AbstractPlayableSprite;
  * Unified UI render pipeline that ensures correct ordering:
  * 1. Scene (rendered by LevelManager/GraphicsManager before this)
  * 2. Overlay (HUD, debug info)
- * 3. Fade pass (screen transitions - always last)
+ * 3. Fade pass (screen transitions; final pass within the normal scene/UI pipeline)
+ *
+ * Engine-owned post-fade diagnostic overlays may render after this pipeline so trace,
+ * debug, and alignment status stays readable during fade-to-black teardown.
  *
  * This consolidates FadeManager and HudRenderManager into a single
  * orchestration point to prevent render order bugs.
  */
 public class UiRenderPipeline {
     private final GraphicsManager graphicsManager;
+    private RenderOrderRecorder renderOrderRecorder = new RenderOrderRecorder();
     private HudRenderManager hudRenderManager;
     private FadeManager fadeManager;
 
@@ -36,12 +40,39 @@ public class UiRenderPipeline {
         this.fadeManager = fadeManager;
     }
 
+    public void setRenderOrderRecorder(RenderOrderRecorder renderOrderRecorder) {
+        this.renderOrderRecorder = renderOrderRecorder != null ? renderOrderRecorder : new RenderOrderRecorder();
+    }
+
     public void setHudEnabled(boolean enabled) {
         this.hudEnabled = enabled;
     }
 
     public void setFadeEnabled(boolean enabled) {
         this.fadeEnabled = enabled;
+    }
+
+    /**
+     * Begin a centered-320 safe-area projection scope for UI drawing.
+     * At native width (320) this is a no-op. At wider viewports it pillarboxes UI
+     * to the central 320-pixel column.
+     * <p>
+     * Callers MUST call {@link #endSafeArea()} BEFORE {@link #renderFadePass()} so the
+     * fade pass runs at the full viewport projection, not the safe-area.
+     *
+     * @param viewportWidth        physical viewport width in pixels
+     * @param viewportHeightPixels physical viewport height in pixels
+     */
+    public void beginSafeArea(int viewportWidth, int viewportHeightPixels) {
+        graphicsManager.beginSafeAreaProjection(viewportWidth, viewportHeightPixels);
+    }
+
+    /**
+     * End the safe-area projection scope, restoring the engine's scene projection.
+     * Must be called after all safe-area UI drawing and BEFORE {@link #renderFadePass()}.
+     */
+    public void endSafeArea() {
+        graphicsManager.endSafeAreaProjection();
     }
 
     /**
@@ -52,22 +83,19 @@ public class UiRenderPipeline {
      * @param player Current player sprite (may be null)
      */
     public void renderOverlay(LevelState levelState, AbstractPlayableSprite player) {
-        RenderOrderRecorder recorder = RenderOrderRecorder.getInstance();
-
         if (hudEnabled && hudRenderManager != null && levelState != null) {
-            recorder.record(RenderPhase.OVERLAY, "HUD");
+            renderOrderRecorder.record(RenderPhase.OVERLAY, "HUD");
             hudRenderManager.draw(levelState, player);
         }
     }
 
     /**
-     * Render the fade pass. Must be called after all other rendering.
+     * Render the fade pass. Must be called after normal scene/HUD rendering.
+     * Explicit diagnostic overlays owned by Engine may render after this pass.
      */
     public void renderFadePass() {
-        RenderOrderRecorder recorder = RenderOrderRecorder.getInstance();
-
         if (fadeEnabled && fadeManager != null && fadeManager.isActive()) {
-            recorder.record(RenderPhase.FADE_PASS, "Fade");
+            renderOrderRecorder.record(RenderPhase.FADE_PASS, "Fade");
             fadeManager.render();
         }
     }
@@ -100,5 +128,9 @@ public class UiRenderPipeline {
      */
     public HudRenderManager getHudRenderManager() {
         return hudRenderManager;
+    }
+
+    public RenderOrderRecorder getRenderOrderRecorder() {
+        return renderOrderRecorder;
     }
 }

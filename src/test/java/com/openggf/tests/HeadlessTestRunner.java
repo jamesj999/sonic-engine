@@ -1,19 +1,21 @@
 package com.openggf.tests;
 
-import com.openggf.LevelFrameStep;
-import com.openggf.camera.Camera;
+import com.openggf.LevelFrameResult;
 import com.openggf.debug.playback.Bk2FrameInput;
 import com.openggf.debug.playback.Bk2Movie;
-import com.openggf.game.GameServices;
-import com.openggf.level.LevelManager;
-import com.openggf.sprites.managers.SpriteManager;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
+import com.openggf.tools.RecordingFrameDriver;
+import com.openggf.trace.timing.TraceHardwareTimingBoundaryObserver;
+import com.openggf.game.GameServices;
+import com.openggf.audio.presentation.PresentationMode;
 
 /**
  * Headless test runner that simulates the full game loop update cycle.
- * Delegates to {@link LevelFrameStep} for frame-level ordering and
- * {@link SpriteManager#tickPlayablePhysics} for per-sprite physics,
- * ensuring the test harness cannot drift from production.
+ * Delegates to the shared engine-side {@link RecordingFrameDriver}, which
+ * handles frame-level ordering via {@code LevelFrameStep} and team updates via
+ * {@code SpriteManager.update(...)}, ensuring the test harness, the trace-replay
+ * tests, and the headless trace-capture tool cannot drift from production
+ * team behavior (or from each other).
  *
  * <p>Usage example:
  * <pre>
@@ -23,22 +25,23 @@ import com.openggf.sprites.playable.AbstractPlayableSprite;
  *
  * <p>Important setup requirements for tests using this class:
  * <ul>
- *   <li>Reset singletons: GraphicsManager.getInstance().resetState(), GameServices.camera().resetState()</li>
- *   <li>Initialize headless graphics: GraphicsManager.getInstance().initHeadless()</li>
+ *   <li>Reset test state: TestEnvironment.resetAll()</li>
+ *   <li>Initialize headless graphics: GameServices.graphics().initHeadless()</li>
  *   <li>Load level: GameServices.level().loadZoneAndAct(zone, act)</li>
  *   <li>Fix GroundSensor: GroundSensor.setLevelManager(GameServices.level())</li>
  *   <li>Update camera position: GameServices.camera().updatePosition(true)</li>
  * </ul>
  */
 public class HeadlessTestRunner {
-    private final AbstractPlayableSprite sprite;
-    private final LevelManager levelManager;
-    private int frameCounter = 0;
 
-    // BK2 recording playback fields
-    private Bk2Movie bk2Movie;
-    private int bk2StartIndex;
-    private int currentBk2Index;
+    /**
+     * Upper bound on consecutive SETUP_ONLY rows before a step is treated as divergent.
+     * A structural boundary only ever costs a handful of rows; an unbounded retry turns a
+     * frame-driver admission regression into a hung fork rather than a failing test.
+     */
+    private static final int SETUP_ONLY_RETRY_LIMIT = 4096;
+
+    private final RecordingFrameDriver driver;
 
     /**
      * Creates a new HeadlessTestRunner for the given sprite.
@@ -46,81 +49,77 @@ public class HeadlessTestRunner {
      * @param sprite The playable sprite to run physics updates on
      */
     public HeadlessTestRunner(AbstractPlayableSprite sprite) {
-        this.sprite = sprite;
-        this.levelManager = GameServices.level();
+        this.driver = new RecordingFrameDriver(sprite);
     }
 
     /**
      * Steps one frame with the given input state.
-     * Frame-level ordering is defined by {@link LevelFrameStep#execute};
-     * per-sprite physics ordering is defined by
-     * {@link SpriteManager#tickPlayablePhysics}.
-     *
-     * @param up    Up input pressed
-     * @param down  Down input pressed
-     * @param left  Left input pressed
-     * @param right Right input pressed
-     * @param jump  Jump input pressed
+     * Frame-level ordering is defined by {@code LevelFrameStep#execute};
+     * playable/team ordering is defined by {@code SpriteManager.update(...)}.
      */
-    public void stepFrame(boolean up, boolean down, boolean left, boolean right, boolean jump) {
-        frameCounter++;
+    public LevelFrameResult stepFrame(
+            boolean up, boolean down, boolean left, boolean right, boolean jump) {
+        return retrySetupOnly(() ->
+                driver.stepFrame(up, down, left, right, jump));
+    }
 
-        // Store RAW input state for objects (like springs) that need to query button state
-        // even when control is locked. This matches SpriteManager.update() behavior where
-        // input state is set BEFORE object updates. Objects read isJumpPressed() during
-        // their update() methods, so this must be set before updateObjectPositions().
-        sprite.setJumpInputPressed(jump);
-        sprite.setDirectionalInputPressed(up, down, left, right);
+    /**
+     * Convenience overload that also carries P1 Start, used by tests exercising
+     * ROM in-game pause.
+     */
+    public LevelFrameResult stepFrame(
+            boolean up, boolean down, boolean left, boolean right, boolean jump,
+            boolean p1Start) {
+        return retrySetupOnly(() ->
+                driver.stepFrame(up, down, left, right, jump, p1Start));
+    }
 
-        // Canonical frame tick: objects → zone features → sprites → level events → camera → level.
-        LevelFrameStep.execute(levelManager, GameServices.camera(), () -> {
-            // Compute effective inputs matching SpriteManager.update() filtering.
-            boolean controlLocked = sprite.isControlLocked();
-            boolean forcedRight = sprite.isForcedInputActive(AbstractPlayableSprite.INPUT_RIGHT)
-                    || sprite.isForceInputRight();
-            boolean forcedLeft = sprite.isForcedInputActive(AbstractPlayableSprite.INPUT_LEFT);
-            boolean forcedUp = sprite.isForcedInputActive(AbstractPlayableSprite.INPUT_UP);
-            boolean forcedDown = sprite.isForcedInputActive(AbstractPlayableSprite.INPUT_DOWN);
-            boolean forcedJump = sprite.isForcedInputActive(AbstractPlayableSprite.INPUT_JUMP);
-            boolean effectiveRight = (!controlLocked && right) || forcedRight;
-            boolean effectiveLeft = ((!controlLocked && left) || forcedLeft) && !forcedRight;
-            boolean effectiveUp = (!controlLocked && up) || forcedUp;
-            boolean effectiveDown = (!controlLocked && down) || forcedDown;
-            boolean effectiveJump = (!controlLocked && jump) || forcedJump;
+    /**
+     * Steps one frame with both P1 and P2 input.
+     */
+    public LevelFrameResult stepFrame(
+            boolean up, boolean down, boolean left, boolean right, boolean jump,
+            int p2Mask, boolean p2Start) {
+        return retrySetupOnly(() ->
+                driver.stepFrame(up, down, left, right, jump, p2Mask, p2Start));
+    }
 
-            SpriteManager.tickPlayablePhysics(sprite,
-                    effectiveUp, effectiveDown, effectiveLeft, effectiveRight, effectiveJump,
-                    false, false, false, levelManager, frameCounter);
-        });
+    /**
+     * Full-input step overload, including P1 Start so ROM in-game pause can be
+     * exercised from both unit tests and BK2 replay.
+     */
+    public LevelFrameResult stepFrame(
+            boolean up, boolean down, boolean left, boolean right, boolean jump,
+            int p2Mask, boolean p2Start, boolean p1Start) {
+        return retrySetupOnly(() -> driver.stepFrame(
+                up, down, left, right, jump, p2Mask, p2Start, p1Start));
+    }
+
+    /**
+     * Primes the synthetic input handler to the state at an already-restored
+     * playback frame.
+     */
+    public void primeInputState(Bk2FrameInput frameInput) {
+        driver.primeInputState(frameInput);
     }
 
     /**
      * Steps multiple frames with no input (idle).
-     *
-     * @param frames Number of frames to step
      */
     public void stepIdleFrames(int frames) {
-        for (int i = 0; i < frames; i++) {
+        for (int frame = 0; frame < frames; frame++) {
             stepFrame(false, false, false, false, false);
         }
     }
 
-    /**
-     * Gets the current frame counter.
-     *
-     * @return The number of frames stepped since creation
-     */
+    /** Gets the current frame counter. */
     public int getFrameCounter() {
-        return frameCounter;
+        return driver.getFrameCounter();
     }
 
-    /**
-     * Gets the sprite being controlled.
-     *
-     * @return The playable sprite
-     */
+    /** Gets the sprite being controlled. */
     public AbstractPlayableSprite getSprite() {
-        return sprite;
+        return driver.getSprite();
     }
 
     // ---- BK2 recording playback ----
@@ -131,110 +130,151 @@ public class HeadlessTestRunner {
      * @param movie          The parsed BK2 movie
      * @param bk2FrameOffset The 0-based emulation frame index where trace recording began
      *                       (from BizHawk's emu.framecount() in the Lua script).
-     *                       This is a direct index into the movie's frame list, NOT a
-     *                       1-based BK2 line number.
      */
     public void setBk2Movie(Bk2Movie movie, int bk2FrameOffset) {
-        this.bk2Movie = movie;
-        this.bk2StartIndex = bk2FrameOffset;
-        this.currentBk2Index = bk2StartIndex;
+        driver.setBk2Movie(movie, bk2FrameOffset);
+    }
 
-        // ROM parity: v_vbla_byte counts ALL VBlanks since power-on, never
-        // resets. Objects with timing gates like (v_vbla_byte + d7) & 7 depend
-        // on the absolute mod-8 alignment. The bk2FrameOffset equals
-        // emu.framecount() at the trace start. ObjectManager.update()
-        // increments frameCounter BEFORE passing it to objects, so we
-        // initialise one below the offset so the first increment lands on the
-        // correct alignment: v_vbla_byte = bk2FrameOffset at the first game
-        // frame, and objects see frameCounter = bk2FrameOffset after the ++.
-        // TODO: Disabled until slot allocation matches ROM exactly. With correct
-        // vbla alignment, slot-dependent timing gates (e.g. Batbrain dropcheck)
-        // fire at the wrong frame because engine slots differ from ROM slots.
-        // Without init, accidental mod-8 alignment of frameCounter happens to
-        // match the first Batbrain encounter. See cascading slot issue analysis.
-        // levelManager.getObjectManager().initVblaCounter(bk2FrameOffset - 1);
+    public void installHardwareTimingReplayObserver(
+            TraceHardwareTimingBoundaryObserver observer) {
+        driver.installHardwareTimingReplayObserver(observer);
+    }
+
+    public void clearHardwareTimingReplayObserver() {
+        driver.clearHardwareTimingReplayObserver();
+    }
+
+    public void beginTraceRow(int traceIndex, int rawFrame) {
+        driver.beginTraceRow(traceIndex, rawFrame);
+    }
+
+    public void enterHardwareTimingGap() {
+        driver.enterHardwareTimingGap();
     }
 
     /**
      * Steps one frame using input from the BK2 movie recording.
      *
      * @return The raw input mask used (for trace input validation)
-     * @throws IllegalStateException if no BK2 movie is loaded or the movie is exhausted
      */
     public int stepFrameFromRecording() {
-        if (bk2Movie == null) {
-            throw new IllegalStateException("No BK2 movie loaded. Call setBk2Movie() first.");
+        int input;
+        int setupRetries = 0;
+        do {
+            if (setupRetries++ >= SETUP_ONLY_RETRY_LIMIT) {
+                throw new IllegalStateException(
+                        "stepFrameFromRecording kept returning SETUP_ONLY for "
+                                + SETUP_ONLY_RETRY_LIMIT + " retries; the frame driver"
+                                + " is no longer admitting a gameplay row");
+            }
+            input = driver.stepFrameFromRecording();
+        } while (driver.getLastFrameResult() == LevelFrameResult.SETUP_ONLY);
+        presentIfAdmitted(driver.getLastFrameResult());
+        return input;
+    }
+
+    /**
+     * Consumes the current BK2 row for validation but drives gameplay with the
+     * previous BK2 row.
+     */
+    public int stepFrameFromRecordingUsingPreviousInput() {
+        int input;
+        int setupRetries = 0;
+        do {
+            if (setupRetries++ >= SETUP_ONLY_RETRY_LIMIT) {
+                throw new IllegalStateException(
+                        "stepFrameFromRecordingUsingPreviousInput kept returning SETUP_ONLY for "
+                                + SETUP_ONLY_RETRY_LIMIT + " retries; the frame driver"
+                                + " is no longer admitting a gameplay row");
+            }
+            input = driver.stepFrameFromRecordingUsingPreviousInput();
+        } while (driver.getLastFrameResult() == LevelFrameResult.SETUP_ONLY);
+        presentIfAdmitted(driver.getLastFrameResult());
+        return input;
+    }
+
+    private LevelFrameResult presentIfAdmitted(LevelFrameResult result) {
+        if (result != LevelFrameResult.SETUP_ONLY) {
+            presentOuterFrame();
         }
-        if (currentBk2Index >= bk2Movie.getFrameCount()) {
-            throw new IllegalStateException(
-                    "BK2 movie exhausted at index " + currentBk2Index
-                    + " (movie has " + bk2Movie.getFrameCount() + " frames)");
-        }
+        return result;
+    }
 
-        Bk2FrameInput frameInput = bk2Movie.getFrame(currentBk2Index);
-        int mask = frameInput.p1InputMask();
+    private LevelFrameResult retrySetupOnly(
+            java.util.function.Supplier<LevelFrameResult> step) {
+        LevelFrameResult result;
+        int setupRetries = 0;
+        do {
+            if (setupRetries++ >= SETUP_ONLY_RETRY_LIMIT) {
+                throw new IllegalStateException(
+                        "a stepped frame kept returning SETUP_ONLY for "
+                                + SETUP_ONLY_RETRY_LIMIT + " retries; the frame driver"
+                                + " is no longer admitting a gameplay row");
+            }
+            result = step.get();
+        } while (result == LevelFrameResult.SETUP_ONLY);
+        return presentIfAdmitted(result);
+    }
 
-        // BK2 separates directional inputs (p1InputMask) from action buttons (p1ActionMask).
-        // The jump/A/B/C buttons are in the action mask, so OR the jump bit into the
-        // returned mask to ensure trace input validation sees the complete input state.
-        if (frameInput.p1ActionMask() != 0) {
-            mask |= AbstractPlayableSprite.INPUT_JUMP;
-        }
+    static boolean hasNewP1ActionPressForLogicalInput(Bk2Movie movie, int bk2Index, boolean controlLocked) {
+        return RecordingFrameDriver.hasNewP1ActionPressForLogicalInput(movie, bk2Index, controlLocked);
+    }
 
-        boolean up    = (mask & AbstractPlayableSprite.INPUT_UP) != 0;
-        boolean down  = (mask & AbstractPlayableSprite.INPUT_DOWN) != 0;
-        boolean left  = (mask & AbstractPlayableSprite.INPUT_LEFT) != 0;
-        boolean right = (mask & AbstractPlayableSprite.INPUT_RIGHT) != 0;
-        boolean jump  = (mask & AbstractPlayableSprite.INPUT_JUMP) != 0;
-
-        stepFrame(up, down, left, right, jump);
-        currentBk2Index++;
-
-        return mask;
+    static boolean hasNewP1ActionPress(Bk2Movie movie, int bk2Index) {
+        return RecordingFrameDriver.hasNewP1ActionPress(movie, bk2Index);
     }
 
     /**
      * Advances the BK2 movie by one frame without processing physics.
-     * Used for lag frames where the ROM didn't execute the main game loop,
-     * so the engine should not process physics either.
      *
      * @return The raw input mask for that frame (for trace input validation)
-     * @throws IllegalStateException if no BK2 movie is loaded or the movie is exhausted
      */
     public int skipFrameFromRecording() {
-        if (bk2Movie == null) {
-            throw new IllegalStateException("No BK2 movie loaded. Call setBk2Movie() first.");
-        }
-        if (currentBk2Index >= bk2Movie.getFrameCount()) {
-            throw new IllegalStateException(
-                    "BK2 movie exhausted at index " + currentBk2Index
-                    + " (movie has " + bk2Movie.getFrameCount() + " frames)");
-        }
+        return driver.skipFrameFromRecording();
+    }
 
-        Bk2FrameInput frameInput = bk2Movie.getFrame(currentBk2Index);
-        int mask = frameInput.p1InputMask();
-        if (frameInput.p1ActionMask() != 0) {
-            mask |= AbstractPlayableSprite.INPUT_JUMP;
-        }
+    public void advancePlayableAnimationsOnly() {
+        driver.advancePlayableAnimationsOnly();
+    }
 
-        // Advance BK2 index without calling stepFrame() — no physics processed.
-        currentBk2Index++;
+    public void advancePlayableFixedSlotsOnly() {
+        driver.advancePlayableFixedSlotsOnly();
+    }
 
-        // ROM parity: v_vbla_byte increments in the VBlank handler even on lag
-        // frames. Objects that use timing gates like (v_vbla_byte + d7) & 7 are
-        // sensitive to this. Advance the ObjectManager's frame counter to keep
-        // it aligned with v_vbla_byte.
-        levelManager.getObjectManager().advanceVblaCounter();
-        return mask;
+    public void suppressFirstSidekickAnimationOnce() {
+        driver.suppressFirstSidekickAnimationOnce();
+    }
+
+    /**
+     * Consumes one BK2 input frame without mutating gameplay or timing counters.
+     */
+    public int consumeRecordingFrameInputOnly() {
+        return driver.consumeRecordingFrameInputOnly();
+    }
+
+    /**
+     * Returns the BK2 input mask at the given offset from the current cursor
+     * without advancing the cursor or stepping gameplay.
+     */
+    public int peekRecordingInputAt(int offset) {
+        return driver.peekRecordingInputAt(offset);
     }
 
     /**
      * Returns the number of BK2 recording frames remaining.
-     *
-     * @return Remaining frames, or 0 if no movie is loaded
      */
     public int getRecordingFramesRemaining() {
-        if (bk2Movie == null) return 0;
-        return bk2Movie.getFrameCount() - currentBk2Index;
+        return driver.getRecordingFramesRemaining();
+    }
+
+    /**
+     * Advances the BK2 cursor without mutating gameplay state.
+     */
+    public void advanceRecordingCursor(int frameCount) {
+        driver.advanceRecordingCursor(frameCount);
+    }
+
+    private static void presentOuterFrame() {
+        GameServices.audio().presentFrame(PresentationMode.FORWARD);
     }
 }

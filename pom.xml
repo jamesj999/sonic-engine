@@ -6,18 +6,59 @@
 
     <groupId>com.openggf</groupId>
     <artifactId>OpenGGF</artifactId>
-    <version>0.5.20260411</version>
+    <version>0.6.20260911</version>
 
     <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <maven.compiler.release>21</maven.compiler.release>
         <lwjgl.version>3.3.3</lwjgl.version>
         <joml.version>1.10.5</joml.version>
-        <surefire.argLine>-Xmx1g -Djdk.attach.allowAttachSelf=true</surefire.argLine>
+        <mockito.version>5.14.2</mockito.version>
+        <slf4j.version>2.0.17</slf4j.version>
+        <mockito.agent.path>"${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar"</mockito.agent.path>
+        <mockito.agent.argLine>-javaagent:${mockito.agent.path}</mockito.agent.argLine>
+        <test.cds.argLine>-Xshare:off</test.cds.argLine>
+        <test.logging.config.file>${project.basedir}/src/test/resources/quiet-logging.properties</test.logging.config.file>
+        <test.slf4j.verbosity>ERROR</test.slf4j.verbosity>
+        <!-- Every worktree owns one ordinary Maven target tree. -->
+        <openggf.test.tmpdir>${project.build.directory}/test-tmp</openggf.test.tmpdir>
+        <openggf.surefire.reports>${project.build.directory}/surefire-reports</openggf.surefire.reports>
+        <openggf.trace.reports>${project.build.directory}/trace-reports</openggf.trace.reports>
+        <openggf.test.diagnostics>${project.build.directory}/diagnostics</openggf.test.diagnostics>
+        <openggf.artifact.root>${project.build.directory}</openggf.artifact.root>
+        <openggf.distribution.root>${project.build.directory}</openggf.distribution.root>
+        <surefire.argLine>${test.cds.argLine} ${mockito.agent.argLine} -Xmx1g</surefire.argLine>
         <surefire.forkCount>4</surefire.forkCount>
+        <surefire.excludedGroups>tracechaser-integration</surefire.excludedGroups>
+        <!-- Escape hatch for the validate-phase build-JDK check; see the antrun
+             verify-build-jdk execution. -->
+        <openggf.jdk.check.skip>false</openggf.jdk.check.skip>
+        <native.macos.package.skip>true</native.macos.package.skip>
     </properties>
 
     <!-- LWJGL native classifier profiles -->
     <profiles>
+        <profile>
+            <id>tracechaser-integration</id>
+            <properties>
+                <surefire.excludedGroups></surefire.excludedGroups>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <version>3.2.5</version>
+                        <configuration>
+                            <groups>tracechaser-integration</groups>
+                            <excludedGroups></excludedGroups>
+                            <excludes combine.self="override"></excludes>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
         <profile>
             <id>lwjgl-natives-linux</id>
             <activation>
@@ -34,7 +75,8 @@
             </activation>
             <properties>
                 <lwjgl.natives>natives-macos</lwjgl.natives>
-                <surefire.argLine>-XstartOnFirstThread -Xmx1g -Djdk.attach.allowAttachSelf=true</surefire.argLine>
+                <surefire.argLine>-XstartOnFirstThread ${test.cds.argLine} ${mockito.agent.argLine} -Xmx1g</surefire.argLine>
+                <native.macos.package.skip>false</native.macos.package.skip>
             </properties>
         </profile>
         <profile>
@@ -44,7 +86,8 @@
             </activation>
             <properties>
                 <lwjgl.natives>natives-macos-arm64</lwjgl.natives>
-                <surefire.argLine>-XstartOnFirstThread -Xmx1g -Djdk.attach.allowAttachSelf=true</surefire.argLine>
+                <surefire.argLine>-XstartOnFirstThread ${test.cds.argLine} ${mockito.agent.argLine} -Xmx1g</surefire.argLine>
+                <native.macos.package.skip>false</native.macos.package.skip>
             </properties>
         </profile>
         <profile>
@@ -57,15 +100,78 @@
             </properties>
         </profile>
 
+        <!-- Fast local dev launcher: run the engine straight from ${project.build.directory}/classes
+             without building the jar-with-dependencies. Activate explicitly:
+
+               mvn -q -Pdev-run compile exec:exec
+
+             This is what dev.cmd and dev.sh invoke. It skips the ~40s fat-jar
+             assembly / mod-SDK / verify packaging that run.cmd and run.sh perform;
+             use the full launcher when you need the distributable jar. The forked
+             JVM args mirror those launchers. -->
+        <profile>
+            <id>dev-run</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <version>3.1.0</version>
+                        <configuration>
+                            <executable>java</executable>
+                            <arguments>
+                                <argument>--add-exports</argument>
+                                <argument>java.base/java.lang=ALL-UNNAMED</argument>
+                                <argument>--add-exports</argument>
+                                <argument>java.desktop/sun.awt=ALL-UNNAMED</argument>
+                                <argument>--add-exports</argument>
+                                <argument>java.desktop/sun.java2d=ALL-UNNAMED</argument>
+                                <argument>-XX:+UseG1GC</argument>
+                                <argument>-XX:MaxGCPauseMillis=5</argument>
+                                <argument>-classpath</argument>
+                                <classpath/>
+                                <argument>com.openggf.Engine</argument>
+                            </arguments>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
         <!-- CI/CD profile: low-memory, single-fork execution.
              Activated automatically when CI=true (GitHub Actions, GitLab CI, etc.)
              or manually via: mvn test -Pci
 
-             Resource profile (measured):
-               1 fork × 256MB = 256MB total, ~19s for 1933 non-ROM tests
-               1 fork × 128MB = OOM on some tests
-               Local 4 forks × 512MB = 2GB total, ~19s (parallelism has <1s benefit)
+             The ordinary suite uses a single 1GB fork in CI. Structural guards
+             run separately through -Pguards, so broad source-graph imports do
+             not accumulate behind the ordinary suite's reused fork.
+             Keeping one fork also avoids native-library races between test JVMs.
         -->
+        <!--
+             The fast lane every branch push runs. Ten test classes are 93 percent
+             of the default suite's wall clock (about 23 of 25 minutes on a CI
+             runner): the S2 audio request-window oracles, the complete-run audio
+             comparator, the Nuked OPN2 bit-exact scripts, the trace session
+             launcher run branch, the modifier documentation sweep and the fast FM
+             tolerance sweeps. They are exhaustive oracles rather than regression
+             signal, so excluding them leaves roughly two minutes of tests that
+             still cover every other class in the tree.
+
+             This is a subset, never a replacement. The full default suite still
+             selects the tagged classes and is what release validation, pull
+             requests and a manually dispatched CI run execute. Tag a class @Tag("slow-suite")
+             only when it is minutes long AND a wider fixture sweep of behaviour
+             some other test already covers.
+
+             Run with: mvn -Psmoke test
+        -->
+        <profile>
+            <id>smoke</id>
+            <properties>
+                <surefire.excludedGroups>tracechaser-integration,performance-measurement,slow-suite</surefire.excludedGroups>
+            </properties>
+        </profile>
+
         <profile>
             <id>ci</id>
             <activation>
@@ -75,9 +181,473 @@
                 </property>
             </activation>
             <properties>
-                <surefire.argLine>-Xmx512m -Djdk.attach.allowAttachSelf=true</surefire.argLine>
+                <surefire.argLine>${test.cds.argLine} ${mockito.agent.argLine} -Xmx1g</surefire.argLine>
                 <surefire.forkCount>1</surefire.forkCount>
             </properties>
+        </profile>
+
+        <!-- Trace replay parity tests are intentionally separated from the
+             default unit/integration suite. They depend on local ROM assets and
+             currently include known parity gaps, so hiding one game-specific
+             class in the default exclusions would make the gap misleading.
+
+             Run explicitly with:
+               mvn -Ptrace-replay test
+        -->
+        <profile>
+            <!--
+              Performance measurements, separated from the correctness suites because they
+              are wall-clock sensitive. TestVerifierCostBenchmark asserts fps() over 100
+              ("headless replay implausibly slow"), which is a real signal on a quiet box
+              and pure noise beside a parallel trace sweep. Together the two heavy classes
+              were about 16 minutes, 37 percent of the trace-replay profile, and neither
+              verifies a trace field: TestVerifierPoolBenchmark's own javadoc says per-frame
+              trace validation is excluded, being the trace suite's job and not a verifier's.
+              Selected by tag rather than filename, because most Benchmark-named classes in
+              this tree are fast unit tests about benchmark tooling.
+              Run with: mvn -Pbenchmarks test
+            -->
+            <id>benchmarks</id>
+            <!-- Benchmarks are wall-clock sensitive, so they default to a single
+                 fork. That default is expressed as the shared surefire.forkCount
+                 property rather than a literal, so the one documented property
+                 still controls fork count everywhere (and -Dsurefire.forkCount
+                 on the command line still wins). -->
+            <properties>
+                <surefire.forkCount>1</surefire.forkCount>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <version>3.2.5</version>
+                        <configuration combine.self="override">
+                            <argLine>${surefire.argLine} -Djava.io.tmpdir="${openggf.test.tmpdir}" -Dorg.lwjgl.system.SharedLibraryExtractPath="${openggf.test.tmpdir}/lwjgl-${surefire.forkNumber}"</argLine>
+                            <reportsDirectory>${openggf.surefire.reports}</reportsDirectory>
+                            <tempDir>${project.build.directory}/surefire</tempDir>
+                            <forkCount>${surefire.forkCount}</forkCount>
+                            <reuseForks>true</reuseForks>
+                            <groups>performance-measurement</groups>
+                            <systemPropertyVariables>
+                                <java.util.logging.config.file>${test.logging.config.file}</java.util.logging.config.file>
+                                <slf4j.internal.verbosity>${test.slf4j.verbosity}</slf4j.internal.verbosity>
+                                <project.basedir>${project.basedir}</project.basedir>
+                                <openggf.test.tmpdir>${openggf.test.tmpdir}</openggf.test.tmpdir>
+                                <openggf.surefire.reports>${openggf.surefire.reports}</openggf.surefire.reports>
+                                <openggf.trace.reports>${openggf.trace.reports}</openggf.trace.reports>
+                                <openggf.test.diagnostics>${openggf.test.diagnostics}</openggf.test.diagnostics>
+                                <openggf.artifact.root>${openggf.artifact.root}</openggf.artifact.root>
+                                <openggf.distribution.root>${openggf.distribution.root}</openggf.distribution.root>
+                            </systemPropertyVariables>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <id>trace-replay</id>
+            <!--
+              The trace-replay suite needs more heap than the shared 1g default,
+              because a run-chain test holds every segment of its run at once:
+              TraceRunReplayWalker.plan() loads all segments eagerly into one
+              TraceData[] and returns a List<SegmentPlan> that retains them for
+              the whole walk. Measured live heap after plan(), per run fixture:
+
+                s3k-knuckles-complete-superemeralds   67 segments   1041 MB
+                s2-sonic-tails-complete-emeralds      35 segments    449 MB
+                s1-sonic-complete-withemeralds        34 segments    322 MB
+                s3k-multibonus / s3-knux-multibonus-ss 25 segments   286 MB
+
+              Only the Knuckles super-emerald run exceeded 1g, which is why it
+              alone died with "Java heap space" and wrote no report while every
+              other chain passed. Its measured peak live heap including the
+              engine was 1245 MB, which is what took this profile from 1g to 2g.
+
+              2g in turn stopped being enough once the 63-segment
+              s3k-sonic-tails-complete-emeralds run landed. Measured on this
+              worktree with -Xlog:gc* over the whole profile at -Xmx2500m
+              (forkCount=1, 834 tests, no OOM): four Full GCs, the largest
+              post-Full-GC live set 2069 MB, just above 2g's 2048 MB, so the
+              fork died mid-suite after 41 report files with every class
+              alphabetically after TestS3kMegaRunChain unexecuted, and reported
+              a truncated 401 tests that looked healthier than the real run.
+              The same profile completes all 834 tests at both 3g and 4g with
+              an identical red set, so 3g is the landed value: ~48% headroom
+              over the 2069 MB measured live set, and forkCount still defaults
+              to 4 here (4 x 3g = 12g worst case).
+
+              The cost is aux events, not physics rows: across the Knuckles run,
+              aux_state.jsonl is 1476 MB uncompressed against 56 MB of
+              physics.csv, and a heap histogram puts TraceFrame at 3% of the
+              retained bytes. Streaming the rows would not have helped; streaming
+              the aux events would, and is the durable fix if a future capture
+              pushes past this ceiling again.
+            -->
+            <properties>
+                <surefire.argLine>${test.cds.argLine} ${mockito.agent.argLine} -Xmx3g</surefire.argLine>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <version>3.2.5</version>
+                        <configuration combine.self="override">
+                            <argLine>${surefire.argLine} -Djava.io.tmpdir="${openggf.test.tmpdir}" -Dorg.lwjgl.system.SharedLibraryExtractPath="${openggf.test.tmpdir}/lwjgl-${surefire.forkNumber}"</argLine>
+                            <reportsDirectory>${openggf.surefire.reports}</reportsDirectory>
+                            <tempDir>${project.build.directory}/surefire</tempDir>
+                            <forkCount>${surefire.forkCount}</forkCount>
+                            <reuseForks>true</reuseForks>
+                            <systemPropertyVariables>
+                                <java.util.logging.config.file>${test.logging.config.file}</java.util.logging.config.file>
+                                <slf4j.internal.verbosity>${test.slf4j.verbosity}</slf4j.internal.verbosity>
+                                <project.basedir>${project.basedir}</project.basedir>
+                                <openggf.test.tmpdir>${openggf.test.tmpdir}</openggf.test.tmpdir>
+                                <openggf.surefire.reports>${openggf.surefire.reports}</openggf.surefire.reports>
+                                <openggf.trace.reports>${openggf.trace.reports}</openggf.trace.reports>
+                                <openggf.test.diagnostics>${openggf.test.diagnostics}</openggf.test.diagnostics>
+                                <openggf.artifact.root>${openggf.artifact.root}</openggf.artifact.root>
+                                <openggf.distribution.root>${openggf.distribution.root}</openggf.distribution.root>
+                            </systemPropertyVariables>
+                            <includes>
+                                <include>**/tests/trace/**/*.java</include>
+                                <include>**/tests/trace/**/*TraceReplay.java</include>
+                                <include>**/tests/trace/**/*ReplayBootstrap.java</include>
+                                <include>**/tests/trace/s2/*Regression.java</include>
+                            </includes>
+                            <!--
+                              Release scope is carried by a JUnit tag as well as by the
+                              file-name lists below. A zone-per-file trace class holds
+                              several character sets, and the release-6 split cuts
+                              between characters, not between files: the Sonic+Tails
+                              Slots replay is in scope while the Knuckles one is not,
+                              and both now live in TestS3kSlotsBonusTraceReplay. Nested
+                              classes tagged trace-scope-r7 are dropped here and picked
+                              up by -Ptrace-replay-r7; the file-name lists still gate the
+                              trace classes that have not been converted yet.
+                            -->
+                            <excludedGroups>performance-measurement,trace-scope-r7</excludedGroups>
+                            <excludes>
+                                <exclude>**/Debug*.java</exclude>
+                                <exclude>**/*Debug*.java</exclude>
+                                <exclude>**/*Probe.java</exclude>
+                                <exclude>**/*Probe*.java</exclude>
+                                <exclude>**/TestGraphicsManagerHeadless.java</exclude>
+                                <exclude>**/VisualRegressionTest.java</exclude>
+                                <exclude>**/VisualReferenceGenerator.java</exclude>
+                                <exclude>**/TestAizFireCurtainGpuDiag.java</exclude>
+                                <exclude>**/TestS3kSpecialStageResultsVisual.java</exclude>
+                                <exclude>**/TestInstaShieldVisual.java</exclude>
+                                <!--
+                                  Release-6 scope gate. Release 6 is the Sonic path through
+                                  S1, S2 and S3; the S&K-half zones (ids 7-13, MHZ onward)
+                                  and every Knuckles route are expected red and run in
+                                  -Ptrace-replay-r7 instead. Kept in one place and mirrored
+                                  by that profile's includes — if you add a trace class for
+                                  an out-of-scope zone or run, add it to BOTH lists.
+                                  Rationale and the measured split:
+                                  docs/status/trace-scope-release-6.md
+                                -->
+                                <exclude>**/tests/trace/s3k/**/*Mhz*.java</exclude>
+                                <exclude>**/tests/trace/s3k/**/*Fbz*.java</exclude>
+                                <exclude>**/tests/trace/s3k/**/*Ssz*.java</exclude>
+                                <exclude>**/tests/trace/s3k/**/*Soz*.java</exclude>
+                                <exclude>**/tests/trace/s3k/**/*Lrz*.java</exclude>
+                                <exclude>**/tests/trace/s3k/**/*Hpz*.java</exclude>
+                                <exclude>**/tests/trace/s3k/**/*Ddz*.java</exclude>
+                                <exclude>**/tests/trace/s3k/**/*Dez*.java</exclude>
+                                <exclude>**/tests/trace/s3k/**/*Zone0c*.java</exclude>
+                                <exclude>**/tests/trace/s3k/TestS3kGumballBonusTraceReplay.java</exclude>
+                                <exclude>**/tests/trace/s3k/TestS3kPachinkoBonusTraceReplay.java</exclude>
+                                <exclude>**/tests/trace/s3k/TestS3kSpecialStageTraceReplay.java</exclude>
+                                <exclude>**/tests/trace/runs/TestS3kKnucklesSuperEmeraldRunChain.java</exclude>
+                                <exclude>**/tests/trace/runs/TestS3kMegaRunChain.java</exclude>
+                                <!--
+                                  Segment gate. A per-zone or per-act segment RESUMES a
+                                  playthrough: it inherits progression state (emeralds above
+                                  all) that it cannot earn, so a green segment proves only
+                                  "given this boundary state, do frames 1..N evolve
+                                  correctly". That is instrumentation, not parity evidence.
+                                  The run chains earn everything by playing and are the gate.
+                                  Segments run in -Ptrace-segments.
+                                  Note the *CompleteRunTraceReplay classes are ALSO per-zone
+                                  slices despite the name — each covers one zone's two acts
+                                  plus the handoff, all sliced from one movie. They differ
+                                  from the sonictails/ set only in that their source movie
+                                  never collects emeralds, so they miss the boundary rather
+                                  than clearing it.
+                                  See docs/status/trace-scope-release-6.md.
+                                -->
+                                <exclude>**/tests/trace/s3k/sonictails/*.java</exclude>
+                                <exclude>**/tests/trace/s3k/*ZoneSliceTraceReplay.java</exclude>
+                            </excludes>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!--
+          Segment traces: instrumentation, not the release gate.
+
+          A per-zone or per-act segment resumes a playthrough mid-flight. It is
+          seeded with position/zone/act from metadata but inherits progression
+          state — emeralds above all — that it has no way to earn, so its
+          comparison answers only "given this boundary state, do frames 1..N
+          evolve correctly". Useful for localisation (a chain red says "somewhere
+          after cursor N"; a segment red names the zone) and cheap to iterate on,
+          but not evidence of parity.
+
+            mvn -Ptrace-segments test
+
+          The run chains are the gate: they play through and earn every piece of
+          run state, so their greens are parity claims.
+        -->
+        <profile>
+            <id>trace-segments</id>
+            <properties>
+                <surefire.argLine>${test.cds.argLine} ${mockito.agent.argLine} -Xmx3g</surefire.argLine>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <version>3.2.5</version>
+                        <configuration combine.self="override">
+                            <argLine>${surefire.argLine} -Djava.io.tmpdir="${openggf.test.tmpdir}" -Dorg.lwjgl.system.SharedLibraryExtractPath="${openggf.test.tmpdir}/lwjgl-${surefire.forkNumber}"</argLine>
+                            <reportsDirectory>${openggf.surefire.reports}</reportsDirectory>
+                            <tempDir>${project.build.directory}/surefire</tempDir>
+                            <forkCount>${surefire.forkCount}</forkCount>
+                            <reuseForks>true</reuseForks>
+                            <systemPropertyVariables>
+                                <java.util.logging.config.file>${test.logging.config.file}</java.util.logging.config.file>
+                                <slf4j.internal.verbosity>${test.slf4j.verbosity}</slf4j.internal.verbosity>
+                                <project.basedir>${project.basedir}</project.basedir>
+                                <openggf.test.tmpdir>${openggf.test.tmpdir}</openggf.test.tmpdir>
+                                <openggf.surefire.reports>${openggf.surefire.reports}</openggf.surefire.reports>
+                                <openggf.trace.reports>${openggf.trace.reports}</openggf.trace.reports>
+                                <openggf.test.diagnostics>${openggf.test.diagnostics}</openggf.test.diagnostics>
+                                <openggf.artifact.root>${openggf.artifact.root}</openggf.artifact.root>
+                                <openggf.distribution.root>${openggf.distribution.root}</openggf.distribution.root>
+                            </systemPropertyVariables>
+                            <includes>
+                                <include>**/tests/trace/s3k/sonictails/*.java</include>
+                                <include>**/tests/trace/s3k/*ZoneSliceTraceReplay.java</include>
+                            </includes>
+                            <excludedGroups>performance-measurement</excludedGroups>
+                            <excludes>
+                                <exclude>**/Debug*.java</exclude>
+                                <exclude>**/*Probe*.java</exclude>
+                            </excludes>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!--
+          Release-7 trace scope: the traces deliberately outside release 6.
+
+          Release 6 is the Sonic path through S1, S2 and S3. S3K is only partly
+          implemented past Launch Base, and the Knuckles routes are not a release-6
+          deliverable, so these classes are EXPECTED red and would otherwise dominate
+          the blocking sweep by error count — 30 S&K-half classes carried 49,261 of
+          the 80,236 measured S3K errors at 9900b3114, against 30,975 in scope.
+
+          Nothing here is deleted, weakened or made advisory. These classes assert
+          exactly what they asserted before and still fail if they regress; they are
+          gated out of the release-blocking suite, not silenced.
+
+            mvn -Ptrace-replay-r7 test
+
+          RUN THIS ANYWAY when a change touches shared runtime rather than one
+          release-6 zone — the sidekick CPU/despawn path, the bonus-stage runtime,
+          the hardware-timing port, PLC/Kosinski queues, the camera, or
+          AbstractTraceReplayTest. The three GREEN Knuckles bonus classes are the best
+          cross-check available for slot-runtime changes, and a ROM-cited sidekick fix
+          landed earlier moved both FBZ and SSZ, which live here.
+
+          The include list below mirrors the exclude list in the trace-replay profile.
+          Add a new out-of-scope class to BOTH.
+          See docs/status/trace-scope-release-6.md.
+        -->
+        <profile>
+            <id>trace-replay-r7</id>
+            <properties>
+                <surefire.argLine>${test.cds.argLine} ${mockito.agent.argLine} -Xmx3g</surefire.argLine>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <version>3.2.5</version>
+                        <configuration combine.self="override">
+                            <argLine>${surefire.argLine} -Djava.io.tmpdir="${openggf.test.tmpdir}" -Dorg.lwjgl.system.SharedLibraryExtractPath="${openggf.test.tmpdir}/lwjgl-${surefire.forkNumber}"</argLine>
+                            <reportsDirectory>${openggf.surefire.reports}</reportsDirectory>
+                            <tempDir>${project.build.directory}/surefire</tempDir>
+                            <forkCount>${surefire.forkCount}</forkCount>
+                            <reuseForks>true</reuseForks>
+                            <systemPropertyVariables>
+                                <java.util.logging.config.file>${test.logging.config.file}</java.util.logging.config.file>
+                                <slf4j.internal.verbosity>${test.slf4j.verbosity}</slf4j.internal.verbosity>
+                                <project.basedir>${project.basedir}</project.basedir>
+                                <openggf.test.tmpdir>${openggf.test.tmpdir}</openggf.test.tmpdir>
+                                <openggf.surefire.reports>${openggf.surefire.reports}</openggf.surefire.reports>
+                                <openggf.trace.reports>${openggf.trace.reports}</openggf.trace.reports>
+                                <openggf.test.diagnostics>${openggf.test.diagnostics}</openggf.test.diagnostics>
+                                <openggf.artifact.root>${openggf.artifact.root}</openggf.artifact.root>
+                                <openggf.distribution.root>${openggf.distribution.root}</openggf.distribution.root>
+                            </systemPropertyVariables>
+                            <includes>
+                                <include>**/tests/trace/s3k/**/*Mhz*.java</include>
+                                <include>**/tests/trace/s3k/**/*Fbz*.java</include>
+                                <include>**/tests/trace/s3k/**/*Ssz*.java</include>
+                                <include>**/tests/trace/s3k/**/*Soz*.java</include>
+                                <include>**/tests/trace/s3k/**/*Lrz*.java</include>
+                                <include>**/tests/trace/s3k/**/*Hpz*.java</include>
+                                <include>**/tests/trace/s3k/**/*Ddz*.java</include>
+                                <include>**/tests/trace/s3k/**/*Dez*.java</include>
+                                <include>**/tests/trace/s3k/**/*Zone0c*.java</include>
+                                <include>**/tests/trace/s3k/TestS3kSlotsBonusTraceReplay.java</include>
+                                <include>**/tests/trace/s3k/TestS3kGumballBonusTraceReplay.java</include>
+                                <include>**/tests/trace/s3k/TestS3kPachinkoBonusTraceReplay.java</include>
+                                <include>**/tests/trace/s3k/TestS3kSpecialStageTraceReplay.java</include>
+                                <include>**/tests/trace/runs/TestS3kKnucklesSuperEmeraldRunChain.java</include>
+                                <include>**/tests/trace/runs/TestS3kMegaRunChain.java</include>
+                                <include>**/tests/trace/s3k/tailsfullchain/*.java</include>
+                                <include>**/tests/trace/runs/TestS3kTailsFullChainRunChain.java</include>
+                            </includes>
+                            <!--
+                              Companion to the tag gate in -Ptrace-replay. A converted
+                              zone-per-file class is included by name below, and its
+                              in-scope character sets (tagged trace-scope-r6) are
+                              dropped here so only the out-of-scope ones run.
+
+                              NOT a strict mirror, and do not "repair" it into one.
+                              TestS3kSlotsBonusTraceReplay is included here by name but
+                              is deliberately ABSENT from the exclude list in
+                              -Ptrace-replay, because tags do the r6-side gating for
+                              converted classes. Adding it there would exclude the
+                              r6-tagged nested class by file name in -Ptrace-replay while
+                              the r7 tag filter already excludes it here, and the
+                              in-scope Slots tests would then run in NEITHER profile,
+                              silently.
+                            -->
+                            <excludedGroups>performance-measurement,trace-scope-r6</excludedGroups>
+                            <excludes>
+                                <exclude>**/Debug*.java</exclude>
+                                <exclude>**/*Debug*.java</exclude>
+                                <exclude>**/*Probe.java</exclude>
+                                <exclude>**/*Probe*.java</exclude>
+                            </excludes>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!-- Structural guard tests: the architectural invariants that no
+             trace fixture can prove and that must never silently stop being
+             enforced.
+
+             They previously lived in the default profile, which the trace suites do
+             not run and which is expensive and ROM-sensitive locally, so a red
+             guard could sit unnoticed on develop (TestS1S2PlcComparisonOnlyGuard
+             did). This profile is source-only, needs no ROM, and runs in about
+             a minute, so CI can gate every push to the integration branches on
+             it - the default `test` job is skipped on push entirely.
+
+               mvn -Pguards test
+
+             The include is a name convention, not a path: a guard may live in
+             any package. TestBuildToolingGuard
+             .everyGuardTestClassIsSelectedByTheGuardsProfile checks that every
+             *Guard* test class on disk is actually selected here. -->
+        <profile>
+            <id>guards</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <version>3.2.5</version>
+                        <configuration combine.self="override">
+                            <argLine>${surefire.argLine} -Djava.io.tmpdir="${openggf.test.tmpdir}" -Dorg.lwjgl.system.SharedLibraryExtractPath="${openggf.test.tmpdir}/lwjgl-${surefire.forkNumber}"</argLine>
+                            <reportsDirectory>${openggf.surefire.reports}</reportsDirectory>
+                            <tempDir>${project.build.directory}/surefire</tempDir>
+                            <forkCount>${surefire.forkCount}</forkCount>
+                            <reuseForks>true</reuseForks>
+                            <systemPropertyVariables>
+                                <project.basedir>${project.basedir}</project.basedir>
+                                <java.util.logging.config.file>${test.logging.config.file}</java.util.logging.config.file>
+                                <slf4j.internal.verbosity>${test.slf4j.verbosity}</slf4j.internal.verbosity>
+                                <openggf.test.tmpdir>${openggf.test.tmpdir}</openggf.test.tmpdir>
+                                <openggf.surefire.reports>${openggf.surefire.reports}</openggf.surefire.reports>
+                                <openggf.trace.reports>${openggf.trace.reports}</openggf.trace.reports>
+                                <openggf.test.diagnostics>${openggf.test.diagnostics}</openggf.test.diagnostics>
+                                <openggf.artifact.root>${openggf.artifact.root}</openggf.artifact.root>
+                                <openggf.distribution.root>${openggf.distribution.root}</openggf.distribution.root>
+                            </systemPropertyVariables>
+                            <includes>
+                                <include>**/Test*Guard*.java</include>
+                                <!-- Prohibition guards predate the *Guard suffix and enforce
+                                     hard rules 5 and 6 (no getInstance() in objects, no direct
+                                     map mutation). Same three conventions are checked by
+                                     TestBuildToolingGuard, so a new one under any of them is
+                                     picked up automatically. -->
+                                <include>**/TestNo*.java</include>
+                                <include>**/TestArchUnit*.java</include>
+                                <!-- This boundary test performs a whole-production ArchUnit
+                                     import but predates the structural-guard naming convention. -->
+                                <include>**/TestAudioPresentationBoundary.java</include>
+                            </includes>
+                            <excludedGroups>performance-measurement</excludedGroups>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!-- Known-red trace probes are excluded from blocking suites and run
+             only when explicitly requested:
+               mvn -Ptrace-diagnostics -Dtest=<DebugOrProbeClass> test
+        -->
+        <profile>
+            <id>trace-diagnostics</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <version>3.2.5</version>
+                        <configuration combine.self="override">
+                            <argLine>${surefire.argLine} -Djava.io.tmpdir="${openggf.test.tmpdir}" -Dorg.lwjgl.system.SharedLibraryExtractPath="${openggf.test.tmpdir}/lwjgl-${surefire.forkNumber}"</argLine>
+                            <reportsDirectory>${openggf.surefire.reports}</reportsDirectory>
+                            <tempDir>${project.build.directory}/surefire</tempDir>
+                            <forkCount>${surefire.forkCount}</forkCount>
+                            <reuseForks>true</reuseForks>
+                            <systemPropertyVariables>
+                                <java.util.logging.config.file>${test.logging.config.file}</java.util.logging.config.file>
+                                <slf4j.internal.verbosity>${test.slf4j.verbosity}</slf4j.internal.verbosity>
+                                <project.basedir>${project.basedir}</project.basedir>
+                                <openggf.test.tmpdir>${openggf.test.tmpdir}</openggf.test.tmpdir>
+                                <openggf.surefire.reports>${openggf.surefire.reports}</openggf.surefire.reports>
+                                <openggf.trace.reports>${openggf.trace.reports}</openggf.trace.reports>
+                                <openggf.test.diagnostics>${openggf.test.diagnostics}</openggf.test.diagnostics>
+                                <openggf.artifact.root>${openggf.artifact.root}</openggf.artifact.root>
+                                <openggf.distribution.root>${openggf.distribution.root}</openggf.distribution.root>
+                            </systemPropertyVariables>
+                            <includes>
+                                <include>**/tests/trace/**/Debug*.java</include>
+                                <include>**/tests/trace/**/*Probe*.java</include>
+                            </includes>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
         </profile>
 
         <!-- GraalVM native-image build: mvn package -Pnative -DskipTests -->
@@ -105,7 +675,7 @@
                             </execution>
                         </executions>
                     </plugin>
-                    <!-- Flatten extracted native libs into target/native-libs/ -->
+                    <!-- Flatten extracted native libs into ${project.build.directory}/native-libs/ -->
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-antrun-plugin</artifactId>
@@ -125,8 +695,8 @@
                                                 <include name="**/*.dll"/>
                                             </fileset>
                                         </copy>
-                                        <!-- Also copy to target/ alongside the native binary
-                                             so bare execution (target/OpenGGF) works -->
+                                        <!-- Also copy alongside the native binary so bare
+                                             execution (${project.build.directory}/OpenGGF) works. -->
                                         <copy todir="${project.build.directory}" flatten="true">
                                             <fileset dir="${project.build.directory}/lwjgl-unpack">
                                                 <include name="**/*.dylib"/>
@@ -134,9 +704,9 @@
                                                 <include name="**/*.dll"/>
                                             </fileset>
                                         </copy>
-                                        <!-- Copy config.json next to the native binary so it
+                                        <!-- Copy config.yaml next to the native binary so it
                                              can be edited without rebuilding -->
-                                        <copy file="${basedir}/src/main/resources/config.json"
+                                        <copy file="${basedir}/src/main/resources/config.yaml"
                                               todir="${project.build.directory}"/>
                                     </target>
                                 </configuration>
@@ -176,11 +746,13 @@
                                 <phase>package</phase>
                                 <goals><goal>exec</goal></goals>
                                 <configuration>
+                                    <skip>${native.macos.package.skip}</skip>
                                     <executable>bash</executable>
                                     <arguments>
                                         <argument>${basedir}/src/packaging/assemble-macos-app.sh</argument>
-                                        <argument>${basedir}/target/OpenGGF</argument>
-                                        <argument>${basedir}/target</argument>
+                                        <argument>${project.build.directory}/OpenGGF</argument>
+                                        <argument>${openggf.distribution.root}</argument>
+                                        <argument>${project.version}</argument>
                                     </arguments>
                                 </configuration>
                             </execution>
@@ -188,6 +760,255 @@
                     </plugin>
                 </plugins>
             </build>
+        </profile>
+
+        <!-- Release-only JVM distribution profile.
+             Adds every supported LWJGL native classifier to the shaded jar so the
+             GitHub release can publish one JVM artifact alongside native bundles. -->
+        <profile>
+            <id>universal-jar</id>
+            <dependencies>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-linux</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl-opengl</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-linux</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl-glfw</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-linux</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl-openal</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-linux</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl-stb</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-linux</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-linux-arm32</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl-opengl</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-linux-arm32</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl-glfw</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-linux-arm32</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl-openal</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-linux-arm32</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl-stb</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-linux-arm32</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-linux-arm64</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl-opengl</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-linux-arm64</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl-glfw</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-linux-arm64</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl-openal</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-linux-arm64</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl-stb</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-linux-arm64</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-windows</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl-opengl</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-windows</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl-glfw</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-windows</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl-openal</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-windows</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl-stb</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-windows</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-windows-arm64</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl-opengl</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-windows-arm64</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl-glfw</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-windows-arm64</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl-openal</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-windows-arm64</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl-stb</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-windows-arm64</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-windows-x86</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl-opengl</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-windows-x86</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl-glfw</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-windows-x86</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl-openal</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-windows-x86</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl-stb</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-windows-x86</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-macos</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl-opengl</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-macos</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl-glfw</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-macos</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl-openal</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-macos</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl-stb</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-macos</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-macos-arm64</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl-opengl</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-macos-arm64</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl-glfw</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-macos-arm64</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl-openal</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-macos-arm64</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.lwjgl</groupId>
+                    <artifactId>lwjgl-stb</artifactId>
+                    <version>${lwjgl.version}</version>
+                    <classifier>natives-macos-arm64</classifier>
+                </dependency>
+            </dependencies>
         </profile>
 
     </profiles>
@@ -205,6 +1026,7 @@
     </dependencyManagement>
 
     <build>
+        <directory>${project.basedir}/target</directory>
         <sourceDirectory>src/main/java</sourceDirectory>
         <testSourceDirectory>src/test/java</testSourceDirectory>
         <resources>
@@ -219,6 +1041,18 @@
                     <include>version.properties</include>
                 </includes>
             </resource>
+            <!-- Licence texts and notices travel with every jar (NOTICE.md, GPL-3 / LGPL-2.1 s.1). -->
+            <resource>
+                <directory>${project.basedir}</directory>
+                <targetPath>META-INF/openggf</targetPath>
+                <filtering>false</filtering>
+                <includes>
+                    <include>LICENSE</include>
+                    <include>LICENSES/**</include>
+                    <include>NOTICE.md</include>
+                    <include>CREDITS.md</include>
+                </includes>
+            </resource>
         </resources>
         <plugins>
             <plugin>
@@ -226,6 +1060,7 @@
                 <artifactId>maven-assembly-plugin</artifactId>
                 <version>3.1.1</version>
                 <configuration>
+                    <outputDirectory>${openggf.artifact.root}</outputDirectory>
                     <!-- get all project dependencies -->
                     <descriptorRefs>
                         <descriptorRef>jar-with-dependencies</descriptorRef>
@@ -253,6 +1088,111 @@
 
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.1.0</version>
+                <executions>
+                    <execution>
+                        <id>prepare-worktree-test-directories</id>
+                        <phase>validate</phase>
+                        <goals><goal>run</goal></goals>
+                        <configuration>
+                            <target>
+                                <mkdir dir="${project.build.directory}/maven-tmp"/>
+                                <mkdir dir="${openggf.test.tmpdir}"/>
+                                <mkdir dir="${openggf.surefire.reports}"/>
+                                <mkdir dir="${openggf.trace.reports}"/>
+                                <mkdir dir="${openggf.test.diagnostics}"/>
+                            </target>
+                        </configuration>
+                    </execution>
+                    <!-- Fail fast when the build JVM is not the JDK the project targets.
+                         Surefire forks inherit Maven's JVM, not whatever `java` is on PATH,
+                         so a newer JDK silently reaches the tests: Mockito/ByteBuddy then
+                         misbehave and the suite reports hundreds of phantom failures that
+                         look like real regressions. Cheaper to stop here with an
+                         actionable message. -->
+                    <execution>
+                        <id>verify-build-jdk</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <condition property="openggf.jdk.ok">
+                                    <or>
+                                        <matches string="${java.version}" pattern="^21\."/>
+                                        <istrue value="${openggf.jdk.check.skip}"/>
+                                    </or>
+                                </condition>
+                                <fail unless="openggf.jdk.ok">
+Wrong build JDK: Maven is running on Java ${java.version} (${java.home}).
+
+OpenGGF targets Java 21, and CI and the release workflow both build and test on
+temurin 21. Surefire forks inherit Maven's JVM rather than the `java` on PATH, so
+on a newer JDK the test suite reports large numbers of phantom failures (Mockito
+stubbing errors leaking across classes, ROM fixtures failing to load) that have
+nothing to do with your change.
+
+Fix: point JAVA_HOME at a JDK 21 before building, e.g.
+  export JAVA_HOME=/path/to/jdk-21    # macOS: $(/usr/libexec/java_home -v 21)
+Verify with `mvn -v` — it must report "Java version: 21".
+
+To bypass deliberately (not for test runs): -Dopenggf.jdk.check.skip=true
+                                </fail>
+                            </target>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>capture-git-build-identity</id>
+                        <phase>initialize</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <exportAntProperties>true</exportAntProperties>
+                            <target>
+                                <exec executable="git" dir="${project.basedir}" outputproperty="openggf.git.commit.raw" failonerror="false">
+                                    <arg value="rev-parse"/>
+                                    <arg value="--short=9"/>
+                                    <arg value="HEAD"/>
+                                </exec>
+                                <exec executable="git" dir="${project.basedir}" outputproperty="openggf.git.dirty.raw" failonerror="false">
+                                    <arg value="status"/>
+                                    <arg value="--porcelain"/>
+                                </exec>
+                                <condition property="openggf.git.commit" value="${openggf.git.commit.raw}" else="">
+                                    <and>
+                                        <isset property="openggf.git.commit.raw"/>
+                                        <length string="${openggf.git.commit.raw}" when="greater" length="0"/>
+                                    </and>
+                                </condition>
+                                <condition property="openggf.git.dirty" value="true" else="false">
+                                    <and>
+                                        <isset property="openggf.git.dirty.raw"/>
+                                        <length string="${openggf.git.dirty.raw}" when="greater" length="0"/>
+                                    </and>
+                                </condition>
+                            </target>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>write-launcher-artifact-manifest</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <echo file="${project.build.directory}/openggf-artifact.properties">finalName=${project.build.finalName}</echo>
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.11.0</version>
                 <configuration>
@@ -265,26 +1205,72 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.2.5</version>
                 <configuration>
+                    <excludedGroups>${surefire.excludedGroups}</excludedGroups>
                     <!-- LWJGL/GLFW on macOS requires -XstartOnFirstThread (set via profile) -->
-                    <argLine>${surefire.argLine}</argLine>
+                    <!--
+                         LWJGL otherwise derives one native extraction directory from
+                         java.io.tmpdir. Give every Surefire fork its own extraction root:
+                         two forks, or two coordinator sessions in different worktrees,
+                         must never replace or unlink one another's libglfw/liblwjgl files.
+                         Surefire expands its fork number in argLine after Maven resolves
+                         the shared session properties.
+                    -->
+                    <!-- java.io.tmpdir must be set on the command line, not via
+                         systemPropertyVariables: java.nio.file.TempFileHelper caches it
+                         in a static initialiser that surefire's own early temp-file use
+                         can trigger before those properties are applied.
+
+                         Tests create temp files and directories in many places and not
+                         all of them clean up. Pointed at the system temp directory that
+                         accumulated ~1,800 stale directories and, where /tmp is a
+                         RAM-backed tmpfs, eventually filled it and broke unrelated
+                         features that legitimately need temporary space. Here the mess
+                         is bounded, invisible to the rest of the machine, and removed by
+                         a normal Maven clean. Tests should still clean up after themselves;
+                         this makes forgetting harmless rather than cumulative. -->
+                    <argLine>${surefire.argLine} -Djava.io.tmpdir="${openggf.test.tmpdir}" -Dorg.lwjgl.system.SharedLibraryExtractPath="${openggf.test.tmpdir}/lwjgl-${surefire.forkNumber}"</argLine>
+                    <reportsDirectory>${openggf.surefire.reports}</reportsDirectory>
+                    <tempDir>${project.build.directory}/surefire</tempDir>
                     <!-- Run test classes in parallel forked JVMs.
                          Thread-level parallelism is unsafe due to singleton state,
                          but process-level forks each get isolated singletons.
                          Default: 4 forks locally, 1 in CI (see ci profile). -->
                     <forkCount>${surefire.forkCount}</forkCount>
                     <reuseForks>true</reuseForks>
+                    <systemPropertyVariables>
+                        <!-- Architectural guard tests resolve source paths from the project root,
+                             which surefire-launched forks inherit; pass it explicitly so IDE
+                             runs from arbitrary working dirs also find the source tree. -->
+                        <project.basedir>${project.basedir}</project.basedir>
+                        <java.util.logging.config.file>${test.logging.config.file}</java.util.logging.config.file>
+                        <slf4j.internal.verbosity>${test.slf4j.verbosity}</slf4j.internal.verbosity>
+                        <openggf.test.tmpdir>${openggf.test.tmpdir}</openggf.test.tmpdir>
+                        <openggf.surefire.reports>${openggf.surefire.reports}</openggf.surefire.reports>
+                        <openggf.trace.reports>${openggf.trace.reports}</openggf.trace.reports>
+                        <openggf.test.diagnostics>${openggf.test.diagnostics}</openggf.test.diagnostics>
+                        <openggf.artifact.root>${openggf.artifact.root}</openggf.artifact.root>
+                        <openggf.distribution.root>${openggf.distribution.root}</openggf.distribution.root>
+                    </systemPropertyVariables>
                     <!-- Exclude tests that require a GL context/display -->
                     <excludes>
+                        <!-- Structural guards, especially whole-production ArchUnit
+                             imports, run in the separate -Pguards session. Keeping
+                             them out of the long ordinary suite gives that graph a
+                             fresh JVM and prevents the known late-suite heap failure. -->
+                        <exclude>**/Test*Guard*.java</exclude>
+                        <exclude>**/TestNo*.java</exclude>
+                        <exclude>**/TestArchUnit*.java</exclude>
+                        <exclude>**/TestAudioPresentationBoundary.java</exclude>
                         <exclude>**/TestGraphicsManagerHeadless.java</exclude>
                         <exclude>**/VisualRegressionTest.java</exclude>
                         <exclude>**/VisualReferenceGenerator.java</exclude>
                         <exclude>**/TestAizFireCurtainGpuDiag.java</exclude>
                         <exclude>**/TestS3kSpecialStageResultsVisual.java</exclude>
                         <exclude>**/TestInstaShieldVisual.java</exclude>
-                        <!-- Trace replay tests: excluded until traces are re-recorded
-                             against current S1 physics. Run manually with:
-                             mvn test -Dtest="com.openggf.tests.trace.s1.*" -->
-                        <exclude>**/trace/s1/TestS1*TraceReplay.java</exclude>
+                        <exclude>**/tests/trace/**/*.java</exclude>
+                        <exclude>**/tests/trace/**/*TraceReplay.java</exclude>
+                        <exclude>**/tests/trace/**/*ReplayBootstrap.java</exclude>
+                        <exclude>**/tests/trace/s2/*Regression.java</exclude>
                     </excludes>
                 </configuration>
             </plugin>
@@ -316,6 +1302,7 @@
         <dependency>
             <groupId>org.lwjgl</groupId>
             <artifactId>lwjgl</artifactId>
+            <version>${lwjgl.version}</version>
             <classifier>${lwjgl.natives}</classifier>
         </dependency>
 
@@ -327,6 +1314,7 @@
         <dependency>
             <groupId>org.lwjgl</groupId>
             <artifactId>lwjgl-opengl</artifactId>
+            <version>${lwjgl.version}</version>
             <classifier>${lwjgl.natives}</classifier>
         </dependency>
 
@@ -338,6 +1326,7 @@
         <dependency>
             <groupId>org.lwjgl</groupId>
             <artifactId>lwjgl-glfw</artifactId>
+            <version>${lwjgl.version}</version>
             <classifier>${lwjgl.natives}</classifier>
         </dependency>
 
@@ -349,6 +1338,7 @@
         <dependency>
             <groupId>org.lwjgl</groupId>
             <artifactId>lwjgl-openal</artifactId>
+            <version>${lwjgl.version}</version>
             <classifier>${lwjgl.natives}</classifier>
         </dependency>
 
@@ -360,6 +1350,7 @@
         <dependency>
             <groupId>org.lwjgl</groupId>
             <artifactId>lwjgl-stb</artifactId>
+            <version>${lwjgl.version}</version>
             <classifier>${lwjgl.natives}</classifier>
         </dependency>
 
@@ -371,33 +1362,38 @@
         </dependency>
 
         <dependency>
-            <groupId>junit</groupId>
-            <artifactId>junit</artifactId>
-            <version>4.13.2</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
             <version>5.10.3</version>
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>org.junit.vintage</groupId>
-            <artifactId>junit-vintage-engine</artifactId>
-            <version>5.10.3</version>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit-junit5</artifactId>
+            <version>1.4.2</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-nop</artifactId>
+            <version>${slf4j.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.mockito</groupId>
             <artifactId>mockito-core</artifactId>
-            <version>5.14.2</version>
+            <version>${mockito.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-            <version>2.22.0</version>
+            <version>2.22.1</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.dataformat</groupId>
+            <artifactId>jackson-dataformat-yaml</artifactId>
+            <version>2.22.1</version>
         </dependency>
     </dependencies>
 

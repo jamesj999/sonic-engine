@@ -1,6 +1,7 @@
 package com.openggf.game.sonic1.scroll;
 
 import com.openggf.level.scroll.AbstractZoneScrollHandler;
+import com.openggf.level.scroll.compose.ScrollEffectComposer;
 import static com.openggf.level.scroll.M68KMath.*;
 
 /**
@@ -44,6 +45,8 @@ public class SwScrlMz extends AbstractZoneScrollHandler {
     // Deform_MZ fills a 32-word buffer, then Bg_Scroll_X expands to per-line hscroll.
     private final short[] scrollBuffer = new short[SCROLL_BUFFER_SIZE];
 
+    private final ScrollEffectComposer composer = new ScrollEffectComposer();
+
     public void init(int cameraX) {
         // BgScrollSpeed seeds all MZ X positions from screenposx.
         bg1XPos = (long) cameraX << 16;
@@ -64,6 +67,7 @@ public class SwScrlMz extends AbstractZoneScrollHandler {
         }
 
         resetScrollTracking();
+        composer.reset();
 
         // Compute delta
         int deltaX = cameraX - lastCameraX;
@@ -87,10 +91,15 @@ public class SwScrlMz extends AbstractZoneScrollHandler {
         if (yOffset >= 0) {
             bgY += (yOffset * 3) >> 2;
         }
-        vscrollFactorBG = (short) bgY;
+        composer.setVscrollFactorBG((short) bgY);
 
         buildScrollBuffer(cameraX, bg3X, bg2X, bg1X);
         writeHScrollBuffer(horizScrollBuf, cameraX, bgY - 0x200);
+
+        composer.copyPackedScrollWordsTo(horizScrollBuf);
+        vscrollFactorBG = composer.getVscrollFactorBG();
+        minScrollOffset = composer.getMinScrollOffset();
+        maxScrollOffset = composer.getMaxScrollOffset();
     }
 
     private void buildScrollBuffer(int cameraX, int bg3X, int bg2X, int bg1X) {
@@ -129,7 +138,6 @@ public class SwScrlMz extends AbstractZoneScrollHandler {
     private void writeHScrollBuffer(int[] horizScrollBuf, int cameraX, int bgYRelativeToBase) {
         short fgScroll = negWord(cameraX);
 
-        // Deform_MZ: clamp lookup start to 0x100 before selecting 16-line band.
         int startWordOffset = bgYRelativeToBase;
         if (startWordOffset >= 0x100) {
             startWordOffset = 0x100;
@@ -140,35 +148,29 @@ public class SwScrlMz extends AbstractZoneScrollHandler {
         int subAlign = bgYRelativeToBase & 0xF;
         int lineIndex = 0;
 
-        // First partial 16-line group (when BG Y is not 16-aligned).
         if (subAlign != 0 && scrollBufferIndex < SCROLL_BUFFER_SIZE) {
-            lineIndex = fillLines(horizScrollBuf, lineIndex, LINES_PER_GROUP - subAlign, fgScroll,
+            lineIndex = fillLines(lineIndex, LINES_PER_GROUP - subAlign, fgScroll,
                     scrollBuffer[scrollBufferIndex++]);
         }
 
-        // Full 16-line groups.
         while (lineIndex < VISIBLE_LINES && scrollBufferIndex < SCROLL_BUFFER_SIZE) {
-            lineIndex = fillLines(horizScrollBuf, lineIndex, LINES_PER_GROUP, fgScroll,
+            lineIndex = fillLines(lineIndex, LINES_PER_GROUP, fgScroll,
                     scrollBuffer[scrollBufferIndex++]);
         }
 
-        // Safety fill for any remaining lines (should normally not be needed).
         short fallback = scrollBuffer[SCROLL_BUFFER_SIZE - 1];
         while (lineIndex < VISIBLE_LINES) {
-            lineIndex = fillLines(horizScrollBuf, lineIndex, LINES_PER_GROUP, fgScroll, fallback);
+            lineIndex = fillLines(lineIndex, LINES_PER_GROUP, fgScroll, fallback);
         }
     }
 
-    private int fillLines(int[] horizScrollBuf, int lineStart, int lineCount, short fgScroll, short bgScroll) {
-        int packed = packScrollWords(fgScroll, bgScroll);
-        trackOffset(fgScroll, bgScroll);
-
-        int line = lineStart;
-        int limit = Math.min(VISIBLE_LINES, lineStart + lineCount);
-        for (; line < limit; line++) {
-            horizScrollBuf[line] = packed;
+    private int fillLines(int lineStart, int lineCount, short fgScroll, short bgScroll) {
+        int writeCount = Math.min(lineCount, VISIBLE_LINES - lineStart);
+        if (writeCount <= 0) {
+            return lineStart;
         }
-        return line;
+        composer.fillPackedScrollWords(lineStart, writeCount, fgScroll, bgScroll);
+        return lineStart + writeCount;
     }
 
 }

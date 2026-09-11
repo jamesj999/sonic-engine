@@ -1,10 +1,11 @@
 package com.openggf.game.sonic2.objects;
 
 import com.openggf.configuration.SonicConfiguration;
-import com.openggf.configuration.SonicConfigurationService;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 import com.openggf.game.PlayableEntity;
@@ -46,7 +47,8 @@ import static org.lwjgl.opengl.GL11.GL_TRIANGLE_FAN;
  *
  * @see BlueBallsObjectInstance Another HURT-category TouchResponseProvider
  */
-public class LavaMarkerObjectInstance extends AbstractObjectInstance implements TouchResponseProvider {
+public class LavaMarkerObjectInstance extends AbstractObjectInstance
+        implements TouchResponseProvider, RewindRecreatable {
 
     // ========================================================================
     // ROM Constants - Collision Flags by Subtype
@@ -96,10 +98,10 @@ public class LavaMarkerObjectInstance extends AbstractObjectInstance implements 
     // ========================================================================
 
     /** Cached collision flags based on subtype. */
-    private final int collisionFlags;
+    private int collisionFlags;
 
     /** Subtype index (0, 1, or 2). */
-    private final int subtypeIndex;
+    private int subtypeIndex;
 
     public LavaMarkerObjectInstance(ObjectSpawn spawn, String name) {
         super(spawn, name);
@@ -109,12 +111,17 @@ public class LavaMarkerObjectInstance extends AbstractObjectInstance implements 
         this.collisionFlags = COLLISION_FLAGS_TABLE[subtypeIndex];
     }
 
+    @Override
+    public LavaMarkerObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new LavaMarkerObjectInstance(ctx.spawn(), getName());
+    }
+
     // ========================================================================
     // Update Logic
     // ========================================================================
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // ROM Obj31_Main (line 46058) only does off-screen culling via MarkObjGone.
         // The ObjectManager.Placement system handles this automatically,
@@ -142,7 +149,7 @@ public class LavaMarkerObjectInstance extends AbstractObjectInstance implements 
     @Override
     public void appendRenderCommands(List<GLCommand> commands) {
         // Invisible during normal gameplay - only render in debug mode
-        SonicConfigurationService config = SonicConfigurationService.getInstance();
+        var config = services().configuration();
         if (!config.getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED)) {
             return;
         }

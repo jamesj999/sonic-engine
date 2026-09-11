@@ -1,10 +1,10 @@
 package com.openggf.game.sonic3k.objects;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 /**
  * Unit tests for S3K invincibility star orbit and trailing logic.
@@ -76,14 +76,14 @@ public class TestSonic3kInvincibilityStars {
         int[][] table = Sonic3kInvincibilityStarsObjectInstance.S3K_ORBIT_OFFSETS;
         int xA = table[0][0];
         int xB = table[16][0];
-        assertTrue("Sub-sprites should be on opposite sides", xA > 0 && xB < 0);
+        assertTrue(xA > 0 && xB < 0, "Sub-sprites should be on opposite sides");
     }
 
     @Test
     public void parentAnimationTable_hasValidFrameIndices() {
         int[] parentAnim = Sonic3kInvincibilityStarsObjectInstance.PARENT_ANIM;
         for (int frame : parentAnim) {
-            assertTrue("Frame index must be 0-8 (9 mapping frames)", frame >= 0 && frame <= 8);
+            assertTrue(frame >= 0 && frame <= 8, "Frame index must be 0-8 (9 mapping frames)");
         }
     }
 
@@ -92,7 +92,7 @@ public class TestSonic3kInvincibilityStars {
         int[][] childAnims = Sonic3kInvincibilityStarsObjectInstance.CHILD_PRIMARY_ANIMS;
         for (int[] anim : childAnims) {
             for (int frame : anim) {
-                assertTrue("Frame index must be 0-8", frame >= 0 && frame <= 8);
+                assertTrue(frame >= 0 && frame <= 8, "Frame index must be 0-8");
             }
         }
     }
@@ -106,3 +106,5 @@ public class TestSonic3kInvincibilityStars {
         assertEquals(23, angleLeft);
     }
 }
+
+

@@ -6,6 +6,9 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.ObjectManager;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
@@ -13,6 +16,7 @@ import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.ObjectTerrainUtils;
 import com.openggf.physics.TerrainCheckResult;
+import com.openggf.sprites.NativePositionOps;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
 import java.util.List;
@@ -41,10 +45,16 @@ import java.util.List;
  *   <li>Mode 4: Screwing - player pushes nut, accumulating displacement</li>
  * </ul>
  * <p>
- * <b>Disassembly Reference:</b> s2.asm Obj69, lines 53487-53656
+ * <b>Two-player handling:</b> ROM Obj69_Main (s2.asm:53523-53531) runs
+ * Obj69_Action TWICE — once for MainCharacter (objoff_38 / p1_standing_bit) and
+ * once for Sidekick (objoff_3C / p2_standing_bit) — each gated by that player's
+ * own standing bit. This class mirrors that with per-player action state and a
+ * per-player standing flag.
+ * <p>
+ * <b>Disassembly Reference:</b> s2.asm Obj69, lines 53465-53663
  */
 public class NutObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
 
     // Solid object collision dimensions (from disassembly lines 53532-53534)
     // d1 = $2B (half-width = 43), d2 = $C (y_radius = 12), d3 = $D (ground height = 13)
@@ -86,14 +96,24 @@ public class NutObjectInstance extends AbstractObjectInstance
     private int yVel;               // Y velocity (word, in 1/256 pixel units)
     private int ySub;               // Sub-pixel Y accumulator (low 16 bits of 32-bit position)
 
-    // Per-player action state (objoff_38 for P1, objoff_3C for P2)
-    // Each stores: byte 0 = mode, byte 1 = direction (0=right push, 1=left push)
-    private int p1Mode;
-    private int p1Direction;
+    // Per-player action state (objoff_38 for P1, objoff_3C for P2).
+    // Each stores: byte 0 = mode, byte 1 = direction (0=right push, 1=left push).
+    private static final class PlayerActionState {
+        int mode = MODE_IDLE;
+        int direction = 0;   // 0 = obj right of player, 1 = obj left of player
+    }
 
-    // Player standing detection
-    private boolean contactStanding;
-    private boolean playerStanding;
+    private final PlayerActionState p1 = new PlayerActionState();
+    private final PlayerActionState p2 = new PlayerActionState();
+
+    // Per-player standing detection. ROM gates each Obj69_Action pass on
+    // p1_standing_bit / p2_standing_bit (set by SolidObject when that specific
+    // player rides the nut). contactStandingP1/P2 are written by onSolidContact
+    // for the matching player and latched into standingP1/standingP2 each update.
+    private boolean contactStandingP1;
+    private boolean contactStandingP2;
+    private boolean standingP1;
+    private boolean standingP2;
 
     // Subtype flags
     private boolean fallsOff;       // Bit 7 of subtype: nut falls off at max travel
@@ -101,6 +121,11 @@ public class NutObjectInstance extends AbstractObjectInstance
     public NutObjectInstance(ObjectSpawn spawn, String name) {
         super(spawn, name);
         init();
+    }
+
+    @Override
+    public NutObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new NutObjectInstance(ctx.spawn(), "Nut");
     }
 
     private void init() {
@@ -119,8 +144,10 @@ public class NutObjectInstance extends AbstractObjectInstance
         yVel = 0;
         ySub = 0;
 
-        p1Mode = MODE_IDLE;
-        p1Direction = 0;
+        p1.mode = MODE_IDLE;
+        p1.direction = 0;
+        p2.mode = MODE_IDLE;
+        p2.direction = 0;
 
         updateDynamicSpawn(x, y);
     }
@@ -134,9 +161,20 @@ public class NutObjectInstance extends AbstractObjectInstance
     public int getY() {
         return y;
     }
+
+    @Override
+    public int getBalanceWidthPixels() {
+        // Obj69_Init writes width_pixels=$20 (docs/s2disasm/s2.asm:53981-53991).
+        // Sonic_Move/Tails_Move use that SST byte for object-edge balance, not
+        // SolidObject's wider d1=$2B collision extent (s2.asm:36285,39359,
+        // 53996-54013). Keeping those two widths distinct prevents an interior
+        // rider from being classified as balancing at the nut's sprite edge.
+        return WIDTH_PIXELS;
+    }
+
     @Override
     public SolidObjectParams getSolidParams() {
-        return new SolidObjectParams(HALF_WIDTH, Y_RADIUS, GROUND_HALF_HEIGHT);
+        return SolidObjectParams.of(HALF_WIDTH, Y_RADIUS, GROUND_HALF_HEIGHT);
     }
 
     @Override
@@ -146,30 +184,72 @@ public class NutObjectInstance extends AbstractObjectInstance
     }
 
     @Override
+    public boolean fullSolidBottomOverlapUsesCurrentYRadiusOnly(PlayableEntity player) {
+        // Obj69 tail-calls the shared S2 SolidObject helper with d1=$2B,
+        // d2=$C, d3=$D (docs/s2disasm/s2.asm:53532-53539). SolidObject_cont
+        // builds both vertical reject halves from live y_radius(a1)
+        // (docs/s2disasm/s2.asm:35156-35169).
+        return true;
+    }
+
+    @Override
     public boolean isSolidFor(PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         return !isDestroyed();
     }
 
     @Override
+    public boolean airborneStaleStandingBitReturnsNoContact(PlayableEntity player) {
+        // Obj69 tail-calls S2 SolidObject after its action passes
+        // (docs/s2disasm/s2.asm:54006-54013). Once the helper reaches the
+        // per-player stale-standing branch, an already-airborne rider clears
+        // Status_OnObj and returns before SolidObject_cont regardless of player
+        // slot; native P2 has an additional off-screen early return before this
+        // branch (s2.asm:35022-35046).
+        return player instanceof AbstractPlayableSprite;
+    }
+
+    @Override
+    public boolean suppressesGroundingRecoveryFromAirborneStaleRide(PlayableEntity player) {
+        // Obj69 runs player movement before its late SolidObject tail, so a
+        // stale airborne ride must not be converted back into ground support
+        // before Obj69 can clear it (s2.asm:35028-35046,54006-54013).
+        return player instanceof AbstractPlayableSprite;
+    }
+
+    @Override
     public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        if (contact.standing() || contact.touchTop()) {
-            contactStanding = true;
+        if (!(contact.standing() || contact.touchTop())) {
+            return;
+        }
+        // ROM sets p1_standing_bit / p2_standing_bit per player; record which
+        // engine player is riding so the matching Obj69_Action pass sees standing.
+        if (playerEntity == resolveSidekick()) {
+            contactStandingP2 = true;
+        } else {
+            contactStandingP1 = true;
         }
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        playerStanding = contactStanding;
-        contactStanding = false;
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
+        // Latch per-player standing detected during this frame's collision pass.
+        standingP1 = contactStandingP1;
+        standingP2 = contactStandingP2;
+        contactStandingP1 = false;
+        contactStandingP2 = false;
 
         switch (routine) {
-            case ROUTINE_MAIN -> updateMain(player);
-            case ROUTINE_FALLING -> updateFalling();
+            case ROUTINE_MAIN -> updateMain();
+            case ROUTINE_FALLING -> {
+                updateFalling();
+                // ROM loc_279FC falls through to loc_278F4 (s2.asm:53655), so the
+                // SolidObject + MarkObjGone tail also runs while falling. The
+                // engine provides solid collision via SolidObjectProvider and
+                // despawn via placement windowing each frame regardless of routine.
+            }
             case ROUTINE_LANDED -> {
-                /* Stationary on ground - SolidObject collision handled by SolidObjectProvider interface */
+                // ROM routine 6 IS loc_278F4: SolidObject + MarkObjGone only.
+                // Handled by the SolidObjectProvider interface + placement windowing.
             }
         }
 
@@ -180,33 +260,98 @@ public class NutObjectInstance extends AbstractObjectInstance
     }
 
     /**
-     * Routine 2: Main behavior - process player action.
-     * ROM: Obj69_Main (lines 53519-53537)
+     * Resolves the native sidekick (ROM Sidekick), or {@code null} when the
+     * active session has no sidekick. Used to attribute solid contacts and to
+     * run the second Obj69_Action pass.
      */
-    private void updateMain(AbstractPlayableSprite player) {
-        if (player != null) {
-            processPlayerAction(player);
+    private AbstractPlayableSprite resolveSidekick() {
+        try {
+            PlayableEntity p2 = services().playerQuery().nativeP2OrNull();
+            if (p2 instanceof AbstractPlayableSprite sprite) {
+                return sprite;
+            }
+        } catch (RuntimeException e) {
+            // Query layer unavailable - no sidekick.
+        }
+        return null;
+    }
+
+    /**
+     * Resolves the native main character (ROM MainCharacter).
+     */
+    private AbstractPlayableSprite resolveMainCharacter() {
+        try {
+            PlayableEntity main = services().playerQuery().mainPlayerOrNull();
+            if (main instanceof AbstractPlayableSprite sprite) {
+                return sprite;
+            }
+        } catch (RuntimeException e) {
+            // Query layer unavailable.
+        }
+        return null;
+    }
+
+    /**
+     * Routine 2: Main behavior - process player action.
+     * ROM: Obj69_Main (lines 53523-53531) runs Obj69_Action TWICE: once for
+     * MainCharacter (objoff_38 / p1_standing_bit) then once for Sidekick
+     * (objoff_3C / p2_standing_bit). Each pass is gated by that player's own
+     * standing bit.
+     */
+    private void updateMain() {
+        AbstractPlayableSprite mainPlayer = resolveMainCharacter();
+        AbstractPlayableSprite sidekickPlayer = resolveSidekick();
+
+        if (mainPlayer != null) {
+            processPlayerAction(p1, mainPlayer, isStandingOnThis(mainPlayer, standingP1));
+        }
+        // Only run the sidekick pass when the routine is still MAIN. (The first
+        // pass can advance routine to FALLING; the ROM would still fall through
+        // to loc_278F4, but the second Obj69_Action selector reads objoff_3C and
+        // would no-op on a falling nut since the sidekick's standing bit clears.)
+        if (sidekickPlayer != null && routine == ROUTINE_MAIN) {
+            processPlayerAction(p2, sidekickPlayer, isStandingOnThis(sidekickPlayer, standingP2));
+        }
+    }
+
+    private boolean isStandingOnThis(AbstractPlayableSprite player, boolean callbackStanding) {
+        if (callbackStanding) {
+            return true;
+        }
+        try {
+            ObjectManager objectManager = services().objectManager();
+            // Obj69_Action reads the object's standing bit, but S2 SolidObject
+            // clears both Status_OnObj and that bit on a continued-ride exit.
+            // CPU Tails can be skipped by the P2 off-screen gate before that
+            // branch, so preserve the existing object-bit fallback for CPU
+            // sidekicks while requiring live Status_OnObj for P1.
+            boolean statusOnObjectVisible = player.isCpuControlled() || player.isOnObject();
+            return statusOnObjectVisible
+                    && objectManager != null
+                    && objectManager.hasObjectStandingBit(player, this);
+        } catch (RuntimeException e) {
+            return false;
         }
     }
 
     /**
      * Process the per-player action state machine.
-     * ROM: Obj69_Action (lines 53540-53637)
+     * ROM: Obj69_Action (lines 53533-53641)
      * <p>
      * The ROM tracks standing via status bits (p1_standing_bit / p2_standing_bit).
-     * If player is NOT standing, the mode resets to 0.
+     * If the player is NOT standing, the mode resets to 0.
      */
-    private void processPlayerAction(AbstractPlayableSprite player) {
+    private void processPlayerAction(PlayerActionState ps, AbstractPlayableSprite player, boolean standing) {
         // ROM: btst d6,status(a0) / bne.s + / clr.b (a4)
         // If player is not standing on nut, reset mode to idle
-        if (!playerStanding) {
-            p1Mode = MODE_IDLE;
+        if (!standing) {
+            ps.mode = MODE_IDLE;
         }
 
-        switch (p1Mode) {
-            case MODE_IDLE -> actionIdle(player);
-            case MODE_ALIGNING -> actionAligning(player);
-            case MODE_SCREWING -> actionScrewing(player);
+        switch (ps.mode) {
+            case MODE_IDLE -> actionIdle(ps, player, standing);
+            case MODE_ALIGNING -> actionAligning(ps, player);
+            case MODE_SCREWING -> actionScrewing(ps, player);
         }
     }
 
@@ -215,13 +360,13 @@ public class NutObjectInstance extends AbstractObjectInstance
      * When standing detected, determine push direction and fall through to aligning mode.
      * ROM: loc_2792C (lines 53557-53568) - falls through to loc_2794C
      */
-    private void actionIdle(AbstractPlayableSprite player) {
-        if (!playerStanding) {
+    private void actionIdle(PlayerActionState ps, AbstractPlayableSprite player, boolean standing) {
+        if (!standing) {
             return;
         }
 
         // Advance to aligning mode
-        p1Mode = MODE_ALIGNING;
+        ps.mode = MODE_ALIGNING;
 
         // Determine direction: 0 = obj is right of player, 1 = obj is left of player
         // ROM: move.w x_pos(a0),d0 / sub.w x_pos(a1),d0
@@ -229,10 +374,10 @@ public class NutObjectInstance extends AbstractObjectInstance
         // bcc.s = if d0 >= 0 (obj right of player), direction stays 0
         // Otherwise (obj left of player), direction = 1
         int dx = x - player.getCentreX();
-        p1Direction = (dx < 0) ? 1 : 0;
+        ps.direction = (dx < 0) ? 1 : 0;
 
         // ROM falls through directly to aligning code (loc_2794C) - process immediately
-        actionAligning(player);
+        actionAligning(ps, player);
     }
 
     /**
@@ -240,13 +385,13 @@ public class NutObjectInstance extends AbstractObjectInstance
      * Checks if player is within ALIGN_THRESHOLD of nut center. If not, snaps player.
      * ROM: loc_2794C (lines 53570-53583)
      */
-    private void actionAligning(AbstractPlayableSprite player) {
+    private void actionAligning(PlayerActionState ps, AbstractPlayableSprite player) {
         // ROM: move.w x_pos(a1),d0 / sub.w x_pos(a0),d0
         int dx = player.getCentreX() - x;
 
         // If direction == 1 (player to the left), add 0x0F to dx
         // ROM: tst.b 1(a4) / beq.s + / addi.w #$F,d0
-        if (p1Direction != 0) {
+        if (ps.direction != 0) {
             dx += 0x0F;
         }
 
@@ -256,8 +401,8 @@ public class NutObjectInstance extends AbstractObjectInstance
         if ((dx & 0xFFFF) < ALIGN_THRESHOLD) {
             // Aligned - snap player X to nut X and advance to screwing
             // ROM: move.w x_pos(a0),x_pos(a1) / addq.b #2,(a4)
-            player.setCentreX((short) x);
-            p1Mode = MODE_SCREWING;
+            NativePositionOps.writeXPosPreserveSubpixel(player, x);
+            ps.mode = MODE_SCREWING;
         }
     }
 
@@ -269,7 +414,7 @@ public class NutObjectInstance extends AbstractObjectInstance
      * If right (dx >= 0), the other direction.
      * The delta is accumulated in objoff_34, which drives both Y position and rotation frame.
      */
-    private void actionScrewing(AbstractPlayableSprite player) {
+    private void actionScrewing(PlayerActionState ps, AbstractPlayableSprite player) {
         int dx = player.getCentreX() - x;
 
         if (dx < 0) {
@@ -278,7 +423,7 @@ public class NutObjectInstance extends AbstractObjectInstance
             accumulator += dx;
 
             // Snap player X to nut center
-            player.setCentreX((short) x);
+            NativePositionOps.writeXPosPreserveSubpixel(player, x);
 
             // Calculate vertical position from accumulator
             // ROM: asr.w #3,d0 / move.w d0,d1
@@ -308,7 +453,7 @@ public class NutObjectInstance extends AbstractObjectInstance
                     routine = ROUTINE_FALLING;
                 } else {
                     // Reset player mode to idle
-                    p1Mode = MODE_IDLE;
+                    ps.mode = MODE_IDLE;
                 }
             }
         } else {
@@ -317,7 +462,7 @@ public class NutObjectInstance extends AbstractObjectInstance
             accumulator += dx;
 
             // Snap player X to nut center
-            player.setCentreX((short) x);
+            NativePositionOps.writeXPosPreserveSubpixel(player, x);
 
             // Calculate vertical position from accumulator
             int shifted = accumulator >> 3;

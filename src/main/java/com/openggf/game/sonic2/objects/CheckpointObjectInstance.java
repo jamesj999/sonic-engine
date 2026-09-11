@@ -5,9 +5,10 @@ import com.openggf.game.CheckpointState;
 import com.openggf.game.PlayableEntity;
 import com.openggf.game.sonic2.audio.Sonic2Sfx;
 
-import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
@@ -33,7 +34,7 @@ import java.util.logging.Logger;
  * - Anim 2: frames 0,4 alternating (blinking after dongle expires)
  * </p>
  */
-public class CheckpointObjectInstance extends BoxObjectInstance {
+public class CheckpointObjectInstance extends BoxObjectInstance implements RewindRecreatable {
     private static final Logger LOGGER = Logger.getLogger(CheckpointObjectInstance.class.getName());
 
     // Activation zone dimensions (ROM: x_delta + 8 < $10, y_delta + $40 < $68)
@@ -53,8 +54,8 @@ public class CheckpointObjectInstance extends BoxObjectInstance {
     private static final int FRAME_HEAD = 3; // Head alone
     private static final int FRAME_BLUE_BALL = 4; // Pole + blue ball
 
-    private final int checkpointIndex;
-    private final boolean cameraLockFlag;
+    private int checkpointIndex;
+    private boolean cameraLockFlag;
     private int animId;
     private int mappingFrame;
     private int animTimer;
@@ -75,6 +76,11 @@ public class CheckpointObjectInstance extends BoxObjectInstance {
         this.dongleActive = false;
     }
 
+    @Override
+    public CheckpointObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new CheckpointObjectInstance(ctx.spawn(), getName());
+    }
+
     private void ensureInitialized() {
         if (initialized) {
             return;
@@ -91,7 +97,7 @@ public class CheckpointObjectInstance extends BoxObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         ensureInitialized();
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (!activated && player != null) {
@@ -195,10 +201,7 @@ public class CheckpointObjectInstance extends BoxObjectInstance {
     }
 
     private void spawnDongle() {
-        ObjectManager objectManager = services().objectManager();
-        if (objectManager != null) {
-            objectManager.addDynamicObject(new CheckpointDongleInstance(this));
-        }
+        spawnFreeChild(() -> new CheckpointDongleInstance(this));
     }
 
     private boolean shouldSpawnStars(AbstractPlayableSprite player) {
@@ -229,14 +232,16 @@ public class CheckpointObjectInstance extends BoxObjectInstance {
     }
 
     private void spawnStars() {
-        ObjectManager objectManager = services().objectManager();
-        if (objectManager == null) {
-            return;
-        }
-        // Spawn 4 stars at angle offsets 0, 0x40, 0x80, 0xC0
+        // Spawn 4 stars at angle offsets 0, 0x40, 0x80, 0xC0.
+        // ROM Obj79_MakeSpecialStars allocates with AllocateObjectAfterCurrent, not
+        // AllocateObject (docs/s2disasm/s2.asm:44841-44845; contrast the dongle at
+        // s2.asm:44647, which does use AllocateObject). The stars therefore land in
+        // slots ABOVE the star post's own and run Obj79_Star on the very frame they
+        // are created, so objoff_36 is already 1 at that frame's end. Allocating them
+        // lowest-free let them fall below the post, costing a frame of orbit phase.
         for (int i = 0; i < 4; i++) {
             int angleOffset = i * 0x40;
-            objectManager.addDynamicObject(new CheckpointStarInstance(this, angleOffset));
+            spawnChild(() -> new CheckpointStarInstance(this, angleOffset));
         }
     }
 
@@ -287,4 +292,3 @@ public class CheckpointObjectInstance extends BoxObjectInstance {
         return RenderPriority.clamp(5);
     }
 }
-

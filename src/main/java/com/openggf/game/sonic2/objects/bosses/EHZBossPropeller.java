@@ -7,6 +7,8 @@ import com.openggf.game.sonic2.constants.Sonic2ObjectIds;
 import com.openggf.level.objects.ObjectAnimationState;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.ObjectRenderManager;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.boss.AbstractBossChild;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -17,7 +19,7 @@ import java.util.List;
  * ROM Reference: s2.asm:63176-63231 (loc_2F54E - Obj56_Propeller normal)
  * ROM Reference: s2.asm:63166-63173 (loc_2F52A - Obj56_PropellerReloaded after defeat)
  */
-public class EHZBossPropeller extends AbstractBossChild {
+public class EHZBossPropeller extends AbstractBossChild implements RewindRecreatable {
     private static final int HELICOPTER_SOUND_INTERVAL = 32;
     private static final int OBJOFF_FLAGS = 0x2D;
     private static final int FLAG_GROUNDED = 0x01;
@@ -43,9 +45,15 @@ public class EHZBossPropeller extends AbstractBossChild {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public EHZBossPropeller recreateForRewind(RewindRecreateContext ctx) {
+        Sonic2EHZBossInstance boss = EhzBossRewindLinks.requireNearestBoss(ctx, "EHZ boss propeller");
+        return new EHZBossPropeller(boss);
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        if (isDestroyed() || !shouldUpdate(frameCounter)) {
+        if (isDestroyed() || !shouldUpdate(vIntRunCount)) {
             return;
         }
 
@@ -63,21 +71,21 @@ public class EHZBossPropeller extends AbstractBossChild {
         }
 
         if (reloading) {
-            updateReloading(frameCounter, parentFlags);
+            updateReloading(vIntRunCount, parentFlags);
             updateDynamicSpawn();
             return;
         }
 
         switch (routineSecondary) {
-            case 0 -> updateAirborne(frameCounter, parentFlags);
+            case 0 -> updateAirborne(vIntRunCount, parentFlags);
             case 2 -> updateLanding();
-            default -> updateAirborne(frameCounter, parentFlags);
+            default -> updateAirborne(vIntRunCount, parentFlags);
         }
 
         updateDynamicSpawn();
     }
 
-    private void updateAirborne(int frameCounter, int parentFlags) {
+    private void updateAirborne(int vIntRunCount, int parentFlags) {
         Sonic2EHZBossInstance ehzParent = (Sonic2EHZBossInstance) parent;
         boolean grounded = (parentFlags & FLAG_GROUNDED) != 0;
 
@@ -87,7 +95,7 @@ public class EHZBossPropeller extends AbstractBossChild {
             routineSecondary = 2;
         } else {
             // Only play helicopter SFX when not flying off
-            if ((parentFlags & FLAG_FLYING_OFF) == 0 && (frameCounter & (HELICOPTER_SOUND_INTERVAL - 1)) == 0) {
+            if ((parentFlags & FLAG_FLYING_OFF) == 0 && (vIntRunCount & (HELICOPTER_SOUND_INTERVAL - 1)) == 0) {
                 services().playSfx(Sonic2Sfx.WING_FORTRESS.id);
             }
         }
@@ -111,7 +119,7 @@ public class EHZBossPropeller extends AbstractBossChild {
         animationState.update();
     }
 
-    private void updateReloading(int frameCounter, int parentFlags) {
+    private void updateReloading(int vIntRunCount, int parentFlags) {
         currentY -= 1;
         timer--;
         if (timer < 0) {
@@ -120,7 +128,7 @@ public class EHZBossPropeller extends AbstractBossChild {
         }
 
         // Play helicopter SFX during reload if not flying off
-        if ((parentFlags & FLAG_FLYING_OFF) == 0 && (frameCounter & (HELICOPTER_SOUND_INTERVAL - 1)) == 0) {
+        if ((parentFlags & FLAG_FLYING_OFF) == 0 && (vIntRunCount & (HELICOPTER_SOUND_INTERVAL - 1)) == 0) {
             services().playSfx(Sonic2Sfx.WING_FORTRESS.id);
         }
 

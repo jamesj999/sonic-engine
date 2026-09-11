@@ -20,8 +20,17 @@ public enum GameMode {
     /** Title Screen (shown on game startup before gameplay) */
     TITLE_SCREEN,
 
+    /** ROM Continue countdown and character departure sequence. */
+    CONTINUE_SCREEN,
+
+    /** Data Select Screen (S3K save file selection) */
+    DATA_SELECT,
+
     /** Level Select Screen (debug menu for selecting zone/act) */
     LEVEL_SELECT,
+
+    /** Editor mode for editing the current world/session */
+    EDITOR,
 
     /** Credits text display on black screen (ending sequence) */
     CREDITS_TEXT,
@@ -31,6 +40,9 @@ public enum GameMode {
 
     /** Master title screen for game selection (before any ROM is loaded) */
     MASTER_TITLE_SCREEN,
+
+    /** Legal disclaimer screen shown on engine startup before MASTER_TITLE_SCREEN. */
+    LEGAL_DISCLAIMER,
 
     /** Post-credits "TRY AGAIN" or "END" screen (Sonic 1) */
     TRY_AGAIN_END,

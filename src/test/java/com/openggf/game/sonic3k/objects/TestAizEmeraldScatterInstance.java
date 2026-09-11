@@ -1,8 +1,8 @@
 package com.openggf.game.sonic3k.objects;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import com.openggf.level.objects.ObjectSpawn;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class TestAizEmeraldScatterInstance {
 
@@ -14,7 +14,7 @@ public class TestAizEmeraldScatterInstance {
         for (int subtype : subtypes) {
             var spawn = new ObjectSpawn(100, 100, 0, subtype, 0, false, 0);
             var emerald = new AizEmeraldScatterInstance(spawn);
-            assertEquals("subtype " + subtype, subtype >> 1, emerald.getMappingFrame());
+            assertEquals(subtype >> 1, emerald.getMappingFrame(), "subtype " + subtype);
         }
     }
 
@@ -54,20 +54,16 @@ public class TestAizEmeraldScatterInstance {
         for (int subtype : new int[]{0, 4, 8, 12}) {
             var spawn = new ObjectSpawn(100, 100, 0, subtype, 0, false, 0);
             var em = new AizEmeraldScatterInstance(spawn);
-            assertTrue("subtype " + subtype + " should collect on right",
-                    em.canBeCollectedByVelocity(0x600));
-            assertFalse("subtype " + subtype + " should NOT collect on left",
-                    em.canBeCollectedByVelocity(-0x600));
+            assertTrue(em.canBeCollectedByVelocity(0x600), "subtype " + subtype + " should collect on right");
+            assertFalse(em.canBeCollectedByVelocity(-0x600), "subtype " + subtype + " should NOT collect on left");
         }
 
         // Subtypes 2, 6, 10 (bit 1 set) -> collect on leftward pass
         for (int subtype : new int[]{2, 6, 10}) {
             var spawn = new ObjectSpawn(100, 100, 0, subtype, 0, false, 0);
             var em = new AizEmeraldScatterInstance(spawn);
-            assertTrue("subtype " + subtype + " should collect on left",
-                    em.canBeCollectedByVelocity(-0x600));
-            assertFalse("subtype " + subtype + " should NOT collect on right",
-                    em.canBeCollectedByVelocity(0x600));
+            assertTrue(em.canBeCollectedByVelocity(-0x600), "subtype " + subtype + " should collect on left");
+            assertFalse(em.canBeCollectedByVelocity(0x600), "subtype " + subtype + " should NOT collect on right");
         }
     }
 
@@ -103,3 +99,5 @@ public class TestAizEmeraldScatterInstance {
         assertEquals(0x200, emerald.getY());
     }
 }
+
+

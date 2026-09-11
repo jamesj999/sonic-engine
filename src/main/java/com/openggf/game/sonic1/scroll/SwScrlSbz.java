@@ -1,6 +1,7 @@
 package com.openggf.game.sonic1.scroll;
 
 import com.openggf.level.scroll.AbstractZoneScrollHandler;
+import com.openggf.level.scroll.compose.ScrollEffectComposer;
 import static com.openggf.level.scroll.M68KMath.*;
 
 /**
@@ -32,6 +33,8 @@ public class SwScrlSbz extends AbstractZoneScrollHandler {
     private int lastCameraY;
     private boolean initialized = false;
 
+    private final ScrollEffectComposer composer = new ScrollEffectComposer();
+
     public void init(int cameraX, int cameraY) {
         // BgScrollSpeed default: bgscreenposx = screenposx
         bgXPos = (long) cameraX << 16;
@@ -55,6 +58,7 @@ public class SwScrlSbz extends AbstractZoneScrollHandler {
         }
 
         resetScrollTracking();
+        composer.reset();
 
         int deltaX = cameraX - lastCameraX;
         int deltaY = cameraY - lastCameraY;
@@ -70,18 +74,17 @@ public class SwScrlSbz extends AbstractZoneScrollHandler {
         int bgX = (int) (bgXPos >> 16);
         int bgY = (int) (bgYPos >> 16);
 
-        vscrollFactorBG = (short) bgY;
+        composer.setVscrollFactorBG((short) bgY);
 
         // Uniform h-scroll
         short fgScroll = negWord(cameraX);
         short bgScroll = negWord(bgX);
 
-        int packed = packScrollWords(fgScroll, bgScroll);
-        trackOffset(fgScroll, bgScroll);
-
-        for (int i = 0; i < VISIBLE_LINES; i++) {
-            horizScrollBuf[i] = packed;
-        }
+        composer.fillPackedScrollWords(0, VISIBLE_LINES, fgScroll, bgScroll);
+        composer.copyPackedScrollWordsTo(horizScrollBuf);
+        vscrollFactorBG = composer.getVscrollFactorBG();
+        minScrollOffset = composer.getMinScrollOffset();
+        maxScrollOffset = composer.getMaxScrollOffset();
     }
 
     @Override

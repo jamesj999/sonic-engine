@@ -10,12 +10,16 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.animation.SpriteAnimationEndAction;
 import com.openggf.sprites.animation.SpriteAnimationScript;
 import com.openggf.sprites.animation.SpriteAnimationSet;
 import com.openggf.physics.TrigLookupTable;
+import com.openggf.sprites.NativePositionOps;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
+import com.openggf.sprites.playable.ObjectControlState;
 
 import com.openggf.debug.DebugColor;
 import java.util.List;
@@ -40,7 +44,7 @@ import java.util.logging.Logger;
  * <p>
  * Disassembly reference: s2.asm lines 52943-53215 (Obj67), misc/obj67.asm (path data)
  */
-public class MTZSpinTubeObjectInstance extends AbstractObjectInstance {
+public class MTZSpinTubeObjectInstance extends AbstractObjectInstance implements RewindRecreatable {
     private static final Logger LOGGER = Logger.getLogger(MTZSpinTubeObjectInstance.class.getName());
 
     // Path traversal speed (0x1000 in ROM at loc_27368/loc_27374)
@@ -119,24 +123,34 @@ public class MTZSpinTubeObjectInstance extends AbstractObjectInstance {
                 SpriteAnimationEndAction.SWITCH, 0));
     }
 
-    // Per-character state: one for main character, one for sidekick
-    // Per-character state layout (mirrors ROM objoff_2C/objoff_36 storage):
-    //   state: 0=idle, 2=sine oscillation, 4=path following
-    //   sineAngle: angle for sinusoidal Y oscillation (0-255, byte)
-    //   duration: frames remaining in current path segment (word)
-    //   pathRemaining: bytes of path data remaining (word)
+    // Per-character state holder. ROM Obj67_Main (s2.asm:52978-52994) runs the
+    // per-character routine TWICE — once for MainCharacter using state byte
+    // objoff_2C, once for Sidekick using state byte objoff_36 — each with the
+    // character pointer (a1) of its own player. Each holder mirrors that
+    // per-character storage:
+    //   state: 0=idle, 2=sine oscillation, 4=path following (the routine selector
+    //          at off_271CA, indexed by the (a4) byte)
+    //   sineAngle: angle for sinusoidal Y oscillation (0-255, byte; 1(a4))
+    //   duration: frames remaining in current path segment (word; 2(a4))
+    //   pathRemaining: bytes of path data remaining (word; 4(a4))
     //   pathIndex: current index into path data array
-    //   pathReverse: traversing path backwards
-    private int mainState = 0;
-    private int mainSineAngle = 0;
-    private int mainDuration = 0;
-    private int mainPathRemaining = 0;
-    private int mainPathIndex = 0;
-    private int[] mainPath = null;
-    private boolean mainPathReverse = false;
+    //   pathReverse: traversing path backwards (mirrors subtype bit 7)
+    private static final class CharacterState {
+        int state = 0;
+        int sineAngle = 0;
+        int duration = 0;
+        int pathRemaining = 0;
+        int pathIndex = 0;
+        int[] path = null;
+        boolean pathReverse = false;
+    }
+
+    // objoff_2C (MainCharacter) and objoff_36 (Sidekick).
+    private final CharacterState mainCharState = new CharacterState();
+    private final CharacterState sidekickCharState = new CharacterState();
 
     // Whether object is x-flipped (from render_flags bit 0)
-    private final boolean xFlipped;
+    private boolean xFlipped;
 
     // Animation state for the flash effect
     private final ObjectAnimationState animationState;
@@ -149,30 +163,79 @@ public class MTZSpinTubeObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
+    public MTZSpinTubeObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new MTZSpinTubeObjectInstance(ctx.spawn());
+    }
+
+    @Override
     public int getPriorityBucket() {
         // ROM: move.b #5,priority(a0)
         return RenderPriority.clamp(5);
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        if (player != null) {
-            updateCharacter(player);
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
+        // ROM Obj67_Main (s2.asm:52978-52994): run the per-character routine once
+        // for MainCharacter (a1 = MainCharacter, a4 = objoff_2C) and once for the
+        // Sidekick (a1 = Sidekick, a4 = objoff_36). Resolve both engine players via
+        // the player-query API; the participation policy NATIVE_P1_P2 yields the
+        // native P1 (main) first and native P2 (sidekick) second, matching the ROM.
+        AbstractPlayableSprite mainPlayer = resolveMainCharacter(playerEntity);
+        AbstractPlayableSprite sidekickPlayer = resolveSidekick();
+
+        if (mainPlayer != null) {
+            updateCharacter(mainCharState, mainPlayer);
+        }
+        if (sidekickPlayer != null) {
+            updateCharacter(sidekickCharState, sidekickPlayer);
         }
 
-        // ROM: checks objoff_2C + objoff_36 for visibility
-        // Only animate when a character is actively in the tube
-        if (mainState != 0) {
+        // ROM: move.b objoff_2C(a0),d0 / add.b objoff_36(a0),d0 / beq.w MarkObjGone3
+        // (s2.asm:52952-52954). Only animate (and render) when at least one
+        // character is actively in the tube.
+        if (mainCharState.state != 0 || sidekickCharState.state != 0) {
             animationState.update();
         }
     }
 
-    private void updateCharacter(AbstractPlayableSprite player) {
-        switch (mainState) {
-            case 0 -> checkEntry(player);
-            case 2 -> updateSineOscillation(player);
-            case 4 -> updatePathFollow(player);
+    /**
+     * Resolves the native main character (ROM MainCharacter / a1 in the first
+     * Obj67_Main pass). Falls back to the {@code playerEntity} supplied by the
+     * object update loop when the query layer is unavailable (e.g. test fixtures).
+     */
+    private AbstractPlayableSprite resolveMainCharacter(PlayableEntity fallback) {
+        try {
+            PlayableEntity main = services().playerQuery().mainPlayerOrNull();
+            if (main instanceof AbstractPlayableSprite sprite) {
+                return sprite;
+            }
+        } catch (RuntimeException e) {
+            // Query layer unavailable - fall back below.
+        }
+        return (fallback instanceof AbstractPlayableSprite sprite) ? sprite : null;
+    }
+
+    /**
+     * Resolves the native sidekick (ROM Sidekick / a1 in the second Obj67_Main
+     * pass), or {@code null} when the active session has no sidekick.
+     */
+    private AbstractPlayableSprite resolveSidekick() {
+        try {
+            PlayableEntity p2 = services().playerQuery().nativeP2OrNull();
+            if (p2 instanceof AbstractPlayableSprite sprite) {
+                return sprite;
+            }
+        } catch (RuntimeException e) {
+            // Query layer unavailable - no sidekick.
+        }
+        return null;
+    }
+
+    private void updateCharacter(CharacterState cs, AbstractPlayableSprite player) {
+        switch (cs.state) {
+            case 0 -> checkEntry(cs, player);
+            case 2 -> updateSineOscillation(cs, player);
+            case 4 -> updatePathFollow(cs, player);
         }
     }
 
@@ -180,7 +243,7 @@ public class MTZSpinTubeObjectInstance extends AbstractObjectInstance {
      * State 0: Check if the player enters the tube activation zone.
      * ROM: loc_271D0
      */
-    private void checkEntry(AbstractPlayableSprite player) {
+    private void checkEntry(CharacterState cs, AbstractPlayableSprite player) {
         // ROM: tst.w (Debug_placement_mode).w / bne.w return
         if (player.isDebugMode()) {
             return;
@@ -219,14 +282,14 @@ public class MTZSpinTubeObjectInstance extends AbstractObjectInstance {
 
         // Capture player
         // ROM: addq.b #2,(a4)
-        mainState = 2;
+        cs.state = 2;
 
         // ROM: move.b #$81,obj_control(a1)
-        player.setObjectControlled(true);
+        ObjectControlState.nativeBit7FullControl().applyTo(player);
         player.setControlLocked(true);
 
-        // ROM: move.b #AniIDSonAni_Roll,anim(a1)
-        player.setRolling(true);
+        // ROM: move.b #AniIDSonAni_Roll,anim(a1). Obj67 does not set the
+        // status.player.rolling bit; it only changes the animation.
         player.setAnimationId(Sonic2AnimationIds.ROLL);
 
         // ROM: move.w #$800,inertia(a1)
@@ -243,15 +306,15 @@ public class MTZSpinTubeObjectInstance extends AbstractObjectInstance {
         player.setAir(true);
 
         // ROM: move.w x_pos(a0),x_pos(a1) / move.w y_pos(a0),y_pos(a1)
-        player.setCentreX((short) objX);
-        player.setCentreY((short) objY);
+        NativePositionOps.writeXPosPreserveSubpixel(player, objX);
+        NativePositionOps.writeYPosPreserveSubpixel(player, objY);
 
         // ROM: bclr #high_priority_bit,art_tile(a1)
         player.setHighPriority(false);
         player.setPriorityBucket(RenderPriority.MIN);
 
         // ROM: clr.b 1(a4) - reset sine angle
-        mainSineAngle = 0;
+        cs.sineAngle = 0;
 
         // ROM: move.w #SndID_Roll,d0 / jsr (PlaySound).l
         playSound(GameSound.ROLLING);
@@ -267,10 +330,10 @@ public class MTZSpinTubeObjectInstance extends AbstractObjectInstance {
      * The player bobs up and down at the tube's X position while descending
      * into the tube, then launches into the path.
      */
-    private void updateSineOscillation(AbstractPlayableSprite player) {
+    private void updateSineOscillation(CharacterState cs, AbstractPlayableSprite player) {
         // ROM: move.b 1(a4),d0 / addq.b #2,1(a4)
-        int angle = mainSineAngle;
-        mainSineAngle = (mainSineAngle + SINE_ANGLE_INCREMENT) & 0xFF;
+        int angle = cs.sineAngle;
+        cs.sineAngle = (cs.sineAngle + SINE_ANGLE_INCREMENT) & 0xFF;
 
         // ROM: jsr (CalcSine).l - returns sine in d0
         int sineValue = TrigLookupTable.sinHex(angle);
@@ -280,16 +343,16 @@ public class MTZSpinTubeObjectInstance extends AbstractObjectInstance {
 
         // ROM: move.w y_pos(a0),d2 / sub.w d0,d2 / move.w d2,y_pos(a1)
         int objY = spawn.y();
-        player.setCentreY((short) (objY - sineValue));
+        NativePositionOps.writeYPosPreserveSubpixel(player, objY - sineValue);
 
         // ROM: cmpi.b #$80,1(a4) / bne.s +
-        if (mainSineAngle != SINE_TRANSITION_ANGLE) {
+        if (cs.sineAngle != SINE_TRANSITION_ANGLE) {
             return;
         }
 
         // Transition to path mode
-        setupPath(player);
-        mainState = 4;
+        setupPath(cs, player);
+        cs.state = 4;
 
         // ROM: move.w #SndID_SpindashRelease,d0 / jsr (PlaySound).l
         playSound(GameSound.SPINDASH_RELEASE);
@@ -299,7 +362,7 @@ public class MTZSpinTubeObjectInstance extends AbstractObjectInstance {
      * Setup path data for traversal.
      * ROM: loc_27310 (forward) / loc_27344 (reverse)
      */
-    private void setupPath(AbstractPlayableSprite player) {
+    private void setupPath(CharacterState cs, AbstractPlayableSprite player) {
         int subtype = spawn.subtype();
         boolean reverse = (subtype & 0x80) != 0;
 
@@ -314,86 +377,86 @@ public class MTZSpinTubeObjectInstance extends AbstractObjectInstance {
 
         if (pathIndex >= PATHS.length) {
             LOGGER.warning("MTZSpinTube: path index " + pathIndex + " out of range");
-            exitTube(player);
+            exitTube(cs, player);
             return;
         }
 
-        mainPath = PATHS[pathIndex];
-        mainPathReverse = reverse;
+        cs.path = PATHS[pathIndex];
+        cs.pathReverse = reverse;
 
         // The path data size word in ROM counts bytes: each waypoint = 4 bytes (2 words)
         // ROM: move.w (a2)+,d0 then subq.w #4,d0 for the size
         // In our array: pathRemaining = (waypointCount - 1) * 4 bytes
         // This counts down by 4 for each waypoint consumed
-        int waypointCount = mainPath.length / 2;
-        mainPathRemaining = (waypointCount - 1) * 4;
+        int waypointCount = cs.path.length / 2;
+        cs.pathRemaining = (waypointCount - 1) * 4;
 
         if (reverse) {
             // ROM: lea (a2,d0.w),a2 - jump to end of path data
             // Position player at last waypoint
-            int lastIdx = mainPath.length - 2;
-            player.setCentreX((short) mainPath[lastIdx]);
-            player.setCentreY((short) mainPath[lastIdx + 1]);
+            int lastIdx = cs.path.length - 2;
+            NativePositionOps.writeXPosPreserveSubpixel(player, cs.path[lastIdx]);
+            NativePositionOps.writeYPosPreserveSubpixel(player, cs.path[lastIdx + 1]);
 
             // ROM: subq.w #8,a2 - back up one waypoint
-            mainPathIndex = lastIdx - 2;
+            cs.pathIndex = lastIdx - 2;
         } else {
             // ROM: move.w (a2)+,d4 / move.w d4,x_pos(a1) / move.w (a2)+,d5 / move.w d5,y_pos(a1)
             // Position player at first waypoint
-            player.setCentreX((short) mainPath[0]);
-            player.setCentreY((short) mainPath[1]);
-            mainPathIndex = 2;
+            NativePositionOps.writeXPosPreserveSubpixel(player, cs.path[0]);
+            NativePositionOps.writeYPosPreserveSubpixel(player, cs.path[1]);
+            cs.pathIndex = 2;
         }
 
         // Calculate velocity to next waypoint
-        int targetX = mainPath[mainPathIndex];
-        int targetY = mainPath[mainPathIndex + 1];
-        calculateVelocity(player, targetX, targetY);
+        int targetX = cs.path[cs.pathIndex];
+        int targetY = cs.path[cs.pathIndex + 1];
+        calculateVelocity(cs, player, targetX, targetY);
     }
 
     /**
      * State 4: Following path waypoints.
      * ROM: loc_27294
      */
-    private void updatePathFollow(AbstractPlayableSprite player) {
+    private void updatePathFollow(CharacterState cs, AbstractPlayableSprite player) {
         // ROM: subq.b #1,2(a4) / bpl.s Obj67_MoveCharacter
-        mainDuration--;
-        if (mainDuration >= 0) {
+        cs.duration--;
+        if (cs.duration >= 0) {
             moveCharacter(player);
             return;
         }
 
         // Reached waypoint - snap to position
         // ROM: movea.l 6(a4),a2 / move.w (a2)+,d4 / move.w d4,x_pos(a1) / move.w (a2)+,d5 / move.w d5,y_pos(a1)
-        int waypointX = mainPath[mainPathIndex];
-        int waypointY = mainPath[mainPathIndex + 1];
-        player.setCentreX((short) waypointX);
-        player.setCentreY((short) waypointY);
+        int waypointX = cs.path[cs.pathIndex];
+        int waypointY = cs.path[cs.pathIndex + 1];
+        NativePositionOps.writeXPosPreserveSubpixel(player, waypointX);
+        NativePositionOps.writeYPosPreserveSubpixel(player, waypointY);
 
         // ROM: tst.b subtype(a0) / bpl.s + / subq.w #8,a2
-        if (mainPathReverse) {
-            mainPathIndex -= 2;
+        if (cs.pathReverse) {
+            cs.pathIndex -= 2;
         } else {
-            mainPathIndex += 2;
+            cs.pathIndex += 2;
         }
 
         // ROM: subq.w #4,4(a4) / beq.s loc_272EE
-        mainPathRemaining -= 4;
-        if (mainPathRemaining <= 0) {
-            exitTube(player);
+        cs.pathRemaining -= 4;
+        if (cs.pathRemaining <= 0) {
+            exitTube(cs, player);
             return;
         }
 
         // Check bounds
-        if (mainPathIndex < 0 || mainPathIndex + 1 >= mainPath.length) {
-            exitTube(player);
+        if (cs.pathIndex < 0 || cs.pathIndex + 1 >= cs.path.length) {
+            exitTube(cs, player);
             return;
         }
 
         // Calculate velocity to next waypoint
-        int targetX = mainPath[mainPathIndex];
-        int targetY = mainPath[mainPathIndex + 1];
-        calculateVelocity(player, targetX, targetY);
+        int targetX = cs.path[cs.pathIndex];
+        int targetY = cs.path[cs.pathIndex + 1];
+        calculateVelocity(cs, player, targetX, targetY);
     }
 
     /**
@@ -409,17 +472,17 @@ public class MTZSpinTubeObjectInstance extends AbstractObjectInstance {
      * Exit the tube and restore player control.
      * ROM: loc_272EE
      */
-    private void exitTube(AbstractPlayableSprite player) {
+    private void exitTube(CharacterState cs, AbstractPlayableSprite player) {
         // ROM: andi.w #$7FF,y_pos(a1)
         int y = player.getCentreY() & 0x7FF;
-        player.setCentreY((short) y);
+        NativePositionOps.writeYPosPreserveSubpixel(player, y);
 
         // ROM: clr.b (a4)
-        mainState = 0;
-        mainPath = null;
+        cs.state = 0;
+        cs.path = null;
 
         // ROM: clr.b obj_control(a1)
-        player.setObjectControlled(false);
+        ObjectControlState.none().applyTo(player);
         player.setControlLocked(false);
 
         // Restore normal render priority
@@ -432,8 +495,13 @@ public class MTZSpinTubeObjectInstance extends AbstractObjectInstance {
             player.setYSpeed((short) 0);
         }
 
-        // Reset animation to invisible
-        animationState.setAnimId(0);
+        // Reset animation to invisible only when BOTH characters have left the
+        // tube. ROM gates visibility/animation on objoff_2C + objoff_36 at the top
+        // of Obj67 (s2.asm:52952-52954); if the other character is still riding,
+        // its flash animation must keep running.
+        if (mainCharState.state == 0 && sidekickCharState.state == 0) {
+            animationState.setAnimId(0);
+        }
     }
 
     /**
@@ -449,7 +517,7 @@ public class MTZSpinTubeObjectInstance extends AbstractObjectInstance {
      *   - xVel = d2 (signed), duration = abs((dx << 16) / d2)
      *   - yVel = (dy << 16) / duration
      */
-    private void calculateVelocity(AbstractPlayableSprite player, int targetX, int targetY) {
+    private void calculateVelocity(CharacterState cs, AbstractPlayableSprite player, int targetX, int targetY) {
         int currentX = player.getCentreX();
         int currentY = player.getCentreY();
         int dx = targetX - currentX;
@@ -482,7 +550,7 @@ public class MTZSpinTubeObjectInstance extends AbstractObjectInstance {
 
             // ROM: abs.w d1 / move.w d1,2(a4) then subq.b #1,2(a4) uses HIGH byte
             // The stored word's high byte is the actual frame counter
-            mainDuration = (Math.abs(duration) >> 8) & 0xFF;
+            cs.duration = (Math.abs(duration) >> 8) & 0xFF;
         } else {
             // X is dominant axis
             // ROM: move.w d2,x_vel(a1) - d2 = speed, negated if dx < 0
@@ -504,7 +572,7 @@ public class MTZSpinTubeObjectInstance extends AbstractObjectInstance {
 
             // ROM: abs.w d0 / move.w d0,2(a4) then subq.b #1,2(a4) uses HIGH byte
             // The stored word's high byte is the actual frame counter
-            mainDuration = (Math.abs(duration) >> 8) & 0xFF;
+            cs.duration = (Math.abs(duration) >> 8) & 0xFF;
         }
 
         player.setXSpeed((short) xVel);
@@ -522,7 +590,7 @@ public class MTZSpinTubeObjectInstance extends AbstractObjectInstance {
     @Override
     public void appendRenderCommands(List<GLCommand> commands) {
         // ROM: only render when a character is in the tube (objoff_2C + objoff_36 != 0)
-        if (mainState == 0) {
+        if (mainCharState.state == 0 && sidekickCharState.state == 0) {
             return;
         }
 
@@ -556,13 +624,15 @@ public class MTZSpinTubeObjectInstance extends AbstractObjectInstance {
         int pathIdx = spawn.subtype() & 0xF;
         boolean rev = (spawn.subtype() & 0x80) != 0;
         ctx.drawWorldLabel(objX, objY, -1,
-                String.format("67 p%d%s s%d", pathIdx, rev ? "R" : "", mainState),
+                String.format("67 p%d%s s%d/%d", pathIdx, rev ? "R" : "",
+                        mainCharState.state, sidekickCharState.state),
                 DebugColor.CYAN);
     }
 
     @Override
     public boolean isPersistent() {
-        // Keep active while controlling a player
-        return mainState == 2 || mainState == 4;
+        // Keep active while controlling either player.
+        return mainCharState.state == 2 || mainCharState.state == 4
+                || sidekickCharState.state == 2 || sidekickCharState.state == 4;
     }
 }

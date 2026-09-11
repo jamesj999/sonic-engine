@@ -14,6 +14,18 @@ package com.openggf.audio.smps;
 public interface CoordFlagHandler {
 
     /**
+     * Notify the game-specific handler that a new SFX is starting.
+     *
+     * <p>Most drivers do not need per-SFX global state, so the default is a
+     * no-op. S3K uses this boundary to mirror the Z80 driver's spindash rev
+     * counter reset rules.
+     *
+     * @param sfxId native game SFX ID
+     */
+    default void onSfxStart(int sfxId) {
+    }
+
+    /**
      * Attempt to handle a coordination flag command.
      *
      * @param ctx  the sequencer context (for data access, track ops, synth writes)

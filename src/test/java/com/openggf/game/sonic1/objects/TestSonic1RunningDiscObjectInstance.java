@@ -1,12 +1,25 @@
 package com.openggf.game.sonic1.objects;
 
-import org.junit.Test;
+import com.openggf.game.GameModuleRegistry;
+import com.openggf.game.sonic1.Sonic1GameModule;
+import com.openggf.sprites.animation.SpriteAnimationEndAction;
+import com.openggf.sprites.animation.SpriteAnimationScript;
+import com.openggf.sprites.animation.SpriteAnimationSet;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import com.openggf.level.objects.ObjectSpawn;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+
+import java.util.List;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TestSonic1RunningDiscObjectInstance {
+
+    @AfterEach
+    void resetGameModuleOverride() {
+        GameModuleRegistry.reset();
+    }
 
     @Test
     public void attachesAndSetsStickToConvex() {
@@ -69,6 +82,34 @@ public class TestSonic1RunningDiscObjectInstance {
         player.setCentreY((short) 0x300);
         disc.update(3, player);
         assertTrue(player.isStickToConvex());
+    }
+
+    @Test
+    public void firstGroundedAttachmentPublishesWalkWithRunPreviousAnimation() {
+        GameModuleRegistry.setCurrent(new Sonic1GameModule());
+        Sonic1RunningDiscObjectInstance disc = createDisc(0x10, 0x200, 0x200);
+        TestPlayableSprite player = new TestPlayableSprite();
+        player.setCentreX((short) 0x200);
+        player.setCentreY((short) 0x200);
+        player.setAir(false);
+        player.setRolling(false);
+        SpriteAnimationSet animations = new SpriteAnimationSet();
+        animations.addScript(0, new SpriteAnimationScript(0,
+                List.of(0x08, 0x09), SpriteAnimationEndAction.LOOP, 0));
+        animations.addScript(2, new SpriteAnimationScript(0,
+                List.of(0x22), SpriteAnimationEndAction.LOOP, 0));
+        player.setAnimationSet(animations);
+        player.setAnimationId(2);
+        player.getAnimationManager().update(0);
+
+        disc.update(1, player);
+
+        assertEquals(0, player.getAnimationId(), "Disc_MoveSonic clears obAnim");
+        assertEquals(1, player.getAnimationManager().captureRewindState().lastAnimationId(),
+                "Disc_MoveSonic writes id_Run to obPrevAni");
+        player.getAnimationManager().update(1);
+        assertEquals(0x08, player.getMappingFrame(),
+                "The next animation pass must restart Walk from its first mapping");
     }
 
     private static Sonic1RunningDiscObjectInstance createDisc(int subtype, int x, int y) {

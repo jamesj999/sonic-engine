@@ -1,17 +1,18 @@
 package com.openggf.tests.graphics;
 
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import com.openggf.game.session.SessionManager;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import com.openggf.game.GameServices;
-import com.openggf.game.RuntimeManager;
 import com.openggf.graphics.FadeManager;
 import com.openggf.graphics.FadeManager.FadeState;
 import com.openggf.graphics.FadeManager.FadeType;
+import com.openggf.tests.TestEnvironment;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Tests for FadeManager state machine transitions and timing.
@@ -25,16 +26,16 @@ public class FadeManagerTest {
 
     private FadeManager fadeManager;
 
-    @Before
+    @BeforeEach
     public void setUp() {
-        RuntimeManager.createGameplay();
+        TestEnvironment.resetAll();
         GameServices.fade().resetState();
         fadeManager = GameServices.fade();
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
-        RuntimeManager.destroyCurrent();
+        SessionManager.clear();
     }
 
     // === Initial State Tests ===
@@ -75,9 +76,9 @@ public class FadeManagerTest {
         // After 1 frame, only red should increase
         fadeManager.update();
         float[] color = fadeManager.getFadeColor();
-        assertTrue("Red should increase first", color[0] > 0);
-        assertEquals("Green should be zero", 0f, color[1], 0.001f);
-        assertEquals("Blue should be zero", 0f, color[2], 0.001f);
+        assertTrue(color[0] > 0, "Red should increase first");
+        assertEquals(0f, color[1], 0.001f, "Green should be zero");
+        assertEquals(0f, color[2], 0.001f, "Blue should be zero");
     }
 
     @Test
@@ -92,9 +93,9 @@ public class FadeManagerTest {
         // One more frame should start green
         fadeManager.update();
         float[] color = fadeManager.getFadeColor();
-        assertEquals("Red should be at max", 1.0f, color[0], 0.01f);
-        assertTrue("Green should start increasing", color[1] > 0);
-        assertEquals("Blue should still be zero", 0f, color[2], 0.001f);
+        assertEquals(1.0f, color[0], 0.01f, "Red should be at max");
+        assertTrue(color[1] > 0, "Green should start increasing");
+        assertEquals(0f, color[2], 0.001f, "Blue should still be zero");
     }
 
     @Test
@@ -109,9 +110,9 @@ public class FadeManagerTest {
         // One more frame should start blue
         fadeManager.update();
         float[] color = fadeManager.getFadeColor();
-        assertEquals("Red should be at max", 1.0f, color[0], 0.01f);
-        assertEquals("Green should be at max", 1.0f, color[1], 0.01f);
-        assertTrue("Blue should start increasing", color[2] > 0);
+        assertEquals(1.0f, color[0], 0.01f, "Red should be at max");
+        assertEquals(1.0f, color[1], 0.01f, "Green should be at max");
+        assertTrue(color[2] > 0, "Blue should start increasing");
     }
 
     @Test
@@ -137,7 +138,7 @@ public class FadeManagerTest {
             fadeManager.update();
         }
 
-        assertTrue("Callback should have executed", callbackExecuted.get());
+        assertTrue(callbackExecuted.get(), "Callback should have executed");
     }
 
     // === Fade To Black Tests ===
@@ -160,8 +161,8 @@ public class FadeManagerTest {
         float[] afterUpdate = fadeManager.getFadeColor();
 
         // For black fade, values represent darkness (0 = full color, 1 = black)
-        assertTrue("Darkness should increase", afterUpdate[0] > initialColor[0] ||
-                afterUpdate[1] > initialColor[1] || afterUpdate[2] > initialColor[2]);
+        assertTrue(afterUpdate[0] > initialColor[0] ||
+                afterUpdate[1] > initialColor[1] || afterUpdate[2] > initialColor[2], "Darkness should increase");
     }
 
     @Test
@@ -182,9 +183,9 @@ public class FadeManagerTest {
         fadeManager.startFadeFromWhite(null);
 
         float[] color = fadeManager.getFadeColor();
-        assertEquals("Red should start at max", 1.0f, color[0], 0.001f);
-        assertEquals("Green should start at max", 1.0f, color[1], 0.001f);
-        assertEquals("Blue should start at max", 1.0f, color[2], 0.001f);
+        assertEquals(1.0f, color[0], 0.001f, "Red should start at max");
+        assertEquals(1.0f, color[1], 0.001f, "Green should start at max");
+        assertEquals(1.0f, color[2], 0.001f, "Blue should start at max");
     }
 
     @Test
@@ -196,9 +197,9 @@ public class FadeManagerTest {
         }
 
         float[] color = fadeManager.getFadeColor();
-        assertEquals("Red should be zero", 0f, color[0], 0.01f);
-        assertEquals("Green should be zero", 0f, color[1], 0.01f);
-        assertEquals("Blue should be zero", 0f, color[2], 0.01f);
+        assertEquals(0f, color[0], 0.01f, "Red should be zero");
+        assertEquals(0f, color[1], 0.01f, "Green should be zero");
+        assertEquals(0f, color[2], 0.01f, "Blue should be zero");
     }
 
     @Test
@@ -220,7 +221,7 @@ public class FadeManagerTest {
         fadeManager.startFadeFromBlack(null);
 
         float[] color = fadeManager.getFadeColor();
-        assertEquals("Darkness values should start at max", 1.0f, color[0], 0.001f);
+        assertEquals(1.0f, color[0], 0.001f, "Darkness values should start at max");
         assertEquals(1.0f, color[1], 0.001f);
         assertEquals(1.0f, color[2], 0.001f);
     }
@@ -281,7 +282,7 @@ public class FadeManagerTest {
         // Should stay in hold for exactly holdFrames
         for (int i = 0; i < holdFrames - 1; i++) {
             fadeManager.update();
-            assertEquals("Should remain in HOLD_WHITE during hold period", FadeState.HOLD_WHITE, fadeManager.getState());
+            assertEquals(FadeState.HOLD_WHITE, fadeManager.getState(), "Should remain in HOLD_WHITE during hold period");
         }
 
         // One more update should complete the hold
@@ -321,7 +322,7 @@ public class FadeManagerTest {
             fadeManager.update();
         }
 
-        assertFalse("Callback should not execute after cancel", callbackExecuted.get());
+        assertFalse(callbackExecuted.get(), "Callback should not execute after cancel");
     }
 
     // === Frame Counter Tests ===
@@ -357,9 +358,9 @@ public class FadeManagerTest {
             fadeManager.update();
             float[] color = fadeManager.getFadeColor();
 
-            assertTrue("Red should not decrease", color[0] >= prevR);
-            assertTrue("Green should not decrease", color[1] >= prevG);
-            assertTrue("Blue should not decrease", color[2] >= prevB);
+            assertTrue(color[0] >= prevR, "Red should not decrease");
+            assertTrue(color[1] >= prevG, "Green should not decrease");
+            assertTrue(color[2] >= prevB, "Blue should not decrease");
 
             prevR = color[0];
             prevG = color[1];
@@ -376,9 +377,9 @@ public class FadeManagerTest {
             fadeManager.update();
             float[] color = fadeManager.getFadeColor();
 
-            assertTrue("Red should not increase", color[0] <= prevR);
-            assertTrue("Green should not increase", color[1] <= prevG);
-            assertTrue("Blue should not increase", color[2] <= prevB);
+            assertTrue(color[0] <= prevR, "Red should not increase");
+            assertTrue(color[1] <= prevG, "Green should not increase");
+            assertTrue(color[2] <= prevB, "Blue should not increase");
 
             prevR = color[0];
             prevG = color[1];
@@ -395,7 +396,7 @@ public class FadeManagerTest {
         // After 1 frame, red should be approximately 1/7
         fadeManager.update();
         float[] color = fadeManager.getFadeColor();
-        assertEquals("Red increment should be 1/7", 1.0f / 7.0f, color[0], 0.001f);
+        assertEquals(1.0f / 7.0f, color[0], 0.001f, "Red increment should be 1/7");
     }
 
     @Test
@@ -407,9 +408,9 @@ public class FadeManagerTest {
         }
 
         float[] color = fadeManager.getFadeColor();
-        assertEquals("Red should be 1.0", 1.0f, color[0], 0.01f);
-        assertEquals("Green should be 1.0", 1.0f, color[1], 0.01f);
-        assertEquals("Blue should be 1.0", 1.0f, color[2], 0.01f);
+        assertEquals(1.0f, color[0], 0.01f, "Red should be 1.0");
+        assertEquals(1.0f, color[1], 0.01f, "Green should be 1.0");
+        assertEquals(1.0f, color[2], 0.01f, "Blue should be 1.0");
     }
 
     // === Fade Type Tests ===
@@ -443,9 +444,9 @@ public class FadeManagerTest {
         // After 1 frame, only red darkness should increase
         fadeManager.update();
         float[] color = fadeManager.getFadeColor();
-        assertTrue("Red darkness should increase first", color[0] > 0);
-        assertEquals("Green darkness should be zero", 0f, color[1], 0.001f);
-        assertEquals("Blue darkness should be zero", 0f, color[2], 0.001f);
+        assertTrue(color[0] > 0, "Red darkness should increase first");
+        assertEquals(0f, color[1], 0.001f, "Green darkness should be zero");
+        assertEquals(0f, color[2], 0.001f, "Blue darkness should be zero");
     }
 
     @Test
@@ -460,9 +461,9 @@ public class FadeManagerTest {
         // One more frame should start green
         fadeManager.update();
         float[] color = fadeManager.getFadeColor();
-        assertEquals("Red darkness should be at max", 1.0f, color[0], 0.01f);
-        assertTrue("Green darkness should start increasing", color[1] > 0);
-        assertEquals("Blue darkness should still be zero", 0f, color[2], 0.001f);
+        assertEquals(1.0f, color[0], 0.01f, "Red darkness should be at max");
+        assertTrue(color[1] > 0, "Green darkness should start increasing");
+        assertEquals(0f, color[2], 0.001f, "Blue darkness should still be zero");
     }
 
     // === Restart Fade Tests ===
@@ -498,9 +499,43 @@ public class FadeManagerTest {
         assertEquals(0, fadeManager.getFrameCount());
 
         float[] color = fadeManager.getFadeColor();
-        assertEquals("Colors should reset", 0f, color[0], 0.001f);
+        assertEquals(0f, color[0], 0.001f, "Colors should reset");
         assertEquals(0f, color[1], 0.001f);
         assertEquals(0f, color[2], 0.001f);
+    }
+
+    @Test
+    public void holdBlackReplacesRunningRevealAndRemainsOpaque() {
+        AtomicBoolean callbackExecuted = new AtomicBoolean(false);
+        fadeManager.startFadeFromBlack(() -> callbackExecuted.set(true));
+
+        fadeManager.holdBlack();
+        for (int frame = 0; frame < 30; frame++) {
+            fadeManager.update();
+        }
+
+        assertEquals(FadeState.HOLD_BLACK, fadeManager.getState());
+        assertEquals(FadeType.BLACK, fadeManager.getFadeType());
+        assertArrayEquals(new float[] {1f, 1f, 1f}, fadeManager.getFadeColor(), 0.001f);
+        assertFalse(fadeManager.hasPendingCompletion());
+        assertFalse(callbackExecuted.get());
+    }
+
+    @Test
+    public void holdWhiteReplacesRunningFadeAndRemainsOpaque() {
+        AtomicBoolean callbackExecuted = new AtomicBoolean(false);
+        fadeManager.startFadeToBlack(() -> callbackExecuted.set(true));
+
+        fadeManager.holdWhite();
+        for (int frame = 0; frame < 30; frame++) {
+            fadeManager.update();
+        }
+
+        assertEquals(FadeState.HOLD_WHITE, fadeManager.getState());
+        assertEquals(FadeType.WHITE, fadeManager.getFadeType());
+        assertArrayEquals(new float[] {1f, 1f, 1f}, fadeManager.getFadeColor(), 0.001f);
+        assertFalse(fadeManager.hasPendingCompletion());
+        assertFalse(callbackExecuted.get());
     }
 
     // === Callback Execution Timing Tests ===
@@ -515,17 +550,17 @@ public class FadeManagerTest {
         for (int i = 0; i < FADE_DURATION; i++) {
             fadeManager.update();
         }
-        assertFalse("Callback should not execute during fade", callbackExecuted.get());
+        assertFalse(callbackExecuted.get(), "Callback should not execute during fade");
 
         // During hold (should not execute yet)
         for (int i = 0; i < holdFrames - 1; i++) {
             fadeManager.update();
-            assertFalse("Callback should not execute during hold", callbackExecuted.get());
+            assertFalse(callbackExecuted.get(), "Callback should not execute during hold");
         }
 
         // Final hold frame should trigger callback
         fadeManager.update();
-        assertTrue("Callback should execute after hold completes", callbackExecuted.get());
+        assertTrue(callbackExecuted.get(), "Callback should execute after hold completes");
     }
 
     @Test
@@ -539,6 +574,7 @@ public class FadeManagerTest {
             fadeManager.update();
         }
 
-        assertEquals("Callback should execute exactly once", 1, callCount[0]);
+        assertEquals(1, callCount[0], "Callback should execute exactly once");
     }
 }
+

@@ -4,7 +4,10 @@ import com.openggf.game.sonic2.Sonic2ObjectArtKeys;
 import com.openggf.game.PlayableEntity;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
+import com.openggf.level.objects.ObjectPlayerParticipationPolicy;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
@@ -12,6 +15,7 @@ import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Logger;
 
@@ -36,7 +40,8 @@ import java.util.logging.Logger;
  * - Max rise: 64 pixels (0x40)
  * - Solid collision enabled while visible
  */
-public class BarrierObjectInstance extends AbstractObjectInstance implements SolidObjectProvider, SolidObjectListener {
+public class BarrierObjectInstance extends AbstractObjectInstance
+        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
     private static final Logger LOGGER = Logger.getLogger(BarrierObjectInstance.class.getName());
 
     // Movement constants (from disassembly)
@@ -49,6 +54,8 @@ public class BarrierObjectInstance extends AbstractObjectInstance implements Sol
     private static final int X_RIGHT_OFFSET = 0x18;    // addi.w #$18,d3
     private static final int X_FLIP_LEFT_ADD = 0x1E8;  // subi.w #-$1E8,d2 (which adds 0x1E8)
     private static final int X_FLIP_RIGHT_ADD = 0x1E8; // addi.w #$1E8,d3
+    private static final ObjectPlayerParticipationPolicy PLAYER_PARTICIPATION =
+            ObjectPlayerParticipationPolicy.MAIN_PLUS_ENGINE_SIDEKICKS_AS_NATIVE_P2_EXTENDED;
 
     // Solid collision constants (from disassembly)
     private static final int SOLID_EXTRA_WIDTH = 0x0B; // addi.w #$B,d1
@@ -80,6 +87,11 @@ public class BarrierObjectInstance extends AbstractObjectInstance implements Sol
     }
 
     @Override
+    public BarrierObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new BarrierObjectInstance(ctx.spawn(), getName());
+    }
+
+    @Override
     public int getX() {
         return x;
     }
@@ -89,8 +101,7 @@ public class BarrierObjectInstance extends AbstractObjectInstance implements Sol
         return y;
     }
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         // Calculate detection boundaries using PREVIOUS frame's movingUp state
         // ROM behavior: detection boundaries are calculated using routine_secondary from the previous frame,
         // then routine_secondary is cleared to 0, then character detection is performed.
@@ -117,11 +128,8 @@ public class BarrierObjectInstance extends AbstractObjectInstance implements Sol
         //   bsr.s Obj2D_CheckCharacter
         //   lea (Sidekick).w,a1
         //   bsr.s Obj2D_CheckCharacter
-        checkCharacter(player, detectLeft, detectRight, detectTop, detectBottom);
-
-        // Check sidekick(s) if present
-        for (PlayableEntity sidekick : services().sidekicks()) {
-            checkCharacter((AbstractPlayableSprite) sidekick, detectLeft, detectRight, detectTop, detectBottom);
+        for (PlayableEntity participant : detectionParticipants(playerEntity)) {
+            checkCharacter((AbstractPlayableSprite) participant, detectLeft, detectRight, detectTop, detectBottom);
         }
 
         // Update position based on movement state
@@ -150,6 +158,17 @@ public class BarrierObjectInstance extends AbstractObjectInstance implements Sol
         wasMovingUp = movingUp;
 
         updateDynamicSpawn(x, y);
+    }
+
+    private List<PlayableEntity> detectionParticipants(PlayableEntity updatePlayer) {
+        List<PlayableEntity> participants = services().playerQuery().playersFor(PLAYER_PARTICIPATION);
+        if (updatePlayer != null && !participants.contains(updatePlayer)) {
+            ArrayList<PlayableEntity> withUpdatePlayer = new ArrayList<>(participants.size() + 1);
+            withUpdatePlayer.add(updatePlayer);
+            withUpdatePlayer.addAll(participants);
+            return withUpdatePlayer;
+        }
+        return participants;
     }
 
     /**
@@ -202,13 +221,38 @@ public class BarrierObjectInstance extends AbstractObjectInstance implements Sol
         int halfWidth = widthPixels + SOLID_EXTRA_WIDTH;
         int airHalfHeight = SOLID_HALF_HEIGHT;
         int groundHalfHeight = SOLID_HALF_HEIGHT + 1;
-        return new SolidObjectParams(halfWidth, airHalfHeight, groundHalfHeight);
+        return SolidObjectParams.of(halfWidth, airHalfHeight, groundHalfHeight);
     }
 
     @Override
     public boolean isTopSolidOnly() {
         // Barrier is a full solid object, not top-only
         return false;
+    }
+
+    @Override
+    public boolean usesInclusiveRightEdge() {
+        // Obj2D passes width_pixels+$B to the standard S2 SolidObject helper.
+        // Its BHI reject keeps relX==2*d1 as a zero-distance side contact; HTZ2
+        // reaches that exact edge while holding Status_Push.
+        return true;
+    }
+
+    @Override
+    public boolean preservesEdgeSubpixelMotion() {
+        // At relX==2*d1, SolidObject_AtEdge reaches Solid_Centre with d0=0.
+        // It sets Status_Push but does not enter StopCharacter, so x_vel and
+        // inertia remain unchanged (s2.asm:35193-35207).
+        return true;
+    }
+
+    @Override
+    public boolean fullSolidBottomOverlapUsesCurrentYRadiusOnly(PlayableEntity player) {
+        // Obj2D calls the shared S2 SolidObject helper (s2.asm:117D6-117E8).
+        // SolidObject_cont builds both vertical reject halves from live
+        // y_radius(a1) after adding it to d2 (s2.asm:35156-35169), so rolling
+        // players use the smaller rolling radius on the lower bound too.
+        return true;
     }
 
     @Override

@@ -1,7 +1,6 @@
 package com.openggf.game.sonic1.events;
 
 import com.openggf.game.sonic1.objects.bosses.Sonic1LZBossInstance;
-import com.openggf.game.GameServices;
 import com.openggf.game.sonic1.Sonic1SwitchManager;
 import com.openggf.game.sonic1.audio.Sonic1Music;
 import com.openggf.game.sonic1.audio.Sonic1Sfx;
@@ -42,8 +41,13 @@ class Sonic1LZEvents extends Sonic1ZoneEvents {
     Sonic1LZEvents() {
     }
 
+    private Sonic1SwitchManager switchManager() {
+        return gameService(Sonic1SwitchManager.class);
+    }
+
     @Override
     void update(int act) {
+        retryPendingPlc();
         switch (act) {
             case 0, 1 -> { /* DLE_LZ12: rts */ }
             case 2 -> updateAct3();
@@ -82,7 +86,7 @@ class Sonic1LZEvents extends Sonic1ZoneEvents {
      */
     private void checkSwitchF() {
         // tst.b (f_switch+$F).w / beq.s loc_6F28
-        if (!Sonic1SwitchManager.getInstance().isPressed(0xF)) {
+        if (!switchManager().isPressed(0xF)) {
             return;
         }
 
@@ -105,8 +109,14 @@ class Sonic1LZEvents extends Sonic1ZoneEvents {
         }
 
         // move.b #7,(a1)
-        map.setValue(0, LAYOUT_GAP_X, LAYOUT_GAP_Y, (byte) CHUNK_ID_GAP);
-        lm.invalidateForegroundTilemap();
+        mutationPipeline().queue(context -> {
+            try {
+                return context.surface().setBlockInMap(0,
+                        LAYOUT_GAP_X, LAYOUT_GAP_Y, CHUNK_ID_GAP);
+            } catch (IllegalArgumentException e) {
+                return com.openggf.game.mutation.MutationEffects.NONE;
+            }
+        });
 
         // move.w #sfx_Rumbling,d0 / bsr.w QueueSound2
         audio().playSfx(Sonic1Sfx.RUMBLING.id);
@@ -168,6 +178,7 @@ class Sonic1LZEvents extends Sonic1ZoneEvents {
 
         // ROM: QueueSound1 bgm_Boss — play boss music
         audio().playMusic(Sonic1Music.BOSS.id);
+        requestSonic1Plc(17);
 
         // ROM: f_lockscreen = 1 — gates the 64px right boundary extension in Sonic_LevelBound. Does NOT modify v_limitleft2 or v_limitright2. The LZ vertical chase relies on natural level boundaries; no explicit camera lock needed.
 

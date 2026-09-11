@@ -62,7 +62,7 @@ public class RomOffsetFinder {
 
             return new GameProfile(
                     "s1", "Sonic 1", "Sonic 1 (REV01)",
-                    "Sonic The Hedgehog (W) (REV01) [!].gen",
+                    "s1.gen",
                     "docs/s1disasm",
                     "sonic.asm",
                     null, // S1 uses bincludePalette, not the palette macro
@@ -101,7 +101,7 @@ public class RomOffsetFinder {
 
             return new GameProfile(
                     "s2", "Sonic 2", "Sonic 2 (REV01)",
-                    "Sonic The Hedgehog 2 (W) (REV01) [!].gen",
+                    "s2.gen",
                     "docs/s2disasm",
                     "s2.asm",
                     "art/palettes/", // S2 uses the palette macro
@@ -127,7 +127,7 @@ public class RomOffsetFinder {
 
             return new GameProfile(
                     "s3k", "Sonic 3 & Knuckles", "Sonic 3 & Knuckles",
-                    "Sonic and Knuckles & Sonic 3 (W) [!].gen",
+                    "s3k.gen",
                     "docs/skdisasm",
                     "sonic3k.asm",
                     null, // S3K does NOT use palette macro
@@ -196,6 +196,15 @@ public class RomOffsetFinder {
         }
 
         DisassemblySearchResult item = searchResults.get(0);
+        for (DisassemblySearchResult r : searchResults) {
+            if (labelPattern.equalsIgnoreCase(r.getLabel()) && r.hasFile()) {
+                item = r;
+                break;
+            }
+            if (labelPattern.equalsIgnoreCase(r.getLabel())) {
+                item = r;
+            }
+        }
 
         if (searchResults.size() > 1) {
             System.out.println("Multiple matches found, using first: " + item.getLabel());
@@ -204,16 +213,20 @@ public class RomOffsetFinder {
             }
         }
 
+        if (item.getCompressionType() == CompressionType.ASSEMBLY_DATA) {
+            long calculatedOffset = offsetCalculator.calculateOffset(item.getLabel());
+            if (calculatedOffset >= 0) {
+                return OffsetFinderResult.found(item, CompressionTestResult.success(
+                        CompressionType.ASSEMBLY_DATA, calculatedOffset, 0, 0, null));
+            }
+            return OffsetFinderResult.notFound(labelPattern,
+                    "Could not calculate assembly label offset: " + item.getLabel());
+        }
+
         // Label-only results (Offs_*, PLC_*) have no binary data to search for
         if (!item.hasFile()) {
             return OffsetFinderResult.notFound(labelPattern,
                     "Label-only result (no binary data): " + item.getLabel());
-        }
-
-        // Assembly text includes don't have a direct ROM offset
-        if (item.getCompressionType() == CompressionType.ASSEMBLY_DATA) {
-            return OffsetFinderResult.notFound(labelPattern,
-                    "Assembly text include (no direct ROM offset): " + item.getLabel());
         }
 
         byte[] referenceData;
@@ -303,9 +316,12 @@ public class RomOffsetFinder {
         // Prefer exact match over partial match
         DisassemblySearchResult item = results.get(0);
         for (DisassemblySearchResult r : results) {
-            if (labelPattern.equalsIgnoreCase(r.getLabel())) {
+            if (labelPattern.equalsIgnoreCase(r.getLabel()) && r.hasFile()) {
                 item = r;
                 break;
+            }
+            if (labelPattern.equalsIgnoreCase(r.getLabel())) {
+                item = r;
             }
         }
         String label = item.getLabel();
@@ -313,14 +329,18 @@ public class RomOffsetFinder {
             return VerificationResult.error(labelPattern, "Item has no label");
         }
 
+        if (item.getCompressionType() == CompressionType.ASSEMBLY_DATA) {
+            long calculatedOffset = offsetCalculator.calculateOffset(label);
+            if (calculatedOffset < 0) {
+                return VerificationResult.notFound(label, -1,
+                        "Could not calculate assembly label offset (no anchor nearby)");
+            }
+            return VerificationResult.verified(label, calculatedOffset, CompressionType.ASSEMBLY_DATA, 0);
+        }
+
         // Label-only results (Offs_*, PLC_*) have no binary data to verify
         if (!item.hasFile()) {
             return VerificationResult.error(label, "Label-only result (no binary data to verify)");
-        }
-
-        // Assembly text includes don't have a direct ROM offset to verify
-        if (item.getCompressionType() == CompressionType.ASSEMBLY_DATA) {
-            return VerificationResult.error(label, "Assembly text include (no direct ROM offset to verify)");
         }
 
         // 2. Calculate offset using the calculator
@@ -1092,6 +1112,8 @@ public class RomOffsetFinder {
             if (result.hasFile()) {
                 System.out.printf("File:        %s%n", result.getFilePath());
                 System.out.printf("Compression: %s%n", result.getCompressionType().getDisplayName());
+            } else if (result.getCompressionType() == CompressionType.ASSEMBLY_DATA) {
+                System.out.printf("Type:        Assembly data label%n");
             } else {
                 System.out.printf("Type:        Label-only (no binary data)%n");
             }
@@ -1100,8 +1122,7 @@ public class RomOffsetFinder {
 
             if (result.hasFile()) {
                 if (result.getCompressionType() == CompressionType.ASSEMBLY_DATA) {
-                    // Assembly includes don't have a direct ROM offset to verify
-                    System.out.printf("Note:        Assembly text include (no direct ROM offset)%n");
+                    printAssemblyDataOffset(finder, result, "ROM Offset:  ");
                 } else {
                     try {
                         long size = finder.searchTool.getFileSize(result.getFilePath());
@@ -1133,6 +1154,8 @@ public class RomOffsetFinder {
                         }
                     }
                 }
+            } else if (result.getCompressionType() == CompressionType.ASSEMBLY_DATA) {
+                printAssemblyDataOffset(finder, result, "ROM Offset:  ");
             }
 
             String plcRefs = formatPlcReferences(finder.searchTool, result.getLabel());
@@ -1141,6 +1164,24 @@ public class RomOffsetFinder {
             }
 
             System.out.println();
+        }
+    }
+
+    private static void printAssemblyDataOffset(RomOffsetFinder finder,
+                                                DisassemblySearchResult result,
+                                                String prefix) {
+        if (result.getLabel() == null) {
+            return;
+        }
+        try {
+            long offset = finder.offsetCalculator.calculateOffset(result.getLabel());
+            if (offset >= 0) {
+                System.out.printf("%s0x%X (calculated)%n", prefix, offset);
+            } else {
+                System.out.printf("%s(could not calculate)%n", prefix);
+            }
+        } catch (IOException e) {
+            System.out.printf("%s(error: %s)%n", prefix, e.getMessage());
         }
     }
 

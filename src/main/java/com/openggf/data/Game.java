@@ -17,6 +17,15 @@ public abstract class Game {
 
     public abstract Level loadLevel(int levelIdx) throws IOException;
 
+    /**
+     * Publishes ROM-backed work for a fresh level assembly when the production
+     * load owns a runtime hardware queue. Games without such a queue remain
+     * synchronous.
+     */
+    public void queueFreshLevelRuntimeArt(int levelIdx) throws IOException {
+        // Most game loaders complete level art synchronously.
+    }
+
     public abstract int getMusicId(int levelIdx) throws IOException;
 
     public abstract Map<GameSound, Integer> getSoundMap();

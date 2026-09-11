@@ -9,6 +9,8 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -19,7 +21,7 @@ import java.util.List;
  * ROM Reference: s2.asm Obj5D (ROUTINE_PIPE_SEGMENT = 0x0E)
  * Follows parent pipe position with Y offset.
  */
-public class CPZBossPipeSegment extends AbstractObjectInstance {
+public class CPZBossPipeSegment extends AbstractObjectInstance implements RewindRecreatable {
     private final Sonic2CPZBossInstance mainBoss;
     private final CPZBossPipe parentPipe;
 
@@ -49,8 +51,28 @@ public class CPZBossPipeSegment extends AbstractObjectInstance {
         animate();  // Initialize mappingFrame to correct first frame for this anim
     }
 
+    private CPZBossPipeSegment(ObjectSpawn spawn) {
+        this(spawn, null, null, 0);
+    }
+
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        Sonic2CPZBossInstance boss = CpzBossRewindLinks.nearestBoss(ctx);
+        CPZBossPipe pipe = CpzBossRewindLinks.nearestPipe(ctx);
+        if (pipe == null) {
+            return null;
+        }
+        CPZBossPipeSegment segment = new CPZBossPipeSegment(ctx.spawn(), boss, pipe, 0);
+        // The pipe's `segments` list is a final identity collection: structural rewind
+        // state the owner must rebuild, not captured through the identity table. Re-register
+        // each recreated segment so the restored pipe drives its one-at-a-time retract
+        // sequence (updateRetract) off a rebuilt list instead of an empty one.
+        pipe.reregisterRestoredSegment(segment);
+        return segment;
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) {
             return;
@@ -94,8 +116,7 @@ public class CPZBossPipeSegment extends AbstractObjectInstance {
         }
         var motion = randomPipeMotion();
         ObjectSpawn partSpawn = new ObjectSpawn(x, y, Sonic2ObjectIds.CPZ_BOSS, 0, renderFlags, false, 0);
-        CPZBossFallingPart part = new CPZBossFallingPart(partSpawn, 1, motion.xVel(), motion.timer());
-        services().objectManager().addDynamicObject(part);
+        spawnChild(() -> new CPZBossFallingPart(partSpawn, 1, motion.xVel(), motion.timer()));
     }
 
     private Sonic2Rng.PipeShardMotion randomPipeMotion() {

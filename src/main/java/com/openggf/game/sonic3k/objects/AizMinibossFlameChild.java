@@ -6,7 +6,15 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.TouchActorContextPolicy;
+import com.openggf.level.objects.TouchAttackBouncePolicy;
+import com.openggf.level.objects.TouchCategoryDecodeMode;
+import com.openggf.level.objects.TouchOverlapStopPolicy;
+import com.openggf.level.objects.TouchResponseProfile;
 import com.openggf.level.objects.TouchResponseProvider;
+import com.openggf.level.objects.TouchShieldDeflectCapability;
 import com.openggf.level.objects.boss.AbstractBossInstance;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
@@ -21,9 +29,19 @@ import java.util.List;
  * - shield_reaction bit 4
  * - wait delay based on subtype, then flame anim, then explosion anim
  */
-public class AizMinibossFlameChild extends AbstractObjectInstance implements TouchResponseProvider {
+public class AizMinibossFlameChild extends AbstractObjectInstance implements TouchResponseProvider, RewindRecreatable {
     private static final int COLLISION_FLAGS = 0x8B;
     private static final int SHIELD_REACTION = 1 << 4;
+    private static final TouchResponseProfile TOUCH_RESPONSE_PROFILE = new TouchResponseProfile(
+            TouchCategoryDecodeMode.NORMAL,
+            false,
+            true,
+            false,
+            TouchShieldDeflectCapability.NONE,
+            SHIELD_REACTION,
+            TouchAttackBouncePolicy.STANDARD_ENEMY_KILL,
+            TouchActorContextPolicy.MAIN_FULL_SIDEKICK_HURT_ONLY,
+            TouchOverlapStopPolicy.STOP_AFTER_FIRST_OVERLAP_FOR_ALL_ACTORS);
 
     // ROM byte_69164 (Animate_RawMultiDelay, first pair skipped on initial play):
     // Explosion sequence: frame, duration (ROM timer+1 = visible ticks)
@@ -35,11 +53,12 @@ public class AizMinibossFlameChild extends AbstractObjectInstance implements Tou
         FLAME,
         EXPLODE
     }
-
     private final AbstractBossInstance parent;
-    private final int xOffset;
-    private final int yOffset;
-    private final int subtype;
+    // xOffset/yOffset/subtype are non-final so the rewind field capturer reapplies
+    // them after the recreate hook rebuilds the flame with placeholders 0; parent is relinked.
+    private int xOffset;
+    private int yOffset;
+    private int subtype;
 
     private Phase phase = Phase.WAIT;
     private int waitTimer;
@@ -75,8 +94,23 @@ public class AizMinibossFlameChild extends AbstractObjectInstance implements Tou
         this.explodeIndex = 0;
     }
 
+    private AizMinibossFlameChild(
+            ObjectSpawn spawn,
+            AizMinibossInstance parent,
+            int xOffset,
+            int yOffset,
+            int subtype) {
+        this(parent, xOffset, yOffset, subtype);
+    }
+
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public AizMinibossFlameChild recreateForRewind(RewindRecreateContext ctx) {
+        AizMinibossInstance boss = AizMinibossRewindLinks.nearestBoss(ctx);
+        return boss == null ? null : new AizMinibossFlameChild(boss, 0, 0, 0);
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (parent != null && parent.getState().defeated) {
             setDestroyed(true);
@@ -185,9 +219,13 @@ public class AizMinibossFlameChild extends AbstractObjectInstance implements Tou
     }
 
     @Override
-    public boolean onShieldDeflect(PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        setDestroyed(true);
-        return true;
+    public TouchResponseProfile getTouchResponseProfile() {
+        return TOUCH_RESPONSE_PROFILE;
     }
+
+    @Override
+    public TouchResponseProfile getTouchResponseProfile(boolean multiRegionSource) {
+        return TOUCH_RESPONSE_PROFILE;
+    }
+
 }

@@ -1,12 +1,12 @@
 package com.openggf.game.sonic1.objects;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.SolidObjectParams;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TestSonic1LargeGrassyPlatformObjectInstance {
 
@@ -19,6 +19,7 @@ public class TestSonic1LargeGrassyPlatformObjectInstance {
         assertEquals(0x20, params.groundHalfHeight());
         assertEquals(0x20, platform.getSlopeBaseline());
         assertFalse(platform.isTopSolidOnly());
+        assertTrue(platform.addsSlopeCatchRangeToVerticalOverlap());
     }
 
     @Test
@@ -38,8 +39,19 @@ public class TestSonic1LargeGrassyPlatformObjectInstance {
         assertTrue(platform.isHighPriority());
     }
 
+    @Test
+    public void balanceUsesRomActiveWidthWithoutHeightmapPadding() {
+        Sonic1LargeGrassyPlatformObjectInstance platform = create(0x00);
+
+        assertEquals(0x40, platform.getBalanceWidthPixels(),
+                "Sonic_Move reads Obj2F obActWid from LGrass_Data");
+        assertEquals(0x4B, platform.getSolidParams().halfWidth(),
+                "LGrass_Solid adds $B only to the collision width");
+    }
+
     private static Sonic1LargeGrassyPlatformObjectInstance create(int subtype) {
         ObjectSpawn spawn = new ObjectSpawn(100, 100, 0x2F, subtype, 0, false, 0);
         return new Sonic1LargeGrassyPlatformObjectInstance(spawn);
     }
 }
+

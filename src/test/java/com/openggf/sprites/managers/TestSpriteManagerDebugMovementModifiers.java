@@ -1,10 +1,10 @@
 package com.openggf.sprites.managers;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import com.openggf.control.InputHandler;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_LEFT_CONTROL;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_LEFT_SHIFT;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_RIGHT_CONTROL;
@@ -47,3 +47,5 @@ public class TestSpriteManagerDebugMovementModifiers {
         assertFalse(SpriteManager.isDebugSlowDownModifierDown(handler));
     }
 }
+
+

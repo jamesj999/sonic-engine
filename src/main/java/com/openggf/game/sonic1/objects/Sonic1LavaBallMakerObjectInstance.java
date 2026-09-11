@@ -5,6 +5,7 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.level.LevelManager;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 import com.openggf.game.PlayableEntity;
 
@@ -39,7 +40,8 @@ import java.util.List;
  * <p>
  * Reference: docs/s1disasm/_incObj/13 Lava Ball Maker.asm
  */
-public class Sonic1LavaBallMakerObjectInstance extends AbstractObjectInstance {
+public class Sonic1LavaBallMakerObjectInstance extends AbstractObjectInstance
+        implements SpawnRewindRecreatable {
 
     // ========================================================================
     // ROM Constants
@@ -59,16 +61,16 @@ public class Sonic1LavaBallMakerObjectInstance extends AbstractObjectInstance {
     // ========================================================================
 
     /** Spawn delay in frames, from LavaM_Rates. Stored in obDelayAni. */
-    private final int spawnDelay;
+    private int spawnDelay;
 
     /** Countdown timer. Stored in obTimeFrame. */
     private int timer;
 
     /** Lower nybble of original subtype, passed to spawned lava balls as their subtype. */
-    private final int ballSubtype;
+    private int ballSubtype;
 
     /** Rate index for debug display. */
-    private final int rateIndex;
+    private int rateIndex;
 
     public Sonic1LavaBallMakerObjectInstance(ObjectSpawn spawn) {
         super(spawn, "LavaBallMaker");
@@ -95,8 +97,11 @@ public class Sonic1LavaBallMakerObjectInstance extends AbstractObjectInstance {
     // ========================================================================
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
+        // ObjPosLoad instantiates S1 placement objects after the exec loop, so the
+        // constructor already mirrors LavaM_Main. The first update must therefore run
+        // LavaM_MakeLava immediately or the countdown drifts one frame late.
         // ROM: LavaM_MakeLava (Routine 2)
         // subq.b #1,obTimeFrame(a0) ; subtract 1 from time delay
         timer--;
@@ -109,7 +114,7 @@ public class Sonic1LavaBallMakerObjectInstance extends AbstractObjectInstance {
 
         // bsr.w ChkObjectVisible
         // bne.s LavaM_Wait
-        if (!isOnScreen(64)) {
+        if (!isChkObjectVisible()) {
             return;
         }
 
@@ -128,7 +133,7 @@ public class Sonic1LavaBallMakerObjectInstance extends AbstractObjectInstance {
                 0x14,  // id_LavaBall
                 ballSubtype,
                 0, false, 0);
-        spawnChild(() -> new Sonic1LavaBallObjectInstance(ballSpawn));
+        spawnFreeChild(() -> new Sonic1LavaBallObjectInstance(ballSpawn));
     }
 
     // ========================================================================

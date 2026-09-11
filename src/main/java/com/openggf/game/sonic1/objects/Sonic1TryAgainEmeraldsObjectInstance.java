@@ -7,6 +7,8 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectRenderManager;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.TrigLookupTable;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
@@ -26,7 +28,7 @@ import java.util.logging.Logger;
  * <p>
  * Reference: docs/s1disasm/_incObj/8C Try Again Emeralds.asm
  */
-public class Sonic1TryAgainEmeraldsObjectInstance extends AbstractObjectInstance {
+public class Sonic1TryAgainEmeraldsObjectInstance extends AbstractObjectInstance implements RewindRecreatable {
     private static final Logger LOGGER = Logger.getLogger(Sonic1TryAgainEmeraldsObjectInstance.class.getName());
 
     private static final int PRIORITY = 1;
@@ -61,6 +63,11 @@ public class Sonic1TryAgainEmeraldsObjectInstance extends AbstractObjectInstance
     private int count;
     private boolean initialized;
 
+    @SuppressWarnings("unused")
+    private Sonic1TryAgainEmeraldsObjectInstance() {
+        this(null);
+    }
+
     /**
      * Creates the TRY AGAIN emerald display.
      * Spawns (6 - emeraldCount) emerald sub-objects for the uncollected ones.
@@ -70,6 +77,14 @@ public class Sonic1TryAgainEmeraldsObjectInstance extends AbstractObjectInstance
     public Sonic1TryAgainEmeraldsObjectInstance(ObjectRenderManager renderManager) {
         super(null, "TryChaos");
         this.renderer = renderManager != null ? renderManager.getRenderer(ObjectArtKeys.END_EMERALDS) : null;
+    }
+
+    @Override
+    public Sonic1TryAgainEmeraldsObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        ObjectRenderManager renderManager = ctx.objectServices() != null
+                ? ctx.objectServices().renderManager()
+                : null;
+        return new Sonic1TryAgainEmeraldsObjectInstance(renderManager);
     }
 
     /**
@@ -141,7 +156,7 @@ public class Sonic1TryAgainEmeraldsObjectInstance extends AbstractObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         ensureInitialized();
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) {

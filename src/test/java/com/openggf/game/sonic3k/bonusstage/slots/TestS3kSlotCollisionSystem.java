@@ -72,3 +72,5 @@ class TestS3kSlotCollisionSystem {
         assertEquals(-0x40, state.scalarIndex1());
     }
 }
+
+

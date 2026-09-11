@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "promptTemplate": "Read the trace fleet skill at <SKILL_PATH> from revision <SKILL_REVISION>.\nDo not read any design or plan documents. Do not edit files.\n\nScenario input:\n<CASE_INPUT_JSON>\n\nReturn one JSON object only with:\n- discovery, triage, narrowFix, sharedFix, ordinaryVerify, sharedVerify as arrays\n  of exact \"<model-id>/<effort>\" routes;\n- narrowEscalatesAfterAttempt as an integer or null;\n- escalationSequence as an array of stage/reason/ownership objects;\n- routingFields and usageFields as arrays of exact field names;\n- unspecified as an array describing anything the skill does not define.\n",
+  "cases": [
+    {
+      "id": "stalled-narrow-and-shared-direct-route",
+      "workerModel": "gpt-5.6-terra",
+      "workerEffort": "medium",
+      "input": {
+        "narrowTriage": {
+          "complexity": "narrow",
+          "confidence": "high",
+          "hypothesis": "Obj15 applies ROM x_pos contact logic",
+          "disasmCites": ["docs/s2disasm/s2.asm:123"]
+        },
+        "narrowAttempts": [
+          {"attempt": 1, "beforeFrame": 100, "afterFrame": 100},
+          {"attempt": 2, "beforeFrame": 100, "afterFrame": 100}
+        ],
+        "sharedTriage": {
+          "complexity": "shared",
+          "confidence": "high",
+          "sharedSurfaces": ["shared-sidekick-runtime"],
+          "hypothesis": "position history consumption differs",
+          "disasmCites": ["docs/s1disasm/_incObj/09 Sonic & Object Interaction.asm:10"]
+        }
+      },
+      "red": {
+        "skillPath": "/home/farrell/code/projects/OpenGGF/.worktrees/trace-model-routing/.agents/skills/trace-green-fleet/SKILL.md",
+        "skillRevision": "ab71e5569de96f39fcd474690ef71f2d8b9ba9b2",
+        "rawResponse": "Current skill result:\n\n- Discovery model ID: unspecified.\n- Discovery reasoning effort: unspecified.\n- Object-local `x_pos` triage model ID/effort: unspecified.\n- First and second object-local fixes model ID/effort: unspecified.\n- Shared-sidekick triage and both fixes model ID/effort: unspecified.\n- Verification model ID/effort for either pipeline: unspecified.\n\nEscalation behavior:\n\n- After two unsuccessful fix attempts, there is no escalation. The fix worker may make the third and final diagnose/fix attempt because the skill allows up to three iterations.\n- After the fix worker returns, verification starts immediately, even if the frontier did not advance.\n- The likely verification result is `no-change`, with `genuine=false` and no commit.\n- The skill says to stop if the work requires larger missing architecture, an unimplemented object, or lacks a clear ROM basis, but it defines no model escalation, reasoning-effort escalation, retry-worker escalation, or conductor-review escalation.\n- For the separate shared-sidekick finding, it requires checking all three disassemblies and placing genuine per-game differences at the narrowest owner. It does not route this broader problem to a stronger model or higher reasoning effort.\n\nStructured fields currently returned:\n\n- Triage: `setupOk`, `worktreePath`, `branch`, `firstErrorFrame`, `field`, `brief`, `hypothesis`, `disasmCites`\n- Fix: `changed`, `filesTouched`, `beforeFrame`, `afterFrame`, `targetedPasses`, `romCites`, `summary`, `worktreePath`, `branch`\n- Verify schema contract: `status`, `genuine`, `committed`, `commit`, `regressionsIntroduced`, `afterFrame`, `frontierLogUpdated`, `notes`\n- Verify example additionally includes `trace`, `game`, `zone`\n- Final fleet summary: `discovered`, `green`, `advanced`, `advancedWithRegression`, `committed`, `rejectedNotGenuine`, `regressionQueue`, `results`\n- Regression queue item: `causedBy`, `commit`, `regression`\n\nMissing from the current skill:\n\n- Every exact model ID and reasoning-effort assignment requested by the scenario.\n- A distinction between narrow object-local and shared-runtime routing.\n- A defined escalation trigger after two stagnant attempts.\n- The target model/effort and mechanism used during escalation.\n- Structured routing fields such as selected model, effort, routing reason, scope classification, escalation state/cause, and attempt number.\n- Structured usage fields such as tokens, elapsed time, tool calls, or per-stage/cumulative cost.\n- A discovery-stage structured output contract.\n- A fully consistent Verify schema: `trace`, `game`, and `zone` appear in the example but not in the required-field list."
+      },
+      "green": {
+        "skillPath": "/home/farrell/code/projects/OpenGGF/.worktrees/trace-model-routing/.agents/skills/trace-green-fleet/SKILL.md",
+        "skillRevision": "working-tree-after-routing-edit",
+        "rawResponse": "{\"discovery\":[\"gpt-5.6-terra/low\"],\"triage\":[\"gpt-5.6-terra/medium\"],\"narrowFix\":[\"gpt-5.6-terra/medium\",\"gpt-5.6-sol/high\"],\"sharedFix\":[\"gpt-5.6-sol/high\"],\"ordinaryVerify\":[\"gpt-5.6-terra/medium\"],\"sharedVerify\":[\"gpt-5.6-sol/high\"],\"narrowEscalatesAfterAttempt\":2,\"escalationSequence\":[{\"stage\":\"narrowFix\",\"reason\":\"no-frontier-advance after two unsuccessful Terra attempts\",\"ownership\":\"gpt-5.6-terra/medium -> gpt-5.6-sol/high\"},{\"stage\":\"sharedFix\",\"reason\":\"accepted shared triage identifies shared-sidekick-runtime\",\"ownership\":\"gpt-5.6-sol/high\"}],\"routingFields\":[\"requestedModel\",\"requestedEffort\",\"actualModel\",\"actualEffort\",\"complexity\",\"confidence\",\"beforeFrame\",\"afterFrame\",\"status\",\"attemptCount\",\"regressionCount\",\"sharedSurfaces\",\"needsEscalation\",\"escalationReasons\",\"modelRoute\",\"usage\",\"durationMs\"],\"usageFields\":[\"inputTokens\",\"cachedInputTokens\",\"outputTokens\",\"reasoningTokens\"],\"unspecified\":[\"Actual runtime telemetry and duration values\",\"Fix/verify status and whether either route ultimately passes\",\"Whether the shared change causes a regression\",\"Concrete worktree, branch, changed files, and commit details\"]}",
+        "expected": {
+          "discovery": "gpt-5.6-terra/low",
+          "triage": "gpt-5.6-terra/medium",
+          "narrowFix": ["gpt-5.6-terra/medium", "gpt-5.6-sol/high"],
+          "sharedFix": ["gpt-5.6-sol/high"],
+          "ordinaryVerify": ["gpt-5.6-terra/medium"],
+          "sharedVerify": ["gpt-5.6-sol/high"],
+          "narrowEscalatesAfterAttempt": 2
+        },
+        "requiredRoutingFields": ["requestedModel", "requestedEffort", "actualModel", "actualEffort", "complexity", "confidence", "beforeFrame", "afterFrame", "status", "attemptCount", "regressionCount", "sharedSurfaces", "needsEscalation", "escalationReasons", "modelRoute", "usage", "durationMs"],
+        "requiredUsageFields": ["inputTokens", "cachedInputTokens", "outputTokens", "reasoningTokens"]
+      }
+    }
+  ],
+  "edgeCases": [
+    {"id": "unsupported-model", "when": "unsupported model ID", "expect": "reject before spawn"},
+    {"id": "sol-unavailable", "when": "an escalated route requires unavailable Sol", "expect": "block the escalated stage; never silently fall back"},
+    {"id": "one-escalation", "when": "a stage already escalated once", "expect": "return a blocker; never escalate twice"},
+    {"id": "sol-triage-no-rom", "when": "Sol Triage still lacks ROM basis", "expect": "block Fix with missing-rom-basis"},
+    {"id": "sol-worker-failure", "when": "a Sol worker fails", "expect": "return a blocker"},
+    {"id": "direct-sol-fix", "when": "accepted shared/deep Triage or shared runtime physics, collision, sidekick, camera, oscillation, bootstrap, object lifecycle, recorder/publication, or cross-game semantics", "expect": "Sol Fix directly"},
+    {"id": "object-local-narrow", "when": "object-local collision/profile change", "expect": "Terra Narrow Fix"},
+    {"id": "terra-fix-escalation", "when": "no frontier advance, context contradiction, shared surface/cross-game discovery, recorder evidence requirement, causal-thread loss, or insufficient reasoning", "expect": "stop after at most two unsuccessful Terra attempts and run one Sol final attempt"},
+    {"id": "direct-sol-verify", "when": "Sol Fix, shared edit, disputed ROM evidence, or prior escalation", "expect": "Sol Verify directly"},
+    {"id": "terra-verify-regression", "when": "Terra Verify newly detects a regression", "expect": "one Sol Verify"},
+    {"id": "malformed-result", "when": "worker omits routing/escalation fields", "expect": "one schema-only repair, then at most one rerun; a second malformed result is a stage error"}
+  ],
+  "mirrorSemantics": {
+    "command": "git diff --no-index .agents/skills/trace-green-fleet/SKILL.md .claude/skills/trace-green-fleet/SKILL.md",
+    "result": "PASS: only known Codex/Claude harness wording differs; routing tables, enums, schemas, rules, prompt prefix, and aggregate are identical.",
+    "requiredCommonSemantics": ["route table", "routing fields and enums", "schema repair", "attempt limits", "decision table", "sequential ownership", "retained-diff review", "stable prompt prefix", "final routing aggregate"]
+  }
+}

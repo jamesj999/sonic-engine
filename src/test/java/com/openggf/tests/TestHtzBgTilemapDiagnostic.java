@@ -12,18 +12,16 @@ import com.openggf.physics.GroundSensor;
 import com.openggf.sprites.managers.SpriteManager;
 import com.openggf.sprites.playable.Sonic;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
 import com.openggf.level.LevelTilemapManager;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Diagnostic test: dumps the HTZ BG tilemap data at earthquake Y positions
@@ -32,9 +30,6 @@ import static org.junit.Assert.*;
  */
 @RequiresRom(SonicGame.SONIC_2)
 public class TestHtzBgTilemapDiagnostic {
-
-    @Rule public RequiresRomRule romRule = new RequiresRomRule();
-
     private static final int HTZ_ZONE = 4;
     private static final int HTZ_ACT = 0;
 
@@ -55,7 +50,7 @@ public class TestHtzBgTilemapDiagnostic {
         return tilemapManager.getBackgroundTilemapData();
     }
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         TestEnvironment.resetAll();
         GraphicsManager.getInstance().initHeadless();
@@ -74,7 +69,7 @@ public class TestHtzBgTilemapDiagnostic {
         GroundSensor.setLevelManager(levelManager);
         camera.updatePosition(true);
         tilemapManager = levelManager.getTilemapManager();
-        assertNotNull("TilemapManager must be initialized after level load", tilemapManager);
+        assertNotNull(tilemapManager, "TilemapManager must be initialized after level load");
     }
 
     @Test
@@ -112,15 +107,15 @@ public class TestHtzBgTilemapDiagnostic {
         System.out.println("Actual data height: " + actualHeight + " tiles");
         System.out.println("backgroundVdpWrapHeightTiles = " + wrapValue);
 
-        assertTrue("VDP wrap height should be 32 for HTZ", wrapValue == 32);
+        assertTrue(wrapValue == 32, "VDP wrap height should be 32 for HTZ");
     }
 
     @Test
     public void bgMapLayerHasValidDataAtEarthquakePositions() {
         Level level = levelManager.getCurrentLevel();
-        assertNotNull("Level must be loaded", level);
+        assertNotNull(level, "Level must be loaded");
         Map map = level.getMap();
-        assertNotNull("Map must be loaded", map);
+        assertNotNull(map, "Map must be loaded");
 
         System.out.println("=== HTZ BG Map Layer Diagnostic ===");
         System.out.println("Map dimensions: " + map.getWidth() + "x" + map.getHeight() + " blocks");
@@ -130,7 +125,7 @@ public class TestHtzBgTilemapDiagnostic {
         System.out.println();
 
         // Check BG layer (layer 1) at various Y positions
-        // Earthquake scroll Y ≈ 784 → block row 6 (784/128=6.125)
+        // Earthquake scroll Y â‰ˆ 784 â†’ block row 6 (784/128=6.125)
         int[] testBlockRows = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
         int nonEmptyRowCount = 0;
 
@@ -176,15 +171,14 @@ public class TestHtzBgTilemapDiagnostic {
         System.out.println("Non-empty BG rows: " + nonEmptyRowCount + "/" + testBlockRows.length);
         // S2 BG map data only populates the first 2 block rows (256px), matching the VDP
         // plane height. The engine wraps via the tilemap shader (WrapY=true, TilemapHeight=32).
-        assertTrue("BG map should have data in first 2 rows (VDP plane height)",
-                nonEmptyRowCount >= 2);
+        assertTrue(nonEmptyRowCount >= 2, "BG map should have data in first 2 rows (VDP plane height)");
     }
 
     @Test
     public void bgTilemapDataContainsValidTilesAtEarthquakeY() throws Exception {
         // Force build of BG tilemap data
         byte[] data = forceBuildBgTilemap();
-        assertNotNull("BG tilemap data must be built", data);
+        assertNotNull(data, "BG tilemap data must be built");
         int widthTiles = tilemapManager.getBackgroundTilemapWidthTiles();
         int heightTiles = tilemapManager.getBackgroundTilemapHeightTiles();
 
@@ -195,7 +189,7 @@ public class TestHtzBgTilemapDiagnostic {
         assertEquals(widthTiles * heightTiles * 4, data.length);
 
         // Check tiles at various Y positions
-        // Earthquake alignedBgY ≈ 784 → tile Y = 784/8 = 98
+        // Earthquake alignedBgY â‰ˆ 784 â†’ tile Y = 784/8 = 98
         int[] testTileYPositions = {0, 10, 20, 30, 50, 80, 98, 100, 110, 120, 130, 200, 255};
 
         System.out.println();
@@ -250,8 +244,8 @@ public class TestHtzBgTilemapDiagnostic {
                         wrappedNonEmpty++;
                     }
                 }
-                assertTrue("VDP-wrapped tileY=" + wrappedY + " (from earthquake Y=" + tileY
-                        + ") should have non-empty tiles", wrappedNonEmpty > 0);
+                assertTrue(wrappedNonEmpty > 0, "VDP-wrapped tileY=" + wrappedY + " (from earthquake Y=" + tileY
+                        + ") should have non-empty tiles");
             }
         }
 
@@ -273,7 +267,7 @@ public class TestHtzBgTilemapDiagnostic {
         int totalTiles = widthTiles * heightTiles;
         float fillPercent = (100.0f * totalNonEmpty) / totalTiles;
         System.out.printf("%nTotal non-empty tiles: %d/%d (%.1f%%)%n", totalNonEmpty, totalTiles, fillPercent);
-        assertTrue("BG tilemap should have substantial data (>10% fill)", fillPercent > 10.0f);
+        assertTrue(fillPercent > 10.0f, "BG tilemap should have substantial data (>10% fill)");
     }
 
     @Test
@@ -324,6 +318,17 @@ public class TestHtzBgTilemapDiagnostic {
             }
         }
 
+        // HTZ's BG tilemap must actually contain the dynamic mountain-range
+        // ($0500-$0517) and cloud ($0518-$051F) tile indices, and must not
+        // reference patterns past the loaded pattern set.
+        assertTrue(mountainTiles > 0,
+                "HTZ BG tilemap should contain dynamic mountain tiles ($0500-$0517)");
+        assertTrue(cloudTiles > 0,
+                "HTZ BG tilemap should contain dynamic cloud tiles ($0518-$051F)");
+        assertTrue(maxPatIdx < patternCount,
+                "BG VDP rows must not reference a pattern index (" + maxPatIdx
+                        + ") at or beyond the loaded pattern count (" + patternCount + ")");
+
         // Also scan the raw BG block/chunk data to see what chunks reference
         System.out.println("\n--- Direct chunk pattern scan (BG rows 0-1, cols 0-7) ---");
         Map map = level.getMap();
@@ -349,7 +354,7 @@ public class TestHtzBgTilemapDiagnostic {
                                 PatternDesc pd = chunk.getPatternDesc(px, py);
                                 int pidx = pd.getPatternIndex();
                                 if (pidx >= 0x0500 && pidx <= 0x051F) {
-                                    System.out.printf("  block(%d,%d) chunk(%d,%d)[%d] pat(%d,%d) → $%04X%n",
+                                    System.out.printf("  block(%d,%d) chunk(%d,%d)[%d] pat(%d,%d) â†’ $%04X%n",
                                             blockCol, blockRow, cx, cy, chunkIdx, px, py, pidx);
                                 }
                             }
@@ -390,9 +395,9 @@ public class TestHtzBgTilemapDiagnostic {
     @Test
     public void bgMapColumnSparsity() {
         Level level = levelManager.getCurrentLevel();
-        assertNotNull("Level must be loaded", level);
+        assertNotNull(level, "Level must be loaded");
         Map map = level.getMap();
-        assertNotNull("Map must be loaded", map);
+        assertNotNull(map, "Map must be loaded");
 
         int mapWidth = map.getWidth();
         int mapHeight = map.getHeight();
@@ -479,7 +484,7 @@ public class TestHtzBgTilemapDiagnostic {
     @Test
     public void dumpBgTilemapAtEarthquakePosition() throws Exception {
         Level level = levelManager.getCurrentLevel();
-        assertNotNull("Level must be loaded", level);
+        assertNotNull(level, "Level must be loaded");
 
         System.out.println("=== HTZ EARTHQUAKE BG DIAGNOSTIC (CURRENT CODE) ===");
         System.out.println("Pattern count: " + level.getPatternCount());
@@ -587,24 +592,24 @@ public class TestHtzBgTilemapDiagnostic {
     @Test
     public void dynamicHtzProducesNonZeroPatterns() throws Exception {
         Level level = levelManager.getCurrentLevel();
-        assertNotNull("Level must be loaded", level);
+        assertNotNull(level, "Level must be loaded");
 
         // Get DynamicHtz and htzHandler from Sonic2ScrollHandlerProvider via reflection
         ParallaxManager pm = GameServices.parallax();
         Field providerField = ParallaxManager.class.getDeclaredField("scrollProvider");
         providerField.setAccessible(true);
         Object scrollProvider = providerField.get(pm);
-        assertNotNull("scrollProvider should be initialized", scrollProvider);
+        assertNotNull(scrollProvider, "scrollProvider should be initialized");
 
         Field dynamicField = scrollProvider.getClass().getDeclaredField("dynamicHtz");
         dynamicField.setAccessible(true);
         Object dynamicHtz = dynamicField.get(scrollProvider);
-        assertNotNull("DynamicHtz should be initialized", dynamicHtz);
+        assertNotNull(dynamicHtz, "DynamicHtz should be initialized");
 
         Field htzHandlerField = scrollProvider.getClass().getDeclaredField("htzHandler");
         htzHandlerField.setAccessible(true);
         Object htzHandler = htzHandlerField.get(scrollProvider);
-        assertNotNull("htzHandler should be initialized", htzHandler);
+        assertNotNull(htzHandler, "htzHandler should be initialized");
 
         // Verify PatchHTZTiles pre-filled patterns with actual cliff art at load time
         int totalBefore = 0;
@@ -616,8 +621,7 @@ public class TestHtzBgTilemapDiagnostic {
         }
         System.out.println("Mountain pattern non-zero pixels AT LOAD (PatchHTZTiles): "
                 + totalBefore + "/1536");
-        assertTrue("PatchHTZTiles should pre-fill mountain patterns with cliff art",
-                totalBefore > 0);
+        assertTrue(totalBefore > 0, "PatchHTZTiles should pre-fill mountain patterns with cliff art");
 
         // Call DynamicHtz.update() with earthquake camera position
         java.lang.reflect.Method updateMethod = dynamicHtz.getClass().getDeclaredMethod(
@@ -641,8 +645,7 @@ public class TestHtzBgTilemapDiagnostic {
                 + totalAfter + "/1536");
         System.out.print(sb);
 
-        assertTrue("DynamicHtz.update() should produce non-zero mountain pattern data",
-                totalAfter > 0);
+        assertTrue(totalAfter > 0, "DynamicHtz.update() should produce non-zero mountain pattern data");
 
         // Also check cloud patterns
         int cloudBefore = 0;
@@ -661,9 +664,9 @@ public class TestHtzBgTilemapDiagnostic {
     @Test
     public void countBgPriorityTilesInChunks() throws Exception {
         Level level = levelManager.getCurrentLevel();
-        assertNotNull("Level must be loaded", level);
+        assertNotNull(level, "Level must be loaded");
         Map map = level.getMap();
-        assertNotNull("Map must be loaded", map);
+        assertNotNull(map, "Map must be loaded");
 
         System.out.println("=== HTZ BG Priority Tile Diagnostic ===");
         System.out.println("Map dimensions: " + map.getWidth() + "x" + map.getHeight() + " blocks");
@@ -841,3 +844,5 @@ public class TestHtzBgTilemapDiagnostic {
         System.out.println("=== END PRIORITY DIAGNOSTIC ===");
     }
 }
+
+

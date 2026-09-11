@@ -1,0 +1,2 @@
+Constructor <com.openggf.game.sonic2.Sonic2PaletteCycler.<init>(com.openggf.data.Rom, com.openggf.level.Level, int)> calls constructor <com.openggf.game.palette.PaletteOwnershipRegistry.<init>()> in (Sonic2PaletteCycler.java:58)
+Constructor <com.openggf.game.sonic3k.Sonic3kPaletteCycler.<init>(com.openggf.data.RomByteReader, com.openggf.level.Level, int, int, com.openggf.game.palette.PaletteOwnershipRegistry, [Lcom.openggf.level.Palette;)> calls constructor <com.openggf.game.palette.PaletteOwnershipRegistry.<init>()> in (Sonic3kPaletteCycler.java:60)

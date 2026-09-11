@@ -5,11 +5,13 @@ import com.openggf.configuration.SonicConfiguration;
 import com.openggf.configuration.SonicConfigurationService;
 import com.openggf.game.LevelSelectProvider;
 import com.openggf.game.sonic1.audio.Sonic1Music;
+import com.openggf.game.TitleScreenProvider;
 import com.openggf.game.sonic1.titlescreen.Sonic1TitleScreenManager;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.GraphicsManager;
 import com.openggf.level.Palette;
 import com.openggf.level.PatternDesc;
+import com.openggf.sprites.playable.AbstractPlayableSprite;
 
 import java.util.logging.Logger;
 
@@ -37,7 +39,7 @@ public class Sonic1LevelSelectManager implements LevelSelectProvider {
 
     private static Sonic1LevelSelectManager instance;
 
-    private final SonicConfigurationService configService = SonicConfigurationService.getInstance();
+    private final SonicConfigurationService configService;
     private final Sonic1LevelSelectDataLoader dataLoader = new Sonic1LevelSelectDataLoader();
     private final PatternDesc reusableDesc = new PatternDesc();
 
@@ -55,7 +57,15 @@ public class Sonic1LevelSelectManager implements LevelSelectProvider {
     private int fadeTimer = 0;
     private static final int FADE_DURATION = 16;
 
-    private Sonic1LevelSelectManager() {
+    /** Projection-space viewport width; default 320 (native). */
+    private int viewportWidth = SCREEN_WIDTH;
+
+    public Sonic1LevelSelectManager() {
+        this(null);
+    }
+
+    Sonic1LevelSelectManager(SonicConfigurationService configService) {
+        this.configService = configService;
     }
 
     public static synchronized Sonic1LevelSelectManager getInstance() {
@@ -63,6 +73,31 @@ public class Sonic1LevelSelectManager implements LevelSelectProvider {
             instance = new Sonic1LevelSelectManager();
         }
         return instance;
+    }
+
+    private SonicConfigurationService configuration() {
+        return configService != null ? configService : GameServices.configuration();
+    }
+
+    /**
+     * Sets the projection-space viewport width for widescreen centering.
+     *
+     * <p>The level select content is always 320 px wide. At widths greater than 320
+     * the content is shifted right by {@code (viewportWidth - 320) / 2} so it stays
+     * visually centered. At native width 320 the offset is 0 — byte-identical.
+     */
+    @Override
+    public void setViewportWidth(int width) {
+        this.viewportWidth = Math.max(SCREEN_WIDTH, width);
+    }
+
+    /**
+     * Returns the horizontal pixel offset to apply to all rendered elements so that
+     * the 320-px-wide content block is centered within the current viewport.
+     * Returns 0 at native width 320.
+     */
+    private int xOffset() {
+        return (viewportWidth - SCREEN_WIDTH) / 2;
     }
 
     @Override
@@ -137,14 +172,15 @@ public class Sonic1LevelSelectManager implements LevelSelectProvider {
     }
 
     private void updateActive(InputHandler input) {
-        int upKey = configService.getInt(SonicConfiguration.UP);
-        int downKey = configService.getInt(SonicConfiguration.DOWN);
-        int leftKey = configService.getInt(SonicConfiguration.LEFT);
-        int rightKey = configService.getInt(SonicConfiguration.RIGHT);
-        int jumpKey = configService.getInt(SonicConfiguration.JUMP);
+        SonicConfigurationService config = configuration();
+        int upKey = config.getInt(SonicConfiguration.UP);
+        int downKey = config.getInt(SonicConfiguration.DOWN);
+        int leftKey = config.getInt(SonicConfiguration.LEFT);
+        int rightKey = config.getInt(SonicConfiguration.RIGHT);
+        int jumpKey = config.getInt(SonicConfiguration.JUMP);
 
         // Handle up/down navigation
-        if (input.isKeyDown(upKey)) {
+        if (input.isDirectionHeld(upKey, AbstractPlayableSprite.INPUT_UP)) {
             if (upHoldTimer == 0 || (upHoldTimer >= HOLD_REPEAT_DELAY && upHoldTimer % HOLD_REPEAT_RATE == 0)) {
                 moveUp();
             }
@@ -153,7 +189,7 @@ public class Sonic1LevelSelectManager implements LevelSelectProvider {
             upHoldTimer = 0;
         }
 
-        if (input.isKeyDown(downKey)) {
+        if (input.isDirectionHeld(downKey, AbstractPlayableSprite.INPUT_DOWN)) {
             if (downHoldTimer == 0 || (downHoldTimer >= HOLD_REPEAT_DELAY && downHoldTimer % HOLD_REPEAT_RATE == 0)) {
                 moveDown();
             }
@@ -163,7 +199,7 @@ public class Sonic1LevelSelectManager implements LevelSelectProvider {
         }
 
         // Handle left/right (sound test value adjustment only)
-        if (input.isKeyDown(leftKey)) {
+        if (input.isDirectionHeld(leftKey, AbstractPlayableSprite.INPUT_LEFT)) {
             if (leftHoldTimer == 0 || (leftHoldTimer >= HOLD_REPEAT_DELAY && leftHoldTimer % HOLD_REPEAT_RATE == 0)) {
                 if (selectedIndex == MENU_ENTRY_COUNT - 1) {
                     soundTestValue--;
@@ -177,7 +213,7 @@ public class Sonic1LevelSelectManager implements LevelSelectProvider {
             leftHoldTimer = 0;
         }
 
-        if (input.isKeyDown(rightKey)) {
+        if (input.isDirectionHeld(rightKey, AbstractPlayableSprite.INPUT_RIGHT)) {
             if (rightHoldTimer == 0 || (rightHoldTimer >= HOLD_REPEAT_DELAY && rightHoldTimer % HOLD_REPEAT_RATE == 0)) {
                 if (selectedIndex == MENU_ENTRY_COUNT - 1) {
                     soundTestValue++;
@@ -192,7 +228,7 @@ public class Sonic1LevelSelectManager implements LevelSelectProvider {
         }
 
         // Handle start/jump to select
-        if (input.isKeyPressed(jumpKey)) {
+        if (input.isKeyPressed(jumpKey) || input.logical().menuAccept()) {
             handleSelect();
         }
     }
@@ -249,18 +285,19 @@ public class Sonic1LevelSelectManager implements LevelSelectProvider {
         // This ensures the title screen art appears with the brown/sepia tint
         // from Pal_LevelSel, matching the original hardware behaviour where
         // changing CRAM immediately affects all displayed tiles.
-        dataLoader.cacheToGpu();
-
-        GraphicsManager gm = GraphicsManager.getInstance();
+        GraphicsManager gm = GameServices.graphics();
         if (gm == null || gm.isHeadlessMode()) {
             return;
         }
+        dataLoader.cacheToGpu(gm);
 
         // Render frozen title screen art behind the level select text.
         // The level select palette is already active on the GPU, so the
         // foreground logo and Sonic sprite appear brown/sepia.
-        Sonic1TitleScreenManager titleScreen = Sonic1TitleScreenManager.getInstance();
-        if (titleScreen.supportsLevelSelectOverlay()) {
+        TitleScreenProvider provider = GameServices.module().getTitleScreenProvider();
+        Sonic1TitleScreenManager titleScreen =
+                provider instanceof Sonic1TitleScreenManager manager ? manager : null;
+        if (titleScreen != null && titleScreen.supportsLevelSelectOverlay()) {
             titleScreen.drawFrozenForLevelSelect();
         }
 
@@ -286,7 +323,7 @@ public class Sonic1LevelSelectManager implements LevelSelectProvider {
                     -1,
                     GLCommand.BlendType.ONE_MINUS_SRC_ALPHA,
                     0.0f, 0.0f, 0.0f, fadeAmount,
-                    0, 0, SCREEN_WIDTH, SCREEN_HEIGHT
+                    0, 0, viewportWidth, SCREEN_HEIGHT
             ));
         }
     }
@@ -296,10 +333,11 @@ public class Sonic1LevelSelectManager implements LevelSelectProvider {
      * Selected line uses highlight palette, others use normal palette.
      */
     private void drawMenuText(GraphicsManager gm) {
+        int xOff = xOffset();
         for (int line = 0; line < MENU_ENTRY_COUNT; line++) {
             int paletteIndex = (line == selectedIndex) ? HIGHLIGHT_PALETTE_INDEX : NORMAL_PALETTE_INDEX;
             int y = TEXT_START_Y + line * LINE_SPACING;
-            drawTextLine(gm, MENU_TEXT[line], TEXT_START_X, y, paletteIndex);
+            drawTextLine(gm, MENU_TEXT[line], xOff + TEXT_START_X, y, paletteIndex);
         }
     }
 
@@ -338,8 +376,9 @@ public class Sonic1LevelSelectManager implements LevelSelectProvider {
         int paletteIndex = (selectedIndex == MENU_ENTRY_COUNT - 1)
                 ? HIGHLIGHT_PALETTE_INDEX : NORMAL_PALETTE_INDEX;
 
-        drawHexDigit(gm, highNibble, SOUND_TEST_X, SOUND_TEST_Y, paletteIndex);
-        drawHexDigit(gm, lowNibble, SOUND_TEST_X + 8, SOUND_TEST_Y, paletteIndex);
+        int xOff = xOffset();
+        drawHexDigit(gm, highNibble, xOff + SOUND_TEST_X, SOUND_TEST_Y, paletteIndex);
+        drawHexDigit(gm, lowNibble, xOff + SOUND_TEST_X + 8, SOUND_TEST_Y, paletteIndex);
     }
 
     /**

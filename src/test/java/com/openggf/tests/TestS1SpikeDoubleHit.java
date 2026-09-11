@@ -1,16 +1,14 @@
 package com.openggf.tests;
 
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import com.openggf.sprites.playable.Sonic;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Regression test for S1 spike double-hit bug on ceiling spikes.
@@ -30,24 +28,21 @@ public class TestS1SpikeDoubleHit {
     private static final int LZ_ZONE = 3;
     private static final int LZ_ACT_3 = 2;
     private static final int FRAMES_AFTER_DAMAGE = 10;
-
-    @ClassRule public static RequiresRomRule romRule = new RequiresRomRule();
-
     private static SharedLevel sharedLevel;
 
-    @BeforeClass
+    @BeforeAll
     public static void loadLevel() throws Exception {
         sharedLevel = SharedLevel.load(SonicGame.SONIC_1, LZ_ZONE, LZ_ACT_3);
     }
 
-    @AfterClass
+    @AfterAll
     public static void cleanup() {
         if (sharedLevel != null) sharedLevel.dispose();
     }
 
     private HeadlessTestFixture fixture;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         fixture = HeadlessTestFixture.builder()
                 .withSharedLevel(sharedLevel)
@@ -81,16 +76,16 @@ public class TestS1SpikeDoubleHit {
         System.out.println("Ground Y after settling: " + groundY);
         System.out.println("Spike at Y=496, solid box bottom = 496 + 16 + " + sprite.getYRadius() + " = " + (496 + 16 + sprite.getYRadius()));
 
-        assertFalse("Sonic should not be dead before jump", sprite.getDead());
-        assertFalse("Sonic should not be hurt before jump", sprite.isHurt());
-        assertEquals("Sonic should have 10 rings before jump", 10, sprite.getRingCount());
+        assertFalse(sprite.getDead(), "Sonic should not be dead before jump");
+        assertFalse(sprite.isHurt(), "Sonic should not be hurt before jump");
+        assertEquals(10, sprite.getRingCount(), "Sonic should have 10 rings before jump");
 
         // Now set Sonic airborne with an upward velocity to simulate a jump
         // into the ceiling spike. Use a speed that reaches the spike's Y range.
         // The spike is at Y=496. Sonic needs to reach ~Y=496+16+yRadius = ~531 from below.
         // Distance: groundY - 531. Speed needed: varies by distance.
         // Use a moderate speed so Sonic reaches the spike near apex.
-        // Re-align X to spike column — settling drifts Sonic sideways on the slope,
+        // Re-align X to spike column â€” settling drifts Sonic sideways on the slope,
         // and different X positions have different ceiling geometry above.
         // Also zero horizontal speed so Sonic goes straight up into the spike.
         sprite.setCentreX((short) 5560);
@@ -105,7 +100,7 @@ public class TestS1SpikeDoubleHit {
         int damageCount = 0;
         boolean wasHurt = false;
 
-        // Step up to 60 frames — enough to hit spike, bounce, land, and survive
+        // Step up to 60 frames â€” enough to hit spike, bounce, land, and survive
         for (int frame = 0; frame < 60; frame++) {
             fixture.stepFrame(false, false, false, false, false);
 
@@ -145,9 +140,11 @@ public class TestS1SpikeDoubleHit {
             }
         }
 
-        assertTrue("Sonic should have been damaged by spikes", damageFrame >= 0);
-        assertEquals("Sonic should have 0 rings after spike hit", 0, sprite.getRingCount());
-        assertFalse("Sonic should not be dead after surviving " + FRAMES_AFTER_DAMAGE
-                + " frames post-damage", sprite.getDead());
+        assertTrue(damageFrame >= 0, "Sonic should have been damaged by spikes");
+        assertEquals(0, sprite.getRingCount(), "Sonic should have 0 rings after spike hit");
+        assertFalse(sprite.getDead(), "Sonic should not be dead after surviving " + FRAMES_AFTER_DAMAGE
+                + " frames post-damage");
     }
 }
+
+

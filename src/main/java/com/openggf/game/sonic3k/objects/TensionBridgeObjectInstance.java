@@ -10,12 +10,18 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.GravityDebrisChild;
+import com.openggf.level.objects.ObjectLifetimeOps;
 import com.openggf.level.objects.ObjectManager;
+import com.openggf.level.objects.ObjectPlayerParticipationPolicy;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.RomObjectCodePointerProvider;
 import com.openggf.level.objects.SlopedSolidProvider;
 import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.TrigLookupTable;
 
@@ -37,7 +43,8 @@ import java.util.List;
  * <p>ROM reference: Obj_TensionBridge (sonic3k.asm:75496+)
  */
 public class TensionBridgeObjectInstance extends AbstractObjectInstance
-        implements SlopedSolidProvider, SolidObjectListener {
+        implements SlopedSolidProvider, SolidObjectListener, RomObjectCodePointerProvider,
+        SpawnRewindRecreatable {
 
     private enum Variant { NORMAL, TRIGGER_COLLAPSE, ICZ_ROPE }
 
@@ -113,10 +120,10 @@ public class TensionBridgeObjectInstance extends AbstractObjectInstance
 
     // --- Instance state ---
 
-    private final boolean negativeSubtype;
-    private final int segmentCount;
-    private final int triggerIndex;
-    private final int baseY;
+    private boolean negativeSubtype;
+    private int segmentCount;
+    private int triggerIndex;
+    private int baseY;
 
     // Lazily resolved (can't call services() in constructor)
     private Variant variant;
@@ -125,6 +132,7 @@ public class TensionBridgeObjectInstance extends AbstractObjectInstance
 
     private int depressionAngle;    // $3E: 0 to MAX_DEPRESSION_ANGLE
     private int playerSegmentIndex; // $3F: which segment the player is on
+    private int sidekickSegmentIndex; // $3B: which segment Player 2 is on
     private boolean playerOnBridge;
     private int[] segmentYOffsets;
     private byte[] slopeData;
@@ -133,7 +141,6 @@ public class TensionBridgeObjectInstance extends AbstractObjectInstance
     private boolean collapseActive;
     private boolean collapsed;
     private int collapseTimer;
-    private PlayableEntity playerAtCollapse; // player standing when collapse starts
 
     public TensionBridgeObjectInstance(ObjectSpawn spawn) {
         super(spawn, "TensionBridge");
@@ -174,11 +181,49 @@ public class TensionBridgeObjectInstance extends AbstractObjectInstance
         // ROM: d1 = segCount*8 + 8 (half-width origin shift), d3 = 8 (half-height)
         // Matching S1 bridge pattern: halfWidth=N*8, offsetX=-8, offsetY=-8
         int halfWidth = segmentCount * 8;
-        return new SolidObjectParams(halfWidth, 0, 0, -8, -SURFACE_OFFSET);
+        return SolidObjectParams.of(halfWidth, 0, 0, -8, -SURFACE_OFFSET);
+    }
+
+    @Override
+    public int getBalanceWidthPixels() {
+        // Obj_TensionBridge init writes width_pixels(a0) = $80 (sonic3k.asm:75516).
+        return 0x80;
     }
 
     @Override
     public boolean isTopSolidOnly() {
+        return true;
+    }
+
+    @Override
+    public boolean forceAirOnRideExit() {
+        // sub_38AA2 loc_38AC2 clears Status_OnObj and the bridge's standing
+        // bit, but deliberately leaves Status_InAir unchanged. This permits a
+        // same-frame bridge-to-terrain handoff at the end of the slope.
+        return false;
+    }
+
+    @Override
+    public int romObjectCodePointerHighWord() {
+        // The live routine at loc_387E0 is in ROM bank $0003. sub_13EFC
+        // copies this word from the stood-on bridge SST into Tails_CPU_interact.
+        return 0x0003;
+    }
+
+    @Override
+    public boolean usesSlopeForNewLanding() {
+        // sub_38AA2 sends a non-standing player through sub_1E410 with d3=8,
+        // so first contact uses the flat bridge origin. Only an established
+        // rider is re-seated from the bent child-segment Y table at loc_38AE8.
+        return false;
+    }
+
+    @Override
+    public boolean rejectsZeroDistanceTopSolidLanding() {
+        // sub_38AA2 sends fresh contacts to sub_1E410. Its unsigned
+        // cmpi.w #-$10,d0 / blo accepts only negative overlap [-$10,-1]
+        // and rejects the exact d0=0 boundary (sonic3k.asm:75871-75946,
+        // 41982-42068).
         return true;
     }
 
@@ -201,7 +246,18 @@ public class TensionBridgeObjectInstance extends AbstractObjectInstance
 
     @Override
     public void onSolidContact(PlayableEntity player, SolidContact contact, int frameCounter) {
-        // Standing detection handled in update() via isAnyPlayerRiding
+        if (player == null || contact == null || !contact.standing()) {
+            return;
+        }
+        int segment = segmentIndexFor(player);
+        if (services().playerQuery().nativeP2OrNull() == player) {
+            // sub_38AA2 stores Player 2's current segment in $3B after the
+            // bend calculation, for the following object dispatch.
+            sidekickSegmentIndex = segment;
+        } else {
+            // The second sub_38AA2 call similarly publishes P1's $3F value.
+            playerSegmentIndex = segment;
+        }
     }
 
     // --- Priority & lifecycle ---
@@ -221,10 +277,21 @@ public class TensionBridgeObjectInstance extends AbstractObjectInstance
         return !collapsed && !collapseActive;
     }
 
+    @Override
+    public boolean suppressSlopeSampleThisFrame(PlayableEntity player) {
+        // loc_387B6 branches directly into loc_389C8 when the trigger fires,
+        // and every loc_3890C countdown dispatch returns without calling
+        // sub_38A88. The bridge therefore performs neither a slope re-seat nor
+        // SolidObject's airborne-rider unseat until the countdown expires and
+        // loc_38918 explicitly clears both players' standing state.
+        return collapseActive || (resolveVariant() == Variant.TRIGGER_COLLAPSE
+                && Sonic3kLevelTriggerManager.testAny(triggerIndex));
+    }
+
     // --- Update ---
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         Variant v = resolveVariant();
 
         // Trigger-collapse variant: check trigger each frame (loc_387B6)
@@ -251,17 +318,44 @@ public class TensionBridgeObjectInstance extends AbstractObjectInstance
 
         // --- Depression angle update ---
         ObjectManager objectManager = services().objectManager();
+        boolean wasPlayerOnBridge = playerOnBridge;
         playerOnBridge = playerEntity != null && objectManager != null
                 && objectManager.isAnyPlayerRiding(this);
+        int nextPlayerSegmentIndex = playerSegmentIndex;
+        PlayableEntity nativeSidekick = services().playerQuery().nativeP2OrNull();
+        boolean sidekickOnBridge = nativeSidekick != null
+                && objectManager != null
+                && objectManager.isRidingObject(nativeSidekick, this);
 
         if (playerOnBridge) {
-            // Track which segment the player is on
-            // ROM: d0 = (playerX - bridgeX + segCount*8 + 8) >> 4
-            int relX = playerEntity.getCentreX() - spawn.x() + segmentCount * 8 + 8;
-            int logIdx = relX >> 4;
-            if (logIdx < 0) logIdx = 0;
-            if (logIdx >= segmentCount) logIdx = segmentCount - 1;
-            playerSegmentIndex = logIdx;
+            if (v == Variant.ICZ_ROPE) {
+                // loc_38966 calls sub_38BD8 before adjusting the shared P1
+                // anchor or calculating sub_38D74. Unlike the normal bridge's
+                // sub_38A88 tail, the rope therefore publishes both riders'
+                // current segments in this same dispatch before bending.
+                nextPlayerSegmentIndex = segmentIndexFor(playerEntity);
+                playerSegmentIndex = nextPlayerSegmentIndex;
+                if (sidekickOnBridge) {
+                    sidekickSegmentIndex = segmentIndexFor(nativeSidekick);
+                }
+            }
+            if (sidekickOnBridge) {
+                // loc_387F6 consumes P2's prior $3B and walks P1's $3F one
+                // segment toward it before calculating the shared bend.
+                if (playerSegmentIndex < sidekickSegmentIndex) {
+                    playerSegmentIndex++;
+                } else if (playerSegmentIndex > sidekickSegmentIndex) {
+                    playerSegmentIndex--;
+                }
+                nextPlayerSegmentIndex = playerSegmentIndex;
+            } else {
+                nextPlayerSegmentIndex = segmentIndexFor(playerEntity);
+                if (!wasPlayerOnBridge) {
+                    // The preceding SolidObject pass has already populated ROM
+                    // byte $3F before the first riding update.
+                    playerSegmentIndex = nextPlayerSegmentIndex;
+                }
+            }
 
             // addq.b #4,$3E(a0); cmpi.b #$40,$3E(a0)
             if (depressionAngle < MAX_DEPRESSION_ANGLE) {
@@ -289,6 +383,16 @@ public class TensionBridgeObjectInstance extends AbstractObjectInstance
 
         // Update slope data for collision
         updateSlopeData();
+        if (playerOnBridge && !sidekickOnBridge && v != Variant.ICZ_ROPE) {
+            // ROM loc_387E0 bends from the prior $3F value, then sub_38A88
+            // stores the player's current segment for the following dispatch.
+            playerSegmentIndex = nextPlayerSegmentIndex;
+        }
+    }
+
+    private int segmentIndexFor(PlayableEntity player) {
+        int relX = player.getCentreX() - spawn.x() + segmentCount * 8 + 8;
+        return Math.max(0, Math.min(segmentCount - 1, relX >> 4));
     }
 
     // --- Bend calculation (sub_38CC2 / sub_38D74) ---
@@ -397,17 +501,14 @@ public class TensionBridgeObjectInstance extends AbstractObjectInstance
         collapseActive = true;
         collapseTimer = COLLAPSE_TIMER_INIT;
 
-        // Remember player for delayed release
+        // Remember the placement for delayed release/despawn.
         ObjectManager objectManager = null;
         try {
             objectManager = services().objectManager();
         } catch (Exception ignored) { }
 
         if (objectManager != null) {
-            if (objectManager.isAnyPlayerRiding(this)) {
-                playerAtCollapse = player;
-            }
-            objectManager.markRemembered(spawn);
+            ObjectLifetimeOps.markSpawnRemembered(objectManager, spawn);
         }
 
         // Spawn fragment for each segment
@@ -434,11 +535,22 @@ public class TensionBridgeObjectInstance extends AbstractObjectInstance
     }
 
     private void releasePlayerAtCollapse() {
-        if (playerAtCollapse != null) {
-            playerAtCollapse.setOnObject(false);
-            playerAtCollapse.setPushing(false);
-            playerAtCollapse.setAir(true);
-            playerAtCollapse = null;
+        ObjectManager objectManager = services().objectManager();
+        List<PlayableEntity> participants = services().playerQuery()
+                .playersFor(ObjectPlayerParticipationPolicy.ALL_ENGINE_PLAYERS);
+
+        // loc_38918/loc_3892C independently clear the P1 and P2 standing bits
+        // and set Status_InAir. Query the live riding table here so both native
+        // players (and any configured extra sidekicks using the same bridge)
+        // receive that release instead of remembering only the update argument.
+        for (PlayableEntity participant : participants) {
+            if (!objectManager.isRidingObject(participant, this)) {
+                continue;
+            }
+            participant.setOnObject(false);
+            participant.setPushing(false);
+            participant.setAir(true);
+            objectManager.clearRidingObject(participant);
         }
     }
 
@@ -487,11 +599,11 @@ public class TensionBridgeObjectInstance extends AbstractObjectInstance
      * Individual bridge segment that falls with gravity after a staggered delay.
      * ROM: no initial velocity, just MoveSprite gravity.
      */
-    private static final class BridgeFragment extends GravityDebrisChild {
-        private final int frameIndex;
+    private static final class BridgeFragment extends GravityDebrisChild implements RewindRecreatable {
+        private int frameIndex;
         private int delay;
-        private final String artKey;
-        private final boolean highPri;
+        private String artKey;
+        private boolean highPri;
 
         private BridgeFragment(int x, int y, int frameIndex, int delay,
                                String artKey, boolean highPri) {
@@ -503,19 +615,37 @@ public class TensionBridgeObjectInstance extends AbstractObjectInstance
             this.highPri = highPri;
         }
 
+        private BridgeFragment() {
+            this(0, 0, 0, 0, Sonic3kObjectArtKeys.TENSION_BRIDGE_HCZ, false);
+        }
+
+        @Override
+        public BridgeFragment recreateForRewind(RewindRecreateContext ctx) {
+            ObjectSpawn capturedSpawn = ctx.spawn();
+            int x = capturedSpawn != null ? capturedSpawn.x() : 0;
+            int y = capturedSpawn != null ? capturedSpawn.y() : 0;
+            return new BridgeFragment(
+                    x,
+                    y,
+                    0,
+                    0,
+                    Sonic3kObjectArtKeys.TENSION_BRIDGE_HCZ,
+                    false);
+        }
+
         @Override
         public boolean isHighPriority() {
             return highPri;
         }
 
         @Override
-        public void update(int frameCounter, PlayableEntity player) {
+        public void update(int vIntRunCount, PlayableEntity player) {
             // loc_388E4: delay countdown, then fall
             if (delay > 0) {
                 delay--;
                 return;
             }
-            super.update(frameCounter, player);
+            super.update(vIntRunCount, player);
         }
 
         @Override

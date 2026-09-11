@@ -7,6 +7,8 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
 
@@ -26,7 +28,7 @@ import java.util.List;
  * {@code Map_HCZConveyorSpike}, {@code ArtTile_HCZSpikeBall}.</p>
  */
 public class HCZConveyorSpikeObjectInstance extends AbstractObjectInstance
-        implements TouchResponseProvider {
+        implements RewindRecreatable, TouchResponseProvider {
 
     private static final String ART_KEY = Sonic3kObjectArtKeys.HCZ_CONVEYOR_SPIKE;
 
@@ -83,9 +85,9 @@ public class HCZConveyorSpikeObjectInstance extends AbstractObjectInstance
         CURVE_LEFT
     }
 
-    private final int centerY;
-    private final int leftBound;
-    private final int rightBound;
+    private int centerY;
+    private int leftBound;
+    private int rightBound;
 
     private State state;
     private int angle;
@@ -115,7 +117,12 @@ public class HCZConveyorSpikeObjectInstance extends AbstractObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity player) {
+    public HCZConveyorSpikeObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new HCZConveyorSpikeObjectInstance(ctx.spawn());
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity player) {
         switch (state) {
             case MOVE_RIGHT -> updateMoveRight();
             case CURVE_RIGHT -> updateCurveRight();

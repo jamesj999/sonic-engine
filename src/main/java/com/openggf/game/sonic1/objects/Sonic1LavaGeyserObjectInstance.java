@@ -1,14 +1,20 @@
 package com.openggf.game.sonic1.objects;
 import com.openggf.game.PlayableEntity;
 
-import com.openggf.camera.Camera;
 import com.openggf.debug.DebugRenderContext;
 import com.openggf.game.sonic1.audio.Sonic1Sfx;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
+import com.openggf.level.objects.ObjectInstance;
+import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectArtKeys;
+import com.openggf.level.objects.ObjectLifetimeOps;
+import com.openggf.level.objects.ObjectServices;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
@@ -43,7 +49,7 @@ import java.util.List;
  * Reference: docs/s1disasm/_incObj/4C &amp; 4D Lava Geyser Maker.asm
  */
 public class Sonic1LavaGeyserObjectInstance extends AbstractObjectInstance
-        implements TouchResponseProvider {
+        implements TouchResponseProvider, RewindRecreatable {
 
     // ========================================================================
     // Constants from disassembly
@@ -80,9 +86,6 @@ public class Sonic1LavaGeyserObjectInstance extends AbstractObjectInstance
     /** Animation speed for head anims (from Ani_Geyser: dc.b 2). */
     private static final int ANIM_SPEED = 3; // speed byte 2 -> every 3 frames
 
-    /** out_of_range compare distance: #128+320+192. */
-    private static final int OUT_OF_RANGE_DISTANCE = 128 + 320 + 192;
-
     // Animation frames for head pieces
     /** Anim 5 (.bubble4): frames {0x11, 0x12} - geyser head bubbles. */
     private static final int[] ANIM_BUBBLE4_FRAMES = {0x11, 0x12};
@@ -109,7 +112,7 @@ public class Sonic1LavaGeyserObjectInstance extends AbstractObjectInstance
     // Instance State
     // ========================================================================
 
-    private final Role role;
+    private Role role;
     /** Mutable subtype: cleared from 1→0 on head after creating lavafall third piece. */
     private int subtype;
 
@@ -120,8 +123,8 @@ public class Sonic1LavaGeyserObjectInstance extends AbstractObjectInstance
     /** Y velocity (subpixels, signed 16-bit). */
     private int velY;
 
-    /** Y subpixel accumulator. */
-    private int ySubpixel;
+    /** Subpixel accumulators (xSub / ySub) for ROM-accurate 16.16 SpeedToPos integration. */
+    private final SubpixelMotion.State motion = new SubpixelMotion.State(0, 0, 0, 0, 0, 0);
 
     /** Origin Y (objoff_30): used for deletion check and body column height. */
     private int originY;
@@ -158,7 +161,7 @@ public class Sonic1LavaGeyserObjectInstance extends AbstractObjectInstance
     private boolean pendingDelete;
 
     /** Whether this is the behind-priority third piece (lavafall). */
-    private final boolean behindPriority;
+    private boolean behindPriority;
 
     // ========================================================================
     // Constructors
@@ -187,6 +190,119 @@ public class Sonic1LavaGeyserObjectInstance extends AbstractObjectInstance
         this.parentGeyser = parentHead;
         this.makerParent = maker;
         this.behindPriority = behindPriority;
+
+        // ROM Geyser_Main, routine 0, "4C, 4D MZ Lava Geyser and Maker.asm":157-172
+        // captures geyser_origY BEFORE applying the lavafall start-height offset,
+        // then falls straight through into Geyser_Action's own SpeedToPos +
+        // DisplaySprite in the SAME pass that GMake_MakeLava's FindNextFreeObj
+        // creates this object -- ROM never displays a lavafall head at its
+        // un-shifted, eventual landing, Y. Apply that shift here, eagerly, in
+        // the constructor (pure position arithmetic; no service lookups needed),
+        // rather than relying on this newly spawned dynamic object's own first
+        // per-frame refresh landing in the same frame as its parent's spawn call.
+        // When the object manager's FindNextFreeObj-equivalent can't place the
+        // child at a slot the current exec pass hasn't reached yet, dynamic
+        // pool pressure, that first per-frame refresh is deferred to the next
+        // frame, and the head would otherwise render one frame at the maker's
+        // own Y -- the "single-frame flicker where a vertical lavafall will
+        // land when it starts" bug. The lavafall THIRD piece, behindPriority
+        // true, is constructed with an already-final Y from its sibling head
+        // and must not be shifted again.
+        if (role == Role.HEAD && !behindPriority && this.subtype != 0) {
+            this.originY = spawn.y();
+            this.currentY -= LAVAFALL_START_Y_OFFSET;
+        }
+    }
+
+    @Override
+    public Sonic1LavaGeyserObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        ObjectSpawn capturedSpawn = ctx != null && ctx.spawn() != null ? ctx.spawn() : getSpawn();
+        Sonic1LavaGeyserMakerObjectInstance maker = restoredMaker(ctx, capturedSpawn);
+        Sonic1LavaGeyserObjectInstance parentHead = restoredParentHeadForBody(ctx, capturedSpawn);
+        boolean body = parentHead != null;
+        boolean thirdPiece = !body && isRestoredLavafallThirdPiece(ctx, capturedSpawn, maker);
+        return new Sonic1LavaGeyserObjectInstance(
+                capturedSpawn,
+                body ? Role.BODY : Role.HEAD,
+                parentHead,
+                maker,
+                thirdPiece);
+    }
+
+    private static Sonic1LavaGeyserMakerObjectInstance restoredMaker(
+            RewindRecreateContext ctx,
+            ObjectSpawn capturedSpawn) {
+        ObjectManager objectManager = restoredObjectManager(ctx);
+        if (objectManager == null || capturedSpawn == null) {
+            return null;
+        }
+        Sonic1LavaGeyserMakerObjectInstance best = null;
+        long bestDistance = Long.MAX_VALUE;
+        for (ObjectInstance object : objectManager.getActiveObjects()) {
+            if (object instanceof Sonic1LavaGeyserMakerObjectInstance maker && !maker.isDestroyed()) {
+                ObjectSpawn makerSpawn = maker.getSpawn();
+                long dx = makerSpawn.x() - capturedSpawn.x();
+                long dy = makerSpawn.y() - capturedSpawn.y();
+                long distance = dx * dx + dy * dy;
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    best = maker;
+                }
+            }
+        }
+        return best;
+    }
+
+    private static Sonic1LavaGeyserObjectInstance restoredParentHeadForBody(
+            RewindRecreateContext ctx,
+            ObjectSpawn capturedSpawn) {
+        ObjectManager objectManager = restoredObjectManager(ctx);
+        if (objectManager == null || capturedSpawn == null) {
+            return null;
+        }
+        for (ObjectInstance object : objectManager.getActiveObjects()) {
+            if (object instanceof Sonic1LavaGeyserObjectInstance geyser
+                    && !geyser.isDestroyed()
+                    && geyser.role == Role.HEAD
+                    && !geyser.behindPriority
+                    && geyser.currentX == capturedSpawn.x()
+                    && geyser.currentY + BODY_Y_OFFSET == capturedSpawn.y()) {
+                return geyser;
+            }
+        }
+        return null;
+    }
+
+    private static boolean isRestoredLavafallThirdPiece(
+            RewindRecreateContext ctx,
+            ObjectSpawn capturedSpawn,
+            Sonic1LavaGeyserMakerObjectInstance maker) {
+        ObjectManager objectManager = restoredObjectManager(ctx);
+        if (objectManager == null || capturedSpawn == null || (capturedSpawn.subtype() & 0xFF) == 0) {
+            return false;
+        }
+        for (ObjectInstance object : objectManager.getActiveObjects()) {
+            if (object instanceof Sonic1LavaGeyserObjectInstance geyser
+                    && !geyser.isDestroyed()
+                    && geyser.role == Role.BODY
+                    && geyser.currentX == capturedSpawn.x()
+                    && (maker == null || geyser.makerParent == maker)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static ObjectManager restoredObjectManager(RewindRecreateContext ctx) {
+        if (ctx == null) {
+            return null;
+        }
+        ObjectManager objectManager = ctx.objectManager();
+        if (objectManager != null) {
+            return objectManager;
+        }
+        ObjectServices services = ctx.objectServices();
+        return services != null ? services.objectManager() : null;
     }
 
     private boolean initialized;
@@ -206,17 +322,18 @@ public class Sonic1LavaGeyserObjectInstance extends AbstractObjectInstance
     private void initializeHead() {
         // Geyser_Main: Routine 0
         // move.w obY(a0),objoff_30(a0)
-        this.originY = currentY;
+        // For the lavafall case (subtype != 0) the constructor already captured
+        // originY and applied the "subi.w #$250,obY(a0)" start-height shift
+        // eagerly (see the constructor's comment) so the position is correct
+        // from the very first render, not just from the first update(). Only
+        // the geyser case (subtype == 0, no shift) still needs it captured here.
+        if (subtype == 0) {
+            this.originY = currentY;
+        }
 
         // Store animation ID based on current subtype BEFORE any clearing.
         // .makelava: move.b #5,obAnim(a1) / tst.b obSubtype / beq.s .fail / move.b #2,obAnim(a1)
         this.headAnimId = (subtype != 0) ? 2 : 5;
-
-        // tst.b obSubtype(a0) / beq.s .isgeyser / subi.w #$250,obY(a0)
-        if (subtype != 0) {
-            // Lavafall: start high above
-            currentY -= LAVAFALL_START_Y_OFFSET;
-        }
 
         // moveq #0,d0 / move.b obSubtype(a0),d0 / add.w d0,d0
         // move.w Geyser_Speeds(pc,d0.w),obVelY(a0)
@@ -229,52 +346,51 @@ public class Sonic1LavaGeyserObjectInstance extends AbstractObjectInstance
         // .activate: create body child at Y+0x60
         if (services().objectManager() != null) {
             // Create body piece (routine 4 = loc_EFFC)
-            ObjectSpawn bodySpawn = new ObjectSpawn(
-                    currentX, currentY + BODY_Y_OFFSET,
-                    0x4D, subtype, 0, false, 0);
-            Sonic1LavaGeyserObjectInstance body = new Sonic1LavaGeyserObjectInstance(
-                    bodySpawn, Role.BODY, this, makerParent, false);
-            body.originY = this.originY + BODY_Y_OFFSET;
-            body.columnAnimTimer = 7; // start with timer at 7 for immediate frame select
-            body.columnAnimFrame = 0;
-            // ROM: FindNextFreeObj allocates slot after head
-            int prevSlot = getSlotIndex();
-            if (prevSlot >= 0) {
-                int childSlot = services().objectManager().allocateSlotAfter(prevSlot);
+            final int prevSlotInit = getSlotIndex();
+            final int[] prevSlotHolder = { prevSlotInit };
+            spawnFreeChild(() -> {
+                ObjectSpawn bodySpawn = new ObjectSpawn(
+                        currentX, currentY + BODY_Y_OFFSET,
+                        0x4D, subtype, 0, false, 0);
+                Sonic1LavaGeyserObjectInstance b = new Sonic1LavaGeyserObjectInstance(
+                        bodySpawn, Role.BODY, this, makerParent, false);
+                b.originY = this.originY + BODY_Y_OFFSET;
+                b.columnAnimTimer = 7; // start with timer at 7 for immediate frame select
+                b.columnAnimFrame = 0;
+                // ROM: FindNextFreeObj allocates slot after head
+                int childSlot = ObjectLifetimeOps.assignFindNextFreeChildSlot(
+                        services().objectManager(), b, prevSlotHolder[0]);
                 if (childSlot >= 0) {
-                    body.setSlotIndex(childSlot);
-                    prevSlot = childSlot;
+                    prevSlotHolder[0] = childSlot;
                 }
-            }
-            services().objectManager().addDynamicObject(body);
+                return b;
+            });
 
             // Lavafall: create third piece as independent HEAD at Y+0x100
             // ROM: moveq #0,d1 / bsr.w .loop (creates one piece via .makelava)
             // Then configures it: routine 2, tile offset +16, priority 0, parent = maker
             if (subtype != 0) {
-                ObjectSpawn thirdSpawn = new ObjectSpawn(
-                        currentX, currentY + THIRD_PIECE_Y_OFFSET,
-                        0x4D, 1, 0, false, 0);
-                // Third piece is an independent HEAD (routine 2 = Geyser_Action)
-                // with subtype 1 → uses Type01 → signals maker anim 1 when past origin
-                Sonic1LavaGeyserObjectInstance third = new Sonic1LavaGeyserObjectInstance(
-                        thirdSpawn, Role.HEAD, null, makerParent, true);
-                third.originY = this.originY; // move.w objoff_30(a0),objoff_30(a1)
-                third.headAnimId = 2; // .end animation (set by .makelava since subtype=1)
-                third.velY = 0; // starts stationary, falls under gravity
-                // ROM: addq.b #2,obRoutine(a1) — third piece starts at routine 2
-                // (Geyser_Action), skipping Geyser_Main. Mark as initialized to
-                // prevent ensureInitialized() from re-running initializeHead(),
-                // which would cascade-spawn infinite children.
-                third.initialized = true;
-                // ROM: FindNextFreeObj allocates slot after body
-                if (prevSlot >= 0) {
-                    int thirdSlot = services().objectManager().allocateSlotAfter(prevSlot);
-                    if (thirdSlot >= 0) {
-                        third.setSlotIndex(thirdSlot);
-                    }
-                }
-                services().objectManager().addDynamicObject(third);
+                spawnFreeChild(() -> {
+                    ObjectSpawn thirdSpawn = new ObjectSpawn(
+                            currentX, currentY + THIRD_PIECE_Y_OFFSET,
+                            0x4D, 1, 0, false, 0);
+                    // Third piece is an independent HEAD (routine 2 = Geyser_Action)
+                    // with subtype 1 → uses Type01 → signals maker anim 1 when past origin
+                    Sonic1LavaGeyserObjectInstance third = new Sonic1LavaGeyserObjectInstance(
+                            thirdSpawn, Role.HEAD, null, makerParent, true);
+                    third.originY = this.originY; // move.w objoff_30(a0),objoff_30(a1)
+                    third.headAnimId = 2; // .end animation (set by .makelava since subtype=1)
+                    third.velY = 0; // starts stationary, falls under gravity
+                    // ROM: addq.b #2,obRoutine(a1) — third piece starts at routine 2
+                    // (Geyser_Action), skipping Geyser_Main. Mark as initialized to
+                    // prevent ensureInitialized() from re-running initializeHead(),
+                    // which would cascade-spawn infinite children.
+                    third.initialized = true;
+                    // ROM: FindNextFreeObj allocates slot after body
+                    ObjectLifetimeOps.assignFindNextFreeChildSlot(
+                            services().objectManager(), third, prevSlotHolder[0]);
+                    return third;
+                });
 
                 // move.b #0,obSubtype(a0) — clear head's subtype to 0
                 // Head now uses Type00 (signals maker anim 3/afRoutine when done)
@@ -291,7 +407,7 @@ public class Sonic1LavaGeyserObjectInstance extends AbstractObjectInstance
     // ========================================================================
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         ensureInitialized();
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (pendingDelete) {
@@ -299,6 +415,11 @@ public class Sonic1LavaGeyserObjectInstance extends AbstractObjectInstance
             return;
         }
 
+        // ROM Geyser_Main (routine 0, "4C, 4D MZ Lava Geyser and Maker.asm":157)
+        // does NOT rts: it falls through .configureLavaObjects (172/206) ->
+        // .sound (230) -> Geyser_Action (235), so the head applies its first
+        // gravity (addi.w #$18,obVelY) + SpeedToPos on its SPAWN frame. The
+        // engine therefore runs updateHead() immediately after ensureInitialized().
         switch (role) {
             case HEAD -> updateHead();
             case BODY -> updateBody();
@@ -317,18 +438,17 @@ public class Sonic1LavaGeyserObjectInstance extends AbstractObjectInstance
             updateType01();
         }
 
-        // bsr.w SpeedToPos — ROM-accurate 16.16 fixed-point arithmetic
-        int yVel32 = (int) (short) velY;
-        int y32 = (currentY << 16) | (ySubpixel & 0xFFFF);
-        y32 += yVel32 << 8;
-        currentY = y32 >> 16;
-        ySubpixel = y32 & 0xFFFF;
+        // bsr.w SpeedToPos — ROM-accurate 16.16 fixed-point arithmetic (Y-only)
+        motion.y = currentY;
+        motion.yVel = velY;
+        SubpixelMotion.speedToPosY(motion);
+        currentY = motion.y;
 
         // AnimateSprite (head animation)
         updateHeadAnimation();
 
         // Geyser_ChkDel: out_of_range.w DeleteObject
-        if (!isWithinOutOfRangeWindow(currentX)) {
+        if (!isInRangeAt(currentX)) {
             setDestroyed(true);
         }
     }
@@ -422,7 +542,7 @@ public class Sonic1LavaGeyserObjectInstance extends AbstractObjectInstance
         displayFrame = columnAnimFrame + frameBase;
 
         // Geyser_ChkDel: out_of_range.w DeleteObject
-        if (!isWithinOutOfRangeWindow(currentX)) {
+        if (!isInRangeAt(currentX)) {
             setDestroyed(true);
         }
     }
@@ -459,6 +579,31 @@ public class Sonic1LavaGeyserObjectInstance extends AbstractObjectInstance
     @Override
     public int getCollisionProperty() {
         return 0;
+    }
+
+    /**
+     * ROM: the body/column piece runs {@code bset #4,obRender(a1)} in
+     * {@code .configureLavaObjects} (docs/s1disasm/_incObj/"4C, 4D MZ Lava
+     * Geyser and Maker.asm":214), so BuildSprites computes its on-screen render
+     * flag from {@code obHeight} ({@code move.b #256/2,obHeight(a1)} -> $80),
+     * not the 32px assumed band. The 256px-tall column's anchor sits above the
+     * camera top yet must keep render_flags bit 7 set so ReactToItem (the
+     * engine's touch-response render-flag gate) still hurts the player. Only the
+     * BODY piece sets the flag and carries collision; the HEAD does not.
+     */
+    @Override
+    protected boolean usesCustomRenderHeight() {
+        return role == Role.BODY;
+    }
+
+    /**
+     * Body column half-height for the custom-height on-screen test:
+     * {@code obHeight = #256/2 = $80} from the disassembly
+     * (docs/s1disasm/_incObj/"4C, 4D MZ Lava Geyser and Maker.asm":213).
+     */
+    @Override
+    public int getOnScreenHalfHeight() {
+        return (role == Role.BODY) ? BODY_HEIGHT : super.getOnScreenHalfHeight();
     }
 
     // ========================================================================
@@ -499,22 +644,7 @@ public class Sonic1LavaGeyserObjectInstance extends AbstractObjectInstance
 
     @Override
     public boolean isPersistent() {
-        return !isDestroyed() && isWithinOutOfRangeWindow(currentX);
-    }
-
-    /**
-     * ROM out_of_range macro (Macros.asm):
-     * round both X positions to $80 and compare against 128+320+192.
-     */
-    private boolean isWithinOutOfRangeWindow(int objectX) {
-        Camera camera = services().camera();
-        if (camera == null) {
-            return true;
-        }
-        int objRounded = objectX & 0xFF80;
-        int camRounded = (camera.getX() - 128) & 0xFF80;
-        int distance = (objRounded - camRounded) & 0xFFFF;
-        return distance <= OUT_OF_RANGE_DISTANCE;
+        return !isDestroyed() && isInRangeAt(currentX);
     }
 
     // ========================================================================

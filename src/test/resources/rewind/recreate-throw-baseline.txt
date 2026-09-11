@@ -1,0 +1,35 @@
+# Justified `throw` statements inside recreateForRewind scopes (method body + private
+# helpers it calls in the same file). Enforced by TestRewindRecreateLinkToleranceGuard.
+#
+# Every entry below is CATEGORY 3 (argument-validation / framework-wiring): a reflective
+# "no matching/unique constructor" failure raised by a shared recreate keystone
+# interface when an implementing class is wired incorrectly. These signal a code mistake
+# to fix at compile/wiring time, NOT a legitimately-absent game-state link, so they stay.
+#
+# A CATEGORY-1 link-tolerance fix (parent/sibling/previous can be legitimately absent
+# because the player destroyed it) must NOT appear here — it returns null instead of
+# throwing, and its entry is removed. A NEW throw not listed here fails the guard.
+#
+# IczSegmentColumnObjectInstance is intentionally excluded in the guard's EXCLUDED_FILES
+# (fixed on bugfix/ai-icz-segment-column-rewind-break), so it never appears here.
+#
+# Format: <normalized source path>=<throw count in recreate scope>
+
+# Grounder zero-index child keystone: reflective (int,int,int,Grounder) constructor
+# lookup + instantiation guards. The parent link itself is already tolerated (a null
+# parent is passed through, not thrown on).
+src/main/java/com/openggf/game/sonic2/objects/GrounderZeroIndexChildRewindRecreatable.java=2
+
+# Shared spawn/scalar recreate keystone interfaces: each throws only when the
+# implementing class lacks the unique constructor the marker interface promises.
+src/main/java/com/openggf/level/objects/NullableSpawnCoordinateZeroScalarArgsRewindRecreatable.java=1
+src/main/java/com/openggf/level/objects/SpawnAndCoordinateZeroScalarArgsRewindRecreatable.java=1
+src/main/java/com/openggf/level/objects/SpawnCoordinateDefaultArgsRewindRecreatable.java=1
+src/main/java/com/openggf/level/objects/SpawnCoordinateSubtypeDefaultArgsRewindRecreatable.java=1
+src/main/java/com/openggf/level/objects/SpawnCoordinateZeroScalarArgsRewindRecreatable.java=1
+src/main/java/com/openggf/level/objects/SpawnDefaultArgsRewindRecreatable.java=1
+src/main/java/com/openggf/level/objects/SpawnNullableReferenceRewindRecreatable.java=1
+src/main/java/com/openggf/level/objects/SpawnRenderFlipRewindRecreatable.java=1
+src/main/java/com/openggf/level/objects/SpawnServicesDefaultArgsRewindRecreatable.java=1
+src/main/java/com/openggf/level/objects/SpawnTrailingZeroIntsRewindRecreatable.java=1
+src/main/java/com/openggf/level/objects/ZeroScalarArgsRewindRecreatable.java=1

@@ -187,3 +187,5 @@ class TestSonic2Rng {
         return new GameRng(GameRng.Flavour.S1_S2, seed);
     }
 }
+
+

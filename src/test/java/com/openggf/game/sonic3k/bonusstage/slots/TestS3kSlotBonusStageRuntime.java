@@ -1,12 +1,12 @@
 package com.openggf.game.sonic3k.bonusstage.slots;
 
+import com.openggf.game.session.SessionManager;
 import com.openggf.configuration.SonicConfiguration;
 import com.openggf.configuration.SonicConfigurationService;
 import com.openggf.game.ObjectArtProvider;
 import com.openggf.game.sonic3k.Sonic3kObjectArtKeys;
-import com.openggf.game.GameRuntime;
+import com.openggf.game.session.GameplayModeContext;
 import com.openggf.game.GameServices;
-import com.openggf.game.RuntimeManager;
 import com.openggf.game.sonic3k.objects.S3kSlotRingRewardObjectInstance;
 import com.openggf.game.sonic3k.objects.S3kSlotSpikeRewardObjectInstance;
 import com.openggf.graphics.GraphicsManager;
@@ -22,6 +22,9 @@ import com.openggf.sprites.playable.AbstractPlayableSprite;
 import com.openggf.sprites.playable.Sonic;
 import com.openggf.sprites.playable.Tails;
 import com.openggf.sprites.render.PlayerSpriteRenderer;
+import com.openggf.tests.TestEnvironment;
+import com.openggf.tests.rules.SonicGame;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -31,6 +34,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -38,21 +42,20 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TestS3kSlotBonusStageRuntime {
-    private Field levelManagerField;
-    private LevelManager originalLevelManager;
+    @BeforeEach
+    void setUp() {
+        TestEnvironment.configureGameModuleFixture(SonicGame.SONIC_3K);
+    }
 
     @AfterEach
-    void tearDown() throws Exception {
-        if (levelManagerField != null) {
-            levelManagerField.set(null, originalLevelManager);
-        }
-        RuntimeManager.destroyCurrent();
+    void tearDown() {
+        SessionManager.clear();
         SonicConfigurationService.getInstance().resetToDefaults();
     }
 
     @Test
     void bootstrapReplacesTailsMainCharacterAtRawPositionTransfersRendererStateAndRemovesSidekicks() {
-        RuntimeManager.createGameplay();
+        TestEnvironment.activeGameplayMode();
         SonicConfigurationService.getInstance().setConfigValue(SonicConfiguration.MAIN_CHARACTER_CODE, "tails");
 
         AbstractPlayableSprite originalPlayer = new Tails("tails", (short) 0x460, (short) 0x430);
@@ -108,7 +111,7 @@ class TestS3kSlotBonusStageRuntime {
 
     @Test
     void queuedRingRewardActivatesInsideRuntimeAndExpires() {
-        RuntimeManager.createGameplay();
+        TestEnvironment.activeGameplayMode();
         SonicConfigurationService.getInstance().setConfigValue(SonicConfiguration.MAIN_CHARACTER_CODE, "tails");
 
         Tails originalPlayer = new Tails("tails", (short) 0x460, (short) 0x430);
@@ -139,7 +142,7 @@ class TestS3kSlotBonusStageRuntime {
 
     @Test
     void queuedRingRewardsSpawnIndependentTransientChildren() {
-        RuntimeManager.createGameplay();
+        TestEnvironment.activeGameplayMode();
         SonicConfigurationService.getInstance().setConfigValue(SonicConfiguration.MAIN_CHARACTER_CODE, "tails");
 
         Tails originalPlayer = new Tails("tails", (short) 0x460, (short) 0x430);
@@ -160,7 +163,7 @@ class TestS3kSlotBonusStageRuntime {
 
     @Test
     void queuedSpikeRewardsSpawnIndependentTransientChildren() {
-        RuntimeManager.createGameplay();
+        TestEnvironment.activeGameplayMode();
         SonicConfigurationService.getInstance().setConfigValue(SonicConfiguration.MAIN_CHARACTER_CODE, "tails");
 
         Tails originalPlayer = new Tails("tails", (short) 0x460, (short) 0x430);
@@ -180,7 +183,7 @@ class TestS3kSlotBonusStageRuntime {
 
     @Test
     void bootstrapPreservesLiveCollisionBitsOnSwappedSlotPlayer() {
-        RuntimeManager.createGameplay();
+        TestEnvironment.activeGameplayMode();
         SonicConfigurationService.getInstance().setConfigValue(SonicConfiguration.MAIN_CHARACTER_CODE, "tails");
 
         AbstractPlayableSprite originalPlayer = new Tails("tails", (short) 0x460, (short) 0x430);
@@ -201,7 +204,7 @@ class TestS3kSlotBonusStageRuntime {
 
     @Test
     void bootstrapKeepsSlotPlayerLowPriorityEvenWhenLivePlayerWasHighPriority() {
-        RuntimeManager.createGameplay();
+        TestEnvironment.activeGameplayMode();
         SonicConfigurationService.getInstance().setConfigValue(SonicConfiguration.MAIN_CHARACTER_CODE, "tails");
 
         AbstractPlayableSprite originalPlayer = new Tails("tails", (short) 0x460, (short) 0x430);
@@ -220,7 +223,7 @@ class TestS3kSlotBonusStageRuntime {
 
     @Test
     void runtimeUpdateDoesNotImmediatelyCaptureAndFreezeBootstrapPlayer() {
-        RuntimeManager.createGameplay();
+        TestEnvironment.activeGameplayMode();
         SonicConfigurationService.getInstance().setConfigValue(SonicConfiguration.MAIN_CHARACTER_CODE, "tails");
 
         AbstractPlayableSprite originalPlayer = new Tails("tails", (short) 0x460, (short) 0x430);
@@ -241,9 +244,121 @@ class TestS3kSlotBonusStageRuntime {
         assertTrue(slotPlayer.getAir());
     }
 
+    // ROM loc_4BA62 (sonic3k.asm:98751-98752) returns straight out of the whole
+    // ground/air/ring/tile dispatch chain while object_control(a0) is set -- e.g.
+    // during the bonus cage grab (sub_4AF80/loc_4B130, sonic3k.asm:98136). Commit
+    // 2bf9ac104 added the matching `!slotPlayer.isObjectControlled()` gate around
+    // checkRingPickup(). Pin both sides: the ring is NOT consumed while object
+    // controlled (this test), and IS consumed once released, so a regression that
+    // drops or inverts the gate is caught even without a trace-frontier signal.
+    @Test
+    void ringPickupIsSuppressedWhilePlayerIsObjectControlled() throws Exception {
+        TestEnvironment.activeGameplayMode();
+        SonicConfigurationService.getInstance().setConfigValue(SonicConfiguration.MAIN_CHARACTER_CODE, "tails");
+
+        Tails originalPlayer = new Tails("tails", (short) 0x460, (short) 0x430);
+        GameServices.sprites().addSprite(originalPlayer);
+        GameServices.camera().setFocusedSprite(originalPlayer);
+
+        S3kSlotBonusStageRuntime runtime = new S3kSlotBonusStageRuntime();
+        runtime.bootstrap();
+
+        AbstractPlayableSprite slotPlayer = assertInstanceOf(
+                AbstractPlayableSprite.class, GameServices.sprites().getSprite("tails"));
+
+        S3kSlotRenderBuffers buffers = runtime.renderBuffersForTest();
+        int expandedIndex = buffers.compactToExpandedIndex(0);
+        int row = expandedIndex / buffers.layoutStrideBytes();
+        int col = expandedIndex % buffers.layoutStrideBytes();
+        buffers.expandedLayout()[expandedIndex] = 8; // ring tile id (S3kSlotCollisionSystem.checkRingPickup)
+        buffers.layout()[0] = 8; // keep the compact layout in sync, as real gameplay data does
+
+        int xPixel = col * S3kSlotCollisionSystem.CELL_SIZE - S3kSlotCollisionSystem.RING_X_OFFSET;
+        int yPixel = row * S3kSlotCollisionSystem.CELL_SIZE - S3kSlotCollisionSystem.RING_Y_OFFSET;
+        setGroundProjectedOrigin(runtime.slotPlayerRuntimeForTest(), xPixel, yPixel);
+
+        slotPlayer.setObjectControlled(true);
+        runtime.stageStateForTest().clearCollision();
+
+        runtime.update(0);
+
+        // consumeRing (S3kSlotCollisionSystem) zeroes the COMPACT layout[0] entry --
+        // the durable "this ring is gone" record -- and startRingAnimationAt starts a
+        // transient sparkle animation at the same compact index. Neither must fire
+        // while checkRingPickup itself is gated off.
+        assertEquals(8, buffers.layout()[0],
+                "the compact layout entry must stay unconsumed while object controlled");
+        assertEquals(8, buffers.expandedLayout()[expandedIndex] & 0xFF,
+                "the ring tile must remain in the layout, unconsumed, while object controlled");
+        assertFalse(buffers.hasActiveTransientAnimationAt(0),
+                "no pickup sparkle should start while checkRingPickup is suppressed");
+    }
+
+    @Test
+    void ringPickupRunsAndConsumesTheTileOnceObjectControlIsReleased() throws Exception {
+        TestEnvironment.activeGameplayMode();
+        SonicConfigurationService.getInstance().setConfigValue(SonicConfiguration.MAIN_CHARACTER_CODE, "tails");
+
+        Tails originalPlayer = new Tails("tails", (short) 0x460, (short) 0x430);
+        GameServices.sprites().addSprite(originalPlayer);
+        GameServices.camera().setFocusedSprite(originalPlayer);
+
+        S3kSlotBonusStageRuntime runtime = new S3kSlotBonusStageRuntime();
+        runtime.bootstrap();
+
+        AbstractPlayableSprite slotPlayer = assertInstanceOf(
+                AbstractPlayableSprite.class, GameServices.sprites().getSprite("tails"));
+        // ROM Cage_Timer suppresses capture for the runtime's first update() call
+        // (suppressInitialCaptureOnce) -- isObjectControlled() is already false
+        // here, matching runtimeUpdateDoesNotImmediatelyCaptureAndFreezeBootstrapPlayer.
+        assertFalse(slotPlayer.isObjectControlled());
+
+        S3kSlotRenderBuffers buffers = runtime.renderBuffersForTest();
+        int expandedIndex = buffers.compactToExpandedIndex(0);
+        int row = expandedIndex / buffers.layoutStrideBytes();
+        int col = expandedIndex % buffers.layoutStrideBytes();
+        buffers.expandedLayout()[expandedIndex] = 8;
+        buffers.layout()[0] = 8;
+
+        int xPixel = col * S3kSlotCollisionSystem.CELL_SIZE - S3kSlotCollisionSystem.RING_X_OFFSET;
+        int yPixel = row * S3kSlotCollisionSystem.CELL_SIZE - S3kSlotCollisionSystem.RING_Y_OFFSET;
+        setGroundProjectedOrigin(runtime.slotPlayerRuntimeForTest(), xPixel, yPixel);
+
+        // initialize()'s own spawn-frame collision probe (inside bootstrap(), against
+        // the real ROM layout before this test's tile injection) may have latched a
+        // stale lastCollisionTileId for the spawn cell; clear it so dispatchTileInteraction
+        // doesn't fire on stale state and stomp the ring tile this test just placed.
+        runtime.stageStateForTest().clearCollision();
+
+        // Ring pickup (ROM sub_4BDCA) now runs inside the player runtime's movement
+        // branch, spliced in before MoveSprite2 (sonic3k.asm:98776-98780) so a bumper
+        // launch reaches the same frame's velocity step. update() no longer owns it;
+        // drive the hook directly here after seeding the ground-projected origin.
+        runtime.runPreMovePlayerInteractionsForTest();
+
+        // consumeRing zeroes both layout arrays at this index, but startRingAnimationAt
+        // (called right after, in the same checkRingPickup branch) immediately writes
+        // the first ring-sparkle frame back over both arrays via setCompactTile -- so
+        // the reliable post-pickup signal is the sparkle animation becoming active
+        // and the raw ring tile id (8) no longer being present, not a literal 0.
+        assertTrue(buffers.hasActiveTransientAnimationAt(0),
+                "the pickup sparkle animation must start once checkRingPickup actually fires");
+        assertNotEquals(8, buffers.layout()[0],
+                "the raw ring tile id must no longer be present once the pickup actually runs");
+    }
+
+    private static void setGroundProjectedOrigin(S3kSlotPlayerRuntime runtime, int xPixel, int yPixel) throws Exception {
+        Field xField = S3kSlotPlayerRuntime.class.getDeclaredField("groundProjectedOriginX");
+        Field yField = S3kSlotPlayerRuntime.class.getDeclaredField("groundProjectedOriginY");
+        xField.setAccessible(true);
+        yField.setAccessible(true);
+        xField.setInt(runtime, xPixel << 16);
+        yField.setInt(runtime, yPixel << 16);
+    }
+
     @Test
     void runtimeUpdateKeepsCameraBoundToSlotRuntimeOrigin() {
-        RuntimeManager.createGameplay();
+        TestEnvironment.activeGameplayMode();
         SonicConfigurationService.getInstance().setConfigValue(SonicConfiguration.MAIN_CHARACTER_CODE, "tails");
 
         AbstractPlayableSprite originalPlayer = new Tails("tails", (short) 0x460, (short) 0x430);
@@ -263,7 +378,7 @@ class TestS3kSlotBonusStageRuntime {
 
     @Test
     void runtimeUpdateBuildsVisibleSemanticCellsForSlotLayout() {
-        RuntimeManager.createGameplay();
+        TestEnvironment.activeGameplayMode();
         SonicConfigurationService.getInstance().setConfigValue(SonicConfiguration.MAIN_CHARACTER_CODE, "tails");
 
         AbstractPlayableSprite originalPlayer = new Tails("tails", (short) 0x460, (short) 0x430);
@@ -277,19 +392,22 @@ class TestS3kSlotBonusStageRuntime {
         assertNotNull(runtime.activeVisibleCellsForTest());
         assertFalse(runtime.activeVisibleCellsForTest().isEmpty());
         assertTrue(runtime.activeVisibleCellsForTest().size() >= 8);
-        assertTrue(runtime.activeVisibleCellsForTest().stream().allMatch(cell -> cell.cellId() > 0));
-        assertTrue(runtime.activeVisibleCellsForTest().stream().noneMatch(cell -> cell.cellId() == 0x09));
         int cameraX = GameServices.camera().getX();
         int cameraY = GameServices.camera().getY();
-        assertTrue(runtime.activeVisibleCellsForTest().stream().allMatch(cell -> cell.worldX() >= cameraX - 0x10));
-        assertTrue(runtime.activeVisibleCellsForTest().stream().allMatch(cell -> cell.worldX() < cameraX + 0x150));
-        assertTrue(runtime.activeVisibleCellsForTest().stream().allMatch(cell -> cell.worldY() >= cameraY - 0x10));
-        assertTrue(runtime.activeVisibleCellsForTest().stream().allMatch(cell -> cell.worldY() < cameraY + 0xF0));
+        S3kSlotRenderBuffers.VisibleCells cells = runtime.activeVisibleCellsForTest();
+        for (int i = 0; i < cells.size(); i++) {
+            assertTrue(cells.cellIdAt(i) > 0);
+            assertTrue(cells.cellIdAt(i) != 0x09);
+            assertTrue(cells.worldXAt(i) >= cameraX - 0x10);
+            assertTrue(cells.worldXAt(i) < cameraX + 0x150);
+            assertTrue(cells.worldYAt(i) >= cameraY - 0x10);
+            assertTrue(cells.worldYAt(i) < cameraY + 0xF0);
+        }
     }
 
     @Test
     void runtimeUsesSharedMachineAnchorForCageAndDisplay() {
-        RuntimeManager.createGameplay();
+        TestEnvironment.activeGameplayMode();
         SonicConfigurationService.getInstance().setConfigValue(SonicConfiguration.MAIN_CHARACTER_CODE, "tails");
 
         AbstractPlayableSprite originalPlayer = new Tails("tails", (short) 0x460, (short) 0x430);
@@ -313,7 +431,7 @@ class TestS3kSlotBonusStageRuntime {
 
     @Test
     void machineDisplayAnchorDoesNotRotateWithStageAngle() {
-        RuntimeManager.createGameplay();
+        TestEnvironment.activeGameplayMode();
         SonicConfigurationService.getInstance().setConfigValue(SonicConfiguration.MAIN_CHARACTER_CODE, "tails");
 
         AbstractPlayableSprite originalPlayer = new Tails("tails", (short) 0x460, (short) 0x430);
@@ -338,7 +456,7 @@ class TestS3kSlotBonusStageRuntime {
 
     @Test
     void goalExitReportsCompletedProviderFadeAfterRomExitFadeCompletes() {
-        RuntimeManager.createGameplay();
+        TestEnvironment.activeGameplayMode();
         SonicConfigurationService.getInstance().setConfigValue(SonicConfiguration.MAIN_CHARACTER_CODE, "tails");
 
         AbstractPlayableSprite originalPlayer = new Tails("tails", (short) 0x460, (short) 0x430);
@@ -361,7 +479,7 @@ class TestS3kSlotBonusStageRuntime {
 
     @Test
     void lateRuntimeRenderPassDoesNotDrawMachineFacePanel() throws Exception {
-        RuntimeManager.createGameplay();
+        TestEnvironment.activeGameplayMode();
         SonicConfigurationService.getInstance().setConfigValue(SonicConfiguration.MAIN_CHARACTER_CODE, "tails");
 
         AbstractPlayableSprite originalPlayer = new Tails("tails", (short) 0x460, (short) 0x430);
@@ -381,7 +499,7 @@ class TestS3kSlotBonusStageRuntime {
 
     @Test
     void shutdownRestoresOriginalPlayerAndCameraFocus() {
-        RuntimeManager.createGameplay();
+        TestEnvironment.activeGameplayMode();
         SonicConfigurationService.getInstance().setConfigValue(SonicConfiguration.MAIN_CHARACTER_CODE, "tails");
 
         Tails originalPlayer = new Tails("tails", (short) 0x460, (short) 0x430);
@@ -406,7 +524,7 @@ class TestS3kSlotBonusStageRuntime {
 
     @Test
     void shutdownRestoresOriginalPlayerOnBootstrapRuntimeAfterCurrentRuntimeRecreation() {
-        GameRuntime bootstrapRuntime = RuntimeManager.createGameplay();
+        GameplayModeContext bootstrapMode = TestEnvironment.activeGameplayMode();
         SonicConfigurationService.getInstance().setConfigValue(SonicConfiguration.MAIN_CHARACTER_CODE, "tails");
 
         Tails originalPlayer = new Tails("tails", (short) 0x460, (short) 0x430);
@@ -416,25 +534,30 @@ class TestS3kSlotBonusStageRuntime {
         S3kSlotBonusStageRuntime runtime = new S3kSlotBonusStageRuntime();
         runtime.bootstrap();
 
-        assertTrue(bootstrapRuntime.getSpriteManager().getSprite("tails") instanceof S3kSlotBonusPlayer);
-        assertNotSame(originalPlayer, bootstrapRuntime.getSpriteManager().getSprite("tails"));
-        assertSame(bootstrapRuntime.getSpriteManager().getSprite("tails"), bootstrapRuntime.getCamera().getFocusedSprite());
+        assertTrue(bootstrapMode.getSpriteManager().getSprite("tails") instanceof S3kSlotBonusPlayer);
+        assertNotSame(originalPlayer, bootstrapMode.getSpriteManager().getSprite("tails"));
+        assertSame(bootstrapMode.getSpriteManager().getSprite("tails"), bootstrapMode.getCamera().getFocusedSprite());
 
-        GameRuntime recreatedRuntime = RuntimeManager.createGameplay();
+        GameplayModeContext recreatedMode = TestEnvironment.activeGameplayMode();
 
         runtime.shutdown();
 
-        assertSame(originalPlayer, bootstrapRuntime.getSpriteManager().getSprite("tails"));
-        assertSame(originalPlayer, bootstrapRuntime.getCamera().getFocusedSprite());
+        // After the session ownership migration, GameplayModeContext owns the
+        // disposable managers (SpriteManager, Camera, etc.). The active
+        // gameplay mode owns those managers, so both references resolve to the same
+        // SpriteManager. The shutdown invariant — original player restored to
+        // the active SpriteManager — is preserved through that shared view.
+        assertSame(originalPlayer, bootstrapMode.getSpriteManager().getSprite("tails"));
+        assertSame(originalPlayer, bootstrapMode.getCamera().getFocusedSprite());
         assertFalse(runtime.isInitialized());
-        assertTrue(recreatedRuntime.getSpriteManager().getSprite("tails") == null);
+        assertSame(originalPlayer, recreatedMode.getSpriteManager().getSprite("tails"));
 
-        bootstrapRuntime.destroy();
+        bootstrapMode.destroy();
     }
 
     @Test
     void bootstrapInitializesAllSubsystems() {
-        RuntimeManager.createGameplay();
+        TestEnvironment.activeGameplayMode();
         SonicConfigurationService.getInstance().setConfigValue(SonicConfiguration.MAIN_CHARACTER_CODE, "tails");
 
         AbstractPlayableSprite originalPlayer = new Tails("tails", (short) 0x460, (short) 0x430);
@@ -475,24 +598,10 @@ class TestS3kSlotBonusStageRuntime {
     }
 
     private void installRenderer(RecordingRenderer renderer, String artKey) throws Exception {
-        levelManagerField = LevelManager.class.getDeclaredField("levelManager");
-        levelManagerField.setAccessible(true);
-        originalLevelManager = (LevelManager) levelManagerField.get(null);
         ObjectRenderManager renderManager = new ObjectRenderManager(new StubObjectArtProvider(renderer, artKey));
-        levelManagerField.set(null, new TestLevelManager(renderManager));
-    }
-
-    private static final class TestLevelManager extends LevelManager {
-        private final ObjectRenderManager renderManager;
-
-        private TestLevelManager(ObjectRenderManager renderManager) {
-            this.renderManager = renderManager;
-        }
-
-        @Override
-        public ObjectRenderManager getObjectRenderManager() {
-            return renderManager;
-        }
+        Field objectRenderManagerField = LevelManager.class.getDeclaredField("objectRenderManager");
+        objectRenderManagerField.setAccessible(true);
+        objectRenderManagerField.set(TestEnvironment.activeGameplayMode().getLevelManager(), renderManager);
     }
 
     private static final class StubObjectArtProvider implements ObjectArtProvider {
@@ -588,3 +697,4 @@ class TestS3kSlotBonusStageRuntime {
         }
     }
 }
+

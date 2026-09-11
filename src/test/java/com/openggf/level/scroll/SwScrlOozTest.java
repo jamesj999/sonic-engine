@@ -1,9 +1,9 @@
 package com.openggf.level.scroll;
 
-import org.junit.Before;
+import org.junit.jupiter.api.BeforeEach;
 import com.openggf.game.sonic2.scroll.ParallaxTables;
 import com.openggf.game.sonic2.scroll.SwScrlOoz;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import com.openggf.game.sonic2.scroll.ParallaxTables;
 import com.openggf.game.sonic2.scroll.SwScrlOoz;
 
@@ -16,7 +16,7 @@ import com.openggf.game.sonic2.scroll.SwScrlOoz;
 import com.openggf.game.sonic2.scroll.ParallaxTables;
 import com.openggf.game.sonic2.scroll.SwScrlOoz;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import com.openggf.game.sonic2.scroll.ParallaxTables;
 import com.openggf.game.sonic2.scroll.SwScrlOoz;
 import static com.openggf.level.scroll.M68KMath.*;
@@ -56,7 +56,7 @@ public class SwScrlOozTest {
             0x01, 0x02
     };
 
-    @Before
+    @BeforeEach
     public void setUp() throws IOException {
         mockRom = new MockOozRom();
         ParallaxTables tables = new ParallaxTables(mockRom);
@@ -74,13 +74,13 @@ public class SwScrlOozTest {
     public void testFactoryHeightBelowThreshold() {
         // All values < 80 produce factory = 48
         int height = handler.calculateFactoryHeightForTest(50);
-        assertEquals("Factory height at bgY=50", 48, height);
+        assertEquals(48, height, "Factory height at bgY=50");
 
         height = handler.calculateFactoryHeightForTest(0);
-        assertEquals("Factory height at bgY=0", 48, height);
+        assertEquals(48, height, "Factory height at bgY=0");
 
         height = handler.calculateFactoryHeightForTest(79);
-        assertEquals("Factory height at bgY=79", 48, height);
+        assertEquals(48, height, "Factory height at bgY=79");
     }
 
     /**
@@ -91,7 +91,7 @@ public class SwScrlOozTest {
     @Test
     public void testFactoryHeightAtLowerThreshold() {
         int height = handler.calculateFactoryHeightForTest(80);
-        assertEquals("Factory height at bgY=80", 48, height);
+        assertEquals(48, height, "Factory height at bgY=80");
     }
 
     /**
@@ -108,15 +108,15 @@ public class SwScrlOozTest {
     public void testFactoryHeightMiddleRange() {
         // bgY = 100: factory = 100 - 32 = 68
         int height = handler.calculateFactoryHeightForTest(100);
-        assertEquals("Factory height at bgY=100", 68, height);
+        assertEquals(68, height, "Factory height at bgY=100");
 
         // bgY = 200: factory = 200 - 32 = 168
         height = handler.calculateFactoryHeightForTest(200);
-        assertEquals("Factory height at bgY=200", 168, height);
+        assertEquals(168, height, "Factory height at bgY=200");
 
         // bgY = 255: factory = 255 - 32 = 223
         height = handler.calculateFactoryHeightForTest(255);
-        assertEquals("Factory height at bgY=255", 223, height);
+        assertEquals(223, height, "Factory height at bgY=255");
     }
 
     /**
@@ -128,11 +128,11 @@ public class SwScrlOozTest {
     public void testFactoryHeightAtUpperThreshold() {
         // bgY = 256: d1 = 176, no borrow on second sub, d1 = 0, factory = 224
         int height = handler.calculateFactoryHeightForTest(256);
-        assertEquals("Factory height at bgY=256", 224, height);
+        assertEquals(224, height, "Factory height at bgY=256");
 
         // bgY = 300: same logic
         height = handler.calculateFactoryHeightForTest(300);
-        assertEquals("Factory height at bgY=300", 224, height);
+        assertEquals(224, height, "Factory height at bgY=300");
     }
 
     /**
@@ -153,9 +153,9 @@ public class SwScrlOozTest {
             } else {
                 expected = 224;
             }
-            assertEquals("Factory height at bgY=" + bgY, expected, height);
-            assertTrue("Factory height should be <= 224 at bgY=" + bgY, height <= 224);
-            assertTrue("Factory height should be > 0 at bgY=" + bgY, height > 0);
+            assertEquals(expected, height, "Factory height at bgY=" + bgY);
+            assertTrue(height <= 224, "Factory height should be <= 224 at bgY=" + bgY);
+            assertTrue(height > 0, "Factory height should be > 0 at bgY=" + bgY);
         }
     }
 
@@ -170,15 +170,15 @@ public class SwScrlOozTest {
 
         // cameraY = 0 -> bgY = (0 >> 3) + 0x50 = 0x50 = 80
         handler.update(hScroll, 0, 0, 0, 0);
-        assertEquals("vscrollFactorBG at cameraY=0", (short) 0x50, handler.getVscrollFactorBG());
+        assertEquals((short) 0x50, handler.getVscrollFactorBG(), "vscrollFactorBG at cameraY=0");
 
         // cameraY = 256 -> bgY = (256 >> 3) + 0x50 = 32 + 80 = 112
         handler.update(hScroll, 0, 256, 0, 0);
-        assertEquals("vscrollFactorBG at cameraY=256", (short) 112, handler.getVscrollFactorBG());
+        assertEquals((short) 112, handler.getVscrollFactorBG(), "vscrollFactorBG at cameraY=256");
 
         // cameraY = 1024 -> bgY = (1024 >> 3) + 0x50 = 128 + 80 = 208
         handler.update(hScroll, 0, 1024, 0, 0);
-        assertEquals("vscrollFactorBG at cameraY=1024", (short) 208, handler.getVscrollFactorBG());
+        assertEquals((short) 208, handler.getVscrollFactorBG(), "vscrollFactorBG at cameraY=1024");
     }
 
     // ==================== Per-Scanline Buffer Tests ====================
@@ -193,7 +193,7 @@ public class SwScrlOozTest {
         for (int i = 0; i < VISIBLE_LINES; i++) {
             // Just verify they're set (not undefined)
             // With cameraX = 0 and bgX = 0, all non-ripple values should be 0
-            assertNotNull("Line " + i + " should be filled", hScroll[i]);
+            assertNotNull(hScroll[i], "Line " + i + " should be filled");
         }
     }
 
@@ -207,7 +207,7 @@ public class SwScrlOozTest {
         short expectedFg = (short) -cameraX;
         for (int i = 0; i < VISIBLE_LINES; i++) {
             short fg = unpackFG(hScroll[i]);
-            assertEquals("Line " + i + " FG scroll", expectedFg, fg);
+            assertEquals(expectedFg, fg, "Line " + i + " FG scroll");
         }
     }
 
@@ -225,8 +225,8 @@ public class SwScrlOozTest {
         // FG = -256, BG = -64 for factory region
         short fgScroll = unpackFG(hScroll[223]);
         short bgScroll = unpackBG(hScroll[223]);
-        assertEquals("FG scroll should be -256", (short) -256, fgScroll);
-        assertEquals("Factory BG scroll should be -64 (quarter speed tracking)", (short) -64, bgScroll);
+        assertEquals((short) -256, fgScroll, "FG scroll should be -256");
+        assertEquals((short) -64, bgScroll, "Factory BG scroll should be -64 (quarter speed tracking)");
 
         // Move camera further to 512 (total delta from start = 512)
         handler.update(hScroll, 512, 0, 2, 0);
@@ -235,8 +235,8 @@ public class SwScrlOozTest {
         // FG = -512, BG = -128
         fgScroll = unpackFG(hScroll[223]);
         bgScroll = unpackBG(hScroll[223]);
-        assertEquals("FG scroll should be -512", (short) -512, fgScroll);
-        assertEquals("Factory BG scroll should be -128 (quarter speed tracking)", (short) -128, bgScroll);
+        assertEquals((short) -512, fgScroll, "FG scroll should be -512");
+        assertEquals((short) -128, bgScroll, "Factory BG scroll should be -128 (quarter speed tracking)");
     }
 
     // ==================== Heat-Haze Phase Animation Tests ====================
@@ -249,8 +249,7 @@ public class SwScrlOozTest {
 
         // Frame 5: (5 + 3) & 7 = 0 -> should decrement
         handler.update(hScroll, 0, 0, 5, 0);
-        assertEquals("Phase should decrement at frame 5",
-                initialPhase - 1, handler.getHeatHazePhaseCounter());
+        assertEquals(initialPhase - 1, handler.getHeatHazePhaseCounter(), "Phase should decrement at frame 5");
     }
 
     @Test
@@ -262,27 +261,27 @@ public class SwScrlOozTest {
 
         // Frame 0: (0 + 3) & 7 = 3 -> no update
         handler.update(hScroll, 0, 0, 0, 0);
-        assertEquals("Phase should not change at frame 0", 10, handler.getHeatHazePhaseCounter());
+        assertEquals(10, handler.getHeatHazePhaseCounter(), "Phase should not change at frame 0");
 
         // Frame 1: (1 + 3) & 7 = 4 -> no update
         handler.update(hScroll, 0, 0, 1, 0);
-        assertEquals("Phase should not change at frame 1", 10, handler.getHeatHazePhaseCounter());
+        assertEquals(10, handler.getHeatHazePhaseCounter(), "Phase should not change at frame 1");
 
         // Frame 2: (2 + 3) & 7 = 5 -> no update
         handler.update(hScroll, 0, 0, 2, 0);
-        assertEquals("Phase should not change at frame 2", 10, handler.getHeatHazePhaseCounter());
+        assertEquals(10, handler.getHeatHazePhaseCounter(), "Phase should not change at frame 2");
 
         // Frame 3: (3 + 3) & 7 = 6 -> no update
         handler.update(hScroll, 0, 0, 3, 0);
-        assertEquals("Phase should not change at frame 3", 10, handler.getHeatHazePhaseCounter());
+        assertEquals(10, handler.getHeatHazePhaseCounter(), "Phase should not change at frame 3");
 
         // Frame 4: (4 + 3) & 7 = 7 -> no update
         handler.update(hScroll, 0, 0, 4, 0);
-        assertEquals("Phase should not change at frame 4", 10, handler.getHeatHazePhaseCounter());
+        assertEquals(10, handler.getHeatHazePhaseCounter(), "Phase should not change at frame 4");
 
         // Frame 5: (5 + 3) & 7 = 0 -> UPDATE
         handler.update(hScroll, 0, 0, 5, 0);
-        assertEquals("Phase should decrement at frame 5", 9, handler.getHeatHazePhaseCounter());
+        assertEquals(9, handler.getHeatHazePhaseCounter(), "Phase should decrement at frame 5");
     }
 
     @Test
@@ -298,8 +297,7 @@ public class SwScrlOozTest {
         }
 
         // Expected: 100 - 3 = 97 (updates at frames 5, 13, 21)
-        assertEquals("Phase should decrement 3 times in 24 frames",
-                97, handler.getHeatHazePhaseCounter());
+        assertEquals(97, handler.getHeatHazePhaseCounter(), "Phase should decrement 3 times in 24 frames");
     }
 
     @Test
@@ -308,7 +306,7 @@ public class SwScrlOozTest {
         for (int i = 0; i < OOZ_RIPPLE_DATA.length; i++) {
             int expected = OOZ_RIPPLE_DATA[i];
             int actual = handler.getRippleValueForTest(i);
-            assertEquals("Ripple value at index " + i, expected, actual);
+            assertEquals(expected, actual, "Ripple value at index " + i);
         }
     }
 
@@ -339,7 +337,7 @@ public class SwScrlOozTest {
             }
         }
 
-        assertTrue("Different phases should produce different ripple values", foundDifference);
+        assertTrue(foundDifference, "Different phases should produce different ripple values");
     }
 
     // ==================== Segment Ordering Tests ====================
@@ -371,10 +369,8 @@ public class SwScrlOozTest {
         // With phase = 0, we read ripple[0..32] which has these non-zero values:
         // Index 0: 1, 1: 2, 2: 1, 3: 3, 4: 1, 5: 2, 6: 2, 7: 1, 8: 2, 9: 3, 10: 1, 11: 2, 12: 1, 13: 2, 14: 0, 15: 0...
         // At least 14 of the first 33 values are non-zero
-        assertTrue("Should have some non-zero BG values from heat-haze, got " + nonZeroCount,
-                nonZeroCount > 0);
-        assertTrue("Should have at most 33 non-zero values (heat-haze region)",
-                nonZeroCount <= 33);
+        assertTrue(nonZeroCount > 0, "Should have some non-zero BG values from heat-haze, got " + nonZeroCount);
+        assertTrue(nonZeroCount <= 33, "Should have at most 33 non-zero values (heat-haze region)");
     }
 
     /**
@@ -398,7 +394,7 @@ public class SwScrlOozTest {
         // 8 + 8 + 8 + 7 + 33 + 8 + 8 + 8 + 8 + 8 + 72 = 176
 
         int sum = 8 + 8 + 8 + 7 + 33 + 8 + 8 + 8 + 8 + 8 + 72;
-        assertEquals("Non-factory segments total", 176, sum);
+        assertEquals(176, sum, "Non-factory segments total");
 
         // Factory fills remaining: 224 - 176 = 48 at minimum
         // But factory height is variable based on threshold logic
@@ -431,7 +427,7 @@ public class SwScrlOozTest {
 
         // Outputs should be identical
         for (int i = 0; i < VISIBLE_LINES; i++) {
-            assertEquals("Line " + i + " should be identical", hScroll1[i], hScroll2[i]);
+            assertEquals(hScroll1[i], hScroll2[i], "Line " + i + " should be identical");
         }
     }
 
@@ -455,16 +451,16 @@ public class SwScrlOozTest {
         // FG scroll should be different
         short fg1 = unpackFG(hScroll1[0]);
         short fg2 = unpackFG(hScroll2[0]);
-        assertNotEquals("FG scroll should differ after camera movement", fg1, fg2);
+        assertNotEquals(fg1, fg2, "FG scroll should differ after camera movement");
 
         // BG scroll in factory region should also differ (tracks at quarter speed)
         short bgFactory1 = unpackBG(hScroll1[223]);
         short bgFactory2 = unpackBG(hScroll2[223]);
-        assertNotEquals("Factory BG scroll should differ after camera movement", bgFactory1, bgFactory2);
+        assertNotEquals(bgFactory1, bgFactory2, "Factory BG scroll should differ after camera movement");
 
         // Factory should track at quarter speed: delta should be ~250
         int factoryDelta = Math.abs(bgFactory2 - bgFactory1);
-        assertEquals("Factory should track at quarter FG speed", 250, factoryDelta);
+        assertEquals(250, factoryDelta, "Factory should track at quarter FG speed");
 
         // Cloud regions have additional shifts, so they move even slower
         // Find a line in a cloud region
@@ -473,8 +469,7 @@ public class SwScrlOozTest {
 
         // Verify parallax effect: cloud scrolls slower than factory
         int cloudDelta = Math.abs(bgCloud2 - bgCloud1);
-        assertTrue("Cloud should scroll slower than factory (parallax effect), cloud=" + cloudDelta + ", factory=" + factoryDelta,
-                cloudDelta < factoryDelta);
+        assertTrue(cloudDelta < factoryDelta, "Cloud should scroll slower than factory (parallax effect), cloud=" + cloudDelta + ", factory=" + factoryDelta);
     }
 
     // ==================== Mock ROM ====================
@@ -498,3 +493,5 @@ public class SwScrlOozTest {
         }
     }
 }
+
+

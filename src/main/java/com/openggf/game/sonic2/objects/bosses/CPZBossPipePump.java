@@ -7,6 +7,8 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -17,7 +19,7 @@ import java.util.List;
  * ROM Reference: s2.asm Obj5D (ROUTINE_PIPE_PUMP = 0x06)
  * Animates pumping motion as liquid is sucked up.
  */
-public class CPZBossPipePump extends AbstractObjectInstance {
+public class CPZBossPipePump extends AbstractObjectInstance implements RewindRecreatable {
 
     private static final int SUB_ANIMATE = 2;
     private static final int SUB_END = 4;
@@ -54,8 +56,19 @@ public class CPZBossPipePump extends AbstractObjectInstance {
         animate();  // Initialize mappingFrame to correct first frame for this anim
     }
 
+    private CPZBossPipePump(ObjectSpawn spawn) {
+        this(spawn, null, null);
+    }
+
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        Sonic2CPZBossInstance boss = CpzBossRewindLinks.nearestBoss(ctx);
+        CPZBossPipe pipe = CpzBossRewindLinks.nearestPipe(ctx);
+        return pipe == null ? null : new CPZBossPipePump(ctx.spawn(), boss, pipe);
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) {
             return;
@@ -106,16 +119,19 @@ public class CPZBossPipePump extends AbstractObjectInstance {
             return;
         }
 
+        // ROM Obj5D_Pipe_Pump_4 (docs/s2disasm/s2.asm:62199-62218): after
+        // `subq.b #1,Obj5D_timer3 / beq.s +`, the would-be repeat branch writes
+        // anim/timer/routine_secondary/y_offset but has NO rts — it FALLS
+        // THROUGH to `+`, which switches the control object to
+        // Obj5D_Pipe_Retract and `jmpto DeleteObject`s the pump head
+        // unconditionally. The two-pass pump that `timer3 = 2` implies never
+        // happens on hardware: every pump cycle is a single pass, and the
+        // repeat writes are dead stores into an object that deletes itself the
+        // same frame. Honouring the repeat kept the pipe control alive through
+        // the boss defeat, where its Obj5D_PipeSegment_End conversion drew a
+        // RandomNumber the ROM never draws (CPZ2 capsule stream desync).
         timer3--;
-        if (timer3 != 0) {
-            anim = 2;
-            timer = 0x12;
-            routineSecondary = SUB_ANIMATE;
-            yOffset = 0x58;
-            animate();  // Sync mappingFrame with new anim before returning
-            return;
-        }
-
+        parentPipe.beginRetractFromPump();
         setDestroyed(true);
     }
 

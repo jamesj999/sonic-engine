@@ -12,6 +12,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class TestS3kSlotStageController {
 
     @Test
+    void spikeSoundCounterUsesUnsignedWordAndResetsOnStageBootstrap() {
+        S3kSlotStageState state = S3kSlotStageState.bootstrap();
+        S3kSlotStageController controller = new S3kSlotStageController(state);
+        state.setScalarIndex2(0xFFFF);
+        controller.advanceSpikePayout();
+        assertEquals(0, state.scalarIndex2());
+        state.setScalarIndex2(0x8000);
+        assertTrue(controller.consumeSpikeSound());
+        assertEquals(0, state.scalarIndex2());
+        state.setScalarIndex2(5);
+        controller.bootstrap();
+        assertEquals(0, state.scalarIndex2());
+    }
+
+    @Test
     void bootstrapResetsAngleStateAfterMovement() {
         S3kSlotStageController controller = new S3kSlotStageController();
         AbstractPlayableSprite player = S3kSlotBonusPlayer.create("tails", (short) 0, (short) 0, newRuntime());
@@ -219,3 +234,5 @@ class TestS3kSlotStageController {
     }
 
 }
+
+

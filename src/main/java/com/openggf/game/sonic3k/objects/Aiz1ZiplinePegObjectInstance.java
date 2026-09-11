@@ -6,6 +6,8 @@ import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.PlaceholderObjectInstance;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 
 import java.util.List;
@@ -17,12 +19,16 @@ import java.util.List;
  * Uses level patterns (art_tile base 0x324, palette 2).
  * ROM priority: 0x380 → bucket 7.
  */
-public class Aiz1ZiplinePegObjectInstance extends AbstractObjectInstance {
-
+public class Aiz1ZiplinePegObjectInstance extends AbstractObjectInstance implements RewindRecreatable {
     private PlaceholderObjectInstance placeholder;
 
     public Aiz1ZiplinePegObjectInstance(ObjectSpawn spawn) {
         super(spawn, "AIZ1ZiplinePeg");
+    }
+
+    @Override
+    public Aiz1ZiplinePegObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new Aiz1ZiplinePegObjectInstance(ctx.spawn());
     }
 
     @Override

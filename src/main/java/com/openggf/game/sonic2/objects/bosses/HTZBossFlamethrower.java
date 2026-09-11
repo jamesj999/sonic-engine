@@ -4,7 +4,12 @@ import com.openggf.game.PlayableEntity;
 import com.openggf.game.sonic2.Sonic2ObjectArtKeys;
 import com.openggf.game.sonic2.constants.Sonic2ObjectIds;
 import com.openggf.graphics.GLCommand;
+import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
+import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreateObjectLinks;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.objects.boss.AbstractBossChild;
 import com.openggf.level.render.PatternSpriteRenderer;
@@ -24,7 +29,8 @@ import java.util.List;
  * $FF in AnimateSprite means restart from beginning (infinite loop).
  * The flamethrower is destroyed via MarkObjGone when it drifts off-screen.
  */
-public class HTZBossFlamethrower extends AbstractBossChild implements TouchResponseProvider {
+public class HTZBossFlamethrower extends AbstractBossChild
+        implements TouchResponseProvider, RewindRecreatable {
 
     // Movement constants (ROM: s2.asm:63869-63892)
     /** Horizontal offset from boss (ROM: move.w #-$70,d0) */
@@ -44,11 +50,25 @@ public class HTZBossFlamethrower extends AbstractBossChild implements TouchRespo
     private static final int TILE_FIRE_1 = CHILD_TILE_BASE_OFFSET + 0x61;
     private static final int TILE_FIRE_2 = CHILD_TILE_BASE_OFFSET + 0x62;
 
+    // Unlike SYZBossSpike, this child DOES live-track its own position: update() calls
+    // updateDynamicSpawn() every frame, so its captured spawn is always its current
+    // drifted position, not a frozen construction-time snapshot. It spawns at the boss
+    // plus X_OFFSET (0x70 = 112px) and flies at X_VELOCITY (4px/frame) until
+    // !isOnScreen() self-destroys it (a full, un-margined 320px-wide camera window), so
+    // the farthest it can ever legitimately be from the boss position at any live moment
+    // is bounded by that spawn offset plus roughly a screen width of travel. Round up
+    // generously (0x1C0 = 448px) since the boss itself is not perfectly camera-centered.
+    private static final int MAX_PARENT_RELINK_DISTANCE = 0x1C0;
+
     // State
     private int xVel;
     private boolean flipped;
     private int animFrame;
     private int animTimer;
+
+    HTZBossFlamethrower(ObjectSpawn spawn) {
+        this(new Sonic2HTZBossInstance(spawn), spawn.x(), spawn.y(), false);
+    }
 
     public HTZBossFlamethrower(Sonic2HTZBossInstance parent, int spawnX, int spawnY, boolean flipped) {
         super(parent, "HTZ Flamethrower", 4, Sonic2ObjectIds.HTZ_BOSS);
@@ -70,9 +90,24 @@ public class HTZBossFlamethrower extends AbstractBossChild implements TouchRespo
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        // The flamethrower is a child of the HTZ boss. If the boss was defeated/swept
+        // before capture there is no parent to bind to, so drop the child rather than
+        // throw. acceptDestroyed relinks to a restored-but-destroyed boss so the
+        // child preserves its captured relationship. Bounded (see
+        // MAX_PARENT_RELINK_DISTANCE) since this child's live-tracked captured position
+        // is directly comparable to the boss's.
+        return RewindRecreateObjectLinks.nearestObject(
+                        ctx, Sonic2HTZBossInstance.class, true, MAX_PARENT_RELINK_DISTANCE)
+                .<AbstractObjectInstance>map(boss ->
+                        new HTZBossFlamethrower(boss, ctx.spawn().x(), ctx.spawn().y(), false))
+                .orElse(null);
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        if (!shouldUpdate(frameCounter)) {
+        if (!shouldUpdate(vIntRunCount)) {
             return;
         }
 

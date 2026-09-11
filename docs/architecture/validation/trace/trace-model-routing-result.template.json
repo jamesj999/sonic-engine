@@ -1,0 +1,167 @@
+{
+  "$schema": "./trace-model-routing-result.schema.json",
+  "schemaVersion": 1,
+  "policy": "terra-sol",
+  "caseId": "s2-cnz-shared-sidekick-control",
+  "baseCommit": "7fe4b63fa7f411515fe20c8dd5d1b5f9321d2b7f",
+  "resultTree": "1111111111111111111111111111111111111111",
+  "patch": {
+    "path": "target/trace-model-routing/terra-sol/s2-cnz-shared-sidekick-control.patch",
+    "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+  },
+  "stages": [
+    {
+      "name": "discovery",
+      "requestedModel": "gpt-5.6-terra",
+      "requestedEffort": "low",
+      "actualModel": "gpt-5.6-terra",
+      "actualEffort": "low",
+      "complexity": "mechanical",
+      "confidence": "high",
+      "beforeFrame": null,
+      "afterFrame": null,
+      "status": "completed",
+      "attemptCount": 0,
+      "regressionCount": 0,
+      "sharedSurfaces": [],
+      "needsEscalation": false,
+      "escalationReasons": [],
+      "modelRoute": [
+        "gpt-5.6-terra/low"
+      ],
+      "usage": {
+        "inputTokens": null,
+        "cachedInputTokens": null,
+        "outputTokens": null,
+        "reasoningTokens": null
+      },
+      "durationMs": null
+    },
+    {
+      "name": "triage",
+      "requestedModel": "gpt-5.6-terra",
+      "requestedEffort": "medium",
+      "actualModel": "gpt-5.6-terra",
+      "actualEffort": "medium",
+      "complexity": "shared",
+      "confidence": "high",
+      "beforeFrame": 202,
+      "afterFrame": 202,
+      "status": "completed",
+      "attemptCount": 0,
+      "regressionCount": 0,
+      "sharedSurfaces": [
+        "SidekickCpuController"
+      ],
+      "needsEscalation": false,
+      "escalationReasons": [],
+      "modelRoute": [
+        "gpt-5.6-terra/medium"
+      ],
+      "usage": {
+        "inputTokens": null,
+        "cachedInputTokens": null,
+        "outputTokens": null,
+        "reasoningTokens": null
+      },
+      "durationMs": null
+    },
+    {
+      "name": "fix",
+      "requestedModel": "gpt-5.6-sol",
+      "requestedEffort": "high",
+      "actualModel": "gpt-5.6-sol",
+      "actualEffort": "high",
+      "complexity": "shared",
+      "confidence": "high",
+      "beforeFrame": 202,
+      "afterFrame": 3675,
+      "status": "advanced",
+      "attemptCount": 1,
+      "regressionCount": 0,
+      "sharedSurfaces": [
+        "SidekickCpuController"
+      ],
+      "needsEscalation": false,
+      "escalationReasons": [],
+      "modelRoute": [
+        "gpt-5.6-sol/high"
+      ],
+      "usage": {
+        "inputTokens": null,
+        "cachedInputTokens": null,
+        "outputTokens": null,
+        "reasoningTokens": null
+      },
+      "durationMs": null
+    },
+    {
+      "name": "verify",
+      "requestedModel": "gpt-5.6-sol",
+      "requestedEffort": "high",
+      "actualModel": "gpt-5.6-sol",
+      "actualEffort": "high",
+      "complexity": "shared",
+      "confidence": "high",
+      "beforeFrame": 3675,
+      "afterFrame": 3675,
+      "status": "advanced",
+      "attemptCount": 0,
+      "regressionCount": 0,
+      "sharedSurfaces": [
+        "SidekickCpuController"
+      ],
+      "needsEscalation": false,
+      "escalationReasons": [],
+      "modelRoute": [
+        "gpt-5.6-sol/high"
+      ],
+      "usage": {
+        "inputTokens": null,
+        "cachedInputTokens": null,
+        "outputTokens": null,
+        "reasoningTokens": null
+      },
+      "durationMs": null
+    }
+  ],
+  "tokens": {
+    "inputTokens": null,
+    "cachedInputTokens": null,
+    "outputTokens": null,
+    "reasoningTokens": null
+  },
+  "wallTimeMs": null,
+  "totalAttemptCount": 1,
+  "beforeFrontier": {
+    "frame": 202,
+    "field": "tails_x"
+  },
+  "afterFrontier": {
+    "frame": 3675,
+    "field": "tails_cpu_ctrl2_held"
+  },
+  "status": "advanced",
+  "accepted": true,
+  "genuine": true,
+  "reviewerRejected": false,
+  "romCitations": [
+    {
+      "path": "docs/s2disasm/s2.asm",
+      "lineStart": 123,
+      "lineEnd": 130,
+      "symbol": "Obj15",
+      "claim": "the ROM updates the sidekick control state before collision"
+    }
+  ],
+  "verificationResults": [
+    {
+      "testClass": "com.openggf.tests.trace.s2.TestS2Ehz1TraceReplay",
+      "outcome": "passed",
+      "reportKind": "surefire",
+      "report": "/tmp/trace-model-routing-retained-terra-sol-s2-cnz-shared-sidekick-control-20260728T120000Z-1234-ABCDEF/verification-reports/com.openggf.tests.trace.s2.TestS2Ehz1TraceReplay.txt",
+      "reportSha256": "2222222222222222222222222222222222222222222222222222222222222222"
+    }
+  ],
+  "regressions": []
+}

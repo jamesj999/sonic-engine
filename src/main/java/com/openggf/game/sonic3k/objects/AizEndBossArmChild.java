@@ -2,10 +2,11 @@ package com.openggf.game.sonic3k.objects;
 
 import com.openggf.game.PlayableEntity;
 import com.openggf.game.sonic3k.Sonic3kObjectArtKeys;
-import com.openggf.game.sonic3k.audio.Sonic3kSfx;
 import com.openggf.graphics.GLCommand;
-import com.openggf.level.objects.ObjectManager;
+import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.boss.AbstractBossChild;
 import com.openggf.level.render.PatternSpriteRenderer;
 
@@ -29,7 +30,7 @@ import java.util.logging.Logger;
  *   <li>Wait for retract signal (parent bit 1 cleared)</li>
  * </ol>
  */
-public class AizEndBossArmChild extends AbstractBossChild {
+public class AizEndBossArmChild extends AbstractBossChild implements RewindRecreatable {
     private static final Logger LOG = Logger.getLogger(AizEndBossArmChild.class.getName());
 
     private static final int ROUTINE_INIT = 0;
@@ -38,11 +39,12 @@ public class AizEndBossArmChild extends AbstractBossChild {
     private static final int ROUTINE_ANIMATE_OPEN = 6;
     private static final int ROUTINE_WAIT_FIRE = 8;
     private static final int ROUTINE_WAIT_RETRACT = 10;
-
     private final AizEndBossInstance boss;
-    private final int offsetX;
-    private final int offsetY;
-    private final int subtype;
+    // Non-final so the generic rewind field capturer reapplies them after the
+    // recreate hook passes placeholder 0/0/0.
+    private int offsetX;
+    private int offsetY;
+    private int subtype;
     private int routine;
     private int mappingFrame;
     private int waitTimer;
@@ -62,8 +64,24 @@ public class AizEndBossArmChild extends AbstractBossChild {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity player) {
-        if (!beginUpdate(frameCounter)) return;
+    public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        AizEndBossInstance restoredBoss = AizEndBossRewindLinks.nearestBoss(ctx);
+        if (restoredBoss == null) {
+            return null;
+        }
+        AizEndBossArmChild restored = new AizEndBossArmChild(restoredBoss, 0, 0, 0);
+        if (ctx.spawn() != null) {
+            restored.setPosition(ctx.spawn().x(), ctx.spawn().y());
+            restored.updateDynamicSpawn();
+        }
+        AizEndBossRewindLinks.seedCapturedScalars(restored, ctx);
+        restoredBoss.rewindAttachArmChild(restored);
+        return restored;
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity player) {
+        if (!shouldUpdate(vIntRunCount)) return;
 
         // ROM Refresh_ChildPositionAdjusted negates child_dx when the parent is X-flipped.
         int signedOffsetX = boss.isFacingRight() ? -offsetX : offsetX;
@@ -84,10 +102,8 @@ public class AizEndBossArmChild extends AbstractBossChild {
         switch (routine) {
             case ROUTINE_INIT -> {
                 // Spawn propeller child (ROM: ChildObjDat_69D26, offset -$1C, 0)
-                ObjectManager objectManager = services().objectManager();
-                if (objectManager != null) {
-                    propeller = new AizEndBossPropellerChild(boss, this, subtype);
-                    objectManager.addDynamicObject(propeller);
+                if (services().objectManager() != null) {
+                    propeller = spawnChild(() -> new AizEndBossPropellerChild(boss, this, subtype));
                 }
                 routine = ROUTINE_WAIT_REVEAL;
             }
@@ -155,5 +171,13 @@ public class AizEndBossArmChild extends AbstractBossChild {
 
     public AizEndBossPropellerChild getPropeller() {
         return propeller;
+    }
+
+    void rewindAttachPropeller(AizEndBossPropellerChild propeller) {
+        this.propeller = propeller;
+    }
+
+    int rewindSubtype() {
+        return subtype;
     }
 }

@@ -7,26 +7,26 @@ import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectServices;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.StubObjectServices;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 public class TestBlueBallsObjectInstance {
 
-    @Before
+    @BeforeEach
     public void setUp() {
         GraphicsManager.getInstance().initHeadless();
         BlueBallsObjectInstance.resetGlobalState();
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         BlueBallsObjectInstance.resetGlobalState();
         GraphicsManager.getInstance().resetState();
@@ -63,13 +63,46 @@ public class TestBlueBallsObjectInstance {
                 .filter(BlueBallsObjectInstance.class::isInstance)
                 .map(BlueBallsObjectInstance.class::cast)
                 .toList();
-        assertEquals("parent plus three low-nibble siblings should be active", 4, balls.size());
+        assertEquals(4, balls.size(), "parent plus three low-nibble siblings should be active");
         for (BlueBallsObjectInstance ball : balls) {
             if (ball != parent) {
-                assertTrue("Obj1D uses AllocateObjectAfterCurrent, so siblings must be after parent",
-                        ball.getSlotIndex() > parent.getSlotIndex());
+                assertTrue(ball.getSlotIndex() > parent.getSlotIndex(), "Obj1D uses AllocateObjectAfterCurrent, so siblings must be after parent");
             }
         }
+    }
+
+    @Test
+    public void placedParentWaitsOnePassAfterInitBeforeMoving() {
+        ObjectManager[] holder = new ObjectManager[1];
+        Camera camera = cameraAtOrigin();
+        ObjectServices services = new StubObjectServices() {
+            @Override
+            public ObjectManager objectManager() {
+                return holder[0];
+            }
+
+            @Override
+            public Camera camera() {
+                return camera;
+            }
+        };
+        ObjectManager manager = new ObjectManager(
+                List.of(), null, 0, null, null,
+                GraphicsManager.getInstance(), camera, services);
+        holder[0] = manager;
+
+        ObjectSpawn spawn = new ObjectSpawn(0x80, 0x100, Sonic2ObjectIds.BLUE_BALLS,
+                0, 0, false, 0);
+        BlueBallsObjectInstance parent = new BlueBallsObjectInstance(spawn, "BlueBalls");
+        manager.addDynamicObjectAtSlot(parent, 40);
+
+        manager.update(0, null, List.of(), 1);
+        assertEquals(0x100, parent.getY(),
+                "Obj1D_Init initializes and returns without running Obj1D_Wait");
+
+        manager.update(0, null, List.of(), 2);
+        assertEquals(0x100, parent.getY(),
+                "Obj1D_Wait only arms routine 4; Obj1D_MoveArc starts on the following pass");
     }
 
     private static Camera cameraAtOrigin() {
@@ -82,3 +115,4 @@ public class TestBlueBallsObjectInstance {
         return camera;
     }
 }
+

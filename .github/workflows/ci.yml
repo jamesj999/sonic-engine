@@ -4,9 +4,150 @@ on:
   pull_request:
     branches:
       - develop
+  push:
+    branches:
+      - '**'
+  workflow_dispatch:
 
 jobs:
+  # Pull requests only. Branch/trailer/changelog policy is enforced locally by
+  # .githooks on every commit, and on master by release.yml's own ci-push step;
+  # running it again on every branch push only produced failure mail for upkeep
+  # that had not been staged yet, on branches nobody was proposing to merge.
+  policy:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate pull request branch policy
+        if: github.event_name == 'pull_request'
+        run: bash .githooks/validate-policy.sh ci-pr "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" "${{ github.base_ref }}" "${{ github.head_ref }}"
+
+  # The fast lane. This is the only Maven job an ordinary branch push reaches,
+  # and allBranchPushPolicyShouldRemainLightweight in TestBuildToolingGuard pins
+  # it that way, so it has to stay bounded.
+  #
+  # `-Psmoke` is the default suite minus ten @Tag("slow-suite") classes that were
+  # 93 percent of its wall clock (about 23 of 25 minutes); see the profile comment
+  # in pom.xml. What remains still executes every other test class in the tree, so
+  # this is a real regression check rather than a token compile, and it finishes in
+  # a few minutes instead of half an hour.
+  #
+  # It is a subset, not a replacement: the full `test` job below still runs the
+  # tagged classes on pull requests and manual dispatch, and release.yml runs
+  # the whole suite before a release.
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Run smoke suite
+        shell: bash
+        run: mvn -Dmse=off -Psmoke test -B
+
+      - name: Assert smoke coverage
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          reports = sorted(Path("target/surefire-reports").glob("TEST-*.xml"))
+          total = 0
+          skipped = 0
+          for report in reports:
+              root = ET.parse(report).getroot()
+              total += int(root.attrib.get("tests", "0"))
+              skipped += int(root.attrib.get("skipped", "0"))
+
+          executed = total - skipped
+          # The full suite executes about 14,300. A smoke run that drops below
+          # this is excluding far more than the tagged oracle sweeps -- most
+          # likely a profile or tag typo that quietly selected almost nothing.
+          minimum = 10000
+          if executed < minimum:
+              print(
+                  f"Smoke CI executed too few tests: executed={executed} "
+                  f"total={total} skipped={skipped} minimum={minimum}",
+                  file=sys.stderr)
+              sys.exit(1)
+
+          print(f"Smoke coverage: executed={executed} total={total} skipped={skipped}")
+          PY
+
+  # Structural guards: the invariants no trace fixture can prove. About nine
+  # minutes, so like the full `test` job they are off the push path -- pull
+  # requests and manual dispatch only.
+  #
+  # They were pinned to develop and master pushes because work lands there by
+  # direct push and TestS1S2PlcComparisonOnlyGuard had sat red for weeks with
+  # nothing selecting it. That is a real risk being reaccepted here: a guard can
+  # now go red on develop and stay red until someone opens a pull request or
+  # dispatches a run. `smoke` does not select the guard classes -- the default
+  # Surefire execution excludes them by name convention -- so it will not catch
+  # this for you. Run `mvn -Dmse=off -Pguards test -B` locally before delivery.
+  guards:
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    env:
+      LUA_BIN: lua5.4
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # TestBuildToolingGuard replays real history against the policy script
+          # -- `git show 53de63da2:...` for the machine-local-path grandfather
+          # baseline, and `git switch -c <branch> ccdd33edf4...` to rebuild the
+          # cutover repositories its branch-policy cases need. actions/checkout
+          # defaults to a depth-1 clone, so those commits are absent and eight
+          # cases fail in CI while passing on any developer clone. The policy
+          # job above already takes full history for the same reason.
+          fetch-depth: 0
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Install Lua 5.4
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes lua5.4
+          "$LUA_BIN" -e 'assert(_VERSION == "Lua 5.4")'
+
+      - name: Run structural guards
+        run: mvn -Dmse=off -Pguards test -B
+
+  # The complete suite, including the @Tag("slow-suite") classes `smoke` drops.
+  # About 26 minutes, so it is off the push path: pull requests and manual
+  # dispatch (Actions -> CI -> Run workflow).
+  #
+  # It did run on develop pushes for a while, after develop carried a
+  # deterministic red test and an order-dependent one unnoticed. Nothing runs
+  # it unattended now -- there is no schedule -- so a regression confined to
+  # the tagged oracle sweeps waits for a pull request or for someone to
+  # dispatch a run. `smoke` is the only thing left on the push path, and it
+  # keeps the per-push signal for everything outside the tagged classes.
+  #
+  # ROM-free either way: ROM-gated classes error only when a path is supplied.
   test:
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -20,4 +161,236 @@ jobs:
           cache: maven
 
       - name: Run tests
-        run: mvn test -B
+        id: default-tests
+        shell: bash
+        run: mvn -Dmse=off test -B
+
+      - name: Assert default test coverage
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          reports = sorted(Path("target/surefire-reports").glob("TEST-*.xml"))
+          total = 0
+          skipped = 0
+          for report in reports:
+              root = ET.parse(report).getroot()
+              total += int(root.attrib.get("tests", "0"))
+              skipped += int(root.attrib.get("skipped", "0"))
+
+          executed = total - skipped
+          minimum = 1000
+          if executed < minimum:
+              print(
+                  f"Default CI executed too few tests: executed={executed} "
+                  f"total={total} skipped={skipped} minimum={minimum}",
+                  file=sys.stderr)
+              sys.exit(1)
+
+          print(f"Default CI coverage: executed={executed} total={total} skipped={skipped}")
+          PY
+
+  develop-trace-replay:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, release-fixtures]
+    env:
+      SONIC1_ROM_PATH: ${{ vars.SONIC1_ROM_PATH }}
+      SONIC2_ROM_PATH: ${{ vars.SONIC2_ROM_PATH }}
+      S3K_ROM_PATH: ${{ vars.S3K_ROM_PATH }}
+    steps:
+      - name: Checkout develop
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Verify trace replay ROM paths
+        shell: bash
+        run: |
+          missing=0
+          for var in SONIC1_ROM_PATH SONIC2_ROM_PATH S3K_ROM_PATH; do
+            value="${!var:-}"
+            if [ -z "$value" ]; then
+              echo "::error ::$var must point to a develop trace-validation ROM fixture."
+              missing=1
+            elif [ ! -f "$value" ]; then
+              echo "::error ::$var points to '$value', but that file does not exist."
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Run trace replay profile
+        id: develop-trace
+        shell: bash
+        run: |
+          mvn -Dmse=off test -Ptrace-replay -B \
+            -Dsonic1.rom.path="${SONIC1_ROM_PATH}" \
+            -Dsonic2.rom.path="${SONIC2_ROM_PATH}" \
+            -Ds3k.rom.path="${S3K_ROM_PATH}"
+
+      - name: Assert trace replay coverage
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import fnmatch
+          import json
+          import re
+          import os
+          import sys
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          surefire_dir = Path("target/surefire-reports")
+          trace_dir = Path("target/trace-reports")
+          source_root = Path("src/test/java/com/openggf/tests/trace")
+          diagnostic_excludes = (
+              "Debug*.java",
+              "*Debug*.java",
+              "*Probe.java",
+              "*Probe*.java",
+          )
+
+          def is_diagnostic(source):
+              return any(fnmatch.fnmatch(source.name, pattern)
+                         for pattern in diagnostic_excludes)
+
+          expected_policy_reports = set()
+          expected_trace_reports = set()
+          required_keep_green_reports = {
+              "TEST-com.openggf.tests.trace.s2.TestS2SpecialStageTraceReplay.xml",
+          }
+          for source in sorted(source_root.rglob("Test*.java")):
+              if is_diagnostic(source):
+                  continue
+              rel = source.relative_to(Path("src/test/java")).with_suffix("")
+              report_name = f"TEST-{'.'.join(rel.parts)}.xml"
+              expected_policy_reports.add(report_name)
+              if source.name.endswith("TraceReplay.java"):
+                  expected_trace_reports.add(report_name)
+
+          untracked_keep_green = required_keep_green_reports - expected_trace_reports
+          if untracked_keep_green:
+              print("Required keep-green traces are outside the replay profile:", file=sys.stderr)
+              for name in sorted(untracked_keep_green):
+                  print(name, file=sys.stderr)
+              sys.exit(1)
+
+          missing_policy = [
+              name for name in sorted(expected_policy_reports)
+              if not (surefire_dir / name).exists()
+          ]
+          if missing_policy:
+              print("Missing expected trace policy reports:", file=sys.stderr)
+              for name in missing_policy:
+                  print(f"{surefire_dir / name}", file=sys.stderr)
+              sys.exit(1)
+
+          missing_trace = [
+              name for name in sorted(expected_trace_reports)
+              if not (surefire_dir / name).exists()
+          ]
+          if missing_trace:
+              print("Missing expected trace replay reports:", file=sys.stderr)
+              for name in missing_trace:
+                  print(f"{surefire_dir / name}", file=sys.stderr)
+              sys.exit(1)
+
+          expected_trace_executed = 0
+          for report_name in sorted(expected_policy_reports):
+              report = surefire_dir / report_name
+              root = ET.parse(report).getroot()
+              tests = int(root.attrib.get("tests", "0"))
+              skipped = int(root.attrib.get("skipped", "0"))
+              executed = tests - skipped
+              if executed <= 0:
+                  print(
+                      f"Expected trace report did not execute: {report} "
+                      f"tests={tests} skipped={skipped}",
+                      file=sys.stderr)
+                  sys.exit(1)
+              if report_name in expected_trace_reports:
+                  expected_trace_executed += executed
+
+          reports = sorted(surefire_dir.glob("com.openggf.tests.trace*TraceReplay.txt"))
+          total = 0
+          skipped = 0
+          skipped_reports = []
+          for report in reports:
+              text = report.read_text(encoding="utf-8", errors="replace")
+              match = re.search(r"Tests run: (\d+), Failures: \d+, Errors: \d+, Skipped: (\d+)", text)
+              if not match:
+                  continue
+              run_count = int(match.group(1))
+              skipped_count = int(match.group(2))
+              total += run_count
+              skipped += skipped_count
+              if skipped_count > 0:
+                  skipped_reports.append((report, skipped_count))
+
+          executed = total - skipped
+          if executed == 0:
+              print("Trace replay profile produced no executed ROM-backed trace tests", file=sys.stderr)
+              print(f"trace_reports={len(reports)} total={total} skipped={skipped}", file=sys.stderr)
+              sys.exit(1)
+
+          if skipped_reports:
+              print("Trace replay skipped tests are develop-blocking", file=sys.stderr)
+              for report, skipped_count in skipped_reports:
+                  print(f"{report}: skipped={skipped_count}", file=sys.stderr)
+              sys.exit(1)
+
+          required_ss_reports = sorted(
+              trace_dir.glob("special-stage/s2_special_stage_0-*.json"))
+          required_ss_reports = [
+              report for report in required_ss_reports
+              if not report.name.endswith(".owner.json")
+          ]
+          if not required_ss_reports:
+              print(
+                  "Missing owner-aware S2 special-stage keep-green report",
+                    file=sys.stderr)
+              sys.exit(1)
+          for required_ss_report in required_ss_reports:
+              required_ss_data = json.loads(required_ss_report.read_text(encoding="utf-8"))
+              required_ss_errors = int(required_ss_data.get("error_count", 0))
+              required_ss_warnings = int(required_ss_data.get("warning_count", 0))
+              if required_ss_errors > 0 or required_ss_warnings > 0:
+                  print(
+                      f"Required S2 special-stage keep-green trace is red: "
+                      f"report={required_ss_report} errors={required_ss_errors} "
+                      f"warnings={required_ss_warnings}",
+                      file=sys.stderr)
+                  sys.exit(1)
+
+          warning_reports = []
+          for report in sorted(trace_dir.rglob("*.json")):
+              if report.name.endswith(".owner.json"):
+                  continue
+              data = json.loads(report.read_text(encoding="utf-8"))
+              warning_count = int(data.get("warning_count", 0))
+              if warning_count > 0:
+                  warning_reports.append((report, warning_count))
+
+          if warning_reports:
+              print("Trace replay warnings are develop-blocking", file=sys.stderr)
+              for report, warning_count in warning_reports:
+                  print(f"{report}: warning_count={warning_count}", file=sys.stderr)
+              sys.exit(1)
+
+          print(
+              f"Develop trace replay coverage: executed={executed} total={total} "
+              f"expected_trace_executed={expected_trace_executed} "
+              f"expected_trace_reports={len(expected_trace_reports)}")
+          PY

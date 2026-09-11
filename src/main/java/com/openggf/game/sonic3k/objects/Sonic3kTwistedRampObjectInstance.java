@@ -1,13 +1,16 @@
 package com.openggf.game.sonic3k.objects;
 
-import com.openggf.configuration.SonicConfiguration;
-import com.openggf.configuration.SonicConfigurationService;
+import com.openggf.debug.DebugRenderContext;
 import com.openggf.game.sonic3k.constants.Sonic3kAnimationIds;
 import com.openggf.game.PlayableEntity;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
+import com.openggf.level.objects.ObjectPlayerParticipationPolicy;
+import com.openggf.level.objects.ObjectServices;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
 import java.util.List;
@@ -36,7 +39,7 @@ import java.util.List;
  * Direction is determined by renderFlags bit 0 (status bit 0 in ROM):
  * 0 = facing right, 1 = facing left.
  */
-public class Sonic3kTwistedRampObjectInstance extends AbstractObjectInstance {
+public class Sonic3kTwistedRampObjectInstance extends AbstractObjectInstance implements RewindRecreatable {
 
     /** Minimum horizontal speed required to trigger (0x400 = 1024 subpixels). */
     private static final int SPEED_THRESHOLD = 0x400;
@@ -65,7 +68,7 @@ public class Sonic3kTwistedRampObjectInstance extends AbstractObjectInstance {
     private static final float DEBUG_B = 0.8f;
 
     /** true when renderFlags bit 0 is set (ramp faces left). */
-    private final boolean facingLeft;
+    private boolean facingLeft;
 
     public Sonic3kTwistedRampObjectInstance(ObjectSpawn spawn) {
         super(spawn, "TwistedRamp");
@@ -74,9 +77,32 @@ public class Sonic3kTwistedRampObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public Sonic3kTwistedRampObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new Sonic3kTwistedRampObjectInstance(ctx.spawn());
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
+        ObjectServices ctx = tryServices();
+        if (ctx != null) {
+            List<PlayableEntity> players = ctx.playerQuery().playersFor(ObjectPlayerParticipationPolicy.NATIVE_P1_P2);
+            if (players.isEmpty() && playerEntity == null && !isOnScreenX()) {
+                setDestroyedByOffscreen();
+                return;
+            }
+            for (PlayableEntity entity : players) {
+                if (entity instanceof AbstractPlayableSprite playable) {
+                    checkAndLaunchPlayer(playable);
+                }
+            }
+            return;
+        }
+
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (player == null) {
+            if (!isOnScreenX()) {
+                setDestroyedByOffscreen();
+            }
             return;
         }
         checkAndLaunchPlayer(player);
@@ -172,11 +198,8 @@ public class Sonic3kTwistedRampObjectInstance extends AbstractObjectInstance {
         player.setFlipSpeed(4);
 
         // ROM: move.b #5,flip_type(a1) - corkscrew flip type
-        // Note: flip_type field not yet implemented in AbstractPlayableSprite.
-        // The flip angle/speed/remaining fields above provide the core rotation.
-        // flip_type=5 (corkscrew) can be added when the flip rendering system
-        // supports type-based rotation modes.
-        //
+        player.setFlipType(5);
+
         // ROM note: unlike springs (which negate flip_angle for left-facing players),
         // TwistedRamp uses the same positive values for ground_vel, flip_angle,
         // flip_speed, and flips_remaining regardless of facing direction.
@@ -191,11 +214,11 @@ public class Sonic3kTwistedRampObjectInstance extends AbstractObjectInstance {
 
     @Override
     public void appendRenderCommands(List<GLCommand> commands) {
-        // Only render debug wireframe when debug view is enabled
-        if (!isDebugViewEnabled()) {
-            return;
-        }
+        // Obj_TwistedRamp is an invisible trigger.
+    }
 
+    @Override
+    public void appendDebugRenderCommands(DebugRenderContext ctx) {
         int rampX = spawn.x();
         int rampY = spawn.y();
 
@@ -206,35 +229,23 @@ public class Sonic3kTwistedRampObjectInstance extends AbstractObjectInstance {
         int top = rampY + Y_MIN;
         int bottom = rampY + Y_MAX;
 
-        appendLine(commands, left, top, right, top);
-        appendLine(commands, right, top, right, bottom);
-        appendLine(commands, right, bottom, left, bottom);
-        appendLine(commands, left, bottom, left, top);
+        ctx.drawLine(left, top, right, top, DEBUG_R, DEBUG_G, DEBUG_B);
+        ctx.drawLine(right, top, right, bottom, DEBUG_R, DEBUG_G, DEBUG_B);
+        ctx.drawLine(right, bottom, left, bottom, DEBUG_R, DEBUG_G, DEBUG_B);
+        ctx.drawLine(left, bottom, left, top, DEBUG_R, DEBUG_G, DEBUG_B);
 
         // Draw direction arrow (points in the direction the ramp launches)
         int centerY = rampY;
         if (!facingLeft) {
             // Right-pointing arrow
-            appendLine(commands, rampX - 4, centerY, rampX + 4, centerY);
-            appendLine(commands, rampX + 4, centerY, rampX + 1, centerY - 3);
-            appendLine(commands, rampX + 4, centerY, rampX + 1, centerY + 3);
+            ctx.drawLine(rampX - 4, centerY, rampX + 4, centerY, DEBUG_R, DEBUG_G, DEBUG_B);
+            ctx.drawLine(rampX + 4, centerY, rampX + 1, centerY - 3, DEBUG_R, DEBUG_G, DEBUG_B);
+            ctx.drawLine(rampX + 4, centerY, rampX + 1, centerY + 3, DEBUG_R, DEBUG_G, DEBUG_B);
         } else {
             // Left-pointing arrow
-            appendLine(commands, rampX + 4, centerY, rampX - 4, centerY);
-            appendLine(commands, rampX - 4, centerY, rampX - 1, centerY - 3);
-            appendLine(commands, rampX - 4, centerY, rampX - 1, centerY + 3);
+            ctx.drawLine(rampX + 4, centerY, rampX - 4, centerY, DEBUG_R, DEBUG_G, DEBUG_B);
+            ctx.drawLine(rampX - 4, centerY, rampX - 1, centerY - 3, DEBUG_R, DEBUG_G, DEBUG_B);
+            ctx.drawLine(rampX - 4, centerY, rampX - 1, centerY + 3, DEBUG_R, DEBUG_G, DEBUG_B);
         }
-    }
-
-    private void appendLine(List<GLCommand> commands, int x1, int y1, int x2, int y2) {
-        commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
-                DEBUG_R, DEBUG_G, DEBUG_B, x1, y1, 0, 0));
-        commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
-                DEBUG_R, DEBUG_G, DEBUG_B, x2, y2, 0, 0));
-    }
-
-    private boolean isDebugViewEnabled() {
-        return SonicConfigurationService.getInstance()
-                .getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED);
     }
 }

@@ -15,7 +15,7 @@ import com.openggf.game.PlayableEntity;
 public abstract class GravityDebrisChild extends AbstractObjectInstance {
 
     protected final SubpixelMotion.State motionState;
-    protected final int gravity;
+    protected int gravity;
 
     /**
      * @param spawn   spawn point (initial position)
@@ -33,10 +33,10 @@ public abstract class GravityDebrisChild extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity player) {
+    public void update(int vIntRunCount, PlayableEntity player) {
         SubpixelMotion.moveSprite(motionState, gravity);
         if (!isOnScreen()) {
-            setDestroyed(true);
+            ObjectLifetimeOps.expireDynamic(this);
         }
     }
 

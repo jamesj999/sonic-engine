@@ -3,6 +3,8 @@ package com.openggf.game.sonic2.menu;
 import com.openggf.graphics.GraphicsManager;
 import com.openggf.level.Pattern;
 
+import java.util.Objects;
+
 /**
  * ROM-accurate animator for the Sonic/Miles menu background (Anim_SonicMilesBG).
  */
@@ -24,10 +26,10 @@ public class MenuBackgroundAnimator {
     private int timer;
     private int frameIndex;
 
-    public MenuBackgroundAnimator(Pattern[] patterns, int patternBase) {
+    public MenuBackgroundAnimator(Pattern[] patterns, GraphicsManager graphicsManager, int patternBase) {
         this.patterns = patterns;
+        this.graphicsManager = Objects.requireNonNull(graphicsManager, "graphicsManager");
         this.patternBase = patternBase;
-        this.graphicsManager = GraphicsManager.getInstance();
         this.timer = 0;
         this.frameIndex = 0;
     }

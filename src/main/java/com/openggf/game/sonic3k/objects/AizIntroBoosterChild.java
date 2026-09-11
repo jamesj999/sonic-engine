@@ -1,9 +1,11 @@
 package com.openggf.game.sonic3k.objects;
 
-import com.openggf.game.PlayableEntity;
-import java.util.logging.Logger;
 import com.openggf.camera.Camera;
+import com.openggf.game.PlayableEntity;
+import com.openggf.game.rewind.RewindStateful;
+import java.util.logging.Logger;
 import com.openggf.graphics.GLCommand;
+import com.openggf.level.objects.ObjectServices;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -21,7 +23,7 @@ import java.util.List;
  *
  * Not spawned as a dynamic object — the plane child manages update/render directly.
  */
-public class AizIntroBoosterChild {
+public class AizIntroBoosterChild implements RewindStateful<AizIntroBoosterChild.RewindState> {
 
     private static final Logger LOG = Logger.getLogger(AizIntroBoosterChild.class.getName());
 
@@ -43,6 +45,8 @@ public class AizIntroBoosterChild {
     private int animTimer;
     private int animIndex;
 
+    public record RewindState(int currentX, int currentY, int animTimer, int animIndex) {}
+
     public AizIntroBoosterChild(AizIntroPlaneChild parent, int xOffset, int yOffset, int[] animSequence) {
         this.parent = parent;
         this.xOffset = xOffset;
@@ -52,7 +56,7 @@ public class AizIntroBoosterChild {
         this.animIndex = 0;
     }
 
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // Follow parent plane position with fixed offset
         currentX = parent.getX() + xOffset;
@@ -69,8 +73,8 @@ public class AizIntroBoosterChild {
         }
     }
 
-    public void appendRenderCommands(List<GLCommand> commands, Camera camera) {
-        PatternSpriteRenderer renderer = AizIntroArtLoader.getPlaneRenderer();
+    public void appendRenderCommands(List<GLCommand> commands, Camera camera, ObjectServices services) {
+        PatternSpriteRenderer renderer = AizIntroArtLoader.getPlaneRenderer(services);
         if (renderer == null || !renderer.isReady()) return;
         int frame = animSequence[animIndex];
         // Screen-space coordinates use the ROM +128 sprite-table bias.
@@ -97,5 +101,18 @@ public class AizIntroBoosterChild {
 
     public int getAnimFrame() {
         return animSequence[animIndex];
+    }
+
+    @Override
+    public RewindState captureRewindStateValue() {
+        return new RewindState(currentX, currentY, animTimer, animIndex);
+    }
+
+    @Override
+    public void restoreRewindStateValue(RewindState state) {
+        currentX = state.currentX();
+        currentY = state.currentY();
+        animTimer = state.animTimer();
+        animIndex = state.animIndex();
     }
 }

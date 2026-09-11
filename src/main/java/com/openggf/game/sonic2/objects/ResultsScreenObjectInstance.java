@@ -1,14 +1,17 @@
 package com.openggf.game.sonic2.objects;
 
 import com.openggf.camera.Camera;
+import com.openggf.game.save.SaveReason;
 import com.openggf.game.sonic2.audio.Sonic2Sfx;
 import com.openggf.game.sonic2.constants.Sonic2Constants;
+import com.openggf.game.sonic2.resources.Sonic2PlcService;
 import com.openggf.level.objects.AbstractResultsScreen;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.GraphicsManager;
 import com.openggf.level.Pattern;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpriteSheet;
+import com.openggf.level.objects.ZeroScalarArgsRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 
 import java.util.List;
@@ -26,7 +29,8 @@ import java.util.logging.Logger;
  * 3. WAIT: Brief pause after tally
  * 4. TRANSITION: Load next level
  */
-public class ResultsScreenObjectInstance extends AbstractResultsScreen {
+public class ResultsScreenObjectInstance extends AbstractResultsScreen
+        implements ZeroScalarArgsRewindRecreatable {
     private static final Logger LOGGER = Logger.getLogger(ResultsScreenObjectInstance.class.getName());
 
     // Time bonus table from s2.asm (TimeBonuses), indexed by (seconds / 15)
@@ -37,6 +41,25 @@ public class ResultsScreenObjectInstance extends AbstractResultsScreen {
     };
     private static final int PERFECT_BONUS_POINTS = 5000;
 
+    // Obj3A master sub-object slide geometry. Row 0 of Obj3A_SubObjectMetadata
+    // (docs/s2disasm/s2.asm:28159) is the row loc_140CE writes over the
+    // spawner's own slot, so it is the object whose routine-2 handler
+    // (loc_14102) decides when the whole screen leaves the slide.
+    // spriteScreenPositionX(0-96) and spriteScreenPositionXCentered(0) expand
+    // through docs/s2disasm/s2.macros.asm:276,280 with
+    // sprite_left_boundary = $80 and screen_width = 320
+    // (docs/s2disasm/s2.constants.asm:1051,1061).
+    private static final int ROM_MASTER_START_X = 0x80 + (0 - 96);
+    private static final int ROM_MASTER_TARGET_X = 0x80 + (320 / 2);
+    /** Obj34_MoveTowardsTargetPosition: moveq #$10,d0 (docs/s2disasm/s2.asm:27494). */
+    private static final int ROM_SLIDE_STEP_PIXELS = 0x10;
+    /**
+     * The one object pass that ROM {@code Obj3A} spends in the routine bumped
+     * by {@code loc_1419C} before {@code loc_14270} executes. Structural, from
+     * the routine split itself, not measured from any recording.
+     */
+    private static final int ROM_EXIT_ROUTINE_PASS = 1;
+
     // Bonus values
     private int timeBonus;
     private int ringBonus;
@@ -44,11 +67,13 @@ public class ResultsScreenObjectInstance extends AbstractResultsScreen {
     private boolean perfectBonus;
     private int perfectBonusRemaining;
 
-    // Input data
-    private final int elapsedTimeSeconds;
-    private final int ringCount;
-    private final int actNumber;
-    private final boolean allRingsCollected;
+    // Input data. Non-final so GenericFieldCapturer captures them and restoreObjectRewindState
+    // reapplies them after rewind recreate rebuilds this screen with placeholder ctor args
+    // (these gameplay-derived values are not encoded in the ObjectSpawn).
+    private int elapsedTimeSeconds;
+    private int ringCount;
+    private int actNumber;
+    private boolean allRingsCollected;
 
     // Screen-space positions for text elements (center of 320x224 screen)
     private static final int TEXT_Y_GOT_THROUGH = 56;
@@ -61,6 +86,8 @@ public class ResultsScreenObjectInstance extends AbstractResultsScreen {
     private int lastRingBonus = Integer.MIN_VALUE;
     private int lastTotalBonus = Integer.MIN_VALUE;
     private int lastPerfectBonus = Integer.MIN_VALUE;
+    /** True once Obj3A routine 0 has observed an empty PLC queue. */
+    private boolean plcReadinessPassed;
     private final Pattern blankDigit = new Pattern();
 
     public ResultsScreenObjectInstance(int elapsedTimeSeconds, int ringCount, int actNumber,
@@ -99,6 +126,19 @@ public class ResultsScreenObjectInstance extends AbstractResultsScreen {
     }
 
     @Override
+    public void update(int vIntRunCount, com.openggf.game.PlayableEntity player) {
+        if (!plcReadinessPassed) {
+            Sonic2PlcService plcService = services().gameService(Sonic2PlcService.class);
+            if (plcService != null && plcService.isBusy()) {
+                this.frameCounter = vIntRunCount;
+                return;
+            }
+            plcReadinessPassed = true;
+        }
+        super.update(vIntRunCount, player);
+    }
+
+    @Override
     protected TallyResult performTallyStep() {
         boolean anyRemaining = false;
         int totalIncrement = 0;
@@ -127,6 +167,52 @@ public class ResultsScreenObjectInstance extends AbstractResultsScreen {
         return tallyResult(anyRemaining, totalIncrement);
     }
 
+    /**
+     * ROM {@code Obj3A} has no slide-in duration constant. The master object
+     * sits in routine 2 ({@code loc_14102}) stepping through
+     * {@code Obj34_MoveTowardsTargetPosition} and advances to routine $A only
+     * once {@code x_pixel} equals {@code titlecard_x_target}
+     * (docs/s2disasm/s2.asm:27847-27853). The length is therefore derived from
+     * the row-0 start/target and the routine's fixed 16px step:
+     * (288 - 32) / 16 = 16 frames. The shared base class's 60-frame default is
+     * not a ROM value.
+     */
+    @Override
+    protected int getSlideDuration() {
+        return (ROM_MASTER_TARGET_X - ROM_MASTER_START_X) / ROM_SLIDE_STEP_PIXELS;
+    }
+
+    @Override
+    protected int getWaitDuration() {
+        return totalBonus >= 1000 ? 0x12C : 0xB4;
+    }
+
+    /**
+     * ROM {@code Obj3A} splits the post-tally wait and the level-order handoff
+     * across two object passes. {@code loc_1419C}
+     * (docs/s2disasm/s2.asm:27906-27913) decrements
+     * {@code anim_frame_duration}, and on the pass that reaches zero it only
+     * does {@code addq.b #2,routine(a0)} and falls into
+     * {@code BranchTo18_DisplaySprite} — it never reaches {@code loc_14270}.
+     * {@code loc_14270} (:27987-28004), which resolves {@code LevelOrder} and
+     * writes {@code Level_Inactive_flag}, therefore runs on the FOLLOWING
+     * pass. The shared base fires {@code onExitReady()} on the expiry pass
+     * itself, which is one pass early; hold it for exactly one pass here.
+     *
+     * <p>Sonic 1's {@code GotThroughCard} has the identical two-routine shape
+     * ({@code Got_Wait} bumps the routine and branches to {@code .display};
+     * {@code Got_NextLevel} sets {@code f_restart} the next pass —
+     * docs/s1disasm/_incObj/3A Got Through Card.asm:110-115,193-210). That site
+     * is left unchanged here; only the S2 object is modelled in this change.
+     */
+    @Override
+    protected void updateWait() {
+        if (stateTimer >= getWaitDuration() + ROM_EXIT_ROUTINE_PASS) {
+            state = STATE_EXIT;
+            onExitReady();
+        }
+    }
+
     @Override
     protected void onExitReady() {
         triggerFadeToBlack();
@@ -135,9 +221,27 @@ public class ResultsScreenObjectInstance extends AbstractResultsScreen {
     private void triggerFadeToBlack() {
         LOGGER.info("Results screen complete, starting fade to black");
 
+        // Persist progression before the level transition
+        services().requestSessionSave(SaveReason.PROGRESSION_SAVE);
+
+        // ROM loc_1429C writes move.w #1,(Level_Inactive_flag).w from inside
+        // RunObjects (docs/s2disasm/s2.asm:28003). Level_MainLoop tests the
+        // flag in the instruction immediately after jsr (RunObjects).l and
+        // branches back to Level (:5095-5097), so this pass never reaches
+        // JmpTo_DeformBgLayer (:5098) and Level's ClearPLC + Pal_FadeToBlack
+        // (:4764-4765) run with no further RunObjects at all — Pal_FadeToBlack
+        // is move.w #$15,d4 plus a dbf loop of WaitForVint + UpdateAllColours
+        // + RunPLC_RAM (:3369-3382). Raising the engine's equivalent here stops
+        // the post-act fade running as ordinary gameplay frames.
+        var levelManager = services().levelManager();
+        if (levelManager != null) {
+            levelManager.setLevelInactiveForTransition(true);
+        }
+
         // Start fade to black, then transition to next level when fade completes
         var fadeManager = services().fadeManager();
-        fadeManager.startFadeToBlack(() -> {
+        var marker = services().nativeFadeLifecycle().beginNativeBlockingFade();
+        fadeManager.startFadeToBlack(marker.wrapCompletion(() -> {
             // Mark this object as done
             setDestroyed(true);
 
@@ -146,10 +250,29 @@ public class ResultsScreenObjectInstance extends AbstractResultsScreen {
                 services().advanceToNextLevel();
             }
 
-            // Keep transition atomic: once the new level is loaded, immediately
-            // start the reveal fade to avoid remaining in HOLD_BLACK.
-            fadeManager.startFadeFromBlack(null);
-        });
+            // The ROM does not fade back in here. `Level:` runs
+            // ClearPLC + Pal_FadeToBlack (docs/s2disasm/s2.asm:4764-4765) and
+            // then, with no Pal_FadeFromBlack anywhere between `Level:`
+            // (:4757) and `Level_MainLoop` (:5087), writes the level palette
+            // straight to the active palette with `bsr.w PalLoad_Now` (:4881).
+            // So the title card appears at full intensity on the first V-blank
+            // of `Level_TtlCard`'s loop (:4914-4915). Running a reveal fade
+            // here instead holds PALETTE_FADE for its whole duration and
+            // pushes the first title-card-owned V-blank that many rows late.
+            // This is the same correction, and the same mechanism, as the
+            // special-stage results screen's clearOverlayForImmediatePaletteLoad
+            // (GameLoop#enterResultsScreen).
+            //
+            // That V-blank's ProcessDMAQueue does NOT retire the outgoing act's
+            // last player DPLC pair, as an earlier version of this comment
+            // claimed. `Level:`'s own VDP setup zeroes the queue head first --
+            // unguarded, so the shipped ROM runs it -- at s2.asm:4857-4858,
+            // which lies between `Level:` (:4757) and the title-card loop
+            // (:4914-4915). ProcessDMAQueue stops on a zero first word
+            // (s2.asm:1772-1790), so the ROM DISCARDS that pair; it never
+            // transfers. The timing argument above is unaffected.
+            fadeManager.clearOverlayForImmediatePaletteLoad();
+        }));
     }
 
     @Override
@@ -170,8 +293,9 @@ public class ResultsScreenObjectInstance extends AbstractResultsScreen {
             return;
         }
 
-        // Screen-space rendering - convert screen coords to world coords
-        int worldBaseX = camera.getX();
+        // Screen-space rendering - convert screen coords to world coords.
+        // xOffset() is (viewportWidth - 320) / 2; 0 at native 320 (byte-identical).
+        int worldBaseX = camera.getX() + xOffset();
         int worldBaseY = camera.getY();
 
         // All elements use ROM-accurate 16 pixels/frame slide speed
@@ -329,7 +453,7 @@ public class ResultsScreenObjectInstance extends AbstractResultsScreen {
             return;
         }
 
-        int worldBaseX = camera.getX();
+        int worldBaseX = camera.getX() + xOffset();
         int worldBaseY = camera.getY();
 
         // All elements use ROM-accurate 16 pixels/frame slide, starting at frame 0

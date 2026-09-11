@@ -6,6 +6,17 @@ import com.openggf.game.sonic2.audio.Sonic2Sfx;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.TouchActorContextPolicy;
+import com.openggf.level.objects.TouchAttackBouncePolicy;
+import com.openggf.level.objects.TouchCategoryDecodeMode;
+import com.openggf.level.objects.TouchOverlapStopPolicy;
+import com.openggf.level.objects.TouchResponseListener;
+import com.openggf.level.objects.TouchResponseProfile;
+import com.openggf.level.objects.TouchResponseProvider;
+import com.openggf.level.objects.TouchResponseResult;
+import com.openggf.level.objects.TouchShieldDeflectCapability;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.physics.Direction;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -16,34 +27,40 @@ import java.util.List;
  * Invisible trigger that spawns 4 falling leaf particles when the player
  * passes through at sufficient speed.
  * <p>
- * Based on Obj2C from s2.asm (lines 51533-51747).
+ * Based on Obj2C from s2.asm (docs/s2disasm/s2.asm:52030-52242).
  * <p>
  * Behavior:
  * - Invisible collision trigger (no visual rendering)
  * - Subtypes 0/1/2 select different collision box sizes
  * - Only triggers when player speed >= 0x200 in X or Y axis
  * - Spawns 4 LeafParticleObjectInstance children at player position
- * - 16-frame cooldown prevents rapid re-triggering
+ * - Uses Obj2C's collision_property bits and objoff_2E frame phase
  */
-public class LeavesGeneratorObjectInstance extends AbstractObjectInstance {
+public class LeavesGeneratorObjectInstance extends AbstractObjectInstance
+        implements TouchResponseProvider, TouchResponseListener, RewindRecreatable {
 
     // Minimum speed required to trigger leaves (0x200 in either axis)
     private static final int MIN_TRIGGER_SPEED = 0x200;
 
-    // Cooldown frames between triggers (ROM: 16 frames via $F mask)
-    private static final int COOLDOWN_FRAMES = 16;
+    // Obj2C_CollisionFlags (docs/s2disasm/s2.asm:52046-52049).
+    private static final int[] COLLISION_FLAGS = {0xD6, 0xD4, 0xD5};
 
-    // Collision box half-sizes based on subtype -> collision_flags mapping
-    // ROM uses Touch_Sizes table indexed by collision_flags byte
-    // 0xD6 -> ~24x32, 0xD4 -> ~16x16, 0xD5 -> ~20x20
-    private static final int[][] COLLISION_SIZES = {
-            {24, 32},  // Subtype 0 -> 0xD6
-            {16, 16},  // Subtype 1 -> 0xD4
-            {20, 20}   // Subtype 2 -> 0xD5
-    };
+    private static final int MAIN_TOUCH_BIT = 0x01;
+    private static final int SIDEKICK_TOUCH_BIT = 0x02;
+
+    private static final TouchResponseProfile TOUCH_RESPONSE_PROFILE = new TouchResponseProfile(
+            TouchCategoryDecodeMode.SONIC2_SPECIAL_PROPERTY,
+            true,
+            false,
+            false,
+            TouchShieldDeflectCapability.NONE,
+            0,
+            TouchAttackBouncePolicy.STANDARD_ENEMY_KILL,
+            TouchActorContextPolicy.MAIN_FULL_SIDEKICK_HURT_ONLY,
+            TouchOverlapStopPolicy.STOP_AFTER_FIRST_OVERLAP_FOR_ALL_ACTORS);
 
     // Velocity table for leaf particles (8.8 fixed point values)
-    // ROM: Obj2C_Speeds at line 26286
+    // ROM: Obj2C_Speeds (docs/s2disasm/s2.asm:52032-52037).
     private static final int[][] LEAF_VELOCITIES = {
             {-0x80, -0x80},  // Leaf 0: top-left
             {0xC0, -0x40},   // Leaf 1: top-right
@@ -51,68 +68,28 @@ public class LeavesGeneratorObjectInstance extends AbstractObjectInstance {
             {0x80, 0x80}     // Leaf 3: bottom-right
     };
 
-    private final int collisionHalfWidth;
-    private final int collisionHalfHeight;
-    // Cooldown timer to prevent rapid re-triggering
-    private int cooldownTimer = 0;
+    private int collisionFlags;
+    private int collisionProperty;
+    private int touchPhaseFrame;
 
     public LeavesGeneratorObjectInstance(ObjectSpawn spawn, String name) {
         super(spawn, name);
 
-        // Select collision size based on subtype (clamped to valid range)
         int subtype = spawn.subtype() & 0x03;
-        if (subtype >= COLLISION_SIZES.length) {
+        if (subtype >= COLLISION_FLAGS.length) {
             subtype = 0;
         }
-        this.collisionHalfWidth = COLLISION_SIZES[subtype][0];
-        this.collisionHalfHeight = COLLISION_SIZES[subtype][1];
+        this.collisionFlags = COLLISION_FLAGS[subtype];
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        // Decrement cooldown timer
-        if (cooldownTimer > 0) {
-            cooldownTimer--;
-        }
-
-        if (player == null) {
-            return;
-        }
-
-        // Check if player is within collision box
-        if (!isPlayerInCollisionBox(player)) {
-            return;
-        }
-
-        // Check if player has sufficient speed
-        if (!hasMinimumSpeed(player)) {
-            return;
-        }
-
-        // Check cooldown
-        if (cooldownTimer > 0) {
-            return;
-        }
-
-        // Trigger leaves!
-        spawnLeaves(player);
-        cooldownTimer = COOLDOWN_FRAMES;
+    public LeavesGeneratorObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new LeavesGeneratorObjectInstance(ctx.spawn(), getName());
     }
 
-    /**
-     * Checks if the player is within this trigger's collision box.
-     */
-    private boolean isPlayerInCollisionBox(AbstractPlayableSprite player) {
-        int objX = spawn.x();
-        int objY = spawn.y();
-        int playerX = player.getCentreX();
-        int playerY = player.getCentreY();
-
-        int dx = Math.abs(playerX - objX);
-        int dy = Math.abs(playerY - objY);
-
-        return dx < collisionHalfWidth && dy < collisionHalfHeight;
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
+        processTouchLatch(levelFrameCounter(vIntRunCount));
     }
 
     /**
@@ -126,9 +103,69 @@ public class LeavesGeneratorObjectInstance extends AbstractObjectInstance {
         return absXSpeed >= MIN_TRIGGER_SPEED || absYSpeed >= MIN_TRIGGER_SPEED;
     }
 
+    private void processTouchLatch(int frameCounter) {
+        int pending = collisionProperty & 0xFF;
+        if (pending == 0) {
+            touchPhaseFrame = 0;
+            return;
+        }
+
+        int phase = 0;
+        if (touchPhaseFrame != 0) {
+            phase = (touchPhaseFrame + frameCounter) & 0x0F;
+            if (phase != 0) {
+                phase = (phase + 8) & 0x0F;
+                if (phase == 0) {
+                    AbstractPlayableSprite sidekick = nativeSidekick();
+                    if ((pending & SIDEKICK_TOUCH_BIT) != 0 && sidekick != null) {
+                        maybeSpawnLeaves(sidekick, frameCounter);
+                    }
+                }
+                collisionProperty = 0;
+                return;
+            }
+        }
+
+        AbstractPlayableSprite main = mainPlayer();
+        if ((pending & MAIN_TOUCH_BIT) != 0 && main != null) {
+            maybeSpawnLeaves(main, frameCounter);
+        }
+        collisionProperty = 0;
+    }
+
+    private void maybeSpawnLeaves(AbstractPlayableSprite player, int frameCounter) {
+        if (!hasMinimumSpeed(player)) {
+            touchPhaseFrame = 0;
+            return;
+        }
+        spawnLeaves(player);
+        if (touchPhaseFrame == 0) {
+            touchPhaseFrame = frameCounter;
+        }
+    }
+
+    private int levelFrameCounter(int vIntRunCount) {
+        var levelManager = services().levelManager();
+        // Obj2C_Main reads the ROM Level_frame_counter during object execution
+        // (s2.asm:52090, 52109, 52116). LevelManager still stores the previous
+        // completed frame until its late-frame update, so object code observes
+        // the next visible level counter here.
+        return levelManager != null ? levelManager.getFrameCounter() : vIntRunCount;
+    }
+
+    private AbstractPlayableSprite mainPlayer() {
+        PlayableEntity main = services().playerQuery().mainPlayerOrNull();
+        return main instanceof AbstractPlayableSprite playable ? playable : null;
+    }
+
+    private AbstractPlayableSprite nativeSidekick() {
+        PlayableEntity sidekick = services().playerQuery().nativeP2OrNull();
+        return sidekick instanceof AbstractPlayableSprite playable ? playable : null;
+    }
+
     /**
      * Spawns 4 leaf particles at the player's position.
-     * ROM: Obj2C_CreateLeaves at line 51629
+     * ROM: Obj2C_CreateLeaves (docs/s2disasm/s2.asm:52126-52182).
      */
     private void spawnLeaves(AbstractPlayableSprite player) {
         if (services().objectManager() == null) {
@@ -162,13 +199,15 @@ public class LeavesGeneratorObjectInstance extends AbstractObjectInstance {
             // ROM: andi.b #1,d0 / move.b d0,mapping_frame(a1)
             int initialFrame = leafRandom.mappingFrame();
 
-            // Random initial oscillation angle
-            int initialAngle = leafRandom.angle();
+            // REV01 FixBugs=0 typo: Obj2C writes RandomNumber's d1 to
+            // angle(a0), the parent, not angle(a1), the child
+            // (docs/s2disasm/s2.asm:52169-52177). Child angle therefore
+            // starts at zero.
+            int initialAngle = 0;
 
-            LeafParticleObjectInstance leaf = new LeafParticleObjectInstance(
-                    leafX, leafY, xVel, yVel, initialFrame, initialAngle);
-
-            services().objectManager().addDynamicObject(leaf);
+            int finalXVel = xVel;
+            spawnFreeChild(() -> new LeafParticleObjectInstance(
+                    leafX, leafY, finalXVel, yVel, initialFrame, initialAngle));
         }
 
         // Play leaves sound
@@ -180,6 +219,47 @@ public class LeavesGeneratorObjectInstance extends AbstractObjectInstance {
             services().playSfx(Sonic2Sfx.LEAVES.id);
         } catch (Exception e) {
             // Don't let audio failure break game logic
+        }
+    }
+
+    @Override
+    public int getCollisionFlags() {
+        return collisionFlags;
+    }
+
+    @Override
+    public int getCollisionProperty() {
+        return collisionProperty;
+    }
+
+    @Override
+    public TouchResponseProfile getTouchResponseProfile() {
+        return TOUCH_RESPONSE_PROFILE;
+    }
+
+    @Override
+    public boolean usesSonic2TouchSpecialPropertyResponse() {
+        return true;
+    }
+
+    @Override
+    public boolean requiresContinuousTouchCallbacks() {
+        return true;
+    }
+
+    @Override
+    public boolean requiresRenderFlagForTouch() {
+        // S2 Touch_Loop scans collision_flags directly; Obj2C consumes
+        // collision_property in its own routine (s2.asm:52086-52117).
+        return false;
+    }
+
+    @Override
+    public void onTouchResponse(PlayableEntity playerEntity, TouchResponseResult result, int frameCounter) {
+        if (playerEntity instanceof AbstractPlayableSprite sprite && sprite.isCpuControlled()) {
+            collisionProperty |= SIDEKICK_TOUCH_BIT;
+        } else {
+            collisionProperty |= MAIN_TOUCH_BIT;
         }
     }
 

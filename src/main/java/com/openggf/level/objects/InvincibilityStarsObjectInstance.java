@@ -1,6 +1,6 @@
 package com.openggf.level.objects;
 
-import com.openggf.game.GameModuleRegistry;
+import com.openggf.game.GameModule;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
@@ -25,10 +25,11 @@ import java.util.List;
  * byte_1DB42: 32-entry orbit offset table. Each dc.w encodes X (high byte) and Y (low byte),
  * both sign-extended. Index is a byte value masked by 0x3E (0-62 even = 32 entries).
  */
-public class InvincibilityStarsObjectInstance extends AbstractObjectInstance implements PowerUpObject {
+public class InvincibilityStarsObjectInstance extends AbstractObjectInstance
+        implements PowerUpObject, PlayerBoundInvincibilityStarsRewindRecreatable {
     private final PlayableEntity player;
     private final PatternSpriteRenderer renderer;
-    private final boolean sonic1TrailMode;
+    private Boolean sonic1TrailMode;
 
     // ── ROM data: byte_1DB42 (orbit offset table, 32 entries) ──
     // dc.w $F00, $F03, $E06, $D08, $B0B, $80D, $60E, $30F,
@@ -101,6 +102,10 @@ public class InvincibilityStarsObjectInstance extends AbstractObjectInstance imp
     private final int[] s1AnimationIndices = new int[STAR_COUNT];
     private final int[] s1AnimationTimers = new int[STAR_COUNT];
 
+    InvincibilityStarsObjectInstance() {
+        this(null);
+    }
+
     public InvincibilityStarsObjectInstance(PlayableEntity player) {
         super(null, "InvincibilityStars");
         this.player = player;
@@ -111,7 +116,6 @@ public class InvincibilityStarsObjectInstance extends AbstractObjectInstance imp
         } else {
             this.renderer = null;
         }
-        this.sonic1TrailMode = isTrailMode();
 
         // Initialize S2 angle state from disassembly initial values
         this.angleByte = new int[STAR_COUNT];
@@ -122,8 +126,8 @@ public class InvincibilityStarsObjectInstance extends AbstractObjectInstance imp
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity player) {
-        if (sonic1TrailMode) {
+    public void update(int vIntRunCount, PlayableEntity player) {
+        if (isTrailModeEnabled()) {
             updateSonic1Trail();
             return;
         }
@@ -171,7 +175,7 @@ public class InvincibilityStarsObjectInstance extends AbstractObjectInstance imp
             return;
         }
 
-        if (sonic1TrailMode) {
+        if (isTrailModeEnabled()) {
             appendSonic1TrailRenderCommands();
             return;
         }
@@ -229,12 +233,17 @@ public class InvincibilityStarsObjectInstance extends AbstractObjectInstance imp
     int[] getAngleBytes() { return angleByte; }
     int[] getAnimCounters() { return animCounter; }
 
-    private static boolean isTrailMode() {
-        try {
-            return GameModuleRegistry.getCurrent().hasTrailInvincibilityStars();
-        } catch (Exception ignored) {
+    private boolean isTrailModeEnabled() {
+        if (sonic1TrailMode != null) {
+            return sonic1TrailMode;
+        }
+        ObjectServices currentServices = tryServices();
+        if (currentServices == null) {
             return false;
         }
+        GameModule module = currentServices.gameModule();
+        sonic1TrailMode = module != null && module.hasTrailInvincibilityStars();
+        return sonic1TrailMode;
     }
 
     @Override
@@ -254,5 +263,15 @@ public class InvincibilityStarsObjectInstance extends AbstractObjectInstance imp
     @Override
     public void setVisible(boolean visible) {
         // Invincibility stars are always visible while alive; no-op.
+    }
+
+    @Override
+    public boolean isInvincibilityStars() {
+        return true;
+    }
+
+    @Override
+    public PlayableEntity boundPlayer() {
+        return player;
     }
 }

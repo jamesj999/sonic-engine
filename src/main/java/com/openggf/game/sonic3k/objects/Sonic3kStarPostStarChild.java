@@ -1,10 +1,15 @@
 package com.openggf.game.sonic3k.objects;
 
+import com.openggf.game.rewind.RewindTransient;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
+import com.openggf.level.objects.ObjectInstance;
+import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 import com.openggf.game.PlayableEntity;
@@ -27,7 +32,7 @@ import java.util.List;
  * <p>
  * This matches the S2 CheckpointDongleInstance behavior with identical ROM math.
  */
-public class Sonic3kStarPostStarChild extends AbstractObjectInstance {
+public class Sonic3kStarPostStarChild extends AbstractObjectInstance implements RewindRecreatable {
 
     // ROM: move.w #$20,$36(a1) (line 61633)
     private static final int INITIAL_LIFETIME = 0x20;
@@ -40,10 +45,12 @@ public class Sonic3kStarPostStarChild extends AbstractObjectInstance {
 
     // ROM: move.b #2,mapping_frame(a1) (line 61632)
     private static final int STAR_FRAME = 2;
-
+    @RewindTransient(reason = "Structural parent link; relinked to the nearest live "
+            + "S3K starpost on rewind recreate. Scalar orbit state is reapplied by "
+            + "the generic field capturer.")
     private final Sonic3kStarPostObjectInstance parent;
-    private final int centerX;
-    private final int centerY;
+    private int centerX;
+    private int centerY;
     private int lifetime;
     private int angle;
     private int currentX;
@@ -66,7 +73,40 @@ public class Sonic3kStarPostStarChild extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        if (ctx == null || ctx.spawn() == null || ctx.objectServices() == null) {
+            return null;
+        }
+        Sonic3kStarPostObjectInstance liveParent =
+                findNearestLiveParentForRewind(ctx.objectServices().objectManager(), ctx.spawn());
+        return liveParent == null ? null : new Sonic3kStarPostStarChild(liveParent);
+    }
+
+    static Sonic3kStarPostObjectInstance findNearestLiveParentForRewind(
+            ObjectManager objectManager,
+            ObjectSpawn spawn) {
+        if (objectManager == null || spawn == null) {
+            return null;
+        }
+        Sonic3kStarPostObjectInstance best = null;
+        long bestDistance = Long.MAX_VALUE;
+        for (ObjectInstance instance : objectManager.getActiveObjects()) {
+            if (!(instance instanceof Sonic3kStarPostObjectInstance parent) || parent.isDestroyed()) {
+                continue;
+            }
+            long dx = parent.getCenterX() - spawn.x();
+            long dy = parent.getCenterY() - spawn.y();
+            long distance = dx * dx + dy * dy;
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = parent;
+            }
+        }
+        return best;
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) {
             return;

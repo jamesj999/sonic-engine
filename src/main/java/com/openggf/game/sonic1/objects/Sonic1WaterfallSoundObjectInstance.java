@@ -1,6 +1,7 @@
 package com.openggf.game.sonic1.objects;
 
 import com.openggf.audio.AudioManager;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.game.sonic1.audio.Sonic1Sfx;
 import com.openggf.game.PlayableEntity;
 import com.openggf.graphics.GLCommand;
@@ -26,7 +27,7 @@ import java.util.List;
  *       jsr     (PlaySound_Special).l
  * </pre>
  */
-public class Sonic1WaterfallSoundObjectInstance extends AbstractObjectInstance {
+public class Sonic1WaterfallSoundObjectInstance extends AbstractObjectInstance implements SpawnRewindRecreatable {
 
     // From disassembly: andi.b #$3F,d0 — play every 64 frames
     private static final int PLAY_INTERVAL_MASK = 0x3F;
@@ -36,10 +37,10 @@ public class Sonic1WaterfallSoundObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // WSnd_PlaySnd: play waterfall SFX every 64 frames
-        if ((frameCounter & PLAY_INTERVAL_MASK) == 0) {
+        if ((vIntRunCount & PLAY_INTERVAL_MASK) == 0) {
             services().playSfx(Sonic1Sfx.WATERFALL.id);
         }
     }

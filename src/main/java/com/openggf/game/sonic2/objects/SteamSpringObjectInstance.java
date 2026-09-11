@@ -6,17 +6,24 @@ import com.openggf.audio.GameSound;
 import com.openggf.debug.DebugRenderContext;
 import com.openggf.game.sonic2.Sonic2ObjectArtKeys;
 import com.openggf.game.sonic2.constants.Sonic2AnimationIds;
+import com.openggf.game.solid.PlayerSolidContactResult;
+import com.openggf.game.solid.SolidCheckpointBatch;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SolidContact;
+import com.openggf.level.objects.SolidExecutionMode;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.objects.SpringBounceHelper;
+
+import java.util.Map;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.Direction;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
@@ -41,7 +48,7 @@ import java.util.List;
  * </ul>
  */
 public class SteamSpringObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
 
     // ROM: move.w #-$A00,y_vel(a1) at loc_26798
     private static final int SPRING_VELOCITY = SpringBounceHelper.STRENGTH_YELLOW;
@@ -62,6 +69,9 @@ public class SteamSpringObjectInstance extends AbstractObjectInstance
     // ROM: addi.w #$28,x_pos(a1) / subi.w #$28,x_pos(a1) - steam puff X offsets
     private static final int STEAM_PUFF_X_OFFSET = 0x28;
 
+    // ROM Obj42_Init: move.b #7,mapping_frame(a0) for the level-art piston head.
+    private static final int PISTON_MAPPING_FRAME = 7;
+
     // State machine (routine_secondary values, divided by 2 for indexing)
     private static final int STATE_WAIT_BEFORE_RISE = 0;
     private static final int STATE_RISING = 1;
@@ -69,7 +79,7 @@ public class SteamSpringObjectInstance extends AbstractObjectInstance
     private static final int STATE_SINKING = 3;
 
     // Position tracking
-    private final int baseY;     // objoff_34: original Y position (before +16 offset)
+    private int baseY;           // objoff_34: original Y position (before +16 offset)
     private int yOffset;         // objoff_36: current Y offset from baseY (16 = fully lowered, 0 = fully risen)
     private int timer;           // objoff_32: countdown timer for wait states
     private int state;           // routine_secondary / 2
@@ -86,8 +96,46 @@ public class SteamSpringObjectInstance extends AbstractObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public SteamSpringObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new SteamSpringObjectInstance(ctx.spawn());
+    }
+
+    @Override
+    public SolidExecutionMode solidExecutionMode() {
+        // ROM: Obj42 loc_26688 calls SolidObject_Always_SingleCharacter at the
+        // start of every routine-2 update, BEFORE the state-machine branches
+        // update objoff_36 / y_pos (s2.asm:52030-52049). Use manual checkpoint
+        // so the solid resolution sees the spring's pre-move y_pos and the
+        // player's position update lags the spring by one frame, matching ROM.
+        return SolidExecutionMode.MANUAL_CHECKPOINT;
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
+        // ROM: s2.asm:52030-52049 -- loc_26688 calls SolidObject_Always_SingleCharacter
+        // BEFORE the state machine moves the spring's y_pos. This lets the player land
+        // / stand at the pre-move surface, then the spring updates its position; the
+        // player follows next frame via continued-riding carry.
+        //
+        // After the solid checkpoint, loc_26688 calls loc_2678E for each character
+        // that is now standing (p1/p2_standing_bit set) and the spring fires if its
+        // routine_secondary == 2 (RISING). Manual checkpoint mode suppresses the
+        // engine's compatibility onSolidContact callback, so we inspect the batch
+        // result directly and apply the spring here, then let the state machine run.
+        SolidCheckpointBatch batch = checkpointAll();
+        if (state == STATE_RISING) {
+            for (Map.Entry<PlayableEntity, PlayerSolidContactResult> entry
+                    : batch.perPlayer().entrySet()) {
+                PlayerSolidContactResult result = entry.getValue();
+                if (result == null || !result.standingNow()) {
+                    continue;
+                }
+                if (entry.getKey() instanceof AbstractPlayableSprite standing) {
+                    applySpring(standing);
+                }
+            }
+        }
         switch (state) {
             case STATE_WAIT_BEFORE_RISE -> updateWaitBeforeRise();
             case STATE_RISING -> updateRising();
@@ -146,47 +194,54 @@ public class SteamSpringObjectInstance extends AbstractObjectInstance
      * First puff at x+0x28, second at x-0x28 (with x_flip).
      */
     private void spawnSteamPuffs() {
-        ObjectManager objectManager = services().objectManager();
-        if (objectManager == null) {
-            return;
-        }
-
         int cx = spawn.x();
         int cy = baseY; // ROM: move.w objoff_34(a0),y_pos(a1)
 
         // Right puff (normal orientation)
-        SteamPuffObjectInstance rightPuff = new SteamPuffObjectInstance(
-                cx + STEAM_PUFF_X_OFFSET, cy, false);
-        objectManager.addDynamicObject(rightPuff);
+        spawnFreeChild(() -> new SteamPuffObjectInstance(cx + STEAM_PUFF_X_OFFSET, cy, false));
 
         // Left puff (x-flipped)
         // ROM: subi.w #$28,x_pos(a1) / bset #render_flags.x_flip,render_flags(a1)
-        SteamPuffObjectInstance leftPuff = new SteamPuffObjectInstance(
-                cx - STEAM_PUFF_X_OFFSET, cy, true);
-        objectManager.addDynamicObject(leftPuff);
+        spawnFreeChild(() -> new SteamPuffObjectInstance(cx - STEAM_PUFF_X_OFFSET, cy, true));
     }
 
     // --- Solid object interface ---
 
     @Override
     public SolidObjectParams getSolidParams() {
-        return new SolidObjectParams(SOLID_HALF_WIDTH, SOLID_HALF_HEIGHT, SOLID_HALF_HEIGHT);
+        return SolidObjectParams.of(SOLID_HALF_WIDTH, SOLID_HALF_HEIGHT, SOLID_HALF_HEIGHT);
+    }
+
+    /**
+     * ROM divergence (P27): Obj42 uses
+     * {@code SolidObject_Always_SingleCharacter} for BOTH Sonic and Tails
+     * (s2.asm:52030-52049), which jumps directly to {@code SolidObject_cont}
+     * (s2.asm:35147) without traversing the {@code SolidObject_OnScreenTest}
+     * on-screen gate (s2.asm:35140-35145) and without consulting the
+     * sidekick render_flags.on_screen check that the regular
+     * {@code SolidObject} P2 prologue performs (s2.asm:34825-34828).
+     * Off-screen Tails must therefore still resolve top/side/bottom contact
+     * against the steam piston, matching the MTZ3 trace at f460 where Tails
+     * lands on this spring while vertically below the camera viewport.
+     */
+    @Override
+    public boolean bypassesOffscreenSolidGate() {
+        return true;
+    }
+
+    @Override
+    public boolean usesInclusiveRightEdge() {
+        // ROM: Obj42 passes d1=$1B into SolidObject_cont, whose X gate uses
+        // cmp.w d3,d0 / bhi (s2.asm:35149-35152). relX == d1*2 is therefore
+        // still contact, which preserves Status_Push at the exact right edge.
+        return true;
     }
 
     @Override
     public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        if (player == null || !contact.standing()) {
-            return;
-        }
-        // ROM: loc_2678E - only spring when state == STATE_RISING (routine_secondary == 2)
-        // Actually ROM checks cmpi.b #2,routine_secondary(a0) which is the rising state
-        if (state != STATE_RISING) {
-            return;
-        }
-        // ROM: yOffset reaches 0 at the moment of spring, but the spring check happens
-        // every frame during state 2 when player is standing
-        applySpring(player);
+        // Spring fire is handled by the manual checkpoint pass in update() — see ROM
+        // loc_26688 / loc_2678E (s2.asm:52030-52049, 52121-52124). Manual checkpoint
+        // mode does not invoke this callback, so it is intentionally a no-op.
     }
 
     /**
@@ -200,7 +255,11 @@ public class SteamSpringObjectInstance extends AbstractObjectInstance
         player.setAir(true);
 
         // ROM: bclr #status.player.on_object,status(a1)
-        // Engine handles this through the solid contact system
+        ObjectManager objectManager = services().objectManager();
+        if (objectManager != null) {
+            objectManager.clearRidingObject(player);
+        }
+        player.setOnObject(false);
 
         // ROM: move.b #AniIDSonAni_Spring,anim(a1)
         player.setAnimationId(Sonic2AnimationIds.SPRING);
@@ -276,8 +335,7 @@ public class SteamSpringObjectInstance extends AbstractObjectInstance
         if (renderManager != null) {
             PatternSpriteRenderer renderer = renderManager.getRenderer(Sonic2ObjectArtKeys.MTZ_STEAM_PISTON);
             if (renderer != null && renderer.isReady()) {
-                // Render piston body at current position (frame 0 = the only frame in piston sheet)
-                renderer.drawFrameIndex(0, spawn.x(), baseY + yOffset, false, false);
+                renderer.drawFrameIndex(PISTON_MAPPING_FRAME, spawn.x(), baseY + yOffset, false, false);
                 return;
             }
         }

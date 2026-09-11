@@ -1,9 +1,9 @@
 package com.openggf.level.objects;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * Verifies S2 invincibility stars data tables and constants against Obj35 disassembly.
@@ -11,7 +11,7 @@ import static org.junit.Assert.assertEquals;
  */
 public class TestInvincibilityStarsS2Data {
 
-    // ── Orbit offset table (byte_1DB42) ──
+    // â”€â”€ Orbit offset table (byte_1DB42) â”€â”€
 
     @Test
     public void orbitTableMatchesDisassemblyByte1DB42() {
@@ -32,8 +32,7 @@ public class TestInvincibilityStarsS2Data {
         };
         assertEquals(32, InvincibilityStarsObjectInstance.ORBIT_OFFSETS.length);
         for (int i = 0; i < 32; i++) {
-            assertArrayEquals("Entry " + i, expected[i],
-                    InvincibilityStarsObjectInstance.ORBIT_OFFSETS[i]);
+            assertArrayEquals(expected[i], InvincibilityStarsObjectInstance.ORBIT_OFFSETS[i], "Entry " + i);
         }
     }
 
@@ -44,7 +43,7 @@ public class TestInvincibilityStarsS2Data {
         assertEquals(-16, InvincibilityStarsObjectInstance.ORBIT_OFFSETS[24][1]);
     }
 
-    // ── Initial angles ──
+    // â”€â”€ Initial angles â”€â”€
 
     @Test
     public void initialAnglesMatchDisassembly() {
@@ -54,7 +53,7 @@ public class TestInvincibilityStarsS2Data {
                 InvincibilityStarsObjectInstance.INITIAL_ANGLES);
     }
 
-    // ── Rotation speeds ──
+    // â”€â”€ Rotation speeds â”€â”€
 
     @Test
     public void parentRotationSpeedMatchesState2() {
@@ -68,7 +67,7 @@ public class TestInvincibilityStarsS2Data {
         assertEquals(0x02, InvincibilityStarsObjectInstance.TRAIL_ROTATION_BYTES);
     }
 
-    // ── Position history lag ──
+    // â”€â”€ Position history lag â”€â”€
 
     @Test
     public void trailLagFramesMatchDisassembly() {
@@ -77,7 +76,7 @@ public class TestInvincibilityStarsS2Data {
                 InvincibilityStarsObjectInstance.TRAIL_LAG_FRAMES);
     }
 
-    // ── Animation tables ──
+    // â”€â”€ Animation tables â”€â”€
 
     @Test
     public void parentAnimationMatchesByte1DB82() {
@@ -119,9 +118,9 @@ public class TestInvincibilityStarsS2Data {
     @Test
     public void primaryAndSecondaryAnimTablesHaveSameLength() {
         for (int i = 0; i < 3; i++) {
-            assertEquals("Star " + (i + 1) + " primary/secondary length mismatch",
-                    InvincibilityStarsObjectInstance.TRAIL_PRIMARY[i].length,
-                    InvincibilityStarsObjectInstance.TRAIL_SECONDARY[i].length);
+            assertEquals(InvincibilityStarsObjectInstance.TRAIL_PRIMARY[i].length, InvincibilityStarsObjectInstance.TRAIL_SECONDARY[i].length, "Star " + (i + 1) + " primary/secondary length mismatch");
         }
     }
 }
+
+

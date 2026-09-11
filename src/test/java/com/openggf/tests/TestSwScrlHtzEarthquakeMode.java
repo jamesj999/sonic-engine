@@ -1,7 +1,7 @@
 package com.openggf.tests;
 
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import com.openggf.game.GameServices;
 import com.openggf.game.sonic2.Sonic2LevelEventManager;
 import com.openggf.game.sonic2.scroll.BackgroundCamera;
@@ -9,8 +9,8 @@ import com.openggf.game.sonic2.scroll.SwScrlHtz;
 
 import java.lang.reflect.Field;
 
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * Regression tests for HTZ earthquake scroll path parity.
@@ -19,16 +19,16 @@ public class TestSwScrlHtzEarthquakeMode {
 
     private Sonic2LevelEventManager levelEvents;
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         TestEnvironment.resetAll();
-        levelEvents = Sonic2LevelEventManager.getInstance();
+        levelEvents = (Sonic2LevelEventManager) GameServices.module().getLevelEventProvider();
         levelEvents.initLevel(Sonic2LevelEventManager.ZONE_HTZ, 1);
     }
 
     @Test
     public void usesEarthquakeModeWhenHtzFlagIsActiveEvenWithoutGeneralShake() throws Exception {
-        GameServices.gameState().setHtzScreenShakeActive(true);
+        levelEvents.getHtzEvents().setEarthquakeActive(true);
         GameServices.gameState().setScreenShakeActive(false);
 
         Object htzHandler = getHtzHandler(levelEvents);
@@ -57,7 +57,7 @@ public class TestSwScrlHtzEarthquakeMode {
 
     @Test
     public void bottomRouteBgXOffsetAffectsBgHorizontalScroll() throws Exception {
-        GameServices.gameState().setHtzScreenShakeActive(true);
+        levelEvents.getHtzEvents().setEarthquakeActive(true);
         GameServices.gameState().setScreenShakeActive(false);
 
         Object htzHandler = getHtzHandler(levelEvents);
@@ -90,3 +90,5 @@ public class TestSwScrlHtzEarthquakeMode {
     }
 
 }
+
+

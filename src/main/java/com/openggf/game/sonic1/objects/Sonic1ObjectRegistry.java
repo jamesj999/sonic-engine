@@ -27,6 +27,7 @@ import com.openggf.game.sonic1.objects.bosses.Sonic1FZBossInstance;
 import com.openggf.game.sonic1.objects.bosses.Sonic1FalseFloorInstance;
 import com.openggf.game.sonic1.objects.bosses.Sonic1ScrapEggmanInstance;
 import com.openggf.level.objects.AbstractObjectRegistry;
+import com.openggf.level.objects.ObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.rings.RingSpawn;
 
@@ -298,6 +299,8 @@ public class Sonic1ObjectRegistry extends AbstractObjectRegistry {
             case Sonic1ObjectIds.MISSILE_DISSOLVE -> "MissileDissolve";
             case Sonic1ObjectIds.RING -> "Ring";
             case Sonic1ObjectIds.MONITOR -> "Monitor";
+            case Sonic1ObjectIds.POWER_UP -> "PowerUp";
+            case Sonic1ObjectIds.EXPLOSION_ITEM -> "ExplosionItem";
             case Sonic1ObjectIds.ANIMALS -> "Animals";
             case Sonic1ObjectIds.CHOPPER -> "Chopper";
             case Sonic1ObjectIds.JAWS -> "Jaws";

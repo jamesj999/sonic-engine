@@ -5,6 +5,7 @@ import com.openggf.game.sonic3k.audio.Sonic3kMusic;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.level.render.PatternSpriteRenderer;
 
@@ -15,7 +16,8 @@ import java.util.List;
  *
  * <p>ROM reference: CutsceneKnux_AIZ2.
  */
-public class CutsceneKnucklesAiz2Instance extends AbstractObjectInstance {
+public class CutsceneKnucklesAiz2Instance extends AbstractObjectInstance
+        implements SpawnRewindRecreatable {
 
     private static final int OBJECT_ID = 0x82;
     private static final int INIT_X = 0x4B8E;
@@ -85,12 +87,17 @@ public class CutsceneKnucklesAiz2Instance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         if (!initialized) {
             initialized = true;
-            AizIntroArtLoader.loadAllIntroArt();
-            AizIntroArtLoader.applyKnucklesPalette();
+            AizIntroArtLoader.loadAllIntroArt(services());
+            AizIntroArtLoader.applyKnucklesPalette(services());
             services().playMusic(Sonic3kMusic.KNUCKLES.id);
+            Aiz2BossEndSequenceState.setActiveKnuckles(this);
+            // Obj_CutsceneKnuckles installs the AIZ2 routine, then loc_61FC2
+            // initializes the wait/children and returns. Routine $02 first
+            // decrements Obj_Wait on the following object entry.
+            return;
         }
         Aiz2BossEndSequenceState.setActiveKnuckles(this);
 
@@ -249,7 +256,7 @@ public class CutsceneKnucklesAiz2Instance extends AbstractObjectInstance {
 
     @Override
     public void appendRenderCommands(List<GLCommand> commands) {
-        PatternSpriteRenderer renderer = AizIntroArtLoader.getKnucklesRenderer();
+        PatternSpriteRenderer renderer = AizIntroArtLoader.getKnucklesRenderer(services());
         if (renderer == null || !renderer.isReady()) {
             return;
         }

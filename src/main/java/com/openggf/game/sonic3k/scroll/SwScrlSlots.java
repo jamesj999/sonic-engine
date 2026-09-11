@@ -1,12 +1,12 @@
 package com.openggf.game.sonic3k.scroll;
 
 import com.openggf.game.GameServices;
-import com.openggf.game.GameModuleRegistry;
 import com.openggf.game.sonic3k.Sonic3kBonusStageCoordinator;
 import com.openggf.game.sonic3k.bonusstage.slots.S3kSlotBonusStageRuntime;
 import com.openggf.game.sonic3k.constants.Sonic3kZoneIds;
 import com.openggf.level.LevelManager;
 import com.openggf.level.scroll.AbstractZoneScrollHandler;
+import com.openggf.level.scroll.compose.ScrollEffectComposer;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -14,7 +14,6 @@ import java.util.Collections;
 import java.util.List;
 
 import static com.openggf.level.scroll.M68KMath.negWord;
-import static com.openggf.level.scroll.M68KMath.packScrollWords;
 
 /**
  * ROM-shaped Slot Machine bonus-stage screen/background handler.
@@ -47,6 +46,7 @@ public final class SwScrlSlots extends AbstractZoneScrollHandler {
     };
 
     private final short[] perLineVScroll = new short[VISIBLE_LINES];
+    private final ScrollEffectComposer composer = new ScrollEffectComposer();
     private final BandState[] bandStates = createBandStates();
     private final int[] bandScrollValues = new int[BAND_CONFIGS.length];
     private final int[] expandedBandScrollValues = new int[BG_DEFORM_SEGMENTS.length];
@@ -80,6 +80,7 @@ public final class SwScrlSlots extends AbstractZoneScrollHandler {
 
     private void applyScrollState(int[] horizScrollBuf, int cameraX, int cameraY, S3kSlotBonusStageRuntime runtime) {
         resetScrollTracking();
+        composer.reset();
         lastBgPlaneRowUpdates.clear();
         ensureRuntimeState(runtime, cameraX, cameraY);
 
@@ -105,11 +106,16 @@ public final class SwScrlSlots extends AbstractZoneScrollHandler {
         lastForegroundOriginY = foregroundOriginY;
         lastBackgroundOriginX = foregroundOriginX + bandScrollValues[0];
         lastBackgroundOriginY = backgroundCameraY();
-        vscrollFactorBG = (short) backgroundCameraY();
+        composer.setVscrollFactorBG((short) backgroundCameraY());
         Arrays.fill(perLineVScroll, (short) 0);
 
         if (horizScrollBuf != null) {
             fillPackedScrollBuffer(horizScrollBuf);
+        } else {
+            // Still publish vscroll factor + scroll bookkeeping when running in headless probes.
+            vscrollFactorBG = composer.getVscrollFactorBG();
+            minScrollOffset = composer.getMinScrollOffset();
+            maxScrollOffset = composer.getMaxScrollOffset();
         }
     }
 
@@ -221,14 +227,16 @@ public final class SwScrlSlots extends AbstractZoneScrollHandler {
 
             short bgScroll = negWord(expandedBandScrollValues[segmentIndex]);
             int linesToWrite = Math.min(segmentLength, VISIBLE_LINES - line);
-            for (int i = 0; i < linesToWrite; i++) {
-                int packed = packScrollWords(fgScroll, bgScroll);
-                horizScrollBuf[line++] = packed;
-                trackOffsetFromPacked(packed);
-            }
+            composer.fillPackedScrollWords(line, linesToWrite, fgScroll, bgScroll);
+            line += linesToWrite;
             segmentIndex++;
             segmentOffset = 0;
         }
+
+        composer.copyPackedScrollWordsTo(horizScrollBuf);
+        vscrollFactorBG = composer.getVscrollFactorBG();
+        minScrollOffset = composer.getMinScrollOffset();
+        maxScrollOffset = composer.getMaxScrollOffset();
     }
 
     private void expandBandScrollTable() {
@@ -311,7 +319,7 @@ public final class SwScrlSlots extends AbstractZoneScrollHandler {
                 levelManager.uploadBackgroundTilemap();
             }
         } catch (IllegalStateException ignored) {
-            // Unit tests and headless scroll probes can run without a GameRuntime.
+            // Unit tests and headless scroll probes can run without a gameplay session.
         }
     }
 
@@ -349,8 +357,7 @@ public final class SwScrlSlots extends AbstractZoneScrollHandler {
     }
 
     private S3kSlotBonusStageRuntime activeSlotRuntime() {
-        if (GameModuleRegistry.getCurrent() == null
-                || !(GameModuleRegistry.getCurrent().getBonusStageProvider() instanceof Sonic3kBonusStageCoordinator coordinator)) {
+        if (!(GameServices.module().getBonusStageProvider() instanceof Sonic3kBonusStageCoordinator coordinator)) {
             return null;
         }
         return coordinator.activeSlotRuntime();

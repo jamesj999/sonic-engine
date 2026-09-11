@@ -26,6 +26,13 @@ public interface CollisionTrace {
     /** Called when solid contact is resolved */
     void onSolidResolved(SolidContact contact, boolean standing, boolean pushing);
 
+    /** Called when a solid checkpoint batch begins for an object. */
+    void onSolidCheckpointStart(String objectType, int objectX, int objectY);
+
+    /** Called for each result produced by a solid checkpoint batch. */
+    void onSolidCheckpointResult(String objectType, String playerLabel, String kind,
+            boolean standingNow, boolean standingLastFrame);
+
     /** Called when solid contacts complete */
     void onSolidContactsComplete(boolean ridingObject, int adjustedX, int adjustedY);
 

@@ -7,7 +7,11 @@ import com.openggf.game.PlayableEntity;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 
+import com.openggf.level.objects.ObjectPlayerParticipationPolicy;
+import com.openggf.level.objects.ObjectServices;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -28,21 +32,45 @@ import java.util.List;
  * - Frame 5: Attack pose
  * - Frames 6-7: Spike projectile
  */
-public class SpinyOnWallBadnikInstance extends AbstractBadnikInstance {
+public class SpinyOnWallBadnikInstance extends AbstractBadnikInstance implements RewindRecreatable {
     private static final int COLLISION_SIZE_INDEX = 0x0B;
 
     // Movement constants
     private static final int Y_VEL = 0x40;        // Movement speed (subpixels)
-    private static final int MOVE_TIMER = 0x80;   // Frames before reversing (128)
+    // ROM reversal-timer quirk (s2.asm:76434, 76452, 76454), identical to the
+    // floor Spiny (ObjA5) modelled in SpinyBadnikInstance:
+    //   ObjA6_Init:  `move.w #$80,objoff_2A(a0)` (a WORD write)
+    //   loc_38BC8:   `subq.b #1,objoff_2A(a0)`   (a BYTE decrement)
+    // objoff_2A is a single byte at $2A. The big-endian word write $0080 sets
+    // byte[$2A] (the high byte the BYTE subq decrements) to $00 and byte[$2B]
+    // (the adjacent detect-lockout byte) to $80. Decrementing the high byte from
+    // $00 wraps $00->$FF->...->$01->$00, taking 256 (0x100) decrements to reach
+    // zero and reverse y_vel — NOT 128. The low byte $80 lands in objoff_2B,
+    // imposing a 128-frame detect lockout at spawn and after every reversal.
+    private static final int MOVE_TIMER = 0x100;  // Move-frames before reversing (256, see above)
 
     // Attack constants
     private static final int ATTACK_TIMER = 0x28;   // Attack duration (40 frames)
     private static final int FIRE_FRAME = 0x14;     // Fire at this remaining (20 frames)
     private static final int ATTACK_LOCKOUT = 0x40; // Cooldown after attack (64 frames)
+    // Side effect of the `move.w #$80,objoff_2A` quirk above: the word write's
+    // low byte ($80) lands in objoff_2B (the detect-lockout byte at $2B). So at
+    // spawn AND on every direction reversal, the spiny gets a 128-frame window
+    // where loc_38BAC skips detection (objoff_2B != 0 -> decrement, bra loc_38BC8).
+    private static final int INITIAL_LOCKOUT = 0x80; // Detect lockout from word write (128)
 
-    // Detection range (simplified from angle-based detection)
-    private static final int DETECT_X_RANGE = 0x80; // Horizontal detection range
-    private static final int DETECT_Y_RANGE = 0x40; // Vertical detection range
+    // Detection range. ROM loc_38BBA (s2.asm:76445-76449) calls
+    // Obj_GetOrientationToPlayer, then: addi.w #$60,d2 / cmpi.w #$C0,d2 / blo.
+    // d2 is the *signed* horizontal distance (spiny.x - closestPlayer.x) to the
+    // CLOSER of MainCharacter/Sidekick. The unsigned (d2 + $60) < $C0 test
+    // therefore attacks whenever the player is within [-$60, $60) horizontally.
+    // There is NO vertical gate and NO facing gate in ObjA6's detection — the
+    // earlier 0x80 box + dy + facing check fired the spike at the wrong frames,
+    // and in CPZ1 the resulting falling spike hit CPU Tails (a hurt ROM never
+    // produces). Firing direction is the spiny's fixed x_flip (loc_38C6E), not
+    // the player's side.
+    private static final int DETECT_X_OFFSET = 0x60; // addi.w #$60,d2
+    private static final int DETECT_X_RANGE = 0xC0;  // cmpi.w #$C0,d2 / blo
 
     // Projectile constants - horizontal only for wall variant
     private static final int SPIKE_X_VEL = 0x300;   // Horizontal spike velocity
@@ -69,8 +97,10 @@ public class SpinyOnWallBadnikInstance extends AbstractBadnikInstance {
         this.state = State.PATROLLING;
         this.moveCounter = MOVE_TIMER;
         this.attackTimer = 0;
-        this.attackLockout = 0;
-        this.movingUp = true;      // Start moving up (negative Y)
+        // ROM ObjA6_Init `move.w #$80,objoff_2A` also seeds objoff_2B=$80, giving
+        // a 128-frame initial detect lockout (s2.asm:76434; see INITIAL_LOCKOUT).
+        this.attackLockout = INITIAL_LOCKOUT;
+        this.movingUp = true;      // Start moving up (negative Y, y_vel = -$40)
         this.hasFired = false;
         this.ySubpixel = 0;
         // Preserve spawn's render_flags for initial facing direction (x_flip bit)
@@ -78,7 +108,12 @@ public class SpinyOnWallBadnikInstance extends AbstractBadnikInstance {
     }
 
     @Override
-    protected void updateMovement(int frameCounter, PlayableEntity playerEntity) {
+    public SpinyOnWallBadnikInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new SpinyOnWallBadnikInstance(ctx.spawn());
+    }
+
+    @Override
+    protected void updateMovement(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         switch (state) {
             case PATROLLING -> updatePatrolling(player);
@@ -86,9 +121,47 @@ public class SpinyOnWallBadnikInstance extends AbstractBadnikInstance {
         }
     }
 
+    /**
+     * Mirrors ROM loc_38BAC -> loc_38BC8 (s2.asm:76438-76460). The order is
+     * critical for matching ROM badnik Y position over the patrol window:
+     *   1. loc_38BAC: if objoff_2B != 0, decrement it and skip detection
+     *      (bra loc_38BC8). Otherwise run detection; if in range, jump to
+     *      attack (loc_38BEA) WITHOUT running loc_38BC8 this frame.
+     *   2. loc_38BC8: subq.b #1,objoff_2A; on hitting zero reseed objoff_2A to
+     *      $80 (word write -> 256-frame reversal period + 128-frame lockout in
+     *      objoff_2B) and neg.w y_vel; then ObjectMove applies y_vel.
+     * Unlike the floor Spiny, movement (loc_38BC8) runs every patrol frame,
+     * including during the detect lockout.
+     */
     private void updatePatrolling(AbstractPlayableSprite player) {
-        // Apply movement velocity using subpixel accumulation
-        // Y_VEL = 0x40 = 64 subpixels per frame = 0.25 pixels per frame
+        // Step 1: detect lockout (objoff_2B). While non-zero, decrement and skip
+        // detection (ROM bra loc_38BC8). loc_38BC8 still runs below.
+        boolean skipDetection;
+        if (attackLockout > 0) {
+            attackLockout--;
+            skipDetection = true;
+        } else {
+            skipDetection = false;
+        }
+
+        // Step 2: detection against closest player. If in range, ROM jumps to
+        // loc_38BEA (attack) and does NOT run loc_38BC8 (no move) this frame.
+        if (!skipDetection && player != null && isPlayerInRange(player)) {
+            startAttack();
+            return;
+        }
+
+        // Step 3: loc_38BC8 reversal timer (objoff_2A). subq.b #1; on zero reseed
+        // to $80 (256-frame period via word-write quirk, + 128-frame detect
+        // lockout in objoff_2B) and neg.w y_vel.
+        moveCounter--;
+        if (moveCounter <= 0) {
+            movingUp = !movingUp;
+            moveCounter = MOVE_TIMER;
+            attackLockout = INITIAL_LOCKOUT;
+        }
+
+        // Step 4: ObjectMove. Y_VEL = 0x40 = 64 subpixels/frame = 0.25 px/frame.
         ySubpixel += Y_VEL;
         while (ySubpixel >= 256) {
             ySubpixel -= 256;
@@ -97,24 +170,6 @@ public class SpinyOnWallBadnikInstance extends AbstractBadnikInstance {
             } else {
                 currentY++;
             }
-        }
-
-        // Decrement move counter
-        moveCounter--;
-        if (moveCounter <= 0) {
-            // Reverse direction
-            movingUp = !movingUp;
-            moveCounter = MOVE_TIMER;
-        }
-
-        // Decrement attack lockout
-        if (attackLockout > 0) {
-            attackLockout--;
-        }
-
-        // Check for player in attack range
-        if (player != null && attackLockout == 0 && isPlayerInRange(player)) {
-            startAttack();
         }
     }
 
@@ -136,22 +191,57 @@ public class SpinyOnWallBadnikInstance extends AbstractBadnikInstance {
     }
 
     /**
-     * Checks if player is within attack range.
-     * The original uses angle-based detection (0x60-0xC0 range).
-     * We simplify to horizontal/vertical distance check.
+     * Checks if a player is within attack range, matching ROM ObjA6 loc_38BBA
+     * (s2.asm:76445-76449):
+     * <pre>
+     *   bsr.w  Obj_GetOrientationToPlayer  ; d2 = spiny.x - closestPlayer.x (signed)
+     *   addi.w #$60,d2
+     *   cmpi.w #$C0,d2
+     *   blo.s  loc_38BEA                   ; attack
+     * </pre>
+     * The signed horizontal distance is taken to the CLOSER of MainCharacter and
+     * Sidekick (Obj_GetOrientationToPlayer, s2.asm:72755-72781). The detection
+     * uses ONLY this horizontal band; there is no vertical gate and no facing
+     * gate in the ROM.
      */
     private boolean isPlayerInRange(AbstractPlayableSprite player) {
-        int dx = Math.abs(player.getCentreX() - currentX);
-        int dy = Math.abs(player.getCentreY() - currentY);
-
-        // Player must be within detection range
-        if (dx > DETECT_X_RANGE || dy > DETECT_Y_RANGE) {
+        AbstractPlayableSprite target = closestPlayer(player);
+        if (target == null) {
             return false;
         }
+        // d2 = spiny.x - player.x (signed), then unsigned (d2 + $60) < $C0.
+        int adjustedDx = (currentX - target.getCentreX()) + DETECT_X_OFFSET;
+        return adjustedDx >= 0 && adjustedDx < DETECT_X_RANGE;
+    }
 
-        // Player must be roughly in front of SpinyOnWall (not behind)
-        boolean playerIsLeft = player.getCentreX() < currentX;
-        return playerIsLeft == facingLeft;
+    /**
+     * Mirrors Obj_GetOrientationToPlayer's character selection (s2.asm:72755-72781):
+     * picks the closer of MainCharacter / Sidekick by absolute horizontal distance.
+     */
+    private AbstractPlayableSprite closestPlayer(PlayableEntity mainPlayer) {
+        AbstractPlayableSprite best = null;
+        int bestDist = Integer.MAX_VALUE;
+        if (mainPlayer instanceof AbstractPlayableSprite mainSprite) {
+            best = mainSprite;
+            bestDist = Math.abs(mainSprite.getCentreX() - currentX);
+        }
+        ObjectServices svc = tryServices();
+        if (svc != null) {
+            for (PlayableEntity sk : svc.playerQuery()
+                    .playersFor(ObjectPlayerParticipationPolicy.ALL_ENGINE_PLAYERS)) {
+                if (sk == mainPlayer) {
+                    continue;
+                }
+                if (sk instanceof AbstractPlayableSprite skSprite) {
+                    int dist = Math.abs(skSprite.getCentreX() - currentX);
+                    if (dist < bestDist) {
+                        best = skSprite;
+                        bestDist = dist;
+                    }
+                }
+            }
+        }
+        return best;
     }
 
     private void startAttack() {
@@ -163,31 +253,34 @@ public class SpinyOnWallBadnikInstance extends AbstractBadnikInstance {
     }
 
     private void fireSpike() {
-        // Fire based on facing direction, not player position
+        // ROM loc_38C6E (s2.asm:76509-76526): the spike spawns at the spiny's
+        // exact x_pos/y_pos and moves at x_vel = $300, negated when the spiny's
+        // render_flags.x_flip bit is set (facingLeft). y_vel starts at 0 and
+        // Obj98_SpinyShotFall applies +$20 gravity (s2.asm:74628-74632). The
+        // previous +/-8 muzzle offset is not in the ROM and shifted the spike's
+        // landing point, contributing to phantom CPU-Tails hits in CPZ1.
         int xVel = facingLeft ? -SPIKE_X_VEL : SPIKE_X_VEL;
 
-        BadnikProjectileInstance projectile = new BadnikProjectileInstance(
+        services().objectManager().createDynamicObject(() -> new BadnikProjectileInstance(
                 spawn,
                 BadnikProjectileInstance.ProjectileType.SPINY_SPIKE,
-                currentX + (facingLeft ? -8 : 8),  // Offset from body in firing direction
+                currentX,
                 currentY,
                 xVel,
                 SPIKE_Y_VEL,
                 true,   // Apply gravity after firing
                 false   // No initial flip
-        );
-
-        services().objectManager().addDynamicObject(projectile);
+        ));
     }
 
     @Override
-    protected void updateAnimation(int frameCounter) {
+    protected void updateAnimation(int vIntRunCount) {
         if (state == State.ATTACKING) {
             // Attack pose (frame 5) for wall variant
             animFrame = 5;
         } else {
             // Wall-climbing animation (frames 3-4, 9-frame delay)
-            animFrame = 3 + ((frameCounter / CLIMB_ANIM_DELAY) & 1);
+            animFrame = 3 + ((vIntRunCount / CLIMB_ANIM_DELAY) & 1);
         }
     }
 

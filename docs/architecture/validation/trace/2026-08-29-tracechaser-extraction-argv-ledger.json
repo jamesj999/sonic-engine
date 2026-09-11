@@ -1,0 +1,113 @@
+{
+  "argv_sha256": "46d639e8b91ea59c3c236d99876163e3b48b833949b69390aab3c529eae4070b",
+  "commands": [
+    {
+      "argv": [
+        "${OPENGGF_REPOSITORY_ROOT}/tools/bizhawk-headless/run.sh",
+        "--mode",
+        "trace",
+        "--rom",
+        "${S1_ROM_PATH}",
+        "--movie",
+        "${OPENGGF_REPOSITORY_ROOT}/src/test/resources/traces/s1/ghz1_fullrun/ghz1_fullrun.bk2",
+        "--output",
+        "${TRACECHASER_EVIDENCE_ROOT}/pre-extraction/captures/s1-ghz1"
+      ],
+      "id": "s1-ghz1"
+    },
+    {
+      "argv": [
+        "${OPENGGF_REPOSITORY_ROOT}/tools/bizhawk-headless/run.sh",
+        "--mode",
+        "trace",
+        "--rom",
+        "${S1_ROM_PATH}",
+        "--movie",
+        "${OPENGGF_REPOSITORY_ROOT}/src/test/resources/traces/s1/runs/s1-sonic-complete-withemeralds/sonic1-complete-withemeralds.bk2",
+        "--output",
+        "${TRACECHASER_EVIDENCE_ROOT}/pre-extraction/captures/s1-emeralds-run",
+        "--run-id",
+        "s1-sonic-complete-withemeralds"
+      ],
+      "id": "s1-emeralds-run"
+    },
+    {
+      "argv": [
+        "${OPENGGF_REPOSITORY_ROOT}/tools/bizhawk-headless/run.sh",
+        "--mode",
+        "trace",
+        "--rom",
+        "${S2_ROM_PATH}",
+        "--movie",
+        "${OPENGGF_REPOSITORY_ROOT}/src/test/resources/traces/s2/ehz1_fullrun/s2-ehz1.bk2",
+        "--output",
+        "${TRACECHASER_EVIDENCE_ROOT}/pre-extraction/captures/s2-ehz1",
+        "--trace-profile",
+        "gameplay_unlock"
+      ],
+      "id": "s2-ehz1"
+    },
+    {
+      "argv": [
+        "${OPENGGF_REPOSITORY_ROOT}/tools/bizhawk-headless/run.sh",
+        "--mode",
+        "trace",
+        "--rom",
+        "${S2_ROM_PATH}",
+        "--movie",
+        "${OPENGGF_REPOSITORY_ROOT}/src/test/resources/traces/s2/runs/s2-sonic-tails-complete-emeralds/sonic-2-sonic-tails-complete-emeralds.bk2",
+        "--output",
+        "${TRACECHASER_EVIDENCE_ROOT}/pre-extraction/captures/s2-emeralds-run",
+        "--run-id",
+        "s2-sonic-tails-complete-emeralds"
+      ],
+      "id": "s2-emeralds-run"
+    },
+    {
+      "argv": [
+        "${OPENGGF_REPOSITORY_ROOT}/tools/bizhawk-headless/run.sh",
+        "--mode",
+        "trace",
+        "--rom",
+        "${S3K_ROM_PATH}",
+        "--movie",
+        "${OPENGGF_REPOSITORY_ROOT}/src/test/resources/traces/s3k/aiz1_to_hcz_fullrun/s3-aiz1-2-sonictails.bk2",
+        "--output",
+        "${TRACECHASER_EVIDENCE_ROOT}/pre-extraction/captures/s3k-aiz",
+        "--trace-profile",
+        "aiz_end_to_end",
+        "--load-queue-state"
+      ],
+      "id": "s3k-aiz"
+    },
+    {
+      "argv": [
+        "${OPENGGF_REPOSITORY_ROOT}/tools/bizhawk-headless/run.sh",
+        "--mode",
+        "trace",
+        "--rom",
+        "${S3K_ROM_PATH}",
+        "--movie",
+        "${OPENGGF_REPOSITORY_ROOT}/src/test/resources/traces/s3k/_movies/s3k-complete-sonic-tails.bk2",
+        "--output",
+        "${TRACECHASER_EVIDENCE_ROOT}/pre-extraction/captures/s3k-complete",
+        "--trace-profile",
+        "complete_run",
+        "--load-queue-state"
+      ],
+      "id": "s3k-complete"
+    }
+  ],
+  "expansion_contract": {
+    "algorithm": "prefix-substitution-without-shell-reparse",
+    "requirements": [
+      "Resolve OPENGGF_REPOSITORY_ROOT to the absolute checkout at TRACECHASER_EXTRACTION_BASE with no trailing slash.",
+      "Resolve TRACECHASER_EVIDENCE_ROOT to the absolute external evidence root with no trailing slash.",
+      "Resolve S1_ROM_PATH, S2_ROM_PATH, and S3K_ROM_PATH to the verified absolute ROM paths.",
+      "For each argv element, replace its single leading ${NAME} token with the corresponding root value as raw UTF-8 text.",
+      "Pass the resulting ordered string array directly to execve-style process creation; never join or reparse it through a shell."
+    ],
+    "token_syntax": "${NAME}"
+  },
+  "format": "openggf-tracechaser-extraction-argv-ledger-v1"
+}

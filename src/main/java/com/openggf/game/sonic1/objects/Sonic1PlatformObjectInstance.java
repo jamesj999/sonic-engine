@@ -1,5 +1,7 @@
 package com.openggf.game.sonic1.objects;
 import com.openggf.game.PlayableEntity;
+import com.openggf.game.solid.PlayerSolidContactResult;
+import com.openggf.game.solid.SolidCheckpointBatch;
 
 import com.openggf.game.sonic1.Sonic1SwitchManager;
 import com.openggf.game.sonic1.constants.Sonic1Constants;
@@ -8,12 +10,15 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
+import com.openggf.level.objects.ObjectLifetimeOps;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.PlatformBobHelper;
 import com.openggf.level.objects.SolidContact;
+import com.openggf.level.objects.SolidExecutionMode;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -45,7 +50,7 @@ import java.util.List;
  * Reference: docs/s1disasm/_incObj/18 Platforms.asm
  */
 public class Sonic1PlatformObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, SpawnRewindRecreatable {
 
     // From disassembly: move.b #$20,obActWid(a0)
     private static final int HALF_WIDTH = 0x20;
@@ -88,8 +93,8 @@ public class Sonic1PlatformObjectInstance extends AbstractObjectInstance
     private int y;
 
     // Saved base positions (objoff_32 = spawn X, objoff_34 = spawn Y)
-    private final int baseX;
-    private final int baseY;
+    private int baseX;
+    private int baseY;
     // objoff_2C: working Y position (modified by vertical movement + nudge)
     private int workingY;
 
@@ -176,15 +181,23 @@ public class Sonic1PlatformObjectInstance extends AbstractObjectInstance
         return y;
     }
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         ensureInitialized();
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        // Check if player is standing on us via ObjectManager
-        playerStanding = isPlayerRiding();
+        var objectManager = services().objectManager();
+        boolean wasPlayerRiding = objectManager != null && objectManager.isAnyPlayerRiding(this);
 
         if (!inFallingRoutine) {
-            // Routine 2/4: update bob angle (frozen in routine 8 / Plat_Action)
-            bobHelper.update(playerStanding);
+            // Routine 2/4: update bob angle (frozen in routine 8 / Plat_Action).
+            // Plat_Solid (routine 2) only subtracts from objoff_38 before
+            // PlatformObject can create a new ride; the +4 nudge ramp runs in
+            // Plat_Action2 (routine 4). The routine for THIS frame was decided by
+            // last frame's standing/ExitPlatform result, so the ramp gate uses the
+            // prior-frame standing latch (playerStanding from the previous update).
+            // On the jump-off frame ROM is still in routine 4 (objoff_38 ramps +4
+            // once more) before ExitPlatform resets it to routine 2 next frame,
+            // matching wasPlayerRiding && (prior playerStanding).
+            bobHelper.update(wasPlayerRiding && playerStanding);
         }
 
         // Apply movement
@@ -194,6 +207,34 @@ public class Sonic1PlatformObjectInstance extends AbstractObjectInstance
         applyNudge();
 
         updateDynamicSpawn(x, y);
+
+        // ROM routine order (docs/s1disasm/_incObj/18 Platforms.asm:74-87): routine 4
+        // (Plat_Action2) runs ExitPlatform, then Plat_Move/Plat_Nudge, then
+        // unconditionally MvSonicOnPtfm2. Both the ExitPlatform detach test and the
+        // MvSonicOnPtfm2 re-seat observe the POST-move platform surface, so a single
+        // post-move checkpoint models them. Resolving after the move (and after the
+        // dynamic-spawn position update above) ensures the airborne-rider carry on
+        // the jump-off frame re-seats to the platform's new y, not its pre-move y.
+        SolidCheckpointBatch batch = checkpointAll();
+        playerStanding = hasStandingContact(batch);
+
+        // ROM landing-frame timer start (type 03 only):
+        // On the landing frame, Plat_Solid calls PlatformObject which sets obStatus bit 3
+        // (standing), then falls through to Plat_Action where Plat_Move (.type03) reads
+        // that bit and sets objoff_3A=30 (docs/s1disasm/_incObj/18 Platforms.asm:54-71,
+        // docs/s1disasm/_incObj/18 Platforms.asm:200-209). In the engine,
+        // moveFallOnStand() runs BEFORE the checkpoint, so it uses the previous frame's
+        // playerStanding=false and misses the landing-frame timer start. The engine's
+        // PlatformObject equivalent (checkpointAll) runs afterward, so the timer must
+        // be started post-checkpoint when we detect the fresh first-time standing.
+        if (moveType == 0x03 && timer == 0 && playerStanding) {
+            timer = FALL_STAND_DELAY;
+        }
+    }
+
+    @Override
+    public SolidExecutionMode solidExecutionMode() {
+        return SolidExecutionMode.MANUAL_CHECKPOINT;
     }
 
     @Override
@@ -206,12 +247,77 @@ public class Sonic1PlatformObjectInstance extends AbstractObjectInstance
 
     @Override
     public SolidObjectParams getSolidParams() {
-        return new SolidObjectParams(HALF_WIDTH, HALF_HEIGHT, HALF_HEIGHT);
+        return SolidObjectParams.of(HALF_WIDTH, HALF_HEIGHT, HALF_HEIGHT);
     }
 
     @Override
     public boolean isTopSolidOnly() {
         return true;
+    }
+
+    @Override
+    public boolean usesCollisionHalfWidthForTopLanding() {
+        // Plat_Solid passes obActWid directly as PlatformObject's d1
+        // (docs/s1disasm/_incObj/18 Platforms.asm:59-62), so the collision
+        // half-width is already the standable width and must not receive the
+        // generic SolidObject +$B narrowing.
+        return true;
+    }
+
+    @Override
+    public boolean usesPreUpdatePositionForSolidContact(PlayableEntity player) {
+        // S1 Obj18 routine 2 calls PlatformObject before Plat_Move and
+        // Plat_Nudge (docs/s1disasm/_incObj/18 Platforms.asm:54-67).
+        // Continued riding still observes the post-move/post-nudge surface
+        // through routine 4's ExitPlatform -> Plat_Move -> Plat_Nudge ->
+        // MvSonicOnPtfm2 order (same file:74-87).
+        return true;
+    }
+
+    @Override
+    public boolean carriesAirborneRiderAfterExitPlatform() {
+        // ROM Plat_Action2 (routine 4, docs/s1disasm/_incObj/18 Platforms.asm:74-87)
+        // calls ExitPlatform first (which clears the on-object bit when the player
+        // jumped this frame, docs/s1disasm/_incObj/sub ExitPlatform.asm:20-27),
+        // then runs Plat_Move/Plat_Nudge, then unconditionally calls MvSonicOnPtfm2
+        // (docs/s1disasm/_incObj/sub MvSonicOnPtfm.asm:18-41). MvSonicOnPtfm2 does
+        // NOT check the rider's velocity, so on the jump-off frame it still pulls
+        // Sonic's y_pos to platformY-9-obHeight using the platform's post-move
+        // position, overwriting the Sonic_Jump rolling-radius adjust
+        // (sonic.asm:1228 addq.w #sonic_height-sonic_roll_height,obY(a0)). This is
+        // structurally identical to Obj52 MBlock_StandOn / Obj59 Elev_Action, which
+        // already opt in (Sonic1MovingBlockObjectInstance / Sonic1ElevatorObjectInstance).
+        //
+        // Without this opt-in the engine applies only the +5 jump adjust and skips
+        // the post-jump pull-up, leaving Sonic ~2px high when the platform moves up
+        // on the launch frame (s1_ghz2 trace frame 2591: ROM y=0x0259, ENG y=0x0257;
+        // BizHawk capture platY 0x026E->0x0270, height 0x13->0x0E). The engine carry
+        // is implemented in ObjectSolidContactController.processInlineRidingObject /
+        // applyRidingCarry once the provider opts in.
+        return true;
+    }
+
+    @Override
+    public boolean rejectsZeroDistanceTopSolidLanding() {
+        // ROM PlatformObject/Plat_NoXCheck_AltY (docs/s1disasm/sonic.lst
+        // 0x7B06-0x7B0A) gates the land band with an UNSIGNED cmpi.w #-16,d0 /
+        // blo, which rejects the exact-touch case d0 = 0 (0x0000 <u 0xFFF0):
+        // standable band is d0 in [-16,-1] (strict penetration). Combined with
+        // the obY-8 detection offset (getTopLandingSnapAdjustment) applied to the
+        // new-landing detection band, this makes the engine land on the same
+        // frame as ROM. Verified by BizHawk capture of GHZ2-CR (BK2 8991 d0=0
+        // keeps falling; BK2 8992 d0=-5 lands).
+        return true;
+    }
+
+    @Override
+    public int getTopLandingSnapAdjustment(PlayableEntity player, int solidTopYRadius) {
+        // PlatformObject builds its entry surface from obY-8 and then snaps via
+        // add.w d0,d2 / addq.w #3,d2 (docs/s1disasm/_incObj/sub PlatformObject.asm:17-42).
+        // Continued riding still uses MvSonicOnPtfm2's obY-9 surface; this
+        // adjustment applies only to the first landing snap (and, via the
+        // controller's detection-band offset, to the matching new-landing detect).
+        return -1;
     }
 
     @Override
@@ -234,7 +340,7 @@ public class Sonic1PlatformObjectInstance extends AbstractObjectInstance
     @Override
     public boolean isPersistent() {
         // out_of_range uses objoff_32 (spawn X), not current X
-        return !isDestroyed() && isOnScreenX(baseX, 320);
+        return !isDestroyed() && isInRangeAt(baseX);
     }
 
     /**
@@ -285,6 +391,19 @@ public class Sonic1PlatformObjectInstance extends AbstractObjectInstance
         x = baseX + d1;
         // .chgmotion: move.b (v_oscillate+$1A).w,objoff_26(a0)
         cachedOscillator = OscillationManager.getByte(OSC_SELF_DRIVEN);
+    }
+
+    protected SolidCheckpointBatch checkpointAll() {
+        return services().solidExecution().resolveSolidNowAll();
+    }
+
+    protected boolean hasStandingContact(SolidCheckpointBatch batch) {
+        for (PlayerSolidContactResult result : batch.perPlayer().values()) {
+            if (result != null && result.standingNow()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -457,9 +576,7 @@ public class Sonic1PlatformObjectInstance extends AbstractObjectInstance
     private void destroyWithWindowGatedRespawn() {
         if (!isDestroyed() ) {
             var objectManager = services().objectManager();
-            if (objectManager != null) {
-                objectManager.removeFromActiveSpawns(spawn);
-            }
+            ObjectLifetimeOps.removeSpawnFromActive(objectManager, spawn);
         }
         setDestroyed(true);
     }
@@ -472,20 +589,4 @@ public class Sonic1PlatformObjectInstance extends AbstractObjectInstance
         return camera != null ? camera.getMaxY() : 0x700;
     }
 
-    /**
-     * Check if the object is within out-of-range distance from camera using spawn X.
-     * Matches the S1 out_of_range macro: round both positions to $80, compare distance
-     * against 128+320+192 = 640.
-     */
-    private boolean isOnScreenX(int objectX, int range) {
-        var camera = services().camera();
-        if (camera == null) {
-            return true;
-        }
-        int objRounded = objectX & 0xFF80;
-        int camRounded = (camera.getX() - 128) & 0xFF80;
-        int distance = (objRounded - camRounded) & 0xFFFF;
-        // out_of_range: cmpi.w #128+320+192,d0 / bhi.s exit
-        return distance <= (128 + 320 + 192);
-    }
 }

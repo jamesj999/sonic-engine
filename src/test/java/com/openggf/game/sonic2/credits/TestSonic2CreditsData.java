@@ -1,7 +1,7 @@
 package com.openggf.game.sonic2.credits;
 
-import org.junit.Test;
-import static org.junit.Assert.*;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class TestSonic2CreditsData {
     @Test
@@ -30,3 +30,5 @@ public class TestSonic2CreditsData {
         assertEquals(0x0001, Sonic2CreditsData.ARTTILE_CREDIT_TEXT_CREDSCR);
     }
 }
+
+

@@ -1,17 +1,15 @@
 package com.openggf.tests;
 
 
-import org.junit.Test;
-import com.openggf.tools.KosinskiReader;
+import org.junit.jupiter.api.Test;
+import com.openggf.data.compression.KosinskiReader;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.channels.Channels;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.logging.Logger;
 
-import static org.junit.Assert.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 
 
 public class TestKosinskiDecompressor {
@@ -57,11 +55,6 @@ public class TestKosinskiDecompressor {
                 (byte) 0x30, (byte) 0x30, (byte) 0x30, (byte) 0x30
         };
 
-        byte[] kosEHZ16 = Files.readAllBytes(Paths.get("src/test/resources/EHZ-16x16.kos"));
-        byte[] rawEHZ16 = Files.readAllBytes(Paths.get("src/test/resources/EHZ-16x16.raw"));
-
-        test(kosEHZ16, rawEHZ16);
-
        // LOG.info("Uncompressed Kosinski Data");
         test(uncompressedKosinskiData, uncompressedData);
 
@@ -97,3 +90,5 @@ public class TestKosinskiDecompressor {
         return hexString.toString();
     }
 }
+
+

@@ -1,0 +1,11 @@
+# bucket|class
+# Snapshot from the headless ObjectManager round-trip sweep.
+# Summary: total=873 passed=679 graph-covered=194 no-codec=0 no-probe-ctor=0 parent-dependent=0 other-failure=0 count-mismatch=0 scalar-mismatch=0
+#
+# Parent-dependent classes live in parent-dependent-graph-coverage-baseline.txt
+# because that file also records graph-test evidence or session-tail status.
+#
+# Suggested next batches:
+# - The headless codec-deletion inventory is exhausted.
+# - Classes that cannot honestly pass as isolated probes are covered by focused graph/session tests and
+#   classified through RewindRoundTripHarness.GRAPH_COVERED_ISOLATED_PROBE_CLASSES.

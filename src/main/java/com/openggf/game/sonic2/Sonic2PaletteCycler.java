@@ -3,6 +3,8 @@ package com.openggf.game.sonic2;
 import com.openggf.data.Rom;
 import com.openggf.data.RomByteReader;
 import com.openggf.game.GameServices;
+import com.openggf.game.palette.PaletteOwnershipRegistry;
+import com.openggf.game.palette.PaletteWrite;
 import com.openggf.game.sonic2.constants.Sonic2Constants;
 import com.openggf.game.sonic2.scroll.Sonic2ZoneConstants;
 import com.openggf.graphics.GraphicsManager;
@@ -22,12 +24,39 @@ import java.util.List;
  * which match the values returned by {@code level.getZoneIndex()}.
  */
 class Sonic2PaletteCycler implements AnimatedPaletteManager {
+    private static final int PALETTE_CYCLE_PRIORITY = 100;
+    private static final String OWNER_EHZ_WATER = "s2.ehz.waterCycle";
+    private static final String OWNER_ARZ_WATER = "s2.arz.waterCycle";
+    private static final String OWNER_HTZ_LAVA = "s2.htz.lavaCycle";
+    private static final String OWNER_MTZ_CYCLE_1 = "s2.mtz.cycle1";
+    private static final String OWNER_MTZ_CYCLE_2 = "s2.mtz.cycle2";
+    private static final String OWNER_MTZ_CYCLE_3 = "s2.mtz.cycle3";
+    private static final String OWNER_OOZ_OIL = "s2.ooz.oilCycle";
+    private static final String OWNER_MCZ_LANTERN = "s2.mcz.lanternCycle";
+    private static final String OWNER_CNZ_CYCLE_1 = "s2.cnz.cycle1";
+    private static final String OWNER_CNZ_CYCLE_3 = "s2.cnz.cycle3";
+    private static final String OWNER_CNZ_CYCLE_4 = "s2.cnz.cycle4";
+    private static final String OWNER_CNZ_BOSS_CYCLE_1 = "s2.cnz.bossCycle1";
+    private static final String OWNER_CNZ_BOSS_CYCLE_2 = "s2.cnz.bossCycle2";
+    private static final String OWNER_CNZ_BOSS_CYCLE_3 = "s2.cnz.bossCycle3";
+    private static final String OWNER_CPZ_CYCLE_1 = "s2.cpz.cycle1";
+    private static final String OWNER_CPZ_CYCLE_2 = "s2.cpz.cycle2";
+    private static final String OWNER_CPZ_CYCLE_3 = "s2.cpz.cycle3";
+    private static final String OWNER_WFZ_FIRE_BELT = "s2.wfz.fireBeltCycle";
+    private static final String OWNER_WFZ_CYCLE_1 = "s2.wfz.cycle1";
+    private static final String OWNER_WFZ_CYCLE_2 = "s2.wfz.cycle2";
+
     private final Level level;
-    private final GraphicsManager graphicsManager = GraphicsManager.getInstance();
+    private final PaletteOwnershipRegistry paletteRegistry;
+    private final boolean usingLocalPaletteRegistry;
     private final List<PaletteCycle> cycles;
+    private Palette[] cachedLevelPalettes;
 
     public Sonic2PaletteCycler(Rom rom, Level level, int zoneIndex) throws IOException {
         this.level = level;
+        PaletteOwnershipRegistry runtimeRegistry = GameServices.paletteOwnershipRegistryOrNull();
+        this.paletteRegistry = runtimeRegistry != null ? runtimeRegistry : new PaletteOwnershipRegistry();
+        this.usingLocalPaletteRegistry = runtimeRegistry == null;
         RomByteReader reader = RomByteReader.fromRom(rom);
         this.cycles = loadCycles(reader, zoneIndex);
     }
@@ -37,9 +66,13 @@ class Sonic2PaletteCycler implements AnimatedPaletteManager {
         if (cycles == null || cycles.isEmpty()) {
             return;
         }
-        for (PaletteCycle cycle : cycles) {
-            cycle.tick(level, graphicsManager);
+        if (usingLocalPaletteRegistry) {
+            paletteRegistry.beginFrame();
         }
+        for (PaletteCycle cycle : cycles) {
+            cycle.tick(level, paletteRegistry);
+        }
+        paletteRegistry.resolveInto(levelPalettes(), null, GameServices.graphics(), null);
     }
 
     private List<PaletteCycle> loadCycles(RomByteReader reader, int zoneIndex) {
@@ -70,7 +103,7 @@ class Sonic2PaletteCycler implements AnimatedPaletteManager {
         if (data.length < 32) return null;
         // Palette line 2 (index 1), colors 3,4,14,15 - 4 frames, 8 bytes each
         int[] colorIndices = {3, 4, 14, 15};
-        return new PaletteCycle(data, 4, 8, 7, 1, colorIndices);
+        return new PaletteCycle(OWNER_EHZ_WATER, data, 4, 8, 7, 1, colorIndices);
     }
 
     // ========== ARZ ==========
@@ -79,7 +112,7 @@ class Sonic2PaletteCycler implements AnimatedPaletteManager {
         if (data.length < 32) return null;
         // Palette line 3 (index 2), colors 2,3,4,5 - 4 frames, 8 bytes each, timer 5
         int[] colorIndices = {2, 3, 4, 5};
-        return new PaletteCycle(data, 4, 8, 5, 2, colorIndices);
+        return new PaletteCycle(OWNER_ARZ_WATER, data, 4, 8, 5, 2, colorIndices);
     }
 
     // ========== HTZ (Hill Top Zone - Lava) ==========
@@ -100,7 +133,7 @@ class Sonic2PaletteCycler implements AnimatedPaletteManager {
         // Cycle 1: 1 color at palette line 3, offset $A (index 5) - 6 frames, timer 17
         byte[] data1 = safeSlice(reader, Sonic2Constants.CYCLING_PAL_MTZ1_ADDR, Sonic2Constants.CYCLING_PAL_MTZ1_LEN);
         if (data1.length >= 12) {
-            cycles.add(new PaletteCycle(data1, 6, 2, 0x11, 2, new int[]{5}));
+            cycles.add(new PaletteCycle(OWNER_MTZ_CYCLE_1, data1, 6, 2, 0x11, 2, new int[]{5}));
         }
 
         // Cycle 2: 3 colors at palette line 3, offset $2 (indices 1,2,3) - 3 frames, timer 2
@@ -113,7 +146,7 @@ class Sonic2PaletteCycler implements AnimatedPaletteManager {
         // Cycle 3: 1 color at palette line 3, offset $1E (index 15) - 10 frames, timer 9
         byte[] data3 = safeSlice(reader, Sonic2Constants.CYCLING_PAL_MTZ3_ADDR, Sonic2Constants.CYCLING_PAL_MTZ3_LEN);
         if (data3.length >= 20) {
-            cycles.add(new PaletteCycle(data3, 10, 2, 9, 2, new int[]{15}));
+            cycles.add(new PaletteCycle(OWNER_MTZ_CYCLE_3, data3, 10, 2, 9, 2, new int[]{15}));
         }
 
         return cycles;
@@ -126,7 +159,7 @@ class Sonic2PaletteCycler implements AnimatedPaletteManager {
         // Palette line 3 (index 2), offset $14 = 4 colors at indices 10,11,12,13
         // 4 frames with AND #6 wrap (so only 4 values used), 8 bytes per frame
         int[] colorIndices = {10, 11, 12, 13};
-        return new PaletteCycle(data, 4, 8, 7, 2, colorIndices);
+        return new PaletteCycle(OWNER_OOZ_OIL, data, 4, 8, 7, 2, colorIndices);
     }
 
     // ========== MCZ (Mystic Cave Zone - Lanterns) ==========
@@ -134,7 +167,7 @@ class Sonic2PaletteCycler implements AnimatedPaletteManager {
         byte[] data = safeSlice(reader, Sonic2Constants.CYCLING_PAL_LANTERN_ADDR, Sonic2Constants.CYCLING_PAL_LANTERN_LEN);
         if (data.length < 8) return null;
         // Palette line 2 (index 1), offset $16 = index 11, 4 frames, timer 1
-        return new PaletteCycle(data, 4, 2, 1, 1, new int[]{11});
+        return new PaletteCycle(OWNER_MCZ_LANTERN, data, 4, 2, 1, 1, new int[]{11});
     }
 
     // ========== CNZ (Casino Night Zone) ==========
@@ -186,19 +219,19 @@ class Sonic2PaletteCycler implements AnimatedPaletteManager {
         // Cycle 1: 3 colors at palette line 4, offset $18 (indices 12, 13, 14)
         byte[] data1 = safeSlice(reader, Sonic2Constants.CYCLING_PAL_CPZ1_ADDR, Sonic2Constants.CYCLING_PAL_CPZ1_LEN);
         if (data1.length >= Sonic2Constants.CYCLING_PAL_CPZ1_LEN) {
-            cycles.add(new PaletteCycle(data1, 9, 6, 7, 3, new int[]{12, 13, 14}));
+            cycles.add(new PaletteCycle(OWNER_CPZ_CYCLE_1, data1, 9, 6, 7, 3, new int[]{12, 13, 14}));
         }
 
         // Cycle 2: 1 color at palette line 4, offset $1E (index 15)
         byte[] data2 = safeSlice(reader, Sonic2Constants.CYCLING_PAL_CPZ2_ADDR, Sonic2Constants.CYCLING_PAL_CPZ2_LEN);
         if (data2.length >= Sonic2Constants.CYCLING_PAL_CPZ2_LEN) {
-            cycles.add(new PaletteCycle(data2, 21, 2, 7, 3, new int[]{15}));
+            cycles.add(new PaletteCycle(OWNER_CPZ_CYCLE_2, data2, 21, 2, 7, 3, new int[]{15}));
         }
 
         // Cycle 3: 1 color at palette line 3, offset $1E (index 15)
         byte[] data3 = safeSlice(reader, Sonic2Constants.CYCLING_PAL_CPZ3_ADDR, Sonic2Constants.CYCLING_PAL_CPZ3_LEN);
         if (data3.length >= Sonic2Constants.CYCLING_PAL_CPZ3_LEN) {
-            cycles.add(new PaletteCycle(data3, 16, 2, 7, 2, new int[]{15}));
+            cycles.add(new PaletteCycle(OWNER_CPZ_CYCLE_3, data3, 16, 2, 7, 2, new int[]{15}));
         }
 
         return cycles;
@@ -222,14 +255,14 @@ class Sonic2PaletteCycler implements AnimatedPaletteManager {
         // ROM: PalCycle_Timer2, PalCycle_Frame2, 34 frames, timer 3
         byte[] wfz1Data = safeSlice(reader, Sonic2Constants.CYCLING_PAL_WFZ1_ADDR, Sonic2Constants.CYCLING_PAL_WFZ1_LEN);
         if (wfz1Data.length >= Sonic2Constants.CYCLING_PAL_WFZ1_LEN) {
-            cycles.add(new PaletteCycle(wfz1Data, 34, 2, 3, 2, new int[]{14}));
+            cycles.add(new PaletteCycle(OWNER_WFZ_CYCLE_1, wfz1Data, 34, 2, 3, 2, new int[]{14}));
         }
 
         // Cycle 3: Flashing light 2 - 1 color at palette line 3 offset $1E (index 15)
         // ROM: PalCycle_Timer3, PalCycle_Frame3, 12 frames, timer 5
         byte[] wfz2Data = safeSlice(reader, Sonic2Constants.CYCLING_PAL_WFZ2_ADDR, Sonic2Constants.CYCLING_PAL_WFZ2_LEN);
         if (wfz2Data.length >= Sonic2Constants.CYCLING_PAL_WFZ2_LEN) {
-            cycles.add(new PaletteCycle(wfz2Data, 12, 2, 5, 2, new int[]{15}));
+            cycles.add(new PaletteCycle(OWNER_WFZ_CYCLE_2, wfz2Data, 12, 2, 5, 2, new int[]{15}));
         }
 
         return cycles;
@@ -242,8 +275,64 @@ class Sonic2PaletteCycler implements AnimatedPaletteManager {
         return reader.slice(addr, len);
     }
 
+    private Palette[] levelPalettes() {
+        if (cachedLevelPalettes == null || cachedLevelPalettes.length != level.getPaletteCount()) {
+            cachedLevelPalettes = new Palette[level.getPaletteCount()];
+        }
+        for (int i = 0; i < cachedLevelPalettes.length; i++) {
+            cachedLevelPalettes[i] = level.getPalette(i);
+        }
+        return cachedLevelPalettes;
+    }
+
+    /**
+     * Captures per-cycle mutable state (timers, frame indices, dirty flags) across
+     * all loaded cycles for the current zone. Intended for inclusion in the
+     * level-animation manager's combined snapshot.
+     */
+    byte[] captureCyclerState() {
+        if (cycles == null || cycles.isEmpty()) {
+            return new byte[0];
+        }
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        try (java.io.DataOutputStream dout = new java.io.DataOutputStream(out)) {
+            dout.writeInt(cycles.size());
+            for (PaletteCycle cycle : cycles) {
+                byte[] state = com.openggf.game.rewind.schema.PaletteCycleStateCodec.capture(cycle);
+                dout.writeInt(state.length);
+                dout.write(state);
+            }
+        } catch (java.io.IOException e) {
+            return new byte[0];
+        }
+        return out.toByteArray();
+    }
+
+    /** Inverse of {@link #captureCyclerState()}. Tolerant of null/empty/mismatched input. */
+    void restoreCyclerState(byte[] data) {
+        if (data == null || data.length < 4 || cycles == null || cycles.isEmpty()) {
+            return;
+        }
+        try (java.io.DataInputStream din = new java.io.DataInputStream(new java.io.ByteArrayInputStream(data))) {
+            int count = din.readInt();
+            if (count != cycles.size()) {
+                return;
+            }
+            for (PaletteCycle cycle : cycles) {
+                int size = din.readInt();
+                if (size < 0 || size > data.length) {
+                    return;
+                }
+                byte[] state = din.readNBytes(size);
+                com.openggf.game.rewind.schema.PaletteCycleStateCodec.restore(cycle, state);
+            }
+        } catch (java.io.IOException ignored) {
+        }
+    }
+
     // ========== Base PaletteCycle class ==========
     private static class PaletteCycle {
+        protected final String ownerId;
         protected final byte[] data;
         protected final int frameCount;
         protected final int frameSize;
@@ -252,10 +341,10 @@ class Sonic2PaletteCycler implements AnimatedPaletteManager {
         protected final int[] colorIndices;
         protected int timer;
         protected int frame;
-        protected boolean dirty;
 
-        protected PaletteCycle(byte[] data, int frameCount, int frameSize,
+        protected PaletteCycle(String ownerId, byte[] data, int frameCount, int frameSize,
                                int timerReset, int paletteIndex, int[] colorIndices) {
+            this.ownerId = ownerId;
             this.data = data;
             this.frameCount = frameCount;
             this.frameSize = frameSize;
@@ -264,7 +353,7 @@ class Sonic2PaletteCycler implements AnimatedPaletteManager {
             this.colorIndices = colorIndices;
         }
 
-        protected void tick(Level level, GraphicsManager graphicsManager) {
+        protected void tick(Level level, PaletteOwnershipRegistry registry) {
             if (data.length == 0 || frameCount <= 0) return;
 
             if (timer > 0) {
@@ -273,24 +362,16 @@ class Sonic2PaletteCycler implements AnimatedPaletteManager {
                 timer = timerReset;
                 int frameIndex = frame % frameCount;
                 frame++;
-                apply(level, frameIndex);
-                dirty = true;
-            }
-
-            if (dirty && graphicsManager.isGlInitialized()) {
-                graphicsManager.cachePaletteTexture(level.getPalette(paletteIndex), paletteIndex);
-                dirty = false;
+                submitFrame(registry, frameIndex);
             }
         }
 
-        protected void apply(Level level, int frameIndex) {
-            Palette palette = level.getPalette(paletteIndex);
+        protected void submitFrame(PaletteOwnershipRegistry registry, int frameIndex) {
             int base = frameIndex * frameSize;
             for (int i = 0; i < colorIndices.length; i++) {
                 int dataIndex = base + i * 2;
                 if (dataIndex + 1 >= data.length) continue;
-                Palette.Color color = palette.getColor(colorIndices[i]);
-                color.fromSegaFormat(data, dataIndex);
+                submitColor(registry, ownerId, paletteIndex, colorIndices[i], data, dataIndex);
             }
         }
     }
@@ -300,12 +381,12 @@ class Sonic2PaletteCycler implements AnimatedPaletteManager {
         private final int[] delays;
 
         HtzLavaCycle(byte[] data, int[] delays) {
-            super(data, 16, 8, delays[0], 1, new int[]{3, 4, 5, 6});
+            super(OWNER_HTZ_LAVA, data, 16, 8, delays[0], 1, new int[]{3, 4, 5, 6});
             this.delays = delays;
         }
 
         @Override
-        protected void tick(Level level, GraphicsManager graphicsManager) {
+        protected void tick(Level level, PaletteOwnershipRegistry registry) {
             if (data.length == 0) return;
 
             if (timer > 0) {
@@ -316,23 +397,15 @@ class Sonic2PaletteCycler implements AnimatedPaletteManager {
                 frame++;
 
                 // Apply to palette line 2: colors 3,4,5,6 and 14,15 (from same data)
-                Palette palette = level.getPalette(1);
                 int base = frameIndex * 8;
 
                 // First group: indices 3,4 from offset 0
-                palette.getColor(3).fromSegaFormat(data, base);
-                palette.getColor(4).fromSegaFormat(data, base + 2);
+                submitColor(registry, ownerId, 1, 3, data, base);
+                submitColor(registry, ownerId, 1, 4, data, base + 2);
 
                 // Second group: indices 14,15 from offset 4
-                palette.getColor(14).fromSegaFormat(data, base + 4);
-                palette.getColor(15).fromSegaFormat(data, base + 6);
-
-                dirty = true;
-            }
-
-            if (dirty && graphicsManager.isGlInitialized()) {
-                graphicsManager.cachePaletteTexture(level.getPalette(1), 1);
-                dirty = false;
+                submitColor(registry, ownerId, 1, 14, data, base + 4);
+                submitColor(registry, ownerId, 1, 15, data, base + 6);
             }
         }
     }
@@ -340,21 +413,20 @@ class Sonic2PaletteCycler implements AnimatedPaletteManager {
     // ========== MTZ Cycle 2 (3 colors, special layout) ==========
     private static class MtzCycle2 extends PaletteCycle {
         MtzCycle2(byte[] data) {
-            super(data, 3, 6, 2, 2, new int[]{1, 2, 3});
+            super(OWNER_MTZ_CYCLE_2, data, 3, 6, 2, 2, new int[]{1, 2, 3});
         }
 
         @Override
-        protected void apply(Level level, int frameIndex) {
-            Palette palette = level.getPalette(2);
+        protected void submitFrame(PaletteOwnershipRegistry registry, int frameIndex) {
             int base = frameIndex * 2;
             // Data layout: 3 frames of 2+2+2 bytes for 3 colors
             // But the file is only 12 bytes, so it's 2 bytes per frame for 3 colors interleaved
             // Actually reads: move.l (a0,d0.w),(a1)+  move.w 4(a0,d0.w),(a1)
             // So it reads 6 bytes (3 colors) from base offset
             if (base + 5 < data.length) {
-                palette.getColor(1).fromSegaFormat(data, base);
-                palette.getColor(2).fromSegaFormat(data, base + 2);
-                palette.getColor(3).fromSegaFormat(data, base + 4);
+                submitColor(registry, ownerId, 2, 1, data, base);
+                submitColor(registry, ownerId, 2, 2, data, base + 2);
+                submitColor(registry, ownerId, 2, 3, data, base + 4);
             }
         }
     }
@@ -362,11 +434,11 @@ class Sonic2PaletteCycler implements AnimatedPaletteManager {
     // ========== CNZ Cycle 1 (interleaved layout) ==========
     private static class CnzCycle1 extends PaletteCycle {
         CnzCycle1(byte[] data) {
-            super(data, 3, 2, 7, 0, new int[]{});
+            super(OWNER_CNZ_CYCLE_1, data, 3, 2, 7, 0, new int[]{});
         }
 
         @Override
-        protected void tick(Level level, GraphicsManager graphicsManager) {
+        protected void tick(Level level, PaletteOwnershipRegistry registry) {
             if (data.length == 0) return;
 
             if (timer > 0) {
@@ -379,22 +451,14 @@ class Sonic2PaletteCycler implements AnimatedPaletteManager {
                 // Line 3 (palette 2): offsets $4A, $4C, $4E = indices 5,6,7
                 // Line 3 (palette 2): offsets $56, $58, $5A = indices 11,12,13
                 // Data is interleaved: color0_frame0, color0_frame1, color0_frame2, color1_frame0...
-                Palette pal2 = level.getPalette(2);
                 int d0 = frameIndex * 2;
 
-                pal2.getColor(5).fromSegaFormat(data, d0);       // offset 0
-                pal2.getColor(6).fromSegaFormat(data, 6 + d0);   // offset 6
-                pal2.getColor(7).fromSegaFormat(data, 12 + d0);  // offset 12
-                pal2.getColor(11).fromSegaFormat(data, 18 + d0); // offset 18
-                pal2.getColor(12).fromSegaFormat(data, 24 + d0); // offset 24
-                pal2.getColor(13).fromSegaFormat(data, 30 + d0); // offset 30
-
-                dirty = true;
-            }
-
-            if (dirty && graphicsManager.isGlInitialized()) {
-                graphicsManager.cachePaletteTexture(level.getPalette(2), 2);
-                dirty = false;
+                submitColor(registry, ownerId, 2, 5, data, d0);
+                submitColor(registry, ownerId, 2, 6, data, 6 + d0);
+                submitColor(registry, ownerId, 2, 7, data, 12 + d0);
+                submitColor(registry, ownerId, 2, 11, data, 18 + d0);
+                submitColor(registry, ownerId, 2, 12, data, 24 + d0);
+                submitColor(registry, ownerId, 2, 13, data, 30 + d0);
             }
         }
     }
@@ -402,11 +466,11 @@ class Sonic2PaletteCycler implements AnimatedPaletteManager {
     // ========== CNZ Cycle 3 (3 interleaved colors) ==========
     private static class CnzCycle3 extends PaletteCycle {
         CnzCycle3(byte[] data) {
-            super(data, 3, 2, 7, 0, new int[]{});
+            super(OWNER_CNZ_CYCLE_3, data, 3, 2, 7, 0, new int[]{});
         }
 
         @Override
-        protected void tick(Level level, GraphicsManager graphicsManager) {
+        protected void tick(Level level, PaletteOwnershipRegistry registry) {
             if (data.length == 0) return;
 
             if (timer > 0) {
@@ -417,19 +481,11 @@ class Sonic2PaletteCycler implements AnimatedPaletteManager {
                 frame++;
 
                 // Line 4 (palette 3): offsets $64, $66, $68 = indices 2,3,4
-                Palette pal3 = level.getPalette(3);
                 int d0 = frameIndex * 2;
 
-                pal3.getColor(2).fromSegaFormat(data, d0);      // offset 0
-                pal3.getColor(3).fromSegaFormat(data, 6 + d0);  // offset 6
-                pal3.getColor(4).fromSegaFormat(data, 12 + d0); // offset 12
-
-                dirty = true;
-            }
-
-            if (dirty && graphicsManager.isGlInitialized()) {
-                graphicsManager.cachePaletteTexture(level.getPalette(3), 3);
-                dirty = false;
+                submitColor(registry, ownerId, 3, 2, data, d0);
+                submitColor(registry, ownerId, 3, 3, data, 6 + d0);
+                submitColor(registry, ownerId, 3, 4, data, 12 + d0);
             }
         }
     }
@@ -439,11 +495,11 @@ class Sonic2PaletteCycler implements AnimatedPaletteManager {
         private int cnzFrame;
 
         CnzCycle4(byte[] data) {
-            super(data, 18, 2, 7, 3, new int[]{});
+            super(OWNER_CNZ_CYCLE_4, data, 18, 2, 7, 3, new int[]{});
         }
 
         @Override
-        protected void tick(Level level, GraphicsManager graphicsManager) {
+        protected void tick(Level level, PaletteOwnershipRegistry registry) {
             if (data.length == 0) return;
 
             if (timer > 0) {
@@ -457,18 +513,10 @@ class Sonic2PaletteCycler implements AnimatedPaletteManager {
             if (cnzFrame >= 18) cnzFrame = 0;
 
             // Palette line 4, offset $12 = indices 9,10,11 - reads in reverse order
-            Palette pal3 = level.getPalette(3);
             if (d0 + 4 < data.length) {
-                pal3.getColor(9).fromSegaFormat(data, d0 + 4);  // move.w 4(a0,d0.w),(a1)+
-                pal3.getColor(10).fromSegaFormat(data, d0 + 2); // move.w 2(a0,d0.w),(a1)+
-                pal3.getColor(11).fromSegaFormat(data, d0);     // move.w (a0,d0.w),(a1)+
-            }
-
-            dirty = true;
-
-            if (dirty && graphicsManager.isGlInitialized()) {
-                graphicsManager.cachePaletteTexture(level.getPalette(3), 3);
-                dirty = false;
+                submitColor(registry, ownerId, 3, 9, data, d0 + 4);
+                submitColor(registry, ownerId, 3, 10, data, d0 + 2);
+                submitColor(registry, ownerId, 3, 11, data, d0);
             }
         }
     }
@@ -492,14 +540,14 @@ class Sonic2PaletteCycler implements AnimatedPaletteManager {
 
         WfzFireBeltCycle(byte[] fireData, byte[] beltData) {
             // Palette line 3 (index 2), 4 colors at offset $E = indices 7,8,9,10
-            super(fireData, FRAME_COUNT, FRAME_SIZE, FIRE_TIMER_RESET, 2,
+            super(OWNER_WFZ_FIRE_BELT, fireData, FRAME_COUNT, FRAME_SIZE, FIRE_TIMER_RESET, 2,
                     new int[]{7, 8, 9, 10});
             this.fireData = fireData;
             this.beltData = beltData;
         }
 
         @Override
-        protected void tick(Level level, GraphicsManager graphicsManager) {
+        protected void tick(Level level, PaletteOwnershipRegistry registry) {
             if (fireData.length == 0 || beltData.length == 0) return;
 
             if (timer > 0) {
@@ -517,19 +565,8 @@ class Sonic2PaletteCycler implements AnimatedPaletteManager {
                 // ROM: lea (Normal_palette_line3+$E).w,a1
                 // move.l (a0,d0.w),(a1)+ / move.l 4(a0,d0.w),(a1)
                 // Writes 8 bytes (4 colors) to palette line 3, offset $E (indices 7-10)
-                Palette palette = level.getPalette(2);
                 int base = frameIndex * FRAME_SIZE;
-                palette.getColor(7).fromSegaFormat(activeData, base);
-                palette.getColor(8).fromSegaFormat(activeData, base + 2);
-                palette.getColor(9).fromSegaFormat(activeData, base + 4);
-                palette.getColor(10).fromSegaFormat(activeData, base + 6);
-
-                dirty = true;
-            }
-
-            if (dirty && graphicsManager.isGlInitialized()) {
-                graphicsManager.cachePaletteTexture(level.getPalette(2), 2);
-                dirty = false;
+                submitContiguous(registry, ownerId, 2, 7, activeData, base, 8);
             }
         }
     }
@@ -540,11 +577,11 @@ class Sonic2PaletteCycler implements AnimatedPaletteManager {
     private static class CnzBossCycle1 extends PaletteCycle {
         CnzBossCycle1(byte[] data) {
             // Timer 3, palette line 1 (index 1)
-            super(data, 3, 2, 3, 1, new int[]{});
+            super(OWNER_CNZ_BOSS_CYCLE_1, data, 3, 2, 3, 1, new int[]{});
         }
 
         @Override
-        protected void tick(Level level, GraphicsManager graphicsManager) {
+        protected void tick(Level level, PaletteOwnershipRegistry registry) {
             // Only run when boss is active (ROM: tst.b (Current_Boss_ID).w)
             if (GameServices.gameState().getCurrentBossId() == 0) {
                 return;
@@ -562,20 +599,12 @@ class Sonic2PaletteCycler implements AnimatedPaletteManager {
 
             // Palette line 2 (index 1): offsets $24, $26, $28 = indices 2, 3, 4
             // Data is interleaved: read at d0, d0+6, d0+12 (0xC)
-            Palette pal1 = level.getPalette(1);
             int d0 = frameIndex * 2;
 
             if (d0 + 12 < data.length) {
-                pal1.getColor(2).fromSegaFormat(data, d0);       // _move.w 0(a0),$24(a1)
-                pal1.getColor(3).fromSegaFormat(data, 6 + d0);   // move.w 6(a0),$26(a1)
-                pal1.getColor(4).fromSegaFormat(data, 12 + d0);  // move.w $C(a0),$28(a1)
-            }
-
-            dirty = true;
-
-            if (dirty && graphicsManager.isGlInitialized()) {
-                graphicsManager.cachePaletteTexture(level.getPalette(1), 1);
-                dirty = false;
+                submitColor(registry, ownerId, 1, 2, data, d0);
+                submitColor(registry, ownerId, 1, 3, data, 6 + d0);
+                submitColor(registry, ownerId, 1, 4, data, 12 + d0);
             }
         }
     }
@@ -586,11 +615,11 @@ class Sonic2PaletteCycler implements AnimatedPaletteManager {
     private static class CnzBossCycle2 extends PaletteCycle {
         CnzBossCycle2(byte[] data) {
             // Timer 3, palette line 1 (index 1), 10 frames
-            super(data, 10, 2, 3, 1, new int[]{14});
+            super(OWNER_CNZ_BOSS_CYCLE_2, data, 10, 2, 3, 1, new int[]{14});
         }
 
         @Override
-        protected void tick(Level level, GraphicsManager graphicsManager) {
+        protected void tick(Level level, PaletteOwnershipRegistry registry) {
             // Only run when boss is active
             if (GameServices.gameState().getCurrentBossId() == 0) {
                 return;
@@ -607,18 +636,10 @@ class Sonic2PaletteCycler implements AnimatedPaletteManager {
             frame++;
 
             // Palette line 2 (index 1): offset $3C = index 14
-            Palette pal1 = level.getPalette(1);
             int d0 = frameIndex * 2;
 
             if (d0 + 1 < data.length) {
-                pal1.getColor(14).fromSegaFormat(data, d0);  // move.w (a0,d0.w),$3C(a1)
-            }
-
-            dirty = true;
-
-            if (dirty && graphicsManager.isGlInitialized()) {
-                graphicsManager.cachePaletteTexture(level.getPalette(1), 1);
-                dirty = false;
+                submitColor(registry, ownerId, 1, 14, data, d0);
             }
         }
     }
@@ -629,11 +650,11 @@ class Sonic2PaletteCycler implements AnimatedPaletteManager {
     private static class CnzBossCycle3 extends PaletteCycle {
         CnzBossCycle3(byte[] data) {
             // Timer 3, palette line 1 (index 1), 8 frames
-            super(data, 8, 2, 3, 1, new int[]{15});
+            super(OWNER_CNZ_BOSS_CYCLE_3, data, 8, 2, 3, 1, new int[]{15});
         }
 
         @Override
-        protected void tick(Level level, GraphicsManager graphicsManager) {
+        protected void tick(Level level, PaletteOwnershipRegistry registry) {
             // Only run when boss is active
             if (GameServices.gameState().getCurrentBossId() == 0) {
                 return;
@@ -652,19 +673,31 @@ class Sonic2PaletteCycler implements AnimatedPaletteManager {
             frame++;
 
             // Palette line 2 (index 1): offset $3E = index 15
-            Palette pal1 = level.getPalette(1);
             int d0 = frameIndex * 2;
 
             if (d0 + 1 < data.length) {
-                pal1.getColor(15).fromSegaFormat(data, d0);  // move.w (a0,d0.w),$3E(a1)
-            }
-
-            dirty = true;
-
-            if (dirty && graphicsManager.isGlInitialized()) {
-                graphicsManager.cachePaletteTexture(level.getPalette(1), 1);
-                dirty = false;
+                submitColor(registry, ownerId, 1, 15, data, d0);
             }
         }
+    }
+
+    private static void submitColor(PaletteOwnershipRegistry registry, String ownerId,
+                                    int lineIndex, int colorIndex, byte[] sourceData, int dataIndex) {
+        if (dataIndex < 0 || dataIndex + 1 >= sourceData.length) {
+            return;
+        }
+        registry.submit(PaletteWrite.normal(ownerId, PALETTE_CYCLE_PRIORITY, lineIndex, colorIndex,
+                new byte[]{sourceData[dataIndex], sourceData[dataIndex + 1]}));
+    }
+
+    private static void submitContiguous(PaletteOwnershipRegistry registry, String ownerId,
+                                         int lineIndex, int startColor, byte[] sourceData,
+                                         int dataIndex, int byteLength) {
+        if (dataIndex < 0 || byteLength <= 0 || dataIndex + byteLength > sourceData.length) {
+            return;
+        }
+        byte[] copy = new byte[byteLength];
+        System.arraycopy(sourceData, dataIndex, copy, 0, byteLength);
+        registry.submit(PaletteWrite.normal(ownerId, PALETTE_CYCLE_PRIORITY, lineIndex, startColor, copy));
     }
 }

@@ -150,20 +150,6 @@ public final class Sonic3kSpecialStageRomOffsets {
     public static final long MAP_UNC_HUD_DISPLAY = 0x8D2C;
     public static final int MAP_UNC_HUD_DISPLAY_SIZE = 48;
 
-    // ==================== Results Screen Art ====================
-
-    /** ArtKos_SSResultsGeneral */
-    public static final long ART_KOS_RESULTS_GENERAL = -1; // TODO: verify
-    public static final int ART_KOS_RESULTS_GENERAL_SIZE = 1648;
-
-    /** ArtKos_SSResultsTKIcons */
-    public static final long ART_KOS_RESULTS_TK_ICONS = -1; // TODO: verify
-    public static final int ART_KOS_RESULTS_TK_ICONS_SIZE = 432;
-
-    /** Pal_SStage_Results */
-    public static final long PAL_RESULTS = -1; // TODO: verify
-    public static final int PAL_RESULTS_SIZE = 128;
-
     /**
      * Check if critical ROM offsets have been verified.
      */

@@ -15,6 +15,8 @@ public class ProfileSnapshot {
 
     private static final Comparator<SectionStats> BY_TIME_DESC =
             (a, b) -> Double.compare(b.timeMs(), a.timeMs());
+    private static final Comparator<SectionStats> BY_NAME =
+            Comparator.comparing(SectionStats::name);
 
     private final Map<String, SectionStats> sections = new LinkedHashMap<>();
     private double totalFrameTimeMs;
@@ -25,15 +27,32 @@ public class ProfileSnapshot {
 
     // Cached sorted list — invalidated on populate()
     private final List<SectionStats> sortedByTimeCache = new ArrayList<>();
-    private boolean sortedCacheDirty = true;
+    private final List<SectionStats> sortedByNameCache = new ArrayList<>();
+    private boolean sortedByTimeDirty = true;
+    private boolean sortedByNameDirty = true;
 
     public ProfileSnapshot() {
         this.frameHistory = new float[120];
     }
 
+    public void clear() {
+        sections.clear();
+        totalFrameTimeMs = 0;
+        fps = 0;
+        historyIndex = 0;
+        frameCount = 0;
+        for (int i = 0; i < frameHistory.length; i++) {
+            frameHistory[i] = 0;
+        }
+        sortedByTimeCache.clear();
+        sortedByNameCache.clear();
+        sortedByTimeDirty = true;
+        sortedByNameDirty = true;
+    }
+
     /**
      * Updates this snapshot in-place with new profiling data.
-     * Avoids all map/array allocation after the first frame that establishes the section set.
+     * Reuses the history array; section values remain immutable records.
      */
     public void populate(Map<String, Long> rollingSums, int effectiveFrames,
                          float[] sourceHistory, int historyIndex, int frameCount,
@@ -41,24 +60,55 @@ public class ProfileSnapshot {
         sections.clear();
 
         long totalSectionNanos = 0;
-        for (Map.Entry<String, Long> entry : rollingSums.entrySet()) {
-            String name = entry.getKey();
-            long sumNanos = entry.getValue();
-            double avgNanos = (double) sumNanos / effectiveFrames;
-            double avgMs = avgNanos / 1_000_000.0;
-            sections.put(name, new SectionStats(name, avgMs, 0));
+        for (long sumNanos : rollingSums.values()) {
             totalSectionNanos += sumNanos;
         }
-
         double totalMs = (double) totalSectionNanos / effectiveFrames / 1_000_000.0;
-        if (totalMs > 0) {
-            for (Map.Entry<String, SectionStats> entry : sections.entrySet()) {
-                SectionStats stats = entry.getValue();
-                double pct = (stats.timeMs() / totalMs) * 100.0;
-                entry.setValue(new SectionStats(stats.name(), stats.timeMs(), pct));
+        for (Map.Entry<String, Long> entry : rollingSums.entrySet()) {
+            putSection(entry.getKey(), entry.getValue(), effectiveFrames, totalMs);
+        }
+        populateFrame(effectiveFrames, sourceHistory, historyIndex, frameCount,
+                actualFrameTimeSum, totalMs);
+    }
+
+    /** Internal primitive path retains map nodes when the section order is unchanged. */
+    void populate(SectionMeasurements measurements, int effectiveFrames,
+                  float[] sourceHistory, int historyIndex, int frameCount,
+                  long actualFrameTimeSum) {
+        int index = 0;
+        boolean compatible = sections.size() <= measurements.size();
+        if (compatible) {
+            for (String name : sections.keySet()) {
+                if (!java.util.Objects.equals(name, measurements.get(index++).name)) {
+                    compatible = false;
+                    break;
+                }
             }
         }
+        if (!compatible) {
+            sections.clear();
+        }
+        long totalSectionNanos = 0;
+        for (int i = 0; i < measurements.size(); i++) {
+            totalSectionNanos += measurements.get(i).sum;
+        }
+        double totalMs = (double) totalSectionNanos / effectiveFrames / 1_000_000.0;
+        for (int i = 0; i < measurements.size(); i++) {
+            SectionMeasurements.Section section = measurements.get(i);
+            putSection(section.name, section.sum, effectiveFrames, totalMs);
+        }
+        populateFrame(effectiveFrames, sourceHistory, historyIndex, frameCount,
+                actualFrameTimeSum, totalMs);
+    }
 
+    private void putSection(String name, long sumNanos, int effectiveFrames, double totalMs) {
+        double avgMs = (double) sumNanos / effectiveFrames / 1_000_000.0;
+        double percentage = totalMs > 0 ? avgMs / totalMs * 100.0 : 0;
+        sections.put(name, new SectionStats(name, avgMs, percentage));
+    }
+
+    private void populateFrame(int effectiveFrames, float[] sourceHistory, int historyIndex,
+                               int frameCount, long actualFrameTimeSum, double totalMs) {
         this.totalFrameTimeMs = totalMs;
 
         // Reuse or resize the history array
@@ -77,7 +127,8 @@ public class ProfileSnapshot {
             this.fps = 0;
         }
 
-        sortedCacheDirty = true;
+        sortedByTimeDirty = true;
+        sortedByNameDirty = true;
     }
 
     // Direct accessors — no defensive copies needed since this is consumed
@@ -112,13 +163,27 @@ public class ProfileSnapshot {
      * and reused across calls within the same frame.
      */
     public List<SectionStats> getSectionsSortedByTime() {
-        if (sortedCacheDirty) {
+        if (sortedByTimeDirty) {
             sortedByTimeCache.clear();
             sortedByTimeCache.addAll(sections.values());
             sortedByTimeCache.sort(BY_TIME_DESC);
-            sortedCacheDirty = false;
+            sortedByTimeDirty = false;
         }
         return sortedByTimeCache;
+    }
+
+    /**
+     * Returns sections sorted alphabetically by name. The returned list is cached
+     * and reused across calls within the same frame.
+     */
+    public List<SectionStats> getSectionsSortedByName() {
+        if (sortedByNameDirty) {
+            sortedByNameCache.clear();
+            sortedByNameCache.addAll(sections.values());
+            sortedByNameCache.sort(BY_NAME);
+            sortedByNameDirty = false;
+        }
+        return sortedByNameCache;
     }
 
     public boolean hasData() {

@@ -1,11 +1,11 @@
 package com.openggf.tests;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Verify AIZ/LRZ rock debris position and velocity tables match ROM data.
@@ -26,30 +26,22 @@ public class TestTodo19_AizRockDebris {
     @Test
     public void testDebrisPositionTableFrame0MatchesRom() throws Exception {
         int[][][] positions = getPrivateStaticField("DEBRIS_POSITIONS");
-        assertTrue("Debris positions table should have at least 1 frame",
-                positions.length >= 1);
-        assertEquals("Frame 0 should have 8 debris pieces",
-                8, positions[0].length);
+        assertTrue(positions.length >= 1, "Debris positions table should have at least 1 frame");
+        assertEquals(8, positions[0].length, "Frame 0 should have 8 debris pieces");
         for (int i = 0; i < EXPECTED_FRAME0_POSITIONS.length; i++) {
-            assertEquals("Piece " + i + " X offset",
-                    EXPECTED_FRAME0_POSITIONS[i][0], positions[0][i][0]);
-            assertEquals("Piece " + i + " Y offset",
-                    EXPECTED_FRAME0_POSITIONS[i][1], positions[0][i][1]);
+            assertEquals(EXPECTED_FRAME0_POSITIONS[i][0], positions[0][i][0], "Piece " + i + " X offset");
+            assertEquals(EXPECTED_FRAME0_POSITIONS[i][1], positions[0][i][1], "Piece " + i + " Y offset");
         }
     }
 
     @Test
     public void testDebrisVelocityTableFrame0MatchesRom() throws Exception {
         int[][][] velocities = getPrivateStaticField("DEBRIS_VELOCITIES");
-        assertTrue("Debris velocities table should have at least 1 frame",
-                velocities.length >= 1);
-        assertEquals("Frame 0 should have 8 velocity entries",
-                8, velocities[0].length);
+        assertTrue(velocities.length >= 1, "Debris velocities table should have at least 1 frame");
+        assertEquals(8, velocities[0].length, "Frame 0 should have 8 velocity entries");
         for (int i = 0; i < EXPECTED_FRAME0_VELOCITIES.length; i++) {
-            assertEquals("Piece " + i + " X velocity",
-                    EXPECTED_FRAME0_VELOCITIES[i][0], velocities[0][i][0]);
-            assertEquals("Piece " + i + " Y velocity",
-                    EXPECTED_FRAME0_VELOCITIES[i][1], velocities[0][i][1]);
+            assertEquals(EXPECTED_FRAME0_VELOCITIES[i][0], velocities[0][i][0], "Piece " + i + " X velocity");
+            assertEquals(EXPECTED_FRAME0_VELOCITIES[i][1], velocities[0][i][1], "Piece " + i + " Y velocity");
         }
     }
 
@@ -57,11 +49,9 @@ public class TestTodo19_AizRockDebris {
     public void testPositionAndVelocityTablesHaveSameFrameCount() throws Exception {
         int[][][] positions = getPrivateStaticField("DEBRIS_POSITIONS");
         int[][][] velocities = getPrivateStaticField("DEBRIS_VELOCITIES");
-        assertEquals("Position and velocity tables must have same number of frames",
-                positions.length, velocities.length);
+        assertEquals(positions.length, velocities.length, "Position and velocity tables must have same number of frames");
         for (int f = 0; f < positions.length; f++) {
-            assertEquals("Frame " + f + " piece count must match",
-                    positions[f].length, velocities[f].length);
+            assertEquals(positions[f].length, velocities[f].length, "Frame " + f + " piece count must match");
         }
     }
 
@@ -74,3 +64,5 @@ public class TestTodo19_AizRockDebris {
         return (int[][][]) field.get(null);
     }
 }
+
+

@@ -8,8 +8,11 @@ import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.DestructionEffects;
 import com.openggf.level.objects.ObjectArtKeys;
+import com.openggf.level.objects.ObjectLifetimeOps;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.ObjectServices;
+import com.openggf.level.objects.SpawnRewindRecreatable;
+import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.level.objects.TouchResponseAttackable;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.objects.TouchResponseResult;
@@ -48,7 +51,7 @@ import java.util.List;
  * multiplier (subtype * 60 frames).
  */
 public class Sonic1BallHogBadnikInstance extends AbstractObjectInstance
-        implements TouchResponseProvider, TouchResponseAttackable {
+        implements TouchResponseProvider, TouchResponseAttackable, SpawnRewindRecreatable {
 
     // --- Collision ---
     // From disassembly: move.b #5,obColType(a0)
@@ -76,8 +79,11 @@ public class Sonic1BallHogBadnikInstance extends AbstractObjectInstance
     private static final int RENDER_PRIORITY = 4;
 
     // --- Animation ---
-    // Single animation from Ani_Hog: speed 9, then frame sequence
-    private static final int ANIM_SPEED = 9 + 1; // ROM speed byte + 1 = ticks per frame step
+    // ROM Ani_Hog speed byte (obTimeFrame reload value). Each step is held for
+    // ANIM_SPEED_BYTE + 1 = 10 game frames via ROM AnimateSprite's "subq.b #1; bpl"
+    // countdown cadence.
+    // docs/s1disasm/_anim/Ball Hog.asm:6, docs/s1disasm/_incObj/sub AnimateSprite.asm:17-23
+    private static final int ANIM_SPEED_BYTE = 9;
     // Frame sequence: 0, 0, 2, 2, 3, 2, 0, 0, 2, 2, 3, 2, 0, 0, 2, 2, 3, 2, 0, 0, 1
     private static final int[] ANIM_FRAMES = {
             0, 0, 2, 2, 3, 2, 0, 0, 2, 2,
@@ -90,14 +96,20 @@ public class Sonic1BallHogBadnikInstance extends AbstractObjectInstance
     private int currentX;
     private int currentY;
     private int yVelocity;
-    private int ySubpixel;
+    /** Subpixel accumulators (xSub / ySub) for ROM-accurate 16:8 fixed-point integration. */
+    private final SubpixelMotion.State motion = new SubpixelMotion.State(0, 0, 0, 0, 0, 0);
     private boolean facingLeft;
     private boolean initialized;
     private boolean destroyed;
 
-    // Animation state
-    private int animTickCounter;
-    private int animStepIndex;
+    // Animation state, mirroring ROM AnimateSprite (docs/s1disasm/_incObj/sub AnimateSprite.asm):
+    //   animTimeFrame   = obTimeFrame  (frame-duration countdown; starts at 0 so the first
+    //                     Anim_Run call underflows immediately and loads frame[0])
+    //   animScriptIndex = obAniFrame   (read-then-increment index into ANIM_FRAMES)
+    //   displayedFrame  = obFrame      (currently displayed frame ID; ROM clears RAM to 0)
+    private int animTimeFrame;
+    private int animScriptIndex;
+    private int displayedFrame;
 
     // hog_launchflag (objoff_32): 0 = ready to launch, nonzero = already launched this cycle
     private boolean launchFlag;
@@ -107,20 +119,20 @@ public class Sonic1BallHogBadnikInstance extends AbstractObjectInstance
         this.currentX = spawn.x();
         this.currentY = spawn.y();
         this.yVelocity = 0;
-        this.ySubpixel = 0;
 
         // obRender bit 2 = use obStatus for flipping
         // obStatus bit 0 determines facing: 0 = facing right, 1 = facing left
         this.facingLeft = (spawn.renderFlags() & 1) != 0;
         this.initialized = false;
         this.destroyed = false;
-        this.animTickCounter = 0;
-        this.animStepIndex = 0;
+        this.animTimeFrame = 0;
+        this.animScriptIndex = 0;
+        this.displayedFrame = 0;
         this.launchFlag = false;
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (destroyed) {
             return;
@@ -129,7 +141,7 @@ public class Sonic1BallHogBadnikInstance extends AbstractObjectInstance
         if (!initialized) {
             initialize();
         } else {
-            updateAction(frameCounter, player);
+            updateAction(vIntRunCount, player);
         }
     }
 
@@ -147,12 +159,17 @@ public class Sonic1BallHogBadnikInstance extends AbstractObjectInstance
      * </pre>
      */
     private void initialize() {
-        // ObjectFall: VelY += gravity, then Y += VelY (gravity applied before Y movement)
-        yVelocity += GRAVITY;
-        int yPos24 = (currentY << 8) | (ySubpixel & 0xFF);
-        yPos24 += yVelocity;
-        currentY = yPos24 >> 8;
-        ySubpixel = yPos24 & 0xFF;
+        // ROM ObjectFall (_incObj/sub ObjectFall & SpeedToPos.asm:8-23): Y moves with
+        // the OLD y_vel, then gravity is added to y_vel for the next frame (one-frame
+        // delayed gravity). The previous manual pre-increment applied gravity before
+        // the move.
+        motion.x = currentX;
+        motion.y = currentY;
+        motion.xVel = 0;
+        motion.yVel = yVelocity;
+        SubpixelMotion.objectFall(motion, GRAVITY);
+        currentY = motion.y;
+        yVelocity = (short) motion.yVel;
 
         // ObjFloorDist: find floor from feet (obY + obHeight)
         TerrainCheckResult floorResult = ObjectTerrainUtils.checkFloorDist(currentX, currentY, Y_RADIUS);
@@ -188,11 +205,11 @@ public class Sonic1BallHogBadnikInstance extends AbstractObjectInstance
      *     [spawn cannonball]
      * </pre>
      */
-    private void updateAction(int frameCounter, AbstractPlayableSprite player) {
+    private void updateAction(int vIntRunCount, AbstractPlayableSprite player) {
         // AnimateSprite: advance animation
         updateAnimation();
 
-        int currentFrame = ANIM_FRAMES[animStepIndex];
+        int currentFrame = displayedFrame;
 
         if (currentFrame == OPEN_FRAME) {
             // cmpi.b #1,obFrame(a0) / bne.s .setlaunchflag
@@ -215,14 +232,25 @@ public class Sonic1BallHogBadnikInstance extends AbstractObjectInstance
      * After reaching the end of the frame sequence, it loops back to the start (afEnd).
      */
     private void updateAnimation() {
-        animTickCounter++;
-        if (animTickCounter >= ANIM_SPEED) {
-            animTickCounter = 0;
-            animStepIndex++;
-            if (animStepIndex >= ANIM_FRAMES.length) {
-                animStepIndex = 0; // afEnd - loop animation
-            }
+        // ROM AnimateSprite (docs/s1disasm/_incObj/sub AnimateSprite.asm:17-23,46,58-63):
+        //   subq.b #1,obTimeFrame ; bpl.s Anim_Wait   -> only advance when it underflows.
+        //   On advance: reload obTimeFrame with the script speed byte, read the frame ID at
+        //   obAniFrame, then addq.b #1,obAniFrame. afEnd ($FF) wraps the index back to 0.
+        // obTimeFrame starts at 0, so the first call underflows immediately and shows
+        // frame[0]; every step (including the first) is therefore held for
+        // ANIM_SPEED_BYTE + 1 = 10 game frames. The previous count-up logic held the first
+        // step for only 9 frames, advancing the whole animation one frame early and making
+        // the Ball Hog launch its cannonball a frame ahead of ROM (SBZ1 f6082 early hurt).
+        animTimeFrame--;
+        if (animTimeFrame >= 0) {
+            return; // bpl.s Anim_Wait
         }
+        animTimeFrame = ANIM_SPEED_BYTE; // move.b (a1),obTimeFrame
+        if (animScriptIndex >= ANIM_FRAMES.length) {
+            animScriptIndex = 0; // afEnd: restart the animation from the beginning
+        }
+        displayedFrame = ANIM_FRAMES[animScriptIndex]; // read frame ID at obAniFrame
+        animScriptIndex++;                              // addq.b #1,obAniFrame
     }
 
     /**
@@ -251,8 +279,7 @@ public class Sonic1BallHogBadnikInstance extends AbstractObjectInstance
      */
     private void spawnCannonball() {
         ObjectServices svc = tryServices();
-        var objectManager = svc != null ? svc.objectManager() : null;
-        if (objectManager == null) {
+        if (svc == null || svc.objectManager() == null) {
             return;
         }
 
@@ -268,20 +295,20 @@ public class Sonic1BallHogBadnikInstance extends AbstractObjectInstance
             ballXVel = -ballXVel;   // neg.w obVelX(a1)
         }
 
-        int ballX = currentX + xOffset;
-        int ballY = currentY + CANNONBALL_Y_OFFSET;
-        int subtype = spawn.subtype();
+        final int ballX = currentX + xOffset;
+        final int ballY = currentY + CANNONBALL_Y_OFFSET;
+        final int subtype = spawn.subtype();
+        final int ballXVelFinal = ballXVel;
 
-        Sonic1CannonballInstance cannonball = new Sonic1CannonballInstance(
-                ballX, ballY, ballXVel, subtype);
-        objectManager.addDynamicObject(cannonball);
+        spawnFreeChild(() -> new Sonic1CannonballInstance(
+                ballX, ballY, ballXVelFinal, subtype));
     }
 
     /**
      * Returns the current mapping frame index from the animation sequence.
      */
     private int getMappingFrame() {
-        return ANIM_FRAMES[animStepIndex];
+        return displayedFrame;
     }
 
     // --- TouchResponseProvider / TouchResponseAttackable ---
@@ -316,8 +343,7 @@ public class Sonic1BallHogBadnikInstance extends AbstractObjectInstance
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         destroyed = true;
         // ROM parity: explosion inherits our slot (in-place obID change).
-        int mySlot = getSlotIndex();
-        setSlotIndex(-1);
+        int mySlot = ObjectLifetimeOps.detachSlotForTransfer(this);
         setDestroyed(true);
         DestructionEffects.destroyBadnik(currentX, currentY, spawn, mySlot,
                 player, services(), Sonic1DestructionConfig.S1_DESTRUCTION_CONFIG);
@@ -327,8 +353,12 @@ public class Sonic1BallHogBadnikInstance extends AbstractObjectInstance
 
     @Override
     public boolean isPersistent() {
-        // RememberState: persists while on screen
-        return !destroyed && isOnScreenX(160);
+        // BHog_Display ends at RememberState, whose out_of_range macro deletes the
+        // object once its chunk-aligned X leaves the [camera-128, camera-128+0x280]
+        // window (docs/s1disasm/_incObj/1E, 20 Badnik - Ball Hog and Cannonball.asm:61
+        // -> _incObj/sub RememberState.asm:9 -> Macros.asm:278-295). The symmetric
+        // isOnScreenX(160) gate freed the SST slot too early on the right.
+        return !destroyed && isInRange();
     }
 
     @Override
@@ -362,7 +392,7 @@ public class Sonic1BallHogBadnikInstance extends AbstractObjectInstance
         String state = initialized ? "ACTIVE" : "INIT";
         String dir = facingLeft ? "L" : "R";
         int frame = getMappingFrame();
-        String label = "BallHog " + state + " f" + frame + " s" + animStepIndex + " " + dir;
+        String label = "BallHog " + state + " f" + frame + " s" + animScriptIndex + " " + dir;
         ctx.drawWorldLabel(currentX, currentY, -2, label, DebugColor.YELLOW);
     }
 

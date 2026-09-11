@@ -1,9 +1,9 @@
 package com.openggf.game.sonic3k.titlecard;
 
 import com.openggf.game.titlecard.TitleCardMappings;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Verifies bonus title card mapping frames match Map - Title Card.asm lines 204-215.
@@ -30,7 +30,7 @@ public class TestSonic3kBonusTitleCardMappings {
                 Sonic3kTitleCardMappings.FRAME_COMPETITION);
         TitleCardMappings.SpritePiece[] bonus = Sonic3kTitleCardMappings.getFrame(
                 Sonic3kTitleCardMappings.FRAME_BONUS);
-        assertSame("Competition and Bonus should share the same array", competition, bonus);
+        assertSame(competition, bonus, "Competition and Bonus should share the same array");
     }
 
     @Test
@@ -67,3 +67,5 @@ public class TestSonic3kBonusTitleCardMappings {
                 Sonic3kTitleCardMappings.FRAME_ZONE).length);
     }
 }
+
+

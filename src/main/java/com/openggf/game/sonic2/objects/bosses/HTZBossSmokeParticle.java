@@ -6,6 +6,7 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -21,7 +22,7 @@ import java.util.List;
  * Animation uses delay $11 (17 decimal) per frame.
  * Self-destructs after animation completes.
  */
-public class HTZBossSmokeParticle extends AbstractObjectInstance {
+public class HTZBossSmokeParticle extends AbstractObjectInstance implements SpawnRewindRecreatable {
 
     // Animation constants (ROM: s2.asm:64132, 64139-64142)
     // ROM: move.b #$11,anim_frame_duration(a1) = 17 frames per animation frame
@@ -66,7 +67,7 @@ public class HTZBossSmokeParticle extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) {
             return;

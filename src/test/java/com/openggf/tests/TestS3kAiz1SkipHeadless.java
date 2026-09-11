@@ -1,10 +1,9 @@
 package com.openggf.tests;
 
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import com.openggf.camera.Camera;
 import com.openggf.game.GameServices;
 import com.openggf.configuration.SonicConfiguration;
@@ -19,19 +18,18 @@ import com.openggf.physics.GroundSensor;
 import com.openggf.game.GroundMode;
 import com.openggf.sprites.playable.Sonic;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
 
 import java.lang.reflect.Method;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * Grouped headless tests for Sonic 3K AIZ Act 1 with intro skip enabled.
  *
- * Level data is loaded once via {@code @BeforeClass}; sprite, camera, and game
+ * Level data is loaded once via {@code @BeforeAll}; sprite, camera, and game
  * state are reset per test via {@link HeadlessTestFixture}.
  *
  * Merged from:
@@ -42,16 +40,13 @@ import static org.junit.Assert.fail;
  */
 @RequiresRom(SonicGame.SONIC_3K)
 public class TestS3kAiz1SkipHeadless {
-
-    @ClassRule public static RequiresRomRule romRule = new RequiresRomRule();
-
     private static final int ZONE_AIZ = 0;
     private static final int ACT_1 = 0;
 
     private static Object oldSkipIntros;
     private static SharedLevel sharedLevel;
 
-    @BeforeClass
+    @BeforeAll
     public static void loadLevel() throws Exception {
         SonicConfigurationService config = SonicConfigurationService.getInstance();
         oldSkipIntros = config.getConfigValue(SonicConfiguration.S3K_SKIP_INTROS);
@@ -60,7 +55,7 @@ public class TestS3kAiz1SkipHeadless {
         sharedLevel = SharedLevel.load(SonicGame.SONIC_3K, ZONE_AIZ, ACT_1);
     }
 
-    @AfterClass
+    @AfterAll
     public static void cleanup() {
         SonicConfigurationService.getInstance().setConfigValue(
                 SonicConfiguration.S3K_SKIP_INTROS,
@@ -71,7 +66,7 @@ public class TestS3kAiz1SkipHeadless {
     private HeadlessTestFixture fixture;
     private Sonic sprite;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         fixture = HeadlessTestFixture.builder()
                 .withSharedLevel(sharedLevel)
@@ -91,11 +86,10 @@ public class TestS3kAiz1SkipHeadless {
     public void aiz1IntroSkipSpawnHasCollisionAndNoImmediatePitDeath() {
         int centreX = sprite.getCentreX();
         int centreY = sprite.getCentreY();
-        assertTrue("Expected collidable primary terrain below AIZ1 intro-skip spawn",
-                hasPrimaryCollisionBelow(centreX, centreY, 512));
+        assertTrue(hasPrimaryCollisionBelow(centreX, centreY, 512), "Expected collidable primary terrain below AIZ1 intro-skip spawn");
 
         fixture.stepIdleFrames(30);
-        assertFalse("AIZ1 intro-skip spawn should not immediately enter death state", sprite.getDead());
+        assertFalse(sprite.getDead(), "AIZ1 intro-skip spawn should not immediately enter death state");
     }
 
     private boolean hasPrimaryCollisionBelow(int worldX, int worldY, int rangePixels) {
@@ -233,7 +227,7 @@ public class TestS3kAiz1SkipHeadless {
             prevX = x;
         }
 
-        assertTrue("Expected Sonic to pass waypoint X=11412 Y=1070 within 7 in-game seconds. "
+        assertTrue(reachedWaypoint, "Expected Sonic to pass waypoint X=11412 Y=1070 within 7 in-game seconds. "
                         + "Final X=" + sprite.getX() + " Y=" + sprite.getY()
                         + " Input=HoldRight"
                         + " MinYOverall=" + minYOverall
@@ -243,9 +237,8 @@ public class TestS3kAiz1SkipHeadless {
                         + " RideFrames=" + rideFrames
                         + " FirstRideOffFrame=" + firstRideOffFrame
                         + " ObjCtrl=" + sprite.isObjectControlled()
-                        + " ObjMapCtrl=" + sprite.isObjectMappingFrameControl(),
-                reachedWaypoint);
-        assertTrue("Expected Sonic to traverse hollow log and reach Y<=808 within 7 in-game seconds."
+                        + " ObjMapCtrl=" + sprite.isObjectMappingFrameControl());
+        assertTrue(reachedExitHeight, "Expected Sonic to traverse hollow log and reach Y<=808 within 7 in-game seconds."
                         + " MinYAfterWaypoint=" + minYAfterWaypoint
                         + " MinYOverall=" + minYOverall
                         + " MinYOverallFrame=" + minYOverallFrame
@@ -257,8 +250,7 @@ public class TestS3kAiz1SkipHeadless {
                         + " RideFrames=" + rideFrames
                         + " FirstRideOffFrame=" + firstRideOffFrame
                         + " ObjCtrl=" + sprite.isObjectControlled()
-                        + " ObjMapCtrl=" + sprite.isObjectMappingFrameControl(),
-                reachedExitHeight);
+                        + " ObjMapCtrl=" + sprite.isObjectMappingFrameControl());
     }
 
     @Test
@@ -285,17 +277,14 @@ public class TestS3kAiz1SkipHeadless {
             }
         }
 
-        assertTrue("Expected Hollow Log to drive Events_fg_4 to at least 0x14 in Act 1. "
-                        + "Frame=" + firstThresholdFrame,
-                reachedFirstThreshold);
-        assertTrue("Expected Hollow Log to progress to at least the second reveal threshold (0x24). "
-                        + "FirstThresholdFrame=" + firstThresholdFrame,
-                reachedSecondThreshold);
+        assertTrue(reachedFirstThreshold, "Expected Hollow Log to drive Events_fg_4 to at least 0x14 in Act 1. "
+                        + "Frame=" + firstThresholdFrame);
+        assertTrue(reachedSecondThreshold, "Expected Hollow Log to progress to at least the second reveal threshold (0x24). "
+                        + "FirstThresholdFrame=" + firstThresholdFrame);
         // Counter must reach the upper reveal range. The exact peak depends on
         // frame-level tick ordering; 0x33 and 0x34 both indicate full progression.
-        assertTrue("Expected upper reveal progression (counter >= 0x33) to occur for full top-section reveal."
-                        + " MaxRevealCounter=0x" + Integer.toHexString(maxRevealCounter),
-                maxRevealCounter >= 0x33);
+        assertTrue(maxRevealCounter >= 0x33, "Expected upper reveal progression (counter >= 0x33) to occur for full top-section reveal."
+                        + " MaxRevealCounter=0x" + Integer.toHexString(maxRevealCounter));
     }
 
     @Test
@@ -324,12 +313,10 @@ public class TestS3kAiz1SkipHeadless {
             }
         }
 
-        assertTrue("Expected Events_fg_4 to start (non-zero) during hollow-log traversal.",
-                revealStarted);
-        assertTrue("Expected Events_fg_4 to self-clear after reveal progression while holding Right."
+        assertTrue(revealStarted, "Expected Events_fg_4 to start (non-zero) during hollow-log traversal.");
+        assertTrue(revealClearedAfterStart, "Expected Events_fg_4 to self-clear after reveal progression while holding Right."
                         + " MaxCounter=0x" + Integer.toHexString(maxRevealCounter)
-                        + " ClearFrame=" + clearFrame,
-                revealClearedAfterStart);
+                        + " ClearFrame=" + clearFrame);
     }
 
     @Test
@@ -355,19 +342,17 @@ public class TestS3kAiz1SkipHeadless {
 
     @Test
     public void hollowLogTraversal_visualRevealStableAcrossRepeatRuns() {
-        // Reload level to get a clean tilemap — earlier tests may have mutated it
+        // Reload level to get a clean tilemap â€” earlier tests may have mutated it
         // via applyHollowTreeScreenEvent during frame stepping.
         reloadAizAct1AndApplyDebugStart();
 
         LevelManager levelManager = GameServices.level();
 
-        assertTrue("Expected first traversal to trigger and finish tree reveal.",
-                runUntilTreeRevealClears());
+        assertTrue(runUntilTreeRevealClears(), "Expected first traversal to trigger and finish tree reveal.");
         int[] firstPass = snapshotRevealWindow(levelManager);
 
         reloadAizAct1AndApplyDebugStart();
-        assertTrue("Expected second traversal to trigger and finish tree reveal.",
-                runUntilTreeRevealClears());
+        assertTrue(runUntilTreeRevealClears(), "Expected second traversal to trigger and finish tree reveal.");
         int[] secondPass = snapshotRevealWindow(levelManager);
 
         int diffCount = 0;
@@ -381,18 +366,16 @@ public class TestS3kAiz1SkipHeadless {
             }
         }
 
-        assertTrue("Expected repeat traversal to produce identical reveal tilemap output."
+        assertTrue(diffCount == 0, "Expected repeat traversal to produce identical reveal tilemap output."
                         + " diffCount=" + diffCount
-                        + " firstDiffIndex=" + firstDiffIndex,
-                diffCount == 0);
+                        + " firstDiffIndex=" + firstDiffIndex);
     }
 
     @Test
     public void hollowLogTraversal_reentryLandsOnBottomFloor() {
         applyDebugStartState();
 
-        assertTrue("Expected first pass to complete hollow-log ascent before re-entry check.",
-                runUntilExitHeightHoldingRight());
+        assertTrue(runUntilExitHeightHoldingRight(), "Expected first pass to complete hollow-log ascent before re-entry check.");
 
         boolean descendedBackIntoTunnel = false;
         boolean landedAtBottomFloor = false;
@@ -423,21 +406,18 @@ public class TestS3kAiz1SkipHeadless {
             }
         }
 
-        assertTrue("Expected Sonic to descend back into the hollow-tree tunnel after ascent."
-                        + " maxYAfterExit=" + maxYAfterExit,
-                descendedBackIntoTunnel);
-        assertTrue("Expected Sonic to land on the tunnel bottom floor after re-entry."
+        assertTrue(descendedBackIntoTunnel, "Expected Sonic to descend back into the hollow-tree tunnel after ascent."
+                        + " maxYAfterExit=" + maxYAfterExit);
+        assertTrue(landedAtBottomFloor, "Expected Sonic to land on the tunnel bottom floor after re-entry."
                         + " landedY=" + landedY
-                        + " maxYAfterExit=" + maxYAfterExit,
-                landedAtBottomFloor);
+                        + " maxYAfterExit=" + maxYAfterExit);
     }
 
     @Test
     public void hollowLogTraversal_topExitMaintainsForwardTraversal() {
         applyDebugStartState();
 
-        assertTrue("Expected hollow-log ascent to reach top-exit height before momentum check.",
-                runUntilExitHeightHoldingRight());
+        assertTrue(runUntilExitHeightHoldingRight(), "Expected hollow-log ascent to reach top-exit height before momentum check.");
 
         int exitX = sprite.getX();
         int exitY = sprite.getY();
@@ -487,19 +467,17 @@ public class TestS3kAiz1SkipHeadless {
             }
         }
 
-        assertTrue("Expected ride release to occur shortly after top-exit traversal."
+        assertTrue(releasedFromRide, "Expected ride release to occur shortly after top-exit traversal."
                         + " releaseFrame=" + releaseFrame
                         + " exitX=" + exitX
-                        + " exitY=" + exitY,
-                releasedFromRide);
-        assertTrue("Expected continued forward traversal after top exit while holding Right."
+                        + " exitY=" + exitY);
+        assertTrue(maxForwardGain >= 48, "Expected continued forward traversal after top exit while holding Right."
                         + " maxForwardGain=" + maxForwardGain
                         + " releaseFrame=" + releaseFrame
                         + " finalCheckedFrame=" + finalCheckedFrame
                         + " finalCheckedX=0x" + Integer.toHexString(finalCheckedX)
                         + " exitX=" + exitX
-                        + " exitY=" + exitY,
-                maxForwardGain >= 48);
+                        + " exitY=" + exitY);
     }
 
     // ========== Hollow Log Helpers ==========
@@ -624,3 +602,5 @@ public class TestS3kAiz1SkipHeadless {
         return map.getValue(0, chunkX, chunkY) & 0xFF;
     }
 }
+
+

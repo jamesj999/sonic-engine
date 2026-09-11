@@ -72,6 +72,23 @@ public enum Sonic1Sfx {
     /** Highest SFX ID (including special SFX). */
     public static final int ID_MAX = 0xD0;
 
+    /**
+     * Highest id dispatched through the <em>normal</em> SFX pointer table --
+     * NOT {@link #ID_MAX}, which also includes the special-table id 0xD0.
+     * <p>ROM's {@code PlaySoundID} (docs/s1disasm/s1.sounddriver.asm:691-699)
+     * checks the normal SFX range ({@code cmpi.b #sfx__Last,d7 / bls.w
+     * Sound_PlaySFX}, comment "Is this sfx ($A0-$CF)?") and the special SFX
+     * range ({@code cmpi.b #spec__Last,d7 / bls.w Sound_PlaySpecial}, comment
+     * "Is this special sfx ($D0-$D0)?") as two disjoint ranges, not an
+     * inclusive-then-overlapping pair: {@code sfx__Last} (0xCF, docs/s1disasm
+     * /_Constants.asm:330) is the last NORMAL-table entry, and {@code
+     * spec__First}/{@code spec__Last} (0xD0/0xD0, _Constants.asm:333,335) are
+     * the special table's own (single-entry) range. Dispatch code must check
+     * this boundary before falling back to the special range, mirroring the
+     * ROM's own ordering.
+     */
+    public static final int NORMAL_ID_MAX = 0xCF;
+
     private static final Map<Integer, String> NAME_MAP;
     private static final Sonic1Sfx[] BY_ID;
 

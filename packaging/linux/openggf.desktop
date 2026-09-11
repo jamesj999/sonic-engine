@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=OpenGGF
+GenericName=Mega Drive Game Engine
+Comment=Open-source Java engine for research and preservation of classic Mega Drive platform games
+Exec=java -jar /opt/openggf/OpenGGF.jar
+Icon=openggf
+Terminal=false
+Categories=Game;ArcadeGame;
+StartupWMClass=openggf

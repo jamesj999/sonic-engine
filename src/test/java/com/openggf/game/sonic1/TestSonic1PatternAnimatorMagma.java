@@ -1,8 +1,8 @@
 package com.openggf.game.sonic1;
 
 import com.openggf.game.OscillationManager;
-import org.junit.Rule;
-import org.junit.Test;
+import com.openggf.game.session.SessionManager;
+import org.junit.jupiter.api.Test;
 import com.openggf.data.RomByteReader;
 import com.openggf.game.sonic1.constants.Sonic1Constants;
 import com.openggf.level.Block;
@@ -16,42 +16,44 @@ import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.rings.RingSpawn;
 import com.openggf.level.rings.RingSpriteSheet;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
+import com.openggf.tests.TestEnvironment;
 
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 
-import static org.junit.Assert.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 @RequiresRom(SonicGame.SONIC_1)
 public class TestSonic1PatternAnimatorMagma {
-    @Rule
-    public RequiresRomRule romRule = new RequiresRomRule();
-
     @Test
     public void marbleMagmaBodyTilesAreGeneratedAndAnimated() throws IOException {
         OscillationManager.reset();
+        TestEnvironment.activeGameplayMode();
 
-        int required = Sonic1Constants.ARTTILE_MZ_ANIMATED_MAGMA + 16;
-        TestLevel level = new TestLevel(required + 32);
+        try {
+            int required = Sonic1Constants.ARTTILE_MZ_ANIMATED_MAGMA + 16;
+            TestLevel level = new TestLevel(required + 32);
 
-        Sonic1PatternAnimator animator = new Sonic1PatternAnimator(
-                RomByteReader.fromRom(romRule.rom()),
-                level,
-                Sonic1Constants.ZONE_MZ);
+            Sonic1PatternAnimator animator = new Sonic1PatternAnimator(
+                    RomByteReader.fromRom(com.openggf.tests.TestEnvironment.currentRom()),
+                    level,
+                    Sonic1Constants.ZONE_MZ);
 
-        int magmaTile = Sonic1Constants.ARTTILE_MZ_ANIMATED_MAGMA;
-        byte[] initial = dumpMagmaBlock(level, magmaTile);
+            int magmaTile = Sonic1Constants.ARTTILE_MZ_ANIMATED_MAGMA;
+            byte[] initial = dumpMagmaBlock(level, magmaTile);
 
-        for (int frame = 1; frame <= 13; frame++) {
-            OscillationManager.update(frame);
-            animator.update();
+            for (int frame = 1; frame <= 13; frame++) {
+                OscillationManager.update(frame);
+                animator.update();
+            }
+
+            byte[] animated = dumpMagmaBlock(level, magmaTile);
+            assertFalse(Arrays.equals(initial, animated), "MZ magma block should animate over time");
+        } finally {
+            SessionManager.clear();
         }
-
-        byte[] animated = dumpMagmaBlock(level, magmaTile);
-        assertFalse("MZ magma block should animate over time", Arrays.equals(initial, animated));
     }
 
     private static byte[] dumpPattern(Pattern pattern) {
@@ -189,3 +191,5 @@ public class TestSonic1PatternAnimatorMagma {
         }
     }
 }
+
+

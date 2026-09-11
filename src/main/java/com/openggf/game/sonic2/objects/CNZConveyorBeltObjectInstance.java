@@ -3,6 +3,8 @@ package com.openggf.game.sonic2.objects;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 import com.openggf.game.PlayableEntity;
 
@@ -23,7 +25,7 @@ import java.util.List;
  * - X-flip clear: velocity = +2 (rightward)
  * - X-flip set: velocity = -2 (leftward)
  */
-public class CNZConveyorBeltObjectInstance extends AbstractObjectInstance {
+public class CNZConveyorBeltObjectInstance extends AbstractObjectInstance implements RewindRecreatable {
 
     // From disassembly: move.w #$30,objoff_3C(a0) / move.w #$70,objoff_3C(a0)
     private static final int HEIGHT_NORMAL = 0x30;   // 48 pixels
@@ -33,9 +35,9 @@ public class CNZConveyorBeltObjectInstance extends AbstractObjectInstance {
     private static final int VELOCITY = 2;
 
     // Calculated values from subtype
-    private final int widthPixels;    // objoff_38: (subtype & 0x7F) << 4
-    private final int heightPixels;   // objoff_3C: 0x30 or 0x70
-    private final int velocityX;      // objoff_36: +2 or -2
+    private int widthPixels;    // objoff_38: (subtype & 0x7F) << 4
+    private int heightPixels;   // objoff_3C: 0x30 or 0x70
+    private int velocityX;      // objoff_36: +2 or -2
 
     public CNZConveyorBeltObjectInstance(ObjectSpawn spawn, String name) {
         super(spawn, name);
@@ -50,7 +52,7 @@ public class CNZConveyorBeltObjectInstance extends AbstractObjectInstance {
         // andi.b #$7F,d0
         // lsl.b  #4,d0
         // move.b d0,objoff_38(a0)
-        this.widthPixels = (subtype & 0x7F) << 4;
+        this.widthPixels = ((subtype & 0x7F) << 4) & 0xFF;
 
         // move.w #2,objoff_36(a0)
         // btst   #status.npc.x_flip,status(a0)
@@ -61,7 +63,12 @@ public class CNZConveyorBeltObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public CNZConveyorBeltObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new CNZConveyorBeltObjectInstance(ctx.spawn(), getName());
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // From disassembly Obj72_Main:
         // lea (MainCharacter).w,a1
@@ -129,8 +136,7 @@ public class CNZConveyorBeltObjectInstance extends AbstractObjectInstance {
 
         // move.w objoff_36(a0),d0    ; get velocity
         // add.w  d0,x_pos(a1)        ; apply velocity to player X
-        // Note: We add to the pixel position directly
-        player.setX((short) (player.getX() + velocityX));
+        player.shiftX(velocityX);
     }
 
     /**

@@ -9,6 +9,8 @@ import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
+import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.ObjectTerrainUtils;
@@ -61,7 +63,7 @@ import java.util.List;
  * Reference: docs/s1disasm/_incObj/14 Lava Ball.asm
  */
 public class Sonic1LavaBallObjectInstance extends AbstractObjectInstance
-        implements TouchResponseProvider {
+        implements TouchResponseProvider, SpawnRewindRecreatable {
 
     // ========================================================================
     // ROM Constants
@@ -137,7 +139,7 @@ public class Sonic1LavaBallObjectInstance extends AbstractObjectInstance
     private int currentSubtype;
 
     /** Whether this ball started as a horizontal type (subtypes 6-7). */
-    private final boolean isHorizontal;
+    private boolean isHorizontal;
 
     /**
      * Base V-flip from obStatus bit 1, set when velY < 0 (moving up).
@@ -165,14 +167,11 @@ public class Sonic1LavaBallObjectInstance extends AbstractObjectInstance
     /** X velocity in subpixels (signed 16-bit). */
     private int velX;
 
-    /** Y subpixel accumulator for fractional movement. */
-    private int ySubpixel;
-
-    /** X subpixel accumulator for fractional movement. */
-    private int xSubpixel;
+    /** Subpixel accumulators (xSub / ySub) for ROM-accurate 16.16 SpeedToPos integration. */
+    private final SubpixelMotion.State motion = new SubpixelMotion.State(0, 0, 0, 0, 0, 0);
 
     /** Original Y position (objoff_30), used for deletion check in subtypes 0-3. */
-    private final int originY;
+    private int originY;
 
     /** Animation frame index (cycling through animation frames). */
     private int animFrameIndex;
@@ -189,9 +188,9 @@ public class Sonic1LavaBallObjectInstance extends AbstractObjectInstance
     /** Art key to use for rendering (zone-dependent: MZ_FIREBALL or SLZ_FIREBALL). */
     private String artKey;
     /** Boss-spawned variant uses subtype word $00FF in ROM. */
-    private final boolean bossDroppedVariant;
+    private boolean bossDroppedVariant;
     /** Priority bucket can be elevated for boss-spawned lava. */
-    private final int priorityBucket;
+    private int priorityBucket;
 
     public Sonic1LavaBallObjectInstance(ObjectSpawn spawn) {
         super(spawn, "LavaBall");
@@ -261,7 +260,7 @@ public class Sonic1LavaBallObjectInstance extends AbstractObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         ensureInitialized();
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (inCollisionAnim) {
@@ -447,19 +446,14 @@ public class Sonic1LavaBallObjectInstance extends AbstractObjectInstance
      * fractional parts (e.g., velY=-0x318 gives -3px instead of ROM's -4px).
      */
     private void applyVelocity() {
-        // X: SpeedToPos 16.16 fixed-point
-        int xVel32 = (int) (short) velX;
-        int x32 = (currentX << 16) | (xSubpixel & 0xFFFF);
-        x32 += xVel32 << 8;
-        currentX = x32 >> 16;
-        xSubpixel = x32 & 0xFFFF;
-
-        // Y: SpeedToPos 16.16 fixed-point
-        int yVel32 = (int) (short) velY;
-        int y32 = (currentY << 16) | (ySubpixel & 0xFFFF);
-        y32 += yVel32 << 8;
-        currentY = y32 >> 16;
-        ySubpixel = y32 & 0xFFFF;
+        // SpeedToPos 16.16 fixed-point integration for both X and Y.
+        motion.x = currentX;
+        motion.y = currentY;
+        motion.xVel = velX;
+        motion.yVel = velY;
+        SubpixelMotion.speedToPos(motion);
+        currentX = motion.x;
+        currentY = motion.y;
     }
 
     /**

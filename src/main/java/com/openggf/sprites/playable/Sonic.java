@@ -25,7 +25,7 @@ public class Sonic extends AbstractPlayableSprite {
 		// ROM: During hurt bounce (routine 4), DisplaySprite is called directly
 		// (always visible). Flashing only occurs after landing (routine 2) via
 		// Sonic_Display: lsr.w #3,d0 / bcc = visible when (timer & 0x04) != 0.
-		if (!isHurt() && getInvulnerableFrames() > 0 && (getInvulnerableFrames() & 0x04) == 0) {
+		if (!shouldRefreshRenderFlagThisFrame()) {
 			// Still draw spindash dust even when blinking
 			if (getSpindashDustController() != null) {
 				getSpindashDustController().draw();

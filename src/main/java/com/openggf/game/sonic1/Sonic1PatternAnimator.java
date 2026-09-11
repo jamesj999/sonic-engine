@@ -1,13 +1,14 @@
 package com.openggf.game.sonic1;
 
 import com.openggf.data.RomByteReader;
+import com.openggf.game.GameServices;
 import com.openggf.game.OscillationManager;
 import com.openggf.game.sonic1.constants.Sonic1Constants;
 import com.openggf.graphics.GraphicsManager;
 import com.openggf.level.Level;
 import com.openggf.level.Pattern;
 import com.openggf.level.animation.AnimatedPatternManager;
-import com.openggf.tools.KosinskiReader;
+import com.openggf.data.compression.KosinskiReader;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -33,12 +34,12 @@ import java.util.logging.Logger;
  *   <li>SBZ - Smoke Puff 1 (7 frames + 3s interval), Smoke Puff 2 (7 frames + 2s interval)</li>
  * </ul>
  */
-class Sonic1PatternAnimator implements AnimatedPatternManager {
+class Sonic1PatternAnimator implements AnimatedPatternManager,
+        com.openggf.game.rewind.RewindSnapshottable<com.openggf.game.rewind.snapshot.PatternAnimatorSnapshot> {
 
     private static final Logger LOG = Logger.getLogger(Sonic1PatternAnimator.class.getName());
 
     private final Level level;
-    private final GraphicsManager graphicsManager = GraphicsManager.getInstance();
     private final List<AnimHandler> handlers;
 
     Sonic1PatternAnimator(RomByteReader reader, Level level, int zoneIndex) {
@@ -50,6 +51,7 @@ class Sonic1PatternAnimator implements AnimatedPatternManager {
 
     @Override
     public void update() {
+        GraphicsManager graphicsManager = GameServices.graphics();
         for (AnimHandler handler : handlers) {
             handler.tick(level, graphicsManager);
         }
@@ -309,6 +311,7 @@ class Sonic1PatternAnimator implements AnimatedPatternManager {
     }
 
     private void primeAll() {
+        GraphicsManager graphicsManager = GameServices.graphics();
         for (AnimHandler handler : handlers) {
             handler.prime(level, graphicsManager);
         }
@@ -320,6 +323,10 @@ class Sonic1PatternAnimator implements AnimatedPatternManager {
         void tick(Level level, GraphicsManager gm);
         void prime(Level level, GraphicsManager gm);
         int requiredPatternCount();
+        /** Returns opaque counter state for rewind snapshot. */
+        com.openggf.game.rewind.snapshot.PatternAnimatorSnapshot.HandlerCounter captureCounters();
+        /** Restores counters from a rewind snapshot entry. */
+        void restoreCounters(com.openggf.game.rewind.snapshot.PatternAnimatorSnapshot.HandlerCounter hc);
     }
 
     // ===== Simple cycling animation =====
@@ -401,6 +408,18 @@ class Sonic1PatternAnimator implements AnimatedPatternManager {
         protected void onFrameApplied(int frame) {
             // Optional hook for handlers that need the active frame index.
         }
+
+        @Override
+        public com.openggf.game.rewind.snapshot.PatternAnimatorSnapshot.HandlerCounter captureCounters() {
+            return new com.openggf.game.rewind.snapshot.PatternAnimatorSnapshot.HandlerCounter(
+                    timer, frameCounter, 0);
+        }
+
+        @Override
+        public void restoreCounters(com.openggf.game.rewind.snapshot.PatternAnimatorSnapshot.HandlerCounter hc) {
+            timer = hc.slot0();
+            frameCounter = hc.slot1();
+        }
     }
 
     /**
@@ -423,6 +442,20 @@ class Sonic1PatternAnimator implements AnimatedPatternManager {
 
         int getCurrentFrame() {
             return currentFrame;
+        }
+
+        @Override
+        public com.openggf.game.rewind.snapshot.PatternAnimatorSnapshot.HandlerCounter captureCounters() {
+            // slot0=timer, slot1=frameCounter (from CyclingAnim), slot2=currentFrame
+            com.openggf.game.rewind.snapshot.PatternAnimatorSnapshot.HandlerCounter base = super.captureCounters();
+            return new com.openggf.game.rewind.snapshot.PatternAnimatorSnapshot.HandlerCounter(
+                    base.slot0(), base.slot1(), currentFrame);
+        }
+
+        @Override
+        public void restoreCounters(com.openggf.game.rewind.snapshot.PatternAnimatorSnapshot.HandlerCounter hc) {
+            super.restoreCounters(hc);
+            currentFrame = hc.slot2();
         }
     }
 
@@ -521,6 +554,16 @@ class Sonic1PatternAnimator implements AnimatedPatternManager {
             }
         }
 
+        @Override
+        public com.openggf.game.rewind.snapshot.PatternAnimatorSnapshot.HandlerCounter captureCounters() {
+            return new com.openggf.game.rewind.snapshot.PatternAnimatorSnapshot.HandlerCounter(timer, 0, 0);
+        }
+
+        @Override
+        public void restoreCounters(com.openggf.game.rewind.snapshot.PatternAnimatorSnapshot.HandlerCounter hc) {
+            timer = hc.slot0();
+        }
+
         private static byte[] toSegaBytes(Pattern[] patterns) {
             if (patterns == null || patterns.length == 0) {
                 return new byte[0];
@@ -607,6 +650,18 @@ class Sonic1PatternAnimator implements AnimatedPatternManager {
             // Dest 2: Kos_EndFlowers → Big_Flower_2
             writeTiles(level, gm, flower2Art, srcOffset,
                     Sonic1Constants.ARTTILE_GHZ_BIG_FLOWER_2, maxPatterns, canUpdate);
+        }
+
+        @Override
+        public com.openggf.game.rewind.snapshot.PatternAnimatorSnapshot.HandlerCounter captureCounters() {
+            return new com.openggf.game.rewind.snapshot.PatternAnimatorSnapshot.HandlerCounter(
+                    timer, frameCounter, 0);
+        }
+
+        @Override
+        public void restoreCounters(com.openggf.game.rewind.snapshot.PatternAnimatorSnapshot.HandlerCounter hc) {
+            timer = hc.slot0();
+            frameCounter = hc.slot1();
         }
 
         private static void writeTiles(Level level, GraphicsManager gm,
@@ -725,6 +780,20 @@ class Sonic1PatternAnimator implements AnimatedPatternManager {
             }
         }
 
+        @Override
+        public com.openggf.game.rewind.snapshot.PatternAnimatorSnapshot.HandlerCounter captureCounters() {
+            // slot0=frameTimer, slot1=intervalTimer, slot2=frameCounter
+            return new com.openggf.game.rewind.snapshot.PatternAnimatorSnapshot.HandlerCounter(
+                    frameTimer, intervalTimer, frameCounter);
+        }
+
+        @Override
+        public void restoreCounters(com.openggf.game.rewind.snapshot.PatternAnimatorSnapshot.HandlerCounter hc) {
+            frameTimer = hc.slot0();
+            intervalTimer = hc.slot1();
+            frameCounter = hc.slot2();
+        }
+
         /**
          * Fill destination with the first half of the smoke art repeated.
          * This matches the original: first 6 tiles loaded, then a1 reset and
@@ -746,6 +815,35 @@ class Sonic1PatternAnimator implements AnimatedPatternManager {
                     gm.updatePatternTexture(dest, destIndex);
                 }
             }
+        }
+    }
+
+    // --- RewindSnapshottable<PatternAnimatorSnapshot> ---
+
+    @Override
+    public String key() {
+        return "pattern-animator";
+    }
+
+    @Override
+    public com.openggf.game.rewind.snapshot.PatternAnimatorSnapshot capture() {
+        com.openggf.game.rewind.snapshot.PatternAnimatorSnapshot.HandlerCounter[] hc =
+                new com.openggf.game.rewind.snapshot.PatternAnimatorSnapshot.HandlerCounter[handlers.size()];
+        for (int i = 0; i < handlers.size(); i++) {
+            hc[i] = handlers.get(i).captureCounters();
+        }
+        return new com.openggf.game.rewind.snapshot.PatternAnimatorSnapshot(
+                new com.openggf.game.rewind.snapshot.PatternAnimatorSnapshot.ScriptCounter[0],
+                hc,
+                null);
+    }
+
+    @Override
+    public void restore(com.openggf.game.rewind.snapshot.PatternAnimatorSnapshot snap) {
+        com.openggf.game.rewind.snapshot.PatternAnimatorSnapshot.HandlerCounter[] hc = snap.handlerCounters();
+        int restoreCount = Math.min(hc.length, handlers.size());
+        for (int i = 0; i < restoreCount; i++) {
+            handlers.get(i).restoreCounters(hc[i]);
         }
     }
 }

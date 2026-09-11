@@ -1,0 +1,44 @@
+diff --git a/src/main/java/com/openggf/game/sonic3k/events/Sonic3kMGZEvents.java b/src/main/java/com/openggf/game/sonic3k/events/Sonic3kMGZEvents.java
+index e3c76dedd..d372780db 100644
+--- a/src/main/java/com/openggf/game/sonic3k/events/Sonic3kMGZEvents.java
++++ b/src/main/java/com/openggf/game/sonic3k/events/Sonic3kMGZEvents.java
+@@ -584,24 +584,24 @@ public class Sonic3kMGZEvents extends Sonic3kZoneEvents {
+         if (act2SizeChangeArmed && gameState().isEndOfLevelFlag()) {
+             act2SizeChangeArmed = false;
+             act2SizeChangeActive = true;
+-            // Each child executes its create entry before joining the shared
+-            // gradual-worker dispatch later in the same object pass.
+-            act2SizeMaxXAccumulator = 0x4000;
+-            act2SizeMinYAccumulator = 0x4000;
+-            // Child1 creation reaches the later Obj_IncLevEndYGradual
+-            // slot after its create entry in the same Process_Sprites
+-            // pass. Seed that create-side half step before the shared
+-            // worker dispatch below.
+-            act2SizeMaxYAccumulator = 0x8000;
++            // Change_Act2Sizes falls through into Make_LevelSizeObj, which
++            // allocates the three Child1_Act2LevelSize workers with
++            // CreateChild1_Normal -> AllocateObjectAfterCurrent
++            // (sonic3k.asm:180580-180616,176924-176950,37917-37930). That
++            // allocator only ever returns a slot *after* the creating object,
++            // so the ascending Process_Sprites walk reaches every worker in
++            // this same pass: the creation frame is dispatch 1 and each
++            // accumulator starts at zero. Do not pre-charge them -- a seeded
++            // accumulator makes engine dispatch k behave as ROM dispatch k+1.
++            act2SizeMaxXAccumulator = 0;
++            act2SizeMinYAccumulator = 0;
++            act2SizeMaxYAccumulator = 0;
+ 
+             Level level = levelManager().getCurrentLevel();
+             if (level != null) {
+-                // Change_Act2Sizes hands its Child1_Act2LevelSize workers a
+-                // max-Y boundary that already contains the native two-pixel
+-                // carry at this owner handoff. Preserve that carry before the
+-                // first Obj_IncLevEndYGradual dispatch; otherwise the camera's
+-                // first downward clamp starts two pixels low.
+-                camera().setMaxY((short) (camera().getMaxY() + 2));
++                // Change_Act2Sizes writes Camera_target_max_Y_pos only; the
++                // boundary itself is moved solely by Obj_IncLevEndYGradual
++                // below, whose first dispatch carries no integer step.
+                 camera().setMaxYTarget((short) level.getMaxY());
+             }
+             LOG.info("MGZ2: title card completed; starting Change_Act2Sizes workers");

@@ -1,14 +1,15 @@
 package com.openggf.game.sonic2.objects.bosses;
 import com.openggf.game.PlayableEntity;
-import com.openggf.level.objects.ExplosionObjectInstance;
 
 import com.openggf.game.sonic2.audio.Sonic2Sfx;
+import com.openggf.game.sonic2.constants.Sonic2ObjectIds;
 import com.openggf.level.objects.boss.BossExplosionObjectInstance;
 import com.openggf.game.sonic2.Sonic2ObjectArtKeys;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnTrailingZeroIntsRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -19,7 +20,8 @@ import java.util.List;
  * ROM Reference: s2.asm Obj5D (ROUTINE_FALLING_PARTS = 0x14)
  * Explodes after timer, then falls with gravity.
  */
-public class CPZBossFallingPart extends AbstractObjectInstance {
+public class CPZBossFallingPart extends AbstractObjectInstance
+        implements SpawnTrailingZeroIntsRewindRecreatable {
 
     private static final int GRAVITY = 0x38;
     private static final int FLOOR_Y = 0x580;
@@ -53,8 +55,12 @@ public class CPZBossFallingPart extends AbstractObjectInstance {
         this.exploded = false;
     }
 
+    private CPZBossFallingPart(ObjectSpawn spawn) {
+        this(spawn, 0, 0, 0);
+    }
+
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) {
             return;
@@ -92,12 +98,11 @@ public class CPZBossFallingPart extends AbstractObjectInstance {
         if (services().objectManager() == null) {
             return;
         }
-        ObjectRenderManager renderManager = services().renderManager();
-        if (renderManager == null) {
+        if (services().renderManager() == null) {
             return;
         }
-        BossExplosionObjectInstance explosion = new BossExplosionObjectInstance(x, y, renderManager, Sonic2Sfx.BOSS_EXPLOSION.id);
-        services().objectManager().addDynamicObject(explosion);
+        spawnFreeChild(() -> new BossExplosionObjectInstance(
+                x, y, Sonic2ObjectIds.BOSS_EXPLOSION, Sonic2Sfx.BOSS_EXPLOSION.id));
     }
 
     @Override

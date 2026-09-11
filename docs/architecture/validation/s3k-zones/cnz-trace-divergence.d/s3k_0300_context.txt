@@ -1,0 +1,69 @@
+Latest checkpoint: cp gameplay_start z=3 a=0 ap=0 gm=12
+Latest zone_act_state: zoneact z=3 a=0 ap=0 gm=12
+Frame  | Exp x    | Act x    | Exp y    | Act y    | Exp x_speed | Act x_speed | Exp y_speed | Act y_speed | Exp g_speed | Act g_speed | Exp angle | Act angle | Exp air  | Act air  | Exp rolling | Act rolling | Exp ground_mode | Act ground_mode
+0      | 0x0018   | 0x0018  | 0x0600   | 0x0600  | 0x0000   | 0x0000  | 0x0000   | 0x0038  | 0x0000   | 0x0000  | 0x0000   | 0x0000  | 1        | 1       | 0        | 0       | 0        | 0      
+       ROM: sub=(0000,0000) rtn=02 cam=(0000,05A0) rings=0 status=02 gfc=0001 onObj=00 vbc=0C2F lag=0000 | zoneact z=3 a=0 ap=0 gm=12 | cp gameplay_start z=3 a=0 ap=0 gm=12 | mode air 0->1 | routine 00->02 @0018,0600 | obj+ s1 0x0001365C @0018,0600 | near s1 0x0001365C @0018,0600 rtn=02 | obj+ s2 0x00006C2C @0000,0000 | obj+ s4 0x00031754 @0180,0683 | obj+ s5 0x00031754 @01C0,0687 | obj+ s6 0x00031754 @0200,0687 | obj+ s7 0x00031754 @0240,0679 | obj+ s8 0x0002D690 @0000,0000 | obj+ s9 0x0002D95C @0120,00E0 | obj+ s10 0x0002D95C @017C,0100 | obj+ s11 0x0002D95C @0184,0120 | obj+ s12 0x0002D8E2 @00E0,00C0 | obj+ s97 0x000160D2 @0018,0600 | near s97 0x000160D2 @0018,0600 rtn=00 | obj+ s98 0x00018B3E @0000,0000 | obj+ s99 0x00018B3E @0000,0000 | obj+ s100 0x0001952A @0018,0600 | near s100 0x0001952A @0018,0600 rtn=00
+       ENG: rtn=02 rings=0 st=02 cam=0000 sub=(0000,0000) touchBox @0010,05F0 h=32 yr=16 crouch=0
+1      | 0x0019   | 0x0018  | 0x061C   | 0x0600  | 0x0100   |*0x0000  | 0x0008   | 0x0070  | 0x0000   | 0x0000  | 0x0000   | 0x0000  | 1        | 1       | 0        | 0       | 0        | 0      
+       ROM: sub=(0000,0000) rtn=02 cam=(0000,05A0) rings=0 status=02 gfc=0002 onObj=00 vbc=0C30 lag=0000 | near s1 0x0001365C @0019,0600 rtn=02 | near s97 0x000160D2 @0019,0600 rtn=00 | near s100 0x0001952A @0019,061C rtn=00
+       ENG: rtn=02 rings=0 st=02 cam=0000 sub=(0000,3800) touchBox @0010,05F0 h=32 yr=16 crouch=0
+2      | 0x001A   | 0x0018  | 0x061C   | 0x0600  | 0x0100   |*0x0000  | 0x0010   |*0x00A8  | 0x0000   | 0x0000  | 0x0000   | 0x0000  | 1        | 1       | 0        | 0       | 0        | 0      
+       ROM: sub=(0000,0000) rtn=02 cam=(0000,05A0) rings=0 status=02 gfc=0003 onObj=00 vbc=0C31 lag=0000 | near s1 0x0001365C @001A,0600 rtn=02 | near s97 0x000160D2 @001A,0600 rtn=00 | near s100 0x0001952A @001A,061C rtn=00
+       ENG: rtn=02 rings=0 st=02 cam=0000 sub=(0000,A800) touchBox @0010,05F0 h=32 yr=16 crouch=0
+3      | 0x001B   | 0x0018  | 0x061C   | 0x0601  | 0x0100   |*0x0000  | 0x0018   |*0x00E0  | 0x0000   | 0x0000  | 0x0000   | 0x0000  | 1        | 1       | 0        | 0       | 0        | 0      
+       ROM: sub=(0000,0000) rtn=02 cam=(0000,05A0) rings=0 status=02 gfc=0004 onObj=00 vbc=0C32 lag=0000 | near s1 0x0001365C @001B,0600 rtn=02 | near s97 0x000160D2 @001B,0600 rtn=00 | near s100 0x0001952A @001B,061C rtn=00
+       ENG: rtn=02 rings=0 st=02 cam=0000 sub=(0000,5000) touchBox @0010,05F1 h=32 yr=16 crouch=0
+4      | 0x001C   | 0x0018  | 0x061C   | 0x0602  | 0x0100   |*0x0000  | 0x0020   |*0x0118  | 0x0000   | 0x0000  | 0x0000   | 0x0000  | 1        | 1       | 0        | 0       | 0        | 0      
+       ROM: sub=(0000,0000) rtn=02 cam=(0000,05A0) rings=0 status=02 gfc=0005 onObj=00 vbc=0C33 lag=0000 | near s1 0x0001365C @001C,0600 rtn=02 | near s97 0x000160D2 @001C,0600 rtn=00 | near s100 0x0001952A @001C,061C rtn=00
+       ENG: rtn=02 rings=0 st=02 cam=0000 sub=(0000,3000) touchBox @0010,05F2 h=32 yr=16 crouch=0
+5      | 0x001D   | 0x0018  | 0x061C   | 0x0603  | 0x0100   |*0x0000  | 0x0028   |*0x0150  | 0x0000   | 0x0000  | 0x0000   | 0x0000  | 1        | 1       | 0        | 0       | 0        | 0      
+       ROM: sub=(0000,0000) rtn=02 cam=(0000,05A0) rings=0 status=02 gfc=0006 onObj=00 vbc=0C34 lag=0000 | near s1 0x0001365C @001D,0600 rtn=02 | near s97 0x000160D2 @001D,0600 rtn=00 | near s100 0x0001952A @001D,061C rtn=00
+       ENG: rtn=02 rings=0 st=02 cam=0000 sub=(0000,4800) touchBox @0010,05F3 h=32 yr=16 crouch=0
+6      | 0x001E   | 0x0018  | 0x061C   | 0x0604  | 0x0100   |*0x0000  | 0x0030   |*0x0188  | 0x0000   | 0x0000  | 0x0000   | 0x0000  | 1        | 1       | 0        | 0       | 0        | 0      
+       ROM: sub=(0000,0000) rtn=02 cam=(0000,05A0) rings=0 status=02 gfc=0007 onObj=00 vbc=0C35 lag=0000 | near s1 0x0001365C @001E,0600 rtn=02 | near s97 0x000160D2 @001E,0600 rtn=00 | near s100 0x0001952A @001E,061C rtn=00
+       ENG: rtn=02 rings=0 st=02 cam=0000 sub=(0000,9800) touchBox @0010,05F4 h=32 yr=16 crouch=0
+7      | 0x001F   | 0x0018  | 0x061C   | 0x0606  | 0x0100   |*0x0000  | 0x0038   |*0x01C0  | 0x0000   | 0x0000  | 0x0000   | 0x0000  | 1        | 1       | 0        | 0       | 0        | 0      
+       ROM: sub=(0000,0000) rtn=02 cam=(0000,05A0) rings=0 status=02 gfc=0008 onObj=00 vbc=0C36 lag=0000 | near s1 0x0001365C @001F,0600 rtn=02 | near s97 0x000160D2 @001F,0600 rtn=00 | near s100 0x0001952A @001F,061C rtn=00
+       ENG: rtn=02 rings=0 st=02 cam=0000 sub=(0000,2000) touchBox @0010,05F6 h=32 yr=16 crouch=0
+8      | 0x0020   | 0x0018  | 0x061D   | 0x0607  | 0x0100   |*0x0000  | 0x0040   |*0x01F8  | 0x0000   | 0x0000  | 0x0000   | 0x0000  | 1        | 1       | 0        | 0       | 0        | 0      
+       ROM: sub=(0000,0000) rtn=02 cam=(0000,05A0) rings=0 status=02 gfc=0009 onObj=00 vbc=0C37 lag=0000 | near s1 0x0001365C @0020,0601 rtn=02 | near s97 0x000160D2 @0020,0601 rtn=00 | near s100 0x0001952A @0020,061D rtn=00
+       ENG: rtn=02 rings=0 st=02 cam=0000 sub=(0000,E000) touchBox @0010,05F7 h=32 yr=16 crouch=0
+9      | 0x0021   | 0x0018  | 0x061D   | 0x0609  | 0x0100   |*0x0000  | 0x0048   |*0x0230  | 0x0000   | 0x0000  | 0x0000   | 0x0000  | 1        | 1       | 0        | 0       | 0        | 0      
+       ROM: sub=(0000,0000) rtn=02 cam=(0000,05A0) rings=0 status=02 gfc=000A onObj=00 vbc=0C38 lag=0000 | near s1 0x0001365C @0021,0601 rtn=02 | near s97 0x000160D2 @0021,0601 rtn=00 | near s100 0x0001952A @0021,061D rtn=00
+       ENG: rtn=02 rings=0 st=02 cam=0000 sub=(0000,D800) touchBox @0010,05F9 h=32 yr=16 crouch=0
+10     | 0x0022   | 0x0018  | 0x061D   | 0x060C  | 0x0100   |*0x0000  | 0x0050   |*0x0268  | 0x0000   | 0x0000  | 0x0000   | 0x0000  | 1        | 1       | 0        | 0       | 0        | 0      
+       ROM: sub=(0000,0000) rtn=02 cam=(0000,05A0) rings=0 status=02 gfc=000B onObj=00 vbc=0C39 lag=0000 | near s1 0x0001365C @0022,0601 rtn=02 | near s97 0x000160D2 @0022,0601 rtn=00 | near s100 0x0001952A @0022,061D rtn=00
+       ENG: rtn=02 rings=0 st=02 cam=0000 sub=(0000,0800) touchBox @0010,05FC h=32 yr=16 crouch=0
+11     | 0x0023   | 0x0018  | 0x061E   | 0x060E  | 0x0100   |*0x0000  | 0x0058   |*0x02A0  | 0x0000   | 0x0000  | 0x0000   | 0x0000  | 1        | 1       | 0        | 0       | 0        | 0      
+       ROM: sub=(0000,0000) rtn=02 cam=(0000,05A0) rings=0 status=02 gfc=000C onObj=00 vbc=0C3A lag=0000 | near s1 0x0001365C @0023,0602 rtn=02 | near s97 0x000160D2 @0023,0602 rtn=00 | near s100 0x0001952A @0023,061E rtn=00
+       ENG: rtn=02 rings=0 st=02 cam=0000 sub=(0000,7000) touchBox @0010,05FE h=32 yr=16 crouch=0
+12     | 0x0024   | 0x0018  | 0x061E   | 0x0611  | 0x0100   |*0x0000  | 0x0060   |*0x02D8  | 0x0000   | 0x0000  | 0x0000   | 0x0000  | 1        | 1       | 0        | 0       | 0        | 0      
+       ROM: sub=(0000,0000) rtn=02 cam=(0000,05A0) rings=0 status=02 gfc=000D onObj=00 vbc=0C3B lag=0000 | near s1 0x0001365C @0024,0602 rtn=02 | near s97 0x000160D2 @0024,0602 rtn=00 | near s100 0x0001952A @0024,061E rtn=00
+       ENG: rtn=02 rings=0 st=02 cam=0000 sub=(0000,1000) touchBox @0010,0601 h=32 yr=16 crouch=0
+13     | 0x0025   | 0x0018  | 0x061E   | 0x0613  | 0x0100   |*0x0000  | 0x0068   |*0x0310  | 0x0000   | 0x0000  | 0x0000   | 0x0000  | 1        | 1       | 0        | 0       | 0        | 0      
+       ROM: sub=(0000,0000) rtn=02 cam=(0000,05A0) rings=0 status=02 gfc=000E onObj=00 vbc=0C3C lag=0000 | near s1 0x0001365C @0025,0602 rtn=02 | near s97 0x000160D2 @0025,0602 rtn=00 | near s100 0x0001952A @0025,061E rtn=00
+       ENG: rtn=02 rings=0 st=02 cam=0000 sub=(0000,E800) touchBox @0010,0603 h=32 yr=16 crouch=0
+14     | 0x0026   | 0x0018  | 0x061F   | 0x0616  | 0x0100   |*0x0000  | 0x0070   |*0x0348  | 0x0000   | 0x0000  | 0x0000   | 0x0000  | 1        | 1       | 0        | 0       | 0        | 0      
+       ROM: sub=(0000,0000) rtn=02 cam=(0000,05A0) rings=0 status=02 gfc=000F onObj=00 vbc=0C3D lag=0000 | near s1 0x0001365C @0026,0603 rtn=02 | near s97 0x000160D2 @0026,0603 rtn=00 | near s100 0x0001952A @0026,061F rtn=00
+       ENG: rtn=02 rings=0 st=02 cam=0000 sub=(0000,F800) touchBox @0010,0606 h=32 yr=16 crouch=0
+15     | 0x0027   | 0x0018  | 0x061F   | 0x061A  | 0x0100   |*0x0000  | 0x0078   |*0x0380  | 0x0000   | 0x0000  | 0x0000   | 0x0000  | 1        | 1       | 0        | 0       | 0        | 0      
+       ROM: sub=(0000,0000) rtn=02 cam=(0000,05A0) rings=0 status=02 gfc=0010 onObj=00 vbc=0C3E lag=0000 | near s1 0x0001365C @0027,0603 rtn=02 | near s97 0x000160D2 @0027,0603 rtn=00 | near s100 0x0001952A @0027,061F rtn=00
+       ENG: rtn=02 rings=0 st=02 cam=0000 sub=(0000,4000) touchBox @0010,060A h=32 yr=16 crouch=0
+16     | 0x0028   | 0x0018  | 0x0620   | 0x061D  | 0x0100   |*0x0000  | 0x0080   |*0x03B8  | 0x0000   | 0x0000  | 0x0000   | 0x0000  | 1        | 1       | 0        | 0       | 0        | 0      
+       ROM: sub=(0000,0000) rtn=02 cam=(0000,05A0) rings=0 status=02 gfc=0011 onObj=00 vbc=0C3F lag=0000 | near s1 0x0001365C @0028,0604 rtn=02 | near s97 0x000160D2 @0028,0604 rtn=00 | near s100 0x0001952A @0028,0620 rtn=00
+       ENG: rtn=02 rings=0 st=02 cam=0000 sub=(0000,C000) touchBox @0010,060D h=32 yr=16 crouch=0
+17     | 0x0029   | 0x0018  | 0x0620   | 0x0621  | 0x0100   |*0x0000  | 0x0088   |*0x03F0  | 0x0000   | 0x0000  | 0x0000   | 0x0000  | 1        | 1       | 0        | 0       | 0        | 0      
+       ROM: sub=(0000,0000) rtn=02 cam=(0000,05A0) rings=0 status=02 gfc=0012 onObj=00 vbc=0C40 lag=0000 | near s1 0x0001365C @0029,0604 rtn=02 | near s97 0x000160D2 @0029,0604 rtn=00 | near s100 0x0001952A @0029,0620 rtn=00
+       ENG: rtn=02 rings=0 st=02 cam=0000 sub=(0000,7800) touchBox @0010,0611 h=32 yr=16 crouch=0
+18     | 0x002A   | 0x0018  | 0x0621   | 0x0625  | 0x0100   |*0x0000  | 0x0090   |*0x0428  | 0x0000   | 0x0000  | 0x0000   | 0x0000  | 1        | 1       | 0        | 0       | 0        | 0      
+       ROM: sub=(0000,0000) rtn=02 cam=(0000,05A1) rings=0 status=02 gfc=0013 onObj=00 vbc=0C41 lag=0000 | near s1 0x0001365C @002A,0605 rtn=02 | near s97 0x000160D2 @002A,0605 rtn=00 | near s100 0x0001952A @002A,0621 rtn=00
+       ENG: rtn=02 rings=0 st=02 cam=0000 sub=(0000,6800) touchBox @0010,0615 h=32 yr=16 crouch=0
+19     | 0x002B   | 0x0018  | 0x0621   | 0x0629  | 0x0100   |*0x0000  | 0x0098   |*0x0460  | 0x0000   | 0x0000  | 0x0000   | 0x0000  | 1        | 1       | 0        | 0       | 0        | 0      
+       ROM: sub=(0000,0000) rtn=02 cam=(0000,05A1) rings=0 status=02 gfc=0014 onObj=00 vbc=0C42 lag=0000 | near s1 0x0001365C @002B,0605 rtn=02 | near s97 0x000160D2 @002B,0605 rtn=00 | near s100 0x0001952A @002B,0621 rtn=00
+       ENG: rtn=02 rings=0 st=02 cam=0000 sub=(0000,9000) touchBox @0010,0619 h=32 yr=16 crouch=0
+20     | 0x002C   | 0x0018  | 0x0622   | 0x062D  | 0x0100   |*0x0000  | 0x00A0   |*0x0498  | 0x0000   | 0x0000  | 0x0000   | 0x0000  | 1        | 1       | 0        | 0       | 0        | 0      
+       ROM: sub=(0000,0000) rtn=02 cam=(0000,05A2) rings=0 status=02 gfc=0015 onObj=00 vbc=0C43 lag=0000 | near s1 0x0001365C @002C,0606 rtn=02 | near s97 0x000160D2 @002C,0606 rtn=00 | near s100 0x0001952A @002C,0622 rtn=00
+       ENG: rtn=02 rings=0 st=02 cam=0000 sub=(0000,F000) touchBox @0010,061D h=32 yr=16 crouch=0
+21     | 0x002D   | 0x0018  | 0x0623   | 0x0632  | 0x0100   |*0x0000  | 0x00A8   |*0x04D0  | 0x0000   | 0x0000  | 0x0000   | 0x0000  | 1        | 1       | 0        | 0       | 0        | 0      
+       ROM: sub=(0000,0000) rtn=02 cam=(0000,05A3) rings=0 status=02 gfc=0016 onObj=00 vbc=0C44 lag=0000 | near s1 0x0001365C @002D,0607 rtn=02 | near s97 0x000160D2 @002D,0607 rtn=00 | near s100 0x0001952A @002D,0623 rtn=00
+       ENG: rtn=02 rings=0 st=02 cam=0000 sub=(0000,8800) touchBox @0010,0622 h=32 yr=16 crouch=0

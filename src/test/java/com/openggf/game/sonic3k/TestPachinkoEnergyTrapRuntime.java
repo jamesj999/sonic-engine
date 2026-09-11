@@ -10,30 +10,25 @@ import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.tests.HeadlessTestFixture;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @RequiresRom(SonicGame.SONIC_3K)
 public class TestPachinkoEnergyTrapRuntime {
-
-    @ClassRule public static RequiresRomRule romRule = new RequiresRomRule();
-
     private HeadlessTestFixture fixture;
 
-    @BeforeClass
+    @BeforeAll
     public static void configure() {
         SonicConfigurationService config = SonicConfigurationService.getInstance();
         config.setConfigValue(SonicConfiguration.S3K_SKIP_INTROS, true);
     }
 
-    @Before
+    @BeforeEach
     public void setUp() {
         fixture = null;
     }
@@ -68,10 +63,12 @@ public class TestPachinkoEnergyTrapRuntime {
                 }
             }
 
-            assertTrue("Trap should remain in active object list at frame " + i, trapPresent);
+            assertTrue(trapPresent, "Trap should remain in active object list at frame " + i);
         }
 
-        assertTrue("Trap should have risen after 320 frames", trap.getY() < initialY);
-        assertTrue("Trap should have spawned beam children", sawBeamChild);
+        assertTrue(trap.getY() < initialY, "Trap should have risen after 320 frames");
+        assertTrue(sawBeamChild, "Trap should have spawned beam children");
     }
 }
+
+

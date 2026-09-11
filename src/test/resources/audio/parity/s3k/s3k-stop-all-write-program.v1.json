@@ -1,0 +1,515 @@
+{
+  "schema": "openggf.smps_exact_write_program.v1",
+  "source": {
+    "submodule_commit": "044fa46725c71187399e13f5ddb70e11d32dc024",
+    "path": "Sound/Z80 Sound Driver.asm",
+    "routine": "zStopAllSound",
+    "fix_sndbugs": 0
+  },
+  "writes": [
+    {
+      "chip": "YM2612",
+      "port": 1,
+      "register": 130,
+      "value": 255
+    },
+    {
+      "chip": "YM2612",
+      "port": 1,
+      "register": 134,
+      "value": 255
+    },
+    {
+      "chip": "YM2612",
+      "port": 1,
+      "register": 138,
+      "value": 255
+    },
+    {
+      "chip": "YM2612",
+      "port": 1,
+      "register": 142,
+      "value": 255
+    },
+    {
+      "chip": "YM2612",
+      "port": 1,
+      "register": 66,
+      "value": 127
+    },
+    {
+      "chip": "YM2612",
+      "port": 1,
+      "register": 70,
+      "value": 127
+    },
+    {
+      "chip": "YM2612",
+      "port": 1,
+      "register": 74,
+      "value": 127
+    },
+    {
+      "chip": "YM2612",
+      "port": 1,
+      "register": 78,
+      "value": 127
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 40,
+      "value": 6
+    },
+    {
+      "chip": "YM2612",
+      "port": 1,
+      "register": 146,
+      "value": 0
+    },
+    {
+      "chip": "YM2612",
+      "port": 1,
+      "register": 150,
+      "value": 0
+    },
+    {
+      "chip": "YM2612",
+      "port": 1,
+      "register": 154,
+      "value": 0
+    },
+    {
+      "chip": "YM2612",
+      "port": 1,
+      "register": 158,
+      "value": 0
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 128,
+      "value": 255
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 132,
+      "value": 255
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 136,
+      "value": 255
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 140,
+      "value": 255
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 64,
+      "value": 127
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 68,
+      "value": 127
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 72,
+      "value": 127
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 76,
+      "value": 127
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 40,
+      "value": 0
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 144,
+      "value": 0
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 148,
+      "value": 0
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 152,
+      "value": 0
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 156,
+      "value": 0
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 129,
+      "value": 255
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 133,
+      "value": 255
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 137,
+      "value": 255
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 141,
+      "value": 255
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 65,
+      "value": 127
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 69,
+      "value": 127
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 73,
+      "value": 127
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 77,
+      "value": 127
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 40,
+      "value": 1
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 145,
+      "value": 0
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 149,
+      "value": 0
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 153,
+      "value": 0
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 157,
+      "value": 0
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 130,
+      "value": 255
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 134,
+      "value": 255
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 138,
+      "value": 255
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 142,
+      "value": 255
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 66,
+      "value": 127
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 70,
+      "value": 127
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 74,
+      "value": 127
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 78,
+      "value": 127
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 40,
+      "value": 2
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 146,
+      "value": 0
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 150,
+      "value": 0
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 154,
+      "value": 0
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 158,
+      "value": 0
+    },
+    {
+      "chip": "YM2612",
+      "port": 1,
+      "register": 128,
+      "value": 255
+    },
+    {
+      "chip": "YM2612",
+      "port": 1,
+      "register": 132,
+      "value": 255
+    },
+    {
+      "chip": "YM2612",
+      "port": 1,
+      "register": 136,
+      "value": 255
+    },
+    {
+      "chip": "YM2612",
+      "port": 1,
+      "register": 140,
+      "value": 255
+    },
+    {
+      "chip": "YM2612",
+      "port": 1,
+      "register": 64,
+      "value": 127
+    },
+    {
+      "chip": "YM2612",
+      "port": 1,
+      "register": 68,
+      "value": 127
+    },
+    {
+      "chip": "YM2612",
+      "port": 1,
+      "register": 72,
+      "value": 127
+    },
+    {
+      "chip": "YM2612",
+      "port": 1,
+      "register": 76,
+      "value": 127
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 40,
+      "value": 4
+    },
+    {
+      "chip": "YM2612",
+      "port": 1,
+      "register": 144,
+      "value": 0
+    },
+    {
+      "chip": "YM2612",
+      "port": 1,
+      "register": 148,
+      "value": 0
+    },
+    {
+      "chip": "YM2612",
+      "port": 1,
+      "register": 152,
+      "value": 0
+    },
+    {
+      "chip": "YM2612",
+      "port": 1,
+      "register": 156,
+      "value": 0
+    },
+    {
+      "chip": "YM2612",
+      "port": 1,
+      "register": 129,
+      "value": 255
+    },
+    {
+      "chip": "YM2612",
+      "port": 1,
+      "register": 133,
+      "value": 255
+    },
+    {
+      "chip": "YM2612",
+      "port": 1,
+      "register": 137,
+      "value": 255
+    },
+    {
+      "chip": "YM2612",
+      "port": 1,
+      "register": 141,
+      "value": 255
+    },
+    {
+      "chip": "YM2612",
+      "port": 1,
+      "register": 65,
+      "value": 127
+    },
+    {
+      "chip": "YM2612",
+      "port": 1,
+      "register": 69,
+      "value": 127
+    },
+    {
+      "chip": "YM2612",
+      "port": 1,
+      "register": 73,
+      "value": 127
+    },
+    {
+      "chip": "YM2612",
+      "port": 1,
+      "register": 77,
+      "value": 127
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 40,
+      "value": 5
+    },
+    {
+      "chip": "YM2612",
+      "port": 1,
+      "register": 145,
+      "value": 0
+    },
+    {
+      "chip": "YM2612",
+      "port": 1,
+      "register": 149,
+      "value": 0
+    },
+    {
+      "chip": "YM2612",
+      "port": 1,
+      "register": 153,
+      "value": 0
+    },
+    {
+      "chip": "YM2612",
+      "port": 1,
+      "register": 157,
+      "value": 0
+    },
+    {
+      "chip": "PSG",
+      "port": 0,
+      "register": 0,
+      "value": 159
+    },
+    {
+      "chip": "PSG",
+      "port": 0,
+      "register": 0,
+      "value": 191
+    },
+    {
+      "chip": "PSG",
+      "port": 0,
+      "register": 0,
+      "value": 223
+    },
+    {
+      "chip": "PSG",
+      "port": 0,
+      "register": 0,
+      "value": 255
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 43,
+      "value": 0
+    },
+    {
+      "chip": "YM2612",
+      "port": 0,
+      "register": 39,
+      "value": 0
+    }
+  ]
+}

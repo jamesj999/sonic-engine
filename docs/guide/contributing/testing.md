@@ -2,6 +2,8 @@
 
 This page covers the engine's test infrastructure and how to write tests for new features.
 
+All new or updated tests must use JUnit 5 / Jupiter. Do not add JUnit 4 tests, rules, runners, or `org.junit.*` imports.
+
 ## Running Tests
 
 ```bash
@@ -18,8 +20,116 @@ mvn test -Dtest=TestCollisionLogic#testSlopeAngle
 mvn test -Dmse=off
 ```
 
-Tests are configured for parallel execution across 8 JVM forks. This significantly speeds
-up the full test suite but means tests must be independent of each other.
+Tests are configured for parallel execution across 4 JVM forks locally (`1` fork in CI).
+This significantly speeds up the full test suite but means tests must be independent of
+each other.
+
+## Release builds in GitHub
+
+The Release workflow builds Windows, macOS, Linux, and the universal JAR on
+GitHub-hosted runners. Its blocking `test` job runs the ordinary suite and
+structural guards on Ubuntu, installing Lua 5.4 first. Private ROMs are absent
+on these runners, so ROM-dependent skips remain visible in the uploaded test
+evidence; a successful cloud build does not establish ROM replay parity.
+
+A push to `master` builds artifacts without creating a tag. Manual dispatch on
+`master` also publishes a release and creates its version tag. When tagging
+manually, use the push-triggered run's artifacts.
+
+ROM-backed release evidence is collected locally with the existing release
+comparison and skip-classification tools. The optional `validate_roms` manual
+input also enables the unchanged strict checks on a separately configured
+`release-fixtures` runner. It defaults to false and is not a dependency of the
+cloud builds. The no-regression policy in
+[release 6 trace scope](../../status/trace-scope-release-6.md) still applies to
+ROM-backed sign-off.
+
+Release checks use the fixed reviewed `develop` snapshot
+`45cecf566825aa50612f5e687b2682fc9681aed1` as the 0.6 history boundary, as
+approved by the maintainer on September 11, 2026. They audit every entry of
+the final Git tree once for forbidden assets, oversized or uncompressed
+payloads, scratch artifacts, and unsafe symlinks. Python 3 runs this audit.
+All newer incoming commits retain their normal content checks, including
+new local paths and violations introduced and subsequently removed. New
+release commits also retain their documentation-trailer checks. The original
+resource cutover remains the fallback for histories before this snapshot.
+
+The baseline is an immutable commit, not a moving branch name. Existing
+trailer debt is preserved without rewriting published history. Future
+baseline changes require explicit review; an audit failure is never ignored.
+
+## Rewind Tests And Benchmark
+
+The rewind system has both ordinary regression tests and an opt-in benchmark. See
+[Rewind System](rewind-system.md) for usage, limitations, and architecture details.
+
+Run the regular rewind suite:
+
+```bash
+mvn -Dmse=off "-Dtest=*Rewind*" test
+```
+
+Run the compact schema foundation tests when changing automatic rewind capture,
+field policy classification, or value codecs:
+
+```bash
+mvn -Dmse=off "-Dtest=TestRewindStateBuffer,TestRewindSchemaRegistry,TestCompactFieldCapturer,TestCompactFieldCapturerPolicy,TestRewindRecordCodecs,TestRewindHelperCodecs,TestRewindCollectionCodecs,TestRewindPolicyRegistry,TestRewindPlayerReferenceCodecs,TestRewindObjectReferenceCodecs,TestRewindIdentityTable" test
+```
+
+Generate the runtime-owner field inventory when planning object/player rewind
+coverage work:
+
+```bash
+mvn -Dmse=off -DskipTests test-compile exec:java \
+  "-Dexec.mainClass=com.openggf.tools.rewind.RewindFieldInventoryTool"
+```
+
+Add `"-Dexec.args=--object-rollout-candidates"` to list default object subclass
+capture candidates instead of unsupported fields. Use that list before adding
+per-object rewind annotations or overrides; most scalar object state should move
+through the central default-capture path.
+
+Use `"-Dexec.args=--annotation-density"` to report `@RewindTransient` /
+`@RewindDeferred` density by class, declared type, and package, including
+redundant transient annotations that central policy already infers.
+
+When object, boss, badnik, or trace work touches source guards, treat baselines as
+shrink-only migration artifacts. New code should prefer `ObjectControlState`,
+`ObjectPlayerQuery` / `ObjectPlayerParticipationPolicy`, `ObjectLifetimeOps`, and
+canonical profiles under `com.openggf.game.profiles.*`; only add a baseline entry for a
+documented legacy bridge or a temporary `level.objects` compatibility wrapper, and remove
+entries when a migration closes them.
+
+Run the child/spawn graph audit when planning object family coverage:
+
+```bash
+mvn -Dmse=off -DskipTests test-compile exec:java \
+  "-Dexec.mainClass=com.openggf.tools.rewind.ChildGraphPolicyInventoryTool"
+```
+
+Run the focused encounter validation foundation:
+
+```bash
+mvn -Dmse=off "-Dtest=TestRewindEncounterValidation" test
+```
+
+Run the focused presentation checks after changing reverse audio, trace rewind,
+or fade behaviour:
+
+```bash
+mvn -Dmse=off "-Dtest=com.openggf.TestTraceSessionLauncherRewindPresentation,com.openggf.graphics.TestFadeManagerRewindSnapshot,com.openggf.game.rewind.TestLiveRewindManagerAudioCleanup,com.openggf.audio.TestAudioManagerRewindSuppression" test
+```
+
+Run the benchmark only when you need timing, footprint, or long-tail determinism data:
+
+```bash
+mvn -Dmse=off "-Dtest=RewindBenchmark" \
+  "-Dopenggf.rewind.benchmark.run=true" test
+```
+
+The benchmark accepts `-Dopenggf.rewind.benchmark.keyframeInterval=<frames>` to compare
+memory and seek behaviour at intervals such as `60`, `30`, and `15`. Results are printed
+to stdout and written to `target/rewind-benchmark-results.json`.
 
 ## ROM-Dependent Tests
 
@@ -27,48 +137,24 @@ Many tests require ROM files to load level data, object art, or audio. These tes
 **skip gracefully** when ROMs are absent, so CI and contributors without ROMs can still
 run the rest of the suite.
 
-### `@RequiresRom` Annotation (Preferred)
+### `@RequiresRom` Annotation
 
-The preferred approach is to annotate the test class with `@RequiresRom` and declare which
-game's ROM is needed. The test infrastructure handles ROM loading, game module detection,
-and environment reset automatically. When the ROM is absent, the entire class is skipped.
-
-**JUnit 5 (Jupiter):**
+Annotate the test class with `@RequiresRom` and declare which game's ROM is needed.
+The attached JUnit 5 extension handles ROM loading, game module detection, and environment
+reset automatically. When the ROM is absent, the entire class is skipped.
 
 ```java
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomCondition;
 import com.openggf.tests.rules.SonicGame;
-import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.Test;
 
 @RequiresRom(SonicGame.SONIC_2)
-@ExtendWith(RequiresRomCondition.class)
 class TestMyFeature {
 
     @Test
     void testSomething() {
         // ROM is loaded, game module configured, environment reset —
         // just write your test logic
-    }
-}
-```
-
-**JUnit 4:**
-
-```java
-import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
-import com.openggf.tests.rules.SonicGame;
-
-@RequiresRom(SonicGame.SONIC_2)
-public class TestMyFeature {
-    @Rule
-    public RequiresRomRule romRule = new RequiresRomRule();
-
-    @Test
-    public void testSomething() {
-        Rom rom = romRule.rom();  // Access the loaded ROM
-        // ...
     }
 }
 ```
@@ -88,19 +174,40 @@ For tests that need a game module configured but don't need real ROM data (e.g.,
 logic that only depends on which game is active):
 
 ```java
+import com.openggf.tests.rules.RequiresGameModule;
+import com.openggf.tests.rules.SonicGame;
+import org.junit.jupiter.api.Test;
+
 @RequiresGameModule(SonicGame.SONIC_2)
-public class TestGameSpecificLogic {
-    @Rule
-    public RequiresRomRule romRule = new RequiresRomRule();
+class TestGameSpecificLogic {
 
     @Test
-    public void testSomething() {
+    void testSomething() {
         // Game module is set, but no ROM loaded
     }
 }
 ```
 
 Note: `@RequiresRom` and `@RequiresGameModule` are mutually exclusive on the same class.
+
+### `@FullReset`
+
+Use `@FullReset` when a test needs the full singleton/runtime reset path between methods.
+This is the preferred replacement for older manual reset boilerplate.
+
+```java
+import com.openggf.tests.FullReset;
+import org.junit.jupiter.api.Test;
+
+@FullReset
+class TestSomethingStateful {
+
+    @Test
+    void testSomething() {
+        // The test environment is fully reset before this runs
+    }
+}
+```
 
 ### Legacy: `RomTestUtils` (Manual Check)
 
@@ -129,7 +236,7 @@ specify paths via system properties or environment variables:
 # System properties
 mvn test -Dsonic1.rom.path="path/to/sonic1.gen"
 mvn test -Dsonic2.rom.path="path/to/sonic2.gen"
-mvn test -Ds3k.rom.path="Sonic and Knuckles & Sonic 3 (W) [!].gen"
+mvn test -Ds3k.rom.path=s3k.gen
 
 # Environment variables
 export SONIC_1_ROM_PATH="path/to/sonic1.gen"

@@ -12,6 +12,7 @@ import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -40,13 +41,16 @@ import java.util.List;
  * <b>Disassembly reference:</b> docs/s1disasm/_incObj/5A SLZ Circling Platform.asm
  */
 public class Sonic1CirclingPlatformObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, SpawnRewindRecreatable {
 
     // From disassembly: move.b #$18,obActWid(a0)
     private static final int HALF_WIDTH = 0x18;
 
-    // Platform surface height (thin platform)
-    private static final int HALF_HEIGHT = 0x08;
+    // Platform surface height. ROM Circ_Action continued-ride seats the rider via
+    // MvSonicOnPtfm2 (obY-9, docs/s1disasm/_incObj/sub MvSonicOnPtfm.asm:18-41),
+    // so the riding surface half-height is 9 (matching Obj 18). The first-landing
+    // PlatformObject detect (obY-8) is recovered via getTopLandingSnapAdjustment.
+    private static final int HALF_HEIGHT = 9;
 
     // From disassembly: move.b #4,obPriority(a0)
     private static final int PRIORITY = 4;
@@ -60,17 +64,17 @@ public class Sonic1CirclingPlatformObjectInstance extends AbstractObjectInstance
     private static final int OSC_Y_OFFSET = 0x24; // v_oscillate+$26 = oscillator 9 value high byte
 
     // Saved original positions (circ_origX = objoff_32, circ_origY = objoff_30)
-    private final int origX;
-    private final int origY;
+    private int origX;
+    private int origY;
 
     // Current dynamic position
     private int x;
     private int y;
 
     // Subtype configuration
-    private final boolean negateBoth;   // Bit 0: negate both offsets
-    private final boolean rotated;      // Bit 1: negate X, exchange X/Y
-    private final boolean type04;       // Bits 2-3: type04 additionally negates X
+    private boolean negateBoth;   // Bit 0: negate both offsets
+    private boolean rotated;      // Bit 1: negate X, exchange X/Y
+    private boolean type04;       // Bits 2-3: type04 additionally negates X
 
     public Sonic1CirclingPlatformObjectInstance(ObjectSpawn spawn) {
         super(spawn, "CirclingPlatform");
@@ -109,7 +113,7 @@ public class Sonic1CirclingPlatformObjectInstance extends AbstractObjectInstance
         return y;
     }
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) {
             return;
@@ -201,11 +205,79 @@ public class Sonic1CirclingPlatformObjectInstance extends AbstractObjectInstance
 
     @Override
     public SolidObjectParams getSolidParams() {
-        return new SolidObjectParams(HALF_WIDTH, HALF_HEIGHT, HALF_HEIGHT);
+        return SolidObjectParams.of(HALF_WIDTH, HALF_HEIGHT, HALF_HEIGHT);
     }
 
     @Override
     public boolean isTopSolidOnly() {
+        return true;
+    }
+
+    @Override
+    public boolean usesCollisionHalfWidthForTopLanding() {
+        // ROM Circ_Platform (routine 2) passes obActWid (= $18) directly as
+        // PlatformObject's d1 (docs/s1disasm/_incObj/5A SLZ Circling
+        // Platform.asm:31-34), so the full collision half-width is the standable
+        // landing width and must NOT receive the generic SolidObject "-$B"
+        // narrowing. Without this, the top-landing X window shrank from $18 to
+        // $0D, so a player arcing onto the platform near its inner edge was not
+        // caught until he had moved several pixels further in — landing a few
+        // frames late (SLZ2 f3332: a rolling-jump Sonic lands on the circling
+        // platform; ROM catches him at relX=8 / f3332, the engine's narrowed
+        // window rejected him until relX=12 / f3335). Same as Obj 18
+        // (Sonic1PlatformObjectInstance), whose Plat_Solid also passes obActWid
+        // straight to PlatformObject.
+        return true;
+    }
+
+    @Override
+    public boolean rejectsZeroDistanceTopSolidLanding() {
+        // ROM PlatformObject gates the land band with an UNSIGNED cmpi.w #-16,d0 /
+        // blo, rejecting the exact-touch case d0=0 (standable band is d0 in
+        // [-16,-1], strict penetration). Same as Obj 18; without it the engine
+        // caught a frame early (SLZ2 f3331 vs ROM f3332).
+        return true;
+    }
+
+    @Override
+    public int getTopLandingSnapAdjustment(PlayableEntity player, int solidTopYRadius) {
+        // PlatformObject builds its first-landing entry surface from obY-8, while
+        // continued riding (Circ_Action -> MvSonicOnPtfm2) uses obY-9. With
+        // HALF_HEIGHT=9 modelling the obY-9 ride surface, this -1 recovers the
+        // obY-8 first-landing detect/snap. Same as Obj 18.
+        return -1;
+    }
+
+    @Override
+    public boolean carriesAirborneRiderAfterExitPlatform() {
+        // ROM Circ_Action (routine 4, docs/s1disasm/_incObj/5A SLZ Circling
+        // Platform.asm:38-45) calls ExitPlatform first -- which clears the rider's
+        // on-object bit when he passes the pre-move X edge (docs/s1disasm/_incObj/
+        // sub ExitPlatform.asm:24-29) -- then runs Circ_Types to move the platform,
+        // then UNCONDITIONALLY calls MvSonicOnPtfm2 (asm:45). MvSonicOnPtfm2 does
+        // not test the on-object bit, so on the exit frame it still pulls the
+        // rider's y_pos to platformY-9-obHeight using the platform's post-move
+        // position and carries the platform's X delta (docs/s1disasm/_incObj/sub
+        // MvSonicOnPtfm.asm:18-41). This is structurally identical to Obj18
+        // Plat_Action2 / Obj52 MBlock_StandOn / Obj59 Elev_Action, which all opt in.
+        //
+        // Without this, when the descending circling platform's edge slides past
+        // the rider on the exit frame, the engine drops the ride before the final
+        // seat, leaving the rider 1px high (SLZ2 f3353: platformY post-move 0x013C,
+        // ROM seats centre 0x013C-9-0x13 = 0x0120; the engine kept the pre-exit
+        // 0x011F). The carry is applied in
+        // ObjectSolidContactController.processInlineRidingObject's exit branch.
+        return true;
+    }
+
+    @Override
+    public boolean usesPreUpdatePositionForSolidContact(PlayableEntity player) {
+        // ROM Circ_Platform (routine 2) runs PlatformObject before Circ_Types
+        // moves the platform (docs/s1disasm/_incObj/5A SLZ Circling Platform.asm:
+        // 28-34), so first-landing detection sees the pre-move surface — the same
+        // ExitPlatform-before-move order as Obj 18 (18 Platforms.asm:54-67). This
+        // is the 5th Obj 18 landing-family override; it fixes the continued-ride
+        // seat phase on the circling platform's descent (SLZ2 ride-seat frames).
         return true;
     }
 
@@ -223,27 +295,26 @@ public class Sonic1CirclingPlatformObjectInstance extends AbstractObjectInstance
 
     // ---- Persistence ----
 
-    @Override
-    public boolean isPersistent() {
-        // Disasm: out_of_range.w DeleteObject,circ_origX(a0)
-        // Uses stored original X (not current X) for range check
-        return !isDestroyed() && isOrigXOnScreen();
-    }
-
     /**
-     * Range check using original X position, matching the disassembly's
-     * out_of_range.w macro applied to circ_origX.
+     * ROM {@code CirclingPlatform} ends with
+     * {@code out_of_range.w DeleteObject,circ_origX(a0)}
+     * (docs/s1disasm/_incObj/5A SLZ Circling Platform.asm:11), so the delete
+     * window is measured against the stored circle ORIGIN (circ_origX =
+     * objoff_32), never the live swung-out {@code obX}.
+     * <p>
+     * The origin anchor previously only fed {@code isPersistent()}, which is a
+     * keep-alive veto layered ON TOP of the shared out_of_range unload — and that
+     * unload still used the default live-X reference, so the platform survived
+     * whenever EITHER anchor was in window. A platform circling back toward the
+     * camera (X offset down to {@code -$50}) therefore chunk-aligned one $80
+     * block nearer than its origin and was retained after ROM had deleted it,
+     * occupying an SST slot ROM had freed (SLZ1 f3015: the engine holds slot 115
+     * with the origin 768 px out of the 640 px window while ROM holds nothing).
+     * Same shape as Obj 6A's {@code saw_origX} reference.
      */
-    private boolean isOrigXOnScreen() {
-        var camera = services().camera();
-        if (camera == null) {
-            return true;
-        }
-        int objRounded = origX & 0xFF80;
-        int camRounded = (camera.getX() - 128) & 0xFF80;
-        int distance = (objRounded - camRounded) & 0xFFFF;
-        // out_of_range: cmpi.w #128+320+192,d0 / bhi.s exit
-        return distance <= (128 + 320 + 192);
+    @Override
+    public int getOutOfRangeReferenceX() {
+        return origX;
     }
 
     // ---- Debug rendering ----

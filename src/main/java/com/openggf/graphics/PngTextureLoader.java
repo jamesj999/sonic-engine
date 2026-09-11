@@ -14,7 +14,7 @@ import static org.lwjgl.opengl.GL30.*;
 
 /**
  * Utility for loading PNG images from the classpath into OpenGL textures.
- * Uses STBImage (no java.awt dependency) with RGBA format and GL_NEAREST filtering (pixel-art friendly).
+ * Uses STBImage without any AWT dependency, with RGBA format and GL_NEAREST filtering.
  */
 public class PngTextureLoader {
 

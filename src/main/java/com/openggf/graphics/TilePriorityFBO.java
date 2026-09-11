@@ -46,6 +46,13 @@ public class TilePriorityFBO {
 
         // Create colour-only FBO via shared helper
         fboHandle = FboHelper.createColorOnly(width, height, GL_CLAMP_TO_EDGE);
+        if (fboHandle == null) {
+            fboId = -1;
+            textureId = -1;
+            initialized = false;
+            LOGGER.warning("TilePriorityFBO initialization failed; priority rendering disabled");
+            return;
+        }
         fboId = fboHandle.fboId();
         textureId = fboHandle.textureId();
 

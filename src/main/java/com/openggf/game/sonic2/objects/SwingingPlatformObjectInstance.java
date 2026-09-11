@@ -4,6 +4,7 @@ import com.openggf.game.PlayableEntity;
 import com.openggf.debug.DebugRenderContext;
 import com.openggf.game.OscillationManager;
 import com.openggf.game.sonic2.S2SpriteDataLoader;
+import com.openggf.game.sonic2.audio.Sonic2Sfx;
 import com.openggf.game.sonic2.constants.Sonic2Constants;
 import com.openggf.game.sonic2.scroll.Sonic2ZoneConstants;
 import com.openggf.graphics.GLCommand;
@@ -12,10 +13,14 @@ import com.openggf.graphics.RenderPriority;
 import com.openggf.level.PatternDesc;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
+import com.openggf.level.objects.SolidRoutineProfile;
+import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.level.render.SpriteMappingFrame;
 import com.openggf.level.render.SpriteMappingPiece;
 import com.openggf.level.render.SpritePieceRenderer;
@@ -24,6 +29,7 @@ import com.openggf.sprites.playable.AbstractPlayableSprite;
 import com.openggf.util.LazyMappingHolder;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.logging.Logger;
 
 /**
@@ -36,7 +42,7 @@ import java.util.logging.Logger;
  * <p>
  * <b>Subtype encoding:</b>
  * <ul>
- *   <li>Bits 0-3 (0x0F): Number of chain links (1-7)</li>
+ *   <li>Bits 0-3 (0x0F): Number of chain links (1-15; ROM masks low nybble with no upper clamp)</li>
  *   <li>Bits 4-6 (0x70): Behavior mode</li>
  *   <li>Bit 7 (0x80): Display-only mode (no chain creation)</li>
  * </ul>
@@ -58,7 +64,7 @@ import java.util.logging.Logger;
  * </ul>
  */
 public class SwingingPlatformObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
 
     private static final Logger LOGGER = Logger.getLogger(SwingingPlatformObjectInstance.class.getName());
 
@@ -92,6 +98,17 @@ public class SwingingPlatformObjectInstance extends AbstractObjectInstance
     private static final int TRAP_COOLDOWN = 60;       // Frames to wait after rotation
     private static final int TRAP_ROTATION_STEP = 8;   // Angle change per frame
     private static final int TRAP_ROTATION_MAX = 0x200; // Maximum rotation accumulator
+    private static final int DISPLAY_CHILD_ANCHOR_LENGTH = 0x40;
+    private static final int PLATFORM_FRAME_NORMAL = 0;
+    private static final int PLATFORM_FRAME_TRIGGERED_PARENT = 3;
+    private static final int BIT7_STATE_NORMAL = 0;
+    private static final int BIT7_STATE_ARMED = 1;
+    private static final int BIT7_STATE_TRIGGERED_PARENT = 2;
+    private static final int BIT7_STATE_FALLING_CHILD = 3;
+    private static final int BIT7_STATE_BOBBING_CHILD = 4;
+    private static final int STATE6_CHILD_X_SPEED = 0x200;
+    private static final int STATE6_CHILD_GRAVITY = 0x18;
+    private static final int STATE6_CHILD_LANDING_Y = 0x720;
 
     // Static mapping data (loaded per-zone)
     private static final LazyMappingHolder OOZ_MAPPINGS = new LazyMappingHolder();
@@ -100,20 +117,23 @@ public class SwingingPlatformObjectInstance extends AbstractObjectInstance
     private static final LazyMappingHolder TRAP_MAPPINGS = new LazyMappingHolder();
 
     // Position state
-    private final int baseX;
-    private final int baseY;
+    private int baseX;
+    private int baseY;
     private int x;
     private int y;
 
     // Configuration
-    private final ZoneConfig zoneConfig;
-    private final BehaviorMode behaviorMode;
-    private final int chainCount;
-    private final boolean displayOnly;
+    private ZoneConfig zoneConfig;
+    private BehaviorMode behaviorMode;
+    private int chainCount;
+    private boolean displayOnly;
 
     // Chain link positions
     private final int[] chainX;
     private final int[] chainY;
+    private int displayChildX;
+    private int displayChildY;
+    private SwingingPlatformDisplayChild displayChild;
 
     // Trap mode state
     private int trapCooldown;
@@ -123,6 +143,14 @@ public class SwingingPlatformObjectInstance extends AbstractObjectInstance
 
     // Player tracking
     private boolean playerStanding;
+    private int bit7State;
+    private int platformMappingFrame;
+    private int xVel;
+    private int yVel;
+    private int xSub;
+    private int ySub;
+    private int state6BobBaseY;
+
     public SwingingPlatformObjectInstance(ObjectSpawn spawn, String name) {
         super(spawn, name);
         this.baseX = spawn.x();
@@ -132,8 +160,15 @@ public class SwingingPlatformObjectInstance extends AbstractObjectInstance
 
         // Parse subtype
         int subtype = spawn.subtype();
-        this.chainCount = Math.max(1, Math.min(7, subtype & 0x0F));
+        // ROM Obj15_Init (s2.asm:22480) masks bits 0-3 (`andi.w #$F,d1`) with no upper clamp;
+        // values up to 15 are valid. The chainCount drives the platform's hanging distance.
+        // (Note: the ROM's multi-sprite parent only has 6 sub-sprite slots so visible chain
+        // links cap at 6, but the math still uses the full chainCount.)
+        this.chainCount = Math.max(1, subtype & 0x0F);
         this.displayOnly = (subtype & 0x80) != 0;
+        this.bit7State = displayOnly ? BIT7_STATE_ARMED : BIT7_STATE_NORMAL;
+        this.platformMappingFrame = PLATFORM_FRAME_NORMAL;
+        this.state6BobBaseY = spawn.y();
 
         // Determine behavior mode from bits 4-6
         int modeValue = (subtype & 0x70) >> 4;
@@ -151,6 +186,8 @@ public class SwingingPlatformObjectInstance extends AbstractObjectInstance
         // Initialize chain position arrays
         this.chainX = new int[chainCount];
         this.chainY = new int[chainCount];
+        this.displayChildX = spawn.x();
+        this.displayChildY = spawn.y() + DISPLAY_CHILD_ANCHOR_LENGTH;
 
         // Initialize trap mode state
         this.trapAngle = 0x8000;  // Start at top position
@@ -158,18 +195,59 @@ public class SwingingPlatformObjectInstance extends AbstractObjectInstance
         this.trapRotatingClockwise = false;
         this.trapCooldown = 0;
 
-        // Calculate initial positions
-        updatePositions(0);
-        updateDynamicSpawn(x, y);
+        // Do NOT call updatePositions() here with a guessed oscillator value.
+        // ROM parity: Obj15_Init sets up child sprite data and records the base coords
+        // in objoff_38/3A; Obj15_State2 calls sub_FE70 on the very first active frame
+        // to compute actual positions from the live oscillator. Computing positions here
+        // with oscValue=0 would place x far from baseX (up to +136 px for chainCount=8),
+        // causing the out_of_range check to immediately unload the object the same frame
+        // it is spawned (distance > 640) and permanently mark it dormant.
+        // this.x and this.y are already initialised to baseX/baseY above.
 
         LOGGER.fine(() -> String.format(
                 "SwingingPlatform init: pos=(%d,%d), subtype=0x%02X, chains=%d, mode=%s, zone=%s",
                 baseX, baseY, subtype, chainCount, behaviorMode, zoneConfig));
     }
 
+    private SwingingPlatformObjectInstance(SwingingPlatformObjectInstance parent, int childXVel) {
+        this(new ObjectSpawn(
+                        parent.x,
+                        parent.y,
+                        parent.spawn.objectId(),
+                        parent.spawn.subtype(),
+                        parent.spawn.renderFlags(),
+                        false,
+                        parent.spawn.rawYWord(),
+                        parent.spawn.layoutIndex()),
+                parent.name);
+        this.baseX = parent.baseX;
+        this.baseY = parent.baseY;
+        this.x = parent.x;
+        this.y = parent.y;
+        this.displayChildX = parent.displayChildX;
+        this.displayChildY = parent.displayChildY;
+        this.zoneConfig = parent.zoneConfig;
+        this.behaviorMode = parent.behaviorMode;
+        this.displayOnly = false;
+        this.bit7State = BIT7_STATE_FALLING_CHILD;
+        this.platformMappingFrame = PLATFORM_FRAME_NORMAL;
+        this.xVel = childXVel;
+        this.yVel = 0;
+        this.xSub = 0;
+        this.ySub = 0;
+        this.state6BobBaseY = parent.y;
+        updateDynamicSpawn(x, y);
+    }
+
+    @Override
+    public SwingingPlatformObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new SwingingPlatformObjectInstance(ctx.spawn(), getName());
+    }
+
     private ZoneConfig determineZoneConfig() {
-        if (services().currentLevel() != null) {
-            int zoneId = services().currentLevel().getZoneIndex();
+        var objectServices = tryServices();
+        if (objectServices != null && objectServices.currentLevel() != null) {
+            int zoneId = objectServices.currentLevel().getZoneIndex();
             if (zoneId == Sonic2ZoneConstants.ROM_ZONE_MCZ) {
                 return ZoneConfig.MCZ;
             } else if (zoneId == Sonic2ZoneConstants.ROM_ZONE_ARZ) {
@@ -189,60 +267,200 @@ public class SwingingPlatformObjectInstance extends AbstractObjectInstance
     public int getY() {
         return y;
     }
+
+    /**
+     * ROM parity: the Obj15 parent's x_pos stays at the spawn/pivot X (baseX) for the
+     * entire lifetime of the object — only the child multi-sprite's position oscillates.
+     * The ROM out_of_range macro feeds obX(a0) (the parent's x_pos = baseX, not the
+     * swinging platform x) to the distance check. Using the oscillating platform X would
+     * cause the engine to spuriously unload the object on its first frame (platform starts
+     * at baseX + 136 when oscValue = 0, pushing distance past the 640 px threshold while
+     * the camera is near the spawn X).
+     */
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public int getOutOfRangeReferenceX() {
+        if (isState6Child()) {
+            return x;
+        }
+        return baseX;
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) {
             return;
         }
 
-        // Update based on behavior mode
-        switch (behaviorMode) {
-            case NORMAL -> updateNormalSwing(frameCounter);
-            case BOUNCE_LEFT -> updateBounceSwing(player, true);
-            case BOUNCE_RIGHT -> updateBounceSwing(player, false);
-            case TRAP -> updateTrapMode(player);
-            case STATIC -> { /* No update needed */ }
+        switch (bit7State) {
+            case BIT7_STATE_ARMED -> updateBit7State4(vIntRunCount, player);
+            case BIT7_STATE_TRIGGERED_PARENT -> updateTriggeredParent(vIntRunCount, player);
+            case BIT7_STATE_FALLING_CHILD -> updateState6FallingChild();
+            case BIT7_STATE_BOBBING_CHILD -> updateState6BobbingChild();
+            default -> updateByBehavior(vIntRunCount, player);
         }
 
         updateDynamicSpawn(x, y);
     }
 
+    private void updateByBehavior(int vIntRunCount, AbstractPlayableSprite player) {
+        ensureDisplayChild();
+
+        switch (behaviorMode) {
+            case NORMAL -> updateNormalSwing(vIntRunCount);
+            case BOUNCE_LEFT -> updateBounceSwing(player, true);
+            case BOUNCE_RIGHT -> updateBounceSwing(player, false);
+            case TRAP -> updateTrapMode(player);
+            case STATIC -> { /* No update needed */ }
+        }
+    }
+
+    private void updateBit7State4(int vIntRunCount, AbstractPlayableSprite player) {
+        // ROM Obj15_State4 (s2.asm:22753-22831): run normal Obj15 swing math,
+        // then split when the previous SolidObject standing bits are set and
+        // Oscillating_Data+$18 reaches zero.
+        updateByBehavior(vIntRunCount, player);
+        boolean standing = playerStanding || safeIsPlayerRiding();
+        playerStanding = false;
+        if (standing && OscillationManager.getByte(0x18) == 0) {
+            spawnState6Child();
+        }
+    }
+
+    private void updateTriggeredParent(int vIntRunCount, AbstractPlayableSprite player) {
+        updateByBehavior(vIntRunCount, player);
+        playerStanding = false;
+    }
+
+    private boolean safeIsPlayerRiding() {
+        try {
+            return isPlayerRiding();
+        } catch (IllegalStateException e) {
+            return false;
+        }
+    }
+
+    private void spawnState6Child() {
+        int childXVel = ((spawn.renderFlags() & 0x01) != 0)
+                ? -STATE6_CHILD_X_SPEED
+                : STATE6_CHILD_X_SPEED;
+        spawnChild(() -> new SwingingPlatformObjectInstance(this, childXVel));
+        platformMappingFrame = PLATFORM_FRAME_TRIGGERED_PARENT;
+        bit7State = BIT7_STATE_TRIGGERED_PARENT;
+    }
+
+    private void updateState6FallingChild() {
+        SubpixelMotion.State motion = new SubpixelMotion.State(x, y, xSub, ySub, xVel, yVel);
+        SubpixelMotion.speedToPos(motion);
+        motion.yVel += STATE6_CHILD_GRAVITY;
+        x = motion.x;
+        y = motion.y;
+        xSub = motion.xSub;
+        ySub = motion.ySub;
+        xVel = motion.xVel;
+        yVel = motion.yVel;
+        if (y >= STATE6_CHILD_LANDING_Y) {
+            y = STATE6_CHILD_LANDING_Y;
+            ySub = 0;
+            xVel = 0;
+            yVel = 0;
+            state6BobBaseY = y;
+            bit7State = BIT7_STATE_BOBBING_CHILD;
+        }
+    }
+
+    private void updateState6BobbingChild() {
+        y = state6BobBaseY + (OscillationManager.getByte(0x14) >> 1);
+    }
+
+    private boolean isState6Child() {
+        return bit7State == BIT7_STATE_FALLING_CHILD || bit7State == BIT7_STATE_BOBBING_CHILD;
+    }
+
+    private void ensureDisplayChild() {
+        if (displayChild != null) {
+            return;
+        }
+        displayChild = spawnChild(() -> new SwingingPlatformDisplayChild(this));
+    }
+
+    private void attachDisplayChildForRewind(SwingingPlatformDisplayChild child) {
+        displayChild = child;
+    }
+
+    // Returns the swinging platform whose out-of-range reference position is nearest
+    // the display child's captured spawn, or empty when none survives (a legitimate
+    // absent-parent state: the platform was swept before capture). No
+    // {@code !isDestroyed()} filter: during a rewind restore the parent's destroyed
+    // flag is applied in a later pass, so a captured-but-destroyed platform is a valid
+    // relink target here.
+    private static Optional<SwingingPlatformObjectInstance> nearestParentForRewind(RewindRecreateContext ctx) {
+        var objectManager = ctx.objectManager() != null
+                ? ctx.objectManager()
+                : ctx.objectServices().objectManager();
+        if (objectManager == null) {
+            return Optional.empty();
+        }
+        ObjectSpawn spawn = ctx.spawn();
+        return objectManager.getActiveObjects().stream()
+                .filter(SwingingPlatformObjectInstance.class::isInstance)
+                .map(SwingingPlatformObjectInstance.class::cast)
+                .min((a, b) -> Integer.compare(
+                        distanceFromChildSpawn(a, spawn),
+                        distanceFromChildSpawn(b, spawn)));
+    }
+
+    private static int distanceFromChildSpawn(SwingingPlatformObjectInstance parent, ObjectSpawn spawn) {
+        return Math.abs(parent.getOutOfRangeReferenceX() - spawn.x())
+                + Math.abs(parent.getY() - spawn.y());
+    }
+
     /**
      * Normal swing mode: Uses global oscillation data at offset 0x18.
      */
-    private void updateNormalSwing(int frameCounter) {
+    private void updateNormalSwing(int vIntRunCount) {
         // Get oscillation value from offset 0x18 (Oscillating_Data+0x18)
         int oscValue = OscillationManager.getByte(0x18);
         updatePositions(oscValue);
     }
 
     /**
-     * Bounce swing mode: Triggers swing on player proximity.
+     * Bounce swing mode.
+     * <p>
+     * ROM sub_FE70 (s2.asm:22556-22586): unconditional oscillation clamp —
+     * no player-proximity gate exists in the ROM.
+     * <p>
+     * BOUNCE_LEFT (subtype bits 4-6 == 0x10):
+     *   osc &lt; 0x3F  → clamp to 0x40 (no sound)
+     *   osc == 0x3F → play SndID_PlatformKnock, clamp to 0x40
+     *   osc &gt;= 0x40 → use raw osc value (bhs loc_FEC2)
+     * <p>
+     * BOUNCE_RIGHT (subtype bits 4-6 == 0x30):
+     *   osc == 0x41 → play SndID_PlatformKnock, clamp to 0x40
+     *   osc &gt; 0x41  → clamp to 0x40 (no sound)
+     *   osc &lt; 0x41  → use raw osc value (blo loc_FEC2)
      */
     private void updateBounceSwing(AbstractPlayableSprite player, boolean bounceLeft) {
-        // Check player proximity
         int oscValue = OscillationManager.getByte(0x18);
 
-        if (player != null) {
-            int playerX = player.getCentreX();
-            int dx = playerX - baseX;
-
-            // Proximity check: within ±0x20 pixels
-            if (Math.abs(dx) < 0x20) {
-                // Player is close - use oscillation value
-                if (bounceLeft) {
-                    // Bounce left: use oscillation when < 0x40
-                    if (oscValue < 0x40) {
-                        oscValue = 0x40;  // Clamp to middle position
-                    }
-                } else {
-                    // Bounce right: use oscillation when > 0x40
-                    if (oscValue > 0x40) {
-                        oscValue = 0x40;  // Clamp to middle position
-                    }
-                }
+        if (bounceLeft) {
+            // ROM s2.asm:22563-22575: BOUNCE_LEFT unconditional clamp
+            if (oscValue == 0x3F) {
+                services().playSfx(Sonic2Sfx.PLATFORM_KNOCK.id);
+                oscValue = 0x40;
+            } else if (oscValue < 0x3F) {
+                oscValue = 0x40;
             }
+            // osc >= 0x40: use raw value (bhs loc_FEC2)
+        } else {
+            // ROM s2.asm:22580-22586: BOUNCE_RIGHT unconditional clamp
+            if (oscValue == 0x41) {
+                services().playSfx(Sonic2Sfx.PLATFORM_KNOCK.id);
+                oscValue = 0x40;
+            } else if (oscValue > 0x41) {
+                oscValue = 0x40;
+            }
+            // osc < 0x41: use raw value (blo loc_FEC2)
         }
 
         updatePositions(oscValue);
@@ -313,35 +531,62 @@ public class SwingingPlatformObjectInstance extends AbstractObjectInstance
      * </ul>
      */
     private void updatePositions(int oscValue) {
-        // Center oscillation at 0x40 for pendulum motion
-        // This converts the oscillation range to a signed swing angle
-        // where 0 = hanging down, negative = left, positive = right
-        int swingAngle = (oscValue - 0x40) & 0xFF;
+        int effectiveOscValue = mirroredOscillatorValue(oscValue);
+        // ROM sub_FE70 (s2.asm:22604-22654): jsrto JmpTo2_CalcSine with d0=oscValue.
+        // CalcSine returns d0=sin(oscValue), d1=cos(oscValue) from the SINCOSLIST table.
+        // If status.x_flip is set, s2.asm:22617-22620 negates the oscillator byte and adds $80
+        // before CalcSine, mirroring the swing around objoff_3A/38.
+        //
+        // The chain-link loop accumulates d0 (sin) into Y and d1 (cos) into X:
+        //   sin(oscValue) drives Y: oscValue=0x40 → sin=256 → hangs straight down
+        //   cos(oscValue) drives X: oscValue=0x40 → cos=0   → centred horizontally
+        //
+        // ROM fixed-point equivalence (verified exhaustively for all 3840 osc×chain combos):
+        //   ROM: (chainCount + 0.5) * val * 4096 >> 16
+        //   Engine: (val * (chainCount*0x10 + 8)) >> 8
+        // Both produce identical results for all inputs in the SINCOSLIST table.
+        //
+        // IMPORTANT: do NOT use swingAngle=(oscValue-0x40). The SINCOSLIST table is NOT
+        // perfectly antisymmetric (e.g. SINCOSLIST[147]=-117 while SINCOSLIST[19]=115),
+        // so sin(osc-0x40) ≠ -cos(osc) for all values. Using oscValue directly is the
+        // only way to match the ROM's CalcSine(oscValue) call exactly.
+        int sin = calcSine(effectiveOscValue);   // d0 = sin(oscValue) → drives Y
+        int cos = calcCosine(effectiveOscValue); // d1 = cos(oscValue) → drives X
 
-        // Get sin/cos for the swing angle (values from -256 to +256)
-        // sin gives horizontal offset (negative = left, positive = right)
-        // cos gives vertical offset (always positive for |angle| <= 90°)
-        int sin = calcSine(swingAngle);
-        int cos = calcCosine(swingAngle);
+        // Platform hangs at (chainCount + 0.5) increments of 0x10 per link from pivot.
+        int chainLength = chainCount * 0x10 + 8;
+        int displayChildXOffset = (cos * DISPLAY_CHILD_ANCHOR_LENGTH) >> 8;
+        int displayChildYOffset = (sin * DISPLAY_CHILD_ANCHOR_LENGTH) >> 8;
+        int xOffset = (cos * chainLength) >> 8;
+        int yOffset = (sin * chainLength) >> 8;
 
-        // Calculate platform position (at end of chain)
-        // Chain length factor: 0x10 pixels per chain segment
-        int chainLength = chainCount * 0x10;
-        int xOffset = (sin * chainLength) >> 8;  // Divide by 256
-        int yOffset = (cos * chainLength) >> 8;
+        // ROM sub_FE70 copies the just-written sub6_x/sub6_y multi-sprite entry
+        // into the child object's x_pos/y_pos, while the parent/platform position
+        // is the full chain endpoint plus a half-link.
+        displayChildX = baseX + displayChildXOffset;
+        displayChildY = baseY + displayChildYOffset;
+        if (displayChild != null) {
+            displayChild.syncFromParent();
+        }
 
-        // Platform hangs down from pivot point
+        // Platform position
         this.x = baseX + xOffset;
         this.y = baseY + yOffset;
 
-        // Calculate chain link positions (evenly distributed along arc)
+        // Chain link positions (i-th link is at (i+1) increments from pivot)
         for (int i = 0; i < chainCount; i++) {
             int linkLength = (i + 1) * 0x10;
-            int linkXOffset = (sin * linkLength) >> 8;
-            int linkYOffset = (cos * linkLength) >> 8;
-            chainX[i] = baseX + linkXOffset;
-            chainY[i] = baseY + linkYOffset;
+            chainX[i] = baseX + ((cos * linkLength) >> 8);
+            chainY[i] = baseY + ((sin * linkLength) >> 8);
         }
+    }
+
+    private int mirroredOscillatorValue(int oscValue) {
+        int value = oscValue & 0xFF;
+        if ((spawn.renderFlags() & 0x01) != 0) {
+            value = (0x80 - value) & 0xFF;
+        }
+        return value;
     }
 
     /**
@@ -380,6 +625,11 @@ public class SwingingPlatformObjectInstance extends AbstractObjectInstance
         boolean hFlip = (spawn.renderFlags() & 0x1) != 0;
         boolean vFlip = (spawn.renderFlags() & 0x2) != 0;
 
+        if (isState6Child()) {
+            renderPlatformFrame(mappings, graphicsManager, hFlip, vFlip);
+            return;
+        }
+
         // Render anchor/base at pivot point (frame 2)
         if (mappings.size() > 2) {
             SpriteMappingFrame anchorFrame = mappings.get(2);
@@ -399,9 +649,13 @@ public class SwingingPlatformObjectInstance extends AbstractObjectInstance
             }
         }
 
-        // Render platform at end of chain (frame 0)
-        if (mappings.size() > 0) {
-            SpriteMappingFrame platformFrame = mappings.get(0);
+        renderPlatformFrame(mappings, graphicsManager, hFlip, vFlip);
+    }
+
+    private void renderPlatformFrame(List<SpriteMappingFrame> mappings, GraphicsManager graphicsManager,
+                                     boolean hFlip, boolean vFlip) {
+        if (mappings.size() > platformMappingFrame) {
+            SpriteMappingFrame platformFrame = mappings.get(platformMappingFrame);
             if (platformFrame != null && !platformFrame.pieces().isEmpty()) {
                 renderPieces(graphicsManager, platformFrame.pieces(), x, y, hFlip, vFlip);
             }
@@ -453,7 +707,7 @@ public class SwingingPlatformObjectInstance extends AbstractObjectInstance
 
     @Override
     public SolidObjectParams getSolidParams() {
-        return new SolidObjectParams(
+        return SolidObjectParams.of(
                 zoneConfig.widthPixels,
                 zoneConfig.yRadius,
                 zoneConfig.yRadius + 1);
@@ -465,8 +719,12 @@ public class SwingingPlatformObjectInstance extends AbstractObjectInstance
     }
 
     @Override
+    public SolidRoutineProfile getSolidRoutineProfile() {
+        return SolidRoutineProfile.topSolid(usesStickyContactBuffer());
+    }
+
+    @Override
     public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (contact.standing()) {
             playerStanding = true;
         }
@@ -474,8 +732,7 @@ public class SwingingPlatformObjectInstance extends AbstractObjectInstance
 
     @Override
     public boolean isSolidFor(PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        return !isDestroyed();
+        return !isDestroyed() && bit7State != BIT7_STATE_TRIGGERED_PARENT;
     }
 
     @Override
@@ -506,6 +763,80 @@ public class SwingingPlatformObjectInstance extends AbstractObjectInstance
         // Draw platform center (red cross)
         ctx.drawLine(x - 4, y, x + 4, y, 1.0f, 0.0f, 0.0f);
         ctx.drawLine(x, y - 4, x, y + 4, 1.0f, 0.0f, 0.0f);
+    }
+
+    private static final class SwingingPlatformDisplayChild extends AbstractObjectInstance implements RewindRecreatable {
+        private final SwingingPlatformObjectInstance parent;
+        private int x;
+        private int y;
+
+        private SwingingPlatformDisplayChild(SwingingPlatformObjectInstance parent) {
+            super(new ObjectSpawn(
+                    parent.displayChildX,
+                    parent.displayChildY,
+                    parent.spawn.objectId(),
+                    parent.spawn.subtype(),
+                    parent.spawn.renderFlags(),
+                    false,
+                    parent.spawn.rawYWord()),
+                    "SwingingPlatformDisplayChild");
+            this.parent = parent;
+            syncFromParent();
+        }
+
+        @Override
+        public SwingingPlatformDisplayChild recreateForRewind(RewindRecreateContext ctx) {
+            // Display child of a swinging platform. If the parent was swept before
+            // capture there is no assembly owner to relink to, so drop the child (its
+            // live update self-expires with a dead parent) rather than throw.
+            return nearestParentForRewind(ctx)
+                    .map(parent -> {
+                        SwingingPlatformDisplayChild child = new SwingingPlatformDisplayChild(parent);
+                        parent.attachDisplayChildForRewind(child);
+                        return child;
+                    })
+                    .orElse(null);
+        }
+
+        private void syncFromParent() {
+            this.x = parent.displayChildX;
+            this.y = parent.displayChildY;
+            updateDynamicSpawn(x, y);
+        }
+
+        @Override
+        public int getX() {
+            return x;
+        }
+
+        @Override
+        public int getY() {
+            return y;
+        }
+
+        @Override
+        public void update(int vIntRunCount, PlayableEntity playerEntity) {
+            if (parent.isDestroyed()) {
+                setDestroyed(true);
+                return;
+            }
+            syncFromParent();
+        }
+
+        @Override
+        public void appendRenderCommands(List<GLCommand> commands) {
+            // Parent renders the full multi-sprite assembly; this instance only occupies the ROM SST child slot.
+        }
+
+        @Override
+        public int getOutOfRangeReferenceX() {
+            return parent.getOutOfRangeReferenceX();
+        }
+
+        @Override
+        public boolean isHighPriority() {
+            return false;
+        }
     }
 
 }

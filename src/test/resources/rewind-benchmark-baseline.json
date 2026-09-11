@@ -1,0 +1,115 @@
+{
+  "_meta": {
+    "host": "BigDaddy",
+    "javaVersion": "java version \"24.0.2\" 2025-07-15",
+    "date": "2026-05-05",
+    "purpose": "Initial baseline for rewind framework v1.7. Numbers are hardware-dependent; CI does not enforce thresholds from this file. Use as a regression-detection reference for local benchmark runs."
+  },
+  "trace": "src\\test\\resources\\traces\\s2\\ehz1_fullrun",
+  "keyframeInterval": 60,
+  "phases": {
+    "phase1.forward.off": {
+      "sampleCount": 2000,
+      "meanNs": 77701,
+      "p50Ns": 27100,
+      "p95Ns": 174500,
+      "p99Ns": 753000,
+      "maxNs": 9319700,
+      "totalWallTimeNs": 459078800
+    },
+    "phase1.forward.on": {
+      "sampleCount": 2000,
+      "meanNs": 18885,
+      "p50Ns": 13900,
+      "p95Ns": 55200,
+      "p99Ns": 121900,
+      "maxNs": 568000,
+      "totalWallTimeNs": 149606000
+    },
+    "phase2.capture": {
+      "sampleCount": 1000,
+      "meanNs": 12677,
+      "p50Ns": 9500,
+      "p95Ns": 22600,
+      "p99Ns": 40900,
+      "maxNs": 228400,
+      "totalWallTimeNs": 115511700
+    },
+    "phase3.restore": {
+      "sampleCount": 500,
+      "meanNs": 23737,
+      "p50Ns": 21000,
+      "p95Ns": 31700,
+      "p99Ns": 81400,
+      "maxNs": 261000,
+      "totalWallTimeNs": 112046000
+    },
+    "phase4.cold-seek": {
+      "sampleCount": 48,
+      "meanNs": 73725,
+      "p50Ns": 13700,
+      "p95Ns": 162600,
+      "p99Ns": 2287200,
+      "maxNs": 2287200,
+      "totalWallTimeNs": 107080000
+    },
+    "phase5.hot-seek.within-segment": {
+      "sampleCount": 59,
+      "meanNs": 97600,
+      "p50Ns": 9200,
+      "p95Ns": 49500,
+      "p99Ns": 5060100,
+      "maxNs": 5060100,
+      "totalWallTimeNs": 104402500
+    },
+    "phase5.hot-seek.across-segment": {
+      "sampleCount": 2,
+      "meanNs": 581150,
+      "p50Ns": 1153500,
+      "p95Ns": 1153500,
+      "p99Ns": 1153500,
+      "maxNs": 1153500,
+      "totalWallTimeNs": 104402500
+    },
+    "phase6.memory": {
+      "sampleCount": 20,
+      "meanNs": 0,
+      "p50Ns": 0,
+      "p95Ns": 0,
+      "p99Ns": 0,
+      "maxNs": 0,
+      "totalWallTimeNs": 135257000,
+      "perSubsystem": {
+        "gamestate": { "sampleCount": 1, "meanNs": -1, "p50Ns": -1, "p95Ns": -1, "p99Ns": -1, "maxNs": -1 },
+        "water": { "sampleCount": 1, "meanNs": -1, "p50Ns": -1, "p95Ns": -1, "p99Ns": -1, "maxNs": -1 },
+        "level-event": { "sampleCount": 1, "meanNs": -1, "p50Ns": -1, "p95Ns": -1, "p99Ns": -1, "maxNs": -1 },
+        "parallax": { "sampleCount": 1, "meanNs": -1, "p50Ns": -1, "p95Ns": -1, "p99Ns": -1, "maxNs": -1 },
+        "s2-plc-art": { "sampleCount": 1, "meanNs": -1, "p50Ns": -1, "p95Ns": -1, "p99Ns": -1, "maxNs": -1 },
+        "camera": { "sampleCount": 1, "meanNs": -1, "p50Ns": -1, "p95Ns": -1, "p99Ns": -1, "maxNs": -1 },
+        "mutation-pipeline": { "sampleCount": 1, "meanNs": -1, "p50Ns": -1, "p95Ns": -1, "p99Ns": -1, "maxNs": -1 },
+        "object-manager": { "sampleCount": 1, "meanNs": -1, "p50Ns": -1, "p95Ns": -1, "p99Ns": -1, "maxNs": -1 },
+        "gamerng": { "sampleCount": 1, "meanNs": -1, "p50Ns": -1, "p95Ns": -1, "p99Ns": -1, "maxNs": -1 },
+        "oscillation": { "sampleCount": 1, "meanNs": -1, "p50Ns": -1, "p95Ns": -1, "p99Ns": -1, "maxNs": -1 },
+        "rings": { "sampleCount": 1, "meanNs": -1, "p50Ns": -1, "p95Ns": -1, "p99Ns": -1, "maxNs": -1 },
+        "animated-tile-channels": { "sampleCount": 1, "meanNs": -1, "p50Ns": -1, "p95Ns": -1, "p99Ns": -1, "maxNs": -1 },
+        "zone-runtime": { "sampleCount": 1, "meanNs": -1, "p50Ns": -1, "p95Ns": -1, "p99Ns": -1, "maxNs": -1 },
+        "fademanager": { "sampleCount": 1, "meanNs": -1, "p50Ns": -1, "p95Ns": -1, "p99Ns": -1, "maxNs": -1 },
+        "special-render": { "sampleCount": 1, "meanNs": -1, "p50Ns": -1, "p95Ns": -1, "p99Ns": -1, "maxNs": -1 },
+        "level": { "sampleCount": 1, "meanNs": -1, "p50Ns": -1, "p95Ns": -1, "p99Ns": -1, "maxNs": -1 },
+        "palette-ownership": { "sampleCount": 1, "meanNs": -1, "p50Ns": -1, "p95Ns": -1, "p99Ns": -1, "maxNs": -1 },
+        "solid-execution": { "sampleCount": 1, "meanNs": -1, "p50Ns": -1, "p95Ns": -1, "p99Ns": -1, "maxNs": -1 },
+        "advanced-render-mode": { "sampleCount": 1, "meanNs": -1, "p50Ns": -1, "p95Ns": -1, "p99Ns": -1, "maxNs": -1 },
+        "timermanager": { "sampleCount": 1, "meanNs": -1, "p50Ns": -1, "p95Ns": -1, "p99Ns": -1, "maxNs": -1 }
+      }
+    },
+    "longtail.determinism": {
+      "sampleCount": 0,
+      "meanNs": 0,
+      "p50Ns": 0,
+      "p95Ns": 0,
+      "p99Ns": 0,
+      "maxNs": 0,
+      "totalWallTimeNs": 109542500
+    }
+  }
+}

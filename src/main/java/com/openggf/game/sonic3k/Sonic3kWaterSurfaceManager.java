@@ -12,9 +12,10 @@ import com.openggf.level.objects.ObjectSpriteSheet;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.level.render.SpriteMappingFrame;
 import com.openggf.level.render.SpriteMappingPiece;
-import com.openggf.tools.NemesisReader;
+import com.openggf.data.compression.NemesisReader;
 
 import java.io.IOException;
+import com.openggf.sprites.managers.ProcessSpritesEpoch;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -193,5 +194,19 @@ public class Sonic3kWaterSurfaceManager {
 
     public boolean isInitialized() {
         return initialized;
+    }
+
+    /**
+     * Visits the native fixed wave-splash slot during the setup pass. Rendering
+     * derives its mapping directly from the immutable level epoch, so epoch zero
+     * intentionally requires no additional mutable cursor.
+     */
+    void processInitialSstSlot(ProcessSpritesEpoch epoch) {
+        if (!initialized) {
+            throw new IllegalStateException("wave splash fixed slot is not initialized");
+        }
+        if (epoch.advanceGameplayCounter()) {
+            throw new IllegalArgumentException("initial wave splash dispatch cannot count a frame");
+        }
     }
 }

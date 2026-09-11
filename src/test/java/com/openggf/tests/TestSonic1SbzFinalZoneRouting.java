@@ -1,9 +1,8 @@
 package com.openggf.tests;
 
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import com.openggf.camera.Camera;
 import com.openggf.game.GameServices;
 import com.openggf.configuration.SonicConfiguration;
@@ -25,12 +24,11 @@ import com.openggf.physics.GroundSensor;
 import com.openggf.sprites.managers.SpriteManager;
 import com.openggf.sprites.playable.Sonic;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * ROM-backed regression tests for Sonic 1 SBZ3/Final Zone routing and palette parity.
@@ -42,20 +40,16 @@ public class TestSonic1SbzFinalZoneRouting {
     private static final int DISASM_PALID_SBZ3 = 0x0C;
     private static final int DISASM_PALID_SBZ2 = 0x0E;
     private static final int DISASM_PALID_ENDING = 0x13;
-
-    @Rule
-    public RequiresRomRule romRule = new RequiresRomRule();
-
     private Rom rom;
     private Sonic1 sonic1;
 
-    @Before
+    @BeforeEach
     public void setUp() {
-        rom = romRule.rom();
+        rom = com.openggf.tests.TestEnvironment.currentRom();
         sonic1 = new Sonic1(rom);
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         GraphicsManager.getInstance().resetState();
         GameServices.camera().resetState();
@@ -65,7 +59,7 @@ public class TestSonic1SbzFinalZoneRouting {
     @Test
     public void testSbz2UsesSbz2Palette() throws Exception {
         Level level = sonic1.loadLevel(LevelData.S1_SCRAP_BRAIN_2.getLevelIndex());
-        assertEquals("SBZ2 should load in SBZ ROM zone slot", Sonic1Constants.ZONE_SBZ, level.getZoneIndex());
+        assertEquals(Sonic1Constants.ZONE_SBZ, level.getZoneIndex(), "SBZ2 should load in SBZ ROM zone slot");
 
         Palette expectedLine1 = readLevelPaletteLineForDisasmId(DISASM_PALID_SBZ2);
         assertPaletteEquals(expectedLine1, level.getPalette(1));
@@ -74,7 +68,7 @@ public class TestSonic1SbzFinalZoneRouting {
     @Test
     public void testSbz3LoadsLzAct4SlotAndSbz3Palette() throws Exception {
         Level level = sonic1.loadLevel(LevelData.S1_SCRAP_BRAIN_3.getLevelIndex());
-        assertEquals("SBZ3 should load from LZ ROM zone slot", Sonic1Constants.ZONE_LZ, level.getZoneIndex());
+        assertEquals(Sonic1Constants.ZONE_LZ, level.getZoneIndex(), "SBZ3 should load from LZ ROM zone slot");
 
         Palette expectedLine1 = readLevelPaletteLineForDisasmId(DISASM_PALID_SBZ3);
         assertPaletteEquals(expectedLine1, level.getPalette(1));
@@ -83,7 +77,7 @@ public class TestSonic1SbzFinalZoneRouting {
     @Test
     public void testFinalZoneLoadsSbzAct3SlotAndSbz2Palette() throws Exception {
         Level level = sonic1.loadLevel(LevelData.S1_FINAL_ZONE.getLevelIndex());
-        assertEquals("Final Zone should load from SBZ ROM zone slot", Sonic1Constants.ZONE_SBZ, level.getZoneIndex());
+        assertEquals(Sonic1Constants.ZONE_SBZ, level.getZoneIndex(), "Final Zone should load from SBZ ROM zone slot");
 
         Palette expectedLine1 = readLevelPaletteLineForDisasmId(DISASM_PALID_SBZ2);
         assertPaletteEquals(expectedLine1, level.getPalette(1));
@@ -92,12 +86,10 @@ public class TestSonic1SbzFinalZoneRouting {
     @Test
     public void testEndingVariantsLoadEndZoneSlotsAndEndingPalette() throws Exception {
         Level endingFlowers = sonic1.loadLevel(LevelData.S1_ENDING_FLOWERS.getLevelIndex());
-        assertEquals("Ending flowers variant should load from ENDZ ROM slot",
-                Sonic1Constants.ZONE_ENDZ, endingFlowers.getZoneIndex());
+        assertEquals(Sonic1Constants.ZONE_ENDZ, endingFlowers.getZoneIndex(), "Ending flowers variant should load from ENDZ ROM slot");
 
         Level endingNoEmeralds = sonic1.loadLevel(LevelData.S1_ENDING_NO_EMERALDS.getLevelIndex());
-        assertEquals("Ending no-emerald variant should load from ENDZ ROM slot",
-                Sonic1Constants.ZONE_ENDZ, endingNoEmeralds.getZoneIndex());
+        assertEquals(Sonic1Constants.ZONE_ENDZ, endingNoEmeralds.getZoneIndex(), "Ending no-emerald variant should load from ENDZ ROM slot");
 
         Palette[] expectedPalette = readExpectedMainPaletteAfterLoads(DISASM_PALID_ENDING);
         for (int line = 0; line < 4; line++) {
@@ -111,10 +103,8 @@ public class TestSonic1SbzFinalZoneRouting {
         Level endingFlowers = sonic1.loadLevel(LevelData.S1_ENDING_FLOWERS.getLevelIndex());
         Level endingNoEmeralds = sonic1.loadLevel(LevelData.S1_ENDING_NO_EMERALDS.getLevelIndex());
 
-        assertTrue("Ending flowers should load visible level art into low tile indices",
-                hasAnyVisibleTileInRange(endingFlowers, 0x00, 0x40));
-        assertTrue("Ending no-emeralds should load visible level art into low tile indices",
-                hasAnyVisibleTileInRange(endingNoEmeralds, 0x00, 0x40));
+        assertTrue(hasAnyVisibleTileInRange(endingFlowers, 0x00, 0x40), "Ending flowers should load visible level art into low tile indices");
+        assertTrue(hasAnyVisibleTileInRange(endingNoEmeralds, 0x00, 0x40), "Ending no-emeralds should load visible level art into low tile indices");
     }
 
     @Test
@@ -123,11 +113,11 @@ public class TestSonic1SbzFinalZoneRouting {
         LevelManager levelManager = GameServices.level();
         levelManager.loadZoneAndAct(Sonic1ZoneConstants.ZONE_SBZ, 2);
 
-        assertEquals("SBZ3 map/art should come from LZ ROM slot", Sonic1Constants.ZONE_LZ, levelManager.getRomZoneId());
-        assertEquals(
-                "SBZ3 water should use SBZ3 height from ROM behavior",
-                Sonic1Constants.WATER_HEIGHT_SBZ3,
-                GameServices.water().getWaterLevelY(Sonic1Constants.ZONE_SBZ, 2));
+        assertEquals(Sonic1Constants.ZONE_LZ, levelManager.getRomZoneId(), "SBZ3 map/art should come from LZ ROM slot");
+        // SBZ3 is id_LZ_act4 ($0103): v_zone=id_LZ, v_act=act4. Gates ported from
+        // the disassembly read that, not the logical act. (_Constants.asm:87,112)
+        assertEquals(3, levelManager.getRomActId(), "SBZ3 v_act should be act4");
+        assertEquals(Sonic1Constants.WATER_HEIGHT_SBZ3, GameServices.water().getWaterLevelY(Sonic1Constants.ZONE_SBZ, 2), "SBZ3 water should use SBZ3 height from ROM behavior");
     }
 
     @Test
@@ -136,8 +126,16 @@ public class TestSonic1SbzFinalZoneRouting {
         LevelManager levelManager = GameServices.level();
         levelManager.loadZoneAndAct(Sonic1ZoneConstants.ZONE_FZ, 0);
 
-        assertEquals("Final Zone map/art should come from SBZ ROM slot", Sonic1Constants.ZONE_SBZ, levelManager.getRomZoneId());
-        assertFalse("Final Zone must not be treated as water", GameServices.water().hasWater(Sonic1Constants.ZONE_SBZ, 0));
+        assertEquals(Sonic1Constants.ZONE_SBZ, levelManager.getRomZoneId(), "Final Zone map/art should come from SBZ ROM slot");
+        // id_FZ = (id_SBZ<<8)+act3 ($0502): v_zone=id_SBZ, v_act=act3
+        // (_Constants.asm:113). sonic.asm:2755 gates water on v_zone=id_LZ only,
+        // so FZ is dry however its v_act reads.
+        assertEquals(2, levelManager.getRomActId(), "Final Zone v_act should be act3");
+        assertFalse(GameServices.water().hasWater(Sonic1Constants.ZONE_SBZ, 0), "Final Zone must not be treated as water");
+        // Query the pair the water system is actually keyed by, so an act remap
+        // that collides FZ with SBZ3 cannot slip through as it did before.
+        assertFalse(GameServices.water().hasWater(levelManager.getFeatureZoneId(), levelManager.getFeatureActId()),
+                "Final Zone must not be treated as water under its own feature zone/act");
     }
 
     @Test
@@ -282,9 +280,9 @@ public class TestSonic1SbzFinalZoneRouting {
         for (int i = 0; i < 16; i++) {
             Palette.Color e = expected.getColor(i);
             Palette.Color a = actual.getColor(i);
-            assertEquals("R mismatch at color " + i, e.r & 0xFF, a.r & 0xFF);
-            assertEquals("G mismatch at color " + i, e.g & 0xFF, a.g & 0xFF);
-            assertEquals("B mismatch at color " + i, e.b & 0xFF, a.b & 0xFF);
+            assertEquals(e.r & 0xFF, a.r & 0xFF, "R mismatch at color " + i);
+            assertEquals(e.g & 0xFF, a.g & 0xFF, "G mismatch at color " + i);
+            assertEquals(e.b & 0xFF, a.b & 0xFF, "B mismatch at color " + i);
         }
     }
 
@@ -305,3 +303,5 @@ public class TestSonic1SbzFinalZoneRouting {
         GroundSensor.setLevelManager(GameServices.level());
     }
 }
+
+

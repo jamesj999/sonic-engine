@@ -1,14 +1,18 @@
 package com.openggf.graphics;
 
 import org.joml.Matrix4f;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.Test;
 import org.lwjgl.glfw.GLFWErrorCallback;
 import org.lwjgl.opengl.GL;
 import com.openggf.Engine;
 import com.openggf.camera.Camera;
 import com.openggf.game.GameServices;
+import com.openggf.tests.TestSessionOutputPaths;
 import com.openggf.configuration.SonicConfiguration;
 import com.openggf.configuration.SonicConfigurationService;
 import com.openggf.data.Rom;
@@ -19,7 +23,6 @@ import com.openggf.sprites.managers.SpriteManager;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 import com.openggf.sprites.playable.Sonic;
 
-import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -27,8 +30,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
-import static org.junit.Assert.*;
-import static org.junit.Assume.assumeTrue;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.lwjgl.glfw.GLFW.*;
 import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.system.MemoryUtil.NULL;
@@ -68,7 +71,7 @@ public class VisualRegressionTest {
     private static final Matrix4f projectionMatrix = new Matrix4f();
     private static final float[] matrixBuffer = new float[16];
 
-    @BeforeClass
+    @BeforeAll
     public static void setUpClass() {
         try {
             // Save and disable debug view to avoid rendering debug markers (e.g., LayerSwitcher)
@@ -137,12 +140,12 @@ public class VisualRegressionTest {
             // Load ROM
             File romFile = ensureRomAvailable();
             if (romFile == null) {
-                System.err.println("Sonic 2 ROM not available — visual regression tests will be skipped");
+                System.err.println("Sonic 2 ROM not available Ã¢â‚¬â€ visual regression tests will be skipped");
                 initialized = false;
                 return;
             }
             rom = new Rom();
-            assertTrue("Failed to open ROM", rom.open(romFile.getAbsolutePath()));
+            assertTrue(rom.open(romFile.getAbsolutePath()), "Failed to open ROM");
 
             // Register game module
             GameModuleRegistry.detectAndSetModule(rom);
@@ -168,7 +171,7 @@ public class VisualRegressionTest {
         }
     }
 
-    @AfterClass
+    @AfterAll
     public static void tearDownClass() {
         // Restore debug view setting
         SonicConfigurationService.getInstance()
@@ -187,59 +190,59 @@ public class VisualRegressionTest {
 
     @Test
     public void testEhzAct1Checkpoint1() throws Exception {
-        assumeTrue("Test environment not initialized", initialized);
-        assumeTrue("Reference files not generated yet. Run VisualReferenceGenerator first.", referenceFilesExist);
+        assumeTrue(initialized, "Test environment not initialized");
+        assumeTrue(referenceFilesExist, "Reference files not generated yet. Run VisualReferenceGenerator first.");
         assertScreenshotMatchesReference(0, 0, 3568, 170, "ehz_a1_cp1.png");
     }
 
     @Test
     public void testEhzAct1Tunnel() throws Exception {
-        assumeTrue("Test environment not initialized", initialized);
-        assumeTrue("Reference files not generated yet. Run VisualReferenceGenerator first.", referenceFilesExist);
+        assumeTrue(initialized, "Test environment not initialized");
+        assumeTrue(referenceFilesExist, "Reference files not generated yet. Run VisualReferenceGenerator first.");
         // EHZ tunnel tests the priority rendering system (tunnel renders in front of Sonic)
         assertScreenshotMatchesReference(0, 0, 1806, 697, "ehz_a1_tunnel.png");
     }
 
     @Test
     public void testEhzAct2Checkpoint1() throws Exception {
-        assumeTrue("Test environment not initialized", initialized);
-        assumeTrue("Reference files not generated yet. Run VisualReferenceGenerator first.", referenceFilesExist);
+        assumeTrue(initialized, "Test environment not initialized");
+        assumeTrue(referenceFilesExist, "Reference files not generated yet. Run VisualReferenceGenerator first.");
         assertScreenshotMatchesReference(0, 1, 4224, 200, "ehz_a2_cp1.png");
     }
 
     @Test
     public void testCpzAct1Checkpoint1() throws Exception {
-        assumeTrue("Test environment not initialized", initialized);
-        assumeTrue("Reference files not generated yet. Run VisualReferenceGenerator first.", referenceFilesExist);
+        assumeTrue(initialized, "Test environment not initialized");
+        assumeTrue(referenceFilesExist, "Reference files not generated yet. Run VisualReferenceGenerator first.");
         assertScreenshotMatchesReference(1, 0, 4272, 1512, "cpz_a1_cp1.png");
     }
 
     @Test
     public void testCpzAct2Checkpoint1() throws Exception {
-        assumeTrue("Test environment not initialized", initialized);
-        assumeTrue("Reference files not generated yet. Run VisualReferenceGenerator first.", referenceFilesExist);
+        assumeTrue(initialized, "Test environment not initialized");
+        assumeTrue(referenceFilesExist, "Reference files not generated yet. Run VisualReferenceGenerator first.");
         assertScreenshotMatchesReference(1, 1, 3136, 616, "cpz_a2_cp1.png");
     }
 
     @Test
     public void testCnzAct1Checkpoint1() throws Exception {
-        assumeTrue("Test environment not initialized", initialized);
-        assumeTrue("Reference files not generated yet. Run VisualReferenceGenerator first.", referenceFilesExist);
+        assumeTrue(initialized, "Test environment not initialized");
+        assumeTrue(referenceFilesExist, "Reference files not generated yet. Run VisualReferenceGenerator first.");
         assertScreenshotMatchesReference(3, 0, 5944, 296, "cnz_a1_cp1.png");
     }
 
     @Test
     public void testHtzAct1Checkpoint1() throws Exception {
-        assumeTrue("Test environment not initialized", initialized);
-        assumeTrue("Reference files not generated yet. Run VisualReferenceGenerator first.", referenceFilesExist);
+        assumeTrue(initialized, "Test environment not initialized");
+        assumeTrue(referenceFilesExist, "Reference files not generated yet. Run VisualReferenceGenerator first.");
         // HTZ uses overlay tileset system - important to verify
         assertScreenshotMatchesReference(4, 0, 4160, 204, "htz_a1_cp1.png");
     }
 
     @Test
     public void testMczAct1Checkpoint1() throws Exception {
-        assumeTrue("Test environment not initialized", initialized);
-        assumeTrue("Reference files not generated yet. Run VisualReferenceGenerator first.", referenceFilesExist);
+        assumeTrue(initialized, "Test environment not initialized");
+        assumeTrue(referenceFilesExist, "Reference files not generated yet. Run VisualReferenceGenerator first.");
         assertScreenshotMatchesReference(5, 0, 1400, 1128, "mcz_a1_cp1.png");
     }
 
@@ -250,14 +253,14 @@ public class VisualRegressionTest {
     private void assertScreenshotMatchesReference(int zone, int act, int playerX, int playerY, String filename)
             throws Exception {
 
-        assumeTrue("Reference file not found: " + filename, referenceFileExists(filename));
+        assumeTrue(referenceFileExists(filename), "Reference file not found: " + filename);
 
         // Load reference image
-        BufferedImage reference = loadReferenceImage(filename);
-        assertNotNull("Reference image should load: " + filename, reference);
+        RgbaImage reference = loadReferenceImage(filename);
+        assertNotNull(reference, "Reference image should load: " + filename);
 
         // Render current output
-        BufferedImage current = renderScreenshot(zone, act, playerX, playerY);
+        RgbaImage current = renderScreenshot(zone, act, playerX, playerY);
 
         // Compare images
         ScreenshotCapture.ComparisonResult result = ScreenshotCapture.imagesMatch(reference, current, PIXEL_TOLERANCE);
@@ -279,7 +282,7 @@ public class VisualRegressionTest {
     /**
      * Render a screenshot of the level at the specified player position.
      */
-    private BufferedImage renderScreenshot(int zone, int act, int playerX, int playerY) throws IOException {
+    private RgbaImage renderScreenshot(int zone, int act, int playerX, int playerY) throws IOException {
         LevelManager levelManager = GameServices.level();
         Camera camera = GameServices.camera();
         GraphicsManager graphicsManager = GraphicsManager.getInstance();
@@ -342,9 +345,9 @@ public class VisualRegressionTest {
     /**
      * Save a diff image showing the differences between reference and current.
      */
-    private void saveDiffImage(String originalFilename, BufferedImage reference, BufferedImage current)
+    private void saveDiffImage(String originalFilename, RgbaImage reference, RgbaImage current)
             throws IOException {
-        Path diffDir = Paths.get("target", "visual-diff");
+        Path diffDir = TestSessionOutputPaths.diagnostics("visual-diff");
         Files.createDirectories(diffDir);
 
         // Save current image
@@ -353,7 +356,7 @@ public class VisualRegressionTest {
         ScreenshotCapture.savePNG(current, currentPath);
 
         // Save diff image
-        BufferedImage diff = ScreenshotCapture.createDiffImage(reference, current, PIXEL_TOLERANCE);
+        RgbaImage diff = ScreenshotCapture.createDiffImage(reference, current, PIXEL_TOLERANCE);
         String diffFilename = originalFilename.replace(".png", "_diff.png");
         Path diffPath = diffDir.resolve(diffFilename);
         ScreenshotCapture.savePNG(diff, diffPath);
@@ -376,7 +379,7 @@ public class VisualRegressionTest {
     /**
      * Load a reference image from resources.
      */
-    private BufferedImage loadReferenceImage(String filename) throws IOException {
+    private RgbaImage loadReferenceImage(String filename) throws IOException {
         // Try loading from classpath first
         try (InputStream is = getClass().getClassLoader()
                 .getResourceAsStream(REFERENCE_DIR + "/" + filename)) {
@@ -397,3 +400,4 @@ public class VisualRegressionTest {
         }
     }
 }
+

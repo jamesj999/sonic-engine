@@ -14,11 +14,10 @@ import com.openggf.level.animation.AnimatedPaletteManager;
 import com.openggf.level.animation.AnimatedPatternManager;
 import com.openggf.level.objects.ObjectManager;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
-import org.junit.*;
+import org.junit.jupiter.api.*;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Documents and verifies the intentional omissions in
@@ -33,20 +32,17 @@ import static org.junit.Assert.*;
  */
 @RequiresRom(SonicGame.SONIC_2)
 public class TestActTransitionIntentionalSkips {
-
-    @ClassRule public static RequiresRomRule romRule = new RequiresRomRule();
-
     private static final int ZONE_EHZ = 0;
     private static final int ACT_1 = 0;
     private static final int ACT_2 = 1;
     private static SharedLevel sharedLevel;
 
-    @BeforeClass
+    @BeforeAll
     public static void loadLevel() throws Exception {
         sharedLevel = SharedLevel.load(SonicGame.SONIC_2, ZONE_EHZ, ACT_1);
     }
 
-    @AfterClass
+    @AfterAll
     public static void cleanup() {
         if (sharedLevel != null) {
             sharedLevel.dispose();
@@ -55,7 +51,7 @@ public class TestActTransitionIntentionalSkips {
 
     private HeadlessTestFixture fixture;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         fixture = HeadlessTestFixture.builder()
                 .withSharedLevel(sharedLevel)
@@ -77,12 +73,12 @@ public class TestActTransitionIntentionalSkips {
     @Test
     public void waterSystemInstancePreservedAcrossTransition() throws Exception {
         WaterSystem before = GameServices.water();
-        assertNotNull("WaterSystem should exist before transition", before);
+        assertNotNull(before, "WaterSystem should exist before transition");
 
         GameServices.level().executeActTransition(transitionToAct2());
 
         WaterSystem after = GameServices.water();
-        assertSame("WaterSystem instance must survive act transition", before, after);
+        assertSame(before, after, "WaterSystem instance must survive act transition");
     }
 
     @Test
@@ -93,7 +89,7 @@ public class TestActTransitionIntentionalSkips {
         lm.executeActTransition(transitionToAct2());
 
         ZoneFeatureProvider after = lm.getZoneFeatureProvider();
-        assertSame("ZoneFeatureProvider must survive act transition", before, after);
+        assertSame(before, after, "ZoneFeatureProvider must survive act transition");
     }
 
     @Test
@@ -101,80 +97,83 @@ public class TestActTransitionIntentionalSkips {
         LevelManager lm = GameServices.level();
         GameModule beforeLm = lm.getGameModule();
         GameModule beforeRegistry = GameModuleRegistry.getCurrent();
-        assertNotNull("GameModule should exist before transition", beforeLm);
-        assertNotNull("GameModuleRegistry should have a module before transition", beforeRegistry);
+        assertNotNull(beforeLm, "GameModule should exist before transition");
+        assertNotNull(beforeRegistry, "GameModuleRegistry should have a module before transition");
 
         lm.executeActTransition(transitionToAct2());
 
         GameModule afterLm = lm.getGameModule();
         GameModule afterRegistry = GameModuleRegistry.getCurrent();
-        assertSame("LevelManager's GameModule must survive act transition", beforeLm, afterLm);
-        assertSame("GameModuleRegistry's module must survive act transition", beforeRegistry, afterRegistry);
+        assertSame(beforeLm, afterLm, "LevelManager's GameModule must survive act transition");
+        assertSame(beforeRegistry, afterRegistry, "GameModuleRegistry's module must survive act transition");
     }
 
     @Test
     public void gameInstancePreservedAcrossTransition() throws Exception {
         LevelManager lm = GameServices.level();
         Object beforeGame = lm.getGame();
-        assertNotNull("Game should exist before transition", beforeGame);
+        assertNotNull(beforeGame, "Game should exist before transition");
 
         lm.executeActTransition(transitionToAct2());
 
         Object afterGame = lm.getGame();
-        assertSame("Game instance must survive act transition", beforeGame, afterGame);
+        assertSame(beforeGame, afterGame, "Game instance must survive act transition");
     }
 
     @Test
     public void animatedPatternManagerReinitializedAcrossTransition() throws Exception {
         LevelManager lm = GameServices.level();
         AnimatedPatternManager before = lm.getAnimatedPatternManager();
-        assertNotNull("AnimatedPatternManager should exist before transition", before);
+        assertNotNull(before, "AnimatedPatternManager should exist before transition");
 
         lm.executeActTransition(transitionToAct2());
 
         AnimatedPatternManager after = lm.getAnimatedPatternManager();
-        assertNotNull("AnimatedPatternManager should exist after transition", after);
-        assertNotSame("AnimatedPatternManager must refresh for the new act", before, after);
+        assertNotNull(after, "AnimatedPatternManager should exist after transition");
+        assertNotSame(before, after, "AnimatedPatternManager must refresh for the new act");
     }
 
     @Test
     public void animatedPaletteManagerReinitializedAcrossTransition() throws Exception {
         LevelManager lm = GameServices.level();
         AnimatedPaletteManager before = lm.getAnimatedPaletteManager();
-        assertNotNull("AnimatedPaletteManager should exist before transition", before);
+        assertNotNull(before, "AnimatedPaletteManager should exist before transition");
 
         lm.executeActTransition(transitionToAct2());
 
         AnimatedPaletteManager after = lm.getAnimatedPaletteManager();
-        assertNotNull("AnimatedPaletteManager should exist after transition", after);
-        assertNotSame("AnimatedPaletteManager must refresh for the new act", before, after);
+        assertNotNull(after, "AnimatedPaletteManager should exist after transition");
+        assertNotSame(before, after, "AnimatedPaletteManager must refresh for the new act");
     }
 
     @Test
     public void objectManagerRebuiltAcrossTransition() throws Exception {
         LevelManager lm = GameServices.level();
         ObjectManager before = lm.getObjectManager();
-        assertNotNull("ObjectManager should exist before transition", before);
+        assertNotNull(before, "ObjectManager should exist before transition");
 
         lm.executeActTransition(transitionToAct2());
 
         ObjectManager after = lm.getObjectManager();
-        assertNotNull("ObjectManager should exist after transition", after);
-        assertNotSame("ObjectManager must be a new instance", before, after);
+        assertNotNull(after, "ObjectManager should exist after transition");
+        assertNotSame(before, after, "ObjectManager must be a new instance");
     }
 
     @Test
     public void levelEventsReinitializedAcrossTransition() throws Exception {
         LevelManager lm = GameServices.level();
         LevelEventProvider provider = GameModuleRegistry.getCurrent().getLevelEventProvider();
-        assertNotNull("LevelEventProvider should exist", provider);
+        assertNotNull(provider, "LevelEventProvider should exist");
 
         lm.executeActTransition(transitionToAct2());
 
-        assertEquals("Zone should be EHZ after transition", ZONE_EHZ, lm.getCurrentZone());
-        assertEquals("Act should be 2 (index 1) after transition", ACT_2, lm.getCurrentAct());
+        assertEquals(ZONE_EHZ, lm.getCurrentZone(), "Zone should be EHZ after transition");
+        assertEquals(ACT_2, lm.getCurrentAct(), "Act should be 2 (index 1) after transition");
 
         LevelEventProvider afterProvider = GameModuleRegistry.getCurrent().getLevelEventProvider();
-        assertSame("LevelEventProvider instance is reused", provider, afterProvider);
+        assertSame(provider, afterProvider, "LevelEventProvider instance is reused");
     }
 }
+
+
+

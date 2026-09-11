@@ -3,14 +3,16 @@ package com.openggf.game.sonic1.objects;
 import com.openggf.graphics.GLCommand;
 import com.openggf.game.PlayableEntity;
 
+import com.openggf.game.sonic1.constants.Sonic1ObjectIds;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
+import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.ObjectRenderManager;
+import com.openggf.level.objects.SpawnCoordinateZeroPairRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.TrigLookupTable;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -36,10 +38,8 @@ import java.util.List;
  * <p>
  * Reference: docs/s1disasm/_incObj/88 Ending Sequence Emeralds.asm
  */
-public class Sonic1EndingEmeraldsObjectInstance extends AbstractObjectInstance {
-
-    /** All live emerald instances for bulk destruction. */
-    private static final List<Sonic1EndingEmeraldsObjectInstance> ALL_EMERALDS = new ArrayList<>();
+public class Sonic1EndingEmeraldsObjectInstance extends AbstractObjectInstance
+        implements SpawnCoordinateZeroPairRewindRecreatable {
 
     // ========================================================================
     // ROM Constants
@@ -62,7 +62,10 @@ public class Sonic1EndingEmeraldsObjectInstance extends AbstractObjectInstance {
     // ========================================================================
 
     private PatternSpriteRenderer renderer;
-    private final int frameId;
+    // Un-final so GenericFieldCapturer reapplies the per-emerald color frame (1-6)
+    // after a rewind recreate; spawn subtype/objectId are identical across all six,
+    // so frameId is not spawn-derivable. See rewind batch-5 fix.
+    private int frameId;
 
     private int origX;
     private int origY;
@@ -89,10 +92,11 @@ public class Sonic1EndingEmeraldsObjectInstance extends AbstractObjectInstance {
         this.frameId = frame;
         this.currentX = centerX;
         this.currentY = centerY;
+    }
 
-        synchronized (ALL_EMERALDS) {
-            ALL_EMERALDS.add(this);
-        }
+    @Override
+    public ObjectSpawn getSpawn() {
+        return new ObjectSpawn(currentX, currentY, Sonic1ObjectIds.END_CHAOS, 0, 0, false, 0);
     }
 
     private void ensureRenderer() {
@@ -105,7 +109,7 @@ public class Sonic1EndingEmeraldsObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         ensureRenderer();
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) {
@@ -159,16 +163,6 @@ public class Sonic1EndingEmeraldsObjectInstance extends AbstractObjectInstance {
     /** Check if this emerald's radius has reached maximum ($2000). */
     public boolean hasReachedMaxRadius() {
         return radius >= MAX_VALUE;
-    }
-
-    /** Destroy all active emerald instances (ROM: Obj87_ClrObjRam loop). */
-    public static void destroyAllEmeralds() {
-        synchronized (ALL_EMERALDS) {
-            for (Sonic1EndingEmeraldsObjectInstance em : ALL_EMERALDS) {
-                em.setDestroyed(true);
-            }
-            ALL_EMERALDS.clear();
-        }
     }
 
     // ========================================================================

@@ -1,9 +1,14 @@
 package com.openggf.game.sonic3k.features;
 
 import com.openggf.game.GameServices;
+import com.openggf.game.PlayableEntity;
 import com.openggf.game.sonic3k.constants.Sonic3kAnimationIds;
 import com.openggf.game.sonic3k.objects.HCZWaterRushObjectInstance.HCZBreakableBarState;
+import com.openggf.level.objects.ObjectPlayerQuery;
+import com.openggf.sprites.managers.SpriteManager;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
+
+import java.util.List;
 
 /**
  * HCZ Water Tunnel physics — a global per-frame subroutine that pushes the
@@ -49,6 +54,11 @@ public final class HCZWaterTunnelHandler {
 
     private static boolean windTunnelFlagP1;
     private static boolean windTunnelFlagP2;
+
+    /** Influence flag of the tunnel entry each player is currently inside.
+     *  0 = horizontal flow (D-pad nudges Y), non-zero = vertical flow (D-pad nudges X). */
+    private static int activeTunnelInfluenceP1;
+    private static int activeTunnelInfluenceP2;
 
     private static int exitAnimTimerP1;
     private static int exitAnimTimerP2;
@@ -110,10 +120,14 @@ public final class HCZWaterTunnelHandler {
      * @param act current act index (0 = HCZ1, 1 = HCZ2)
      */
     public static void update(int act) {
+        update(playerQueryFromGameServices(), act);
+    }
+
+    static void update(ObjectPlayerQuery query, int act) {
         // ROM: tst.w (Debug_placement_mode).w / bne locret_705A
         // Checked per-player below.
 
-        AbstractPlayableSprite player = GameServices.camera().getFocusedSprite();
+        AbstractPlayableSprite player = asPlayableSprite(query.mainPlayerOrNull());
         if (player == null) {
             return;
         }
@@ -135,17 +149,48 @@ public final class HCZWaterTunnelHandler {
             }
         }
 
-        for (AbstractPlayableSprite sidekick : GameServices.sprites().getSidekicks()) {
-            if (!sidekick.isDebugMode()) {
-                windTunnelFlagP2 = processPlayer(sidekick, tunnels, windTunnelFlagP2, 1);
+        AbstractPlayableSprite p2 = nativeP2From(query);
+        if (p2 != null) {
+            if (!p2.isDebugMode()) {
+                windTunnelFlagP2 = processPlayer(p2, tunnels, windTunnelFlagP2, 1);
             }
             if (exitAnimTimerP2 > 0) {
-                if (!sidekick.getAir()) {
+                if (!p2.getAir()) {
                     exitAnimTimerP2 = 0;
-                    sidekick.setForcedAnimationId(-1);
+                    p2.setForcedAnimationId(-1);
                 }
             }
         }
+    }
+
+    /**
+     * Releases the temporary {@code anim=$1A} tunnel-exit owner as soon as the
+     * player reaches {@code Player_TouchFloor}. The ordinary feature update
+     * runs after the playable slot, which is too late for that slot's
+     * {@code Animate_Sonic}/{@code Animate_Tails} call; consuming the native
+     * exit latch from the landing callback lets the landing's Walk write own
+     * the same frame (sonic3k.asm {@code loc_7046} and {@code loc_121B6}).
+     */
+    public static boolean consumeExitAnimationOnLanding(AbstractPlayableSprite player) {
+        return consumeExitAnimationOnLanding(playerQueryFromGameServices(), player);
+    }
+
+    static boolean consumeExitAnimationOnLanding(ObjectPlayerQuery query,
+                                                  AbstractPlayableSprite player) {
+        if (player == null || query == null) {
+            return false;
+        }
+        if (player == asPlayableSprite(query.mainPlayerOrNull()) && exitAnimTimerP1 > 0) {
+            exitAnimTimerP1 = 0;
+            player.setForcedAnimationId(-1);
+            return true;
+        }
+        if (player == nativeP2From(query) && exitAnimTimerP2 > 0) {
+            exitAnimTimerP2 = 0;
+            player.setForcedAnimationId(-1);
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -154,20 +199,46 @@ public final class HCZWaterTunnelHandler {
     public static void reset() {
         windTunnelFlagP1 = false;
         windTunnelFlagP2 = false;
+        activeTunnelInfluenceP1 = 0;
+        activeTunnelInfluenceP2 = 0;
         exitAnimTimerP1 = 0;
         exitAnimTimerP2 = 0;
     }
 
+    /** Immutable rewind snapshot of per-player wind-tunnel state. */
+    public record Snapshot(
+            boolean windTunnelFlagP1, boolean windTunnelFlagP2,
+            int activeTunnelInfluenceP1, int activeTunnelInfluenceP2,
+            int exitAnimTimerP1, int exitAnimTimerP2) {
+    }
+
+    /** Captures the current per-player wind-tunnel state for rewind snapshots. */
+    public static Snapshot snapshot() {
+        return new Snapshot(windTunnelFlagP1, windTunnelFlagP2,
+                activeTunnelInfluenceP1, activeTunnelInfluenceP2,
+                exitAnimTimerP1, exitAnimTimerP2);
+    }
+
+    /** Restores per-player wind-tunnel state from a previously captured snapshot. */
+    public static void restore(Snapshot snapshot) {
+        windTunnelFlagP1 = snapshot.windTunnelFlagP1();
+        windTunnelFlagP2 = snapshot.windTunnelFlagP2();
+        activeTunnelInfluenceP1 = snapshot.activeTunnelInfluenceP1();
+        activeTunnelInfluenceP2 = snapshot.activeTunnelInfluenceP2();
+        exitAnimTimerP1 = snapshot.exitAnimTimerP1();
+        exitAnimTimerP2 = snapshot.exitAnimTimerP2();
+    }
+
     /**
      * Returns whether the given player is currently being moved by the
-     * wind tunnel system. When true, standard level collision should be
-     * suppressed — the tunnel handler controls position directly.
+     * wind tunnel system.
      *
      * @param playerIndex 0 for P1, 1 for P2/sidekick
      */
     public static boolean isPlayerInTunnel(int playerIndex) {
         return playerIndex == 0 ? windTunnelFlagP1 : windTunnelFlagP2;
     }
+
 
     /**
      * Returns whether HCZ should temporarily present as "dry" for palette/waterline
@@ -215,6 +286,19 @@ public final class HCZWaterTunnelHandler {
                 return false;
             }
 
+            // Set per-sprite collision flags for PlayableSpriteMovement.
+            // WindTunnel_flag makes airborne floor checks run even while the
+            // tunnel velocity points upward, keeping the player constrained
+            // against pipe surfaces for horizontal and vertical entries.
+            player.setSuppressAirCollision(false);
+            player.setForceFloorCheck(true);
+
+            if (playerIndex == 0) {
+                activeTunnelInfluenceP1 = entry[INFLUENCE_FLAG];
+            } else {
+                activeTunnelInfluenceP2 = entry[INFLUENCE_FLAG];
+            }
+
             short xVel = (short) entry[X_VEL];
             short yVel = (short) entry[Y_VEL];
 
@@ -223,22 +307,16 @@ public final class HCZWaterTunnelHandler {
             // to position as the second displacement step.
             player.setXSpeed(xVel);
             player.setYSpeed(yVel);
-            player.setGSpeed((short) 0);
 
             // ROM: ext.l d0 / lsl.l #8,d0 / add.l d0,x_pos(a1) — first
             // displacement step: add velocity<<8 to the 32-bit position.
             // player.move() does exactly this (adds speed<<8 to pixel:subpixel).
             player.move(xVel, yVel);
-
             // ROM: move.b #$F,anim(a1)
             player.setAnimationId(Sonic3kAnimationIds.FLOAT2);
             player.setForcedAnimationId(Sonic3kAnimationIds.FLOAT2);
 
             // ROM: bset #1,status(a1) — sets InAir status bit.
-            // In the ROM this is separate from the physics mode byte, but
-            // our engine uses air as the mode selector. Ceiling collision in
-            // modeAirborne is suppressed via the isPlayerInTunnel() check in
-            // PlayableSpriteMovement.
             player.setAir(true);
 
             // ROM: move.b #0,double_jump_flag(a1)
@@ -278,6 +356,9 @@ public final class HCZWaterTunnelHandler {
                 && playerX >= 0x2F30 && playerX < 0x2F70
                 && playerY < 0x0680 && playerY >= 0x0440
                 && !player.isObjectControlled()) {
+            // Vertical continuation — suppress collision like vertical tunnels.
+            player.setSuppressAirCollision(true);
+            player.setForceFloorCheck(false);
             player.setXSpeed((short) 0);
             player.setYSpeed((short) -0x0400);
             player.setGSpeed((short) 0);
@@ -289,7 +370,10 @@ public final class HCZWaterTunnelHandler {
             return true;
         }
 
-        // No tunnel matched and no continuation applies.
+        // No tunnel matched and no continuation applies — clear collision flags.
+        player.setSuppressAirCollision(false);
+        player.setForceFloorCheck(false);
+
         // ROM: tst.b (a3) / beq locret_705A / move.b #$1A,anim(a1)
         if (wasInTunnel) {
             if (playerIndex == 0) {
@@ -302,5 +386,24 @@ public final class HCZWaterTunnelHandler {
         }
 
         return false;
+    }
+
+    private static ObjectPlayerQuery playerQueryFromGameServices() {
+        AbstractPlayableSprite mainPlayer = GameServices.camera().getFocusedSprite();
+        SpriteManager sprites = GameServices.spritesOrNull();
+        List<? extends PlayableEntity> sidekicks = sprites != null
+                ? List.copyOf(sprites.getSidekicks())
+                : List.of();
+        return new ObjectPlayerQuery(
+                () -> mainPlayer,
+                () -> sidekicks);
+    }
+
+    private static AbstractPlayableSprite nativeP2From(ObjectPlayerQuery query) {
+        return asPlayableSprite(query.nativeP2OrNull());
+    }
+
+    private static AbstractPlayableSprite asPlayableSprite(PlayableEntity player) {
+        return player instanceof AbstractPlayableSprite sprite ? sprite : null;
     }
 }

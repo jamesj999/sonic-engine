@@ -92,19 +92,21 @@ public class Sonic2PlayerArt {
         } else {
             animationSet = null;
         }
-        // Tails' TailsAni_Hurt (0x19) uses the same frame ($5D) as TailsAni_Death (0x18).
-        // Use TailsAni_Hurt2 (0x1A, frame $5C) for Tails so hurt looks distinct from death.
-        int hurtAnimId = (basePatternIndex == Sonic2Constants.ART_TILE_TAILS)
-                ? Sonic2AnimationIds.HURT2.id()
-                : Sonic2AnimationIds.HURT.id();
+        // Hurt_Sidekick writes animation $1A for both Sonic and Tails
+        // (s2.asm:85497-85519). Tails' $19 entry is death-like frame $5D,
+        // while $1A is the distinct hurt frame $5C.
+        int hurtAnimId = Sonic2AnimationIds.HURT2.id();
 
+        boolean isSonic = basePatternIndex != Sonic2Constants.ART_TILE_TAILS;
         SpriteAnimationProfile animationProfile = new ScriptedVelocityAnimationProfile()
                 .setIdleAnimId(Sonic2AnimationIds.WAIT)
                 .setWalkAnimId(Sonic2AnimationIds.WALK)
                 .setRunAnimId(Sonic2AnimationIds.RUN)
+                .setRunFramesUseWalkAnimationId(true)
                 .setRollAnimId(Sonic2AnimationIds.ROLL)
                 .setRoll2AnimId(Sonic2AnimationIds.ROLL2)
                 .setPushAnimId(Sonic2AnimationIds.PUSH)
+                .setPushUsesWalkSpecialHandler(true)
                 .setDuckAnimId(Sonic2AnimationIds.DUCK)
                 .setLookUpAnimId(Sonic2AnimationIds.LOOK_UP)
                 .setSpindashAnimId(Sonic2AnimationIds.SPINDASH)
@@ -123,7 +125,29 @@ public class Sonic2PlayerArt {
                 .setRunSpeedThreshold(0x600)
                 .setFallbackFrame(0)
                 .setAnglePreAdjust(true)
-                .setCompactSuperRunSlope(true);
+                .setDoubleWalkRunAnimationSpeedWhenSliding(true);
+        if (isSonic) {
+            // ROM Obj01_MdNormal_Checks (s2.asm:36444-36468) is Sonic-only:
+            // Obj02 (Tails) has no impatient-wait blink/get-up interrupt.
+            ((ScriptedVelocityAnimationProfile) animationProfile)
+                    .setBlinkAnimId(Sonic2AnimationIds.BLINK)
+                    .setGetUpAnimId(Sonic2AnimationIds.GET_UP)
+                    .setCompactSuperRunSlope(true)
+                    // SAnim_SuperWalk's alternate bright frames, s2.asm:38534-38539.
+                    .setSuperAlternateFrameStep(3, 0x20, 0xB5)
+                    .setWalkRunPublishesFrameBeforeTimerAdvance(true);
+        } else {
+            // TAnim_WalkRunZoom keeps raw anim=Walk while selecting its private
+            // TailsAni_HaulAss pointer at or above $700. Its angle-bank strides are
+            // walk*4, run*3, haul-ass*3 (s2.asm:41366-41401).
+            ((ScriptedVelocityAnimationProfile) animationProfile)
+                    .setHighSpeedWalkRunAnimId(0x1F)
+                    .setHighSpeedWalkRunThreshold(0x700)
+                    .setWalkSlopeFrameStride(4)
+                    .setRunSlopeFrameStride(3)
+                    .setHighSpeedSlopeFrameStride(3)
+                    .setTumbleFrameBase(0x75); // TAnim_Tumble, s2.asm:41405-41435
+        }
 
         return new SpriteArtSet(
                 artTiles,

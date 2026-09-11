@@ -1,9 +1,9 @@
 package com.openggf.game.sonic1;
 
-import com.openggf.game.PhysicsFeatureSet;
 import com.openggf.game.PhysicsModifiers;
 import com.openggf.game.PhysicsProfile;
 import com.openggf.game.PhysicsProvider;
+import com.openggf.game.rules.GameRules;
 
 /**
  * Physics provider for Sonic 1.
@@ -24,7 +24,7 @@ public class Sonic1PhysicsProvider implements PhysicsProvider {
     }
 
     @Override
-    public PhysicsFeatureSet getFeatureSet() {
-        return PhysicsFeatureSet.SONIC_1;
+    public GameRules getRules() {
+        return GameRules.SONIC_1;
     }
 }

@@ -7,8 +7,8 @@ import com.openggf.game.GameServices;
 import com.openggf.graphics.GraphicsManager;
 import com.openggf.level.Palette;
 import com.openggf.level.Pattern;
-import com.openggf.tools.EnigmaReader;
-import com.openggf.tools.NemesisReader;
+import com.openggf.data.compression.EnigmaReader;
+import com.openggf.data.compression.NemesisReader;
 import com.openggf.util.PatternDecompressor;
 
 import java.io.ByteArrayInputStream;
@@ -318,12 +318,10 @@ public class LevelSelectDataLoader {
     /**
      * Caches all loaded patterns and palettes to the GPU.
      */
-    public void cacheToGpu() {
+    public void cacheToGpu(GraphicsManager graphicsManager) {
         if (artCached || !dataLoaded || combinedPatterns == null) {
             return;
         }
-
-        GraphicsManager graphicsManager = GraphicsManager.getInstance();
         if (graphicsManager == null || graphicsManager.isHeadlessMode()) {
             return;
         }

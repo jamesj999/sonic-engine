@@ -7,6 +7,9 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.RomObjectCodePointerProvider;
 import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
@@ -25,7 +28,23 @@ import java.util.List;
  * sets an in-air flip state, and runs the two-frame hit animation.
  */
 public class PachinkoTriangleBumperObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable, RomObjectCodePointerProvider {
+
+    /**
+     * Word 0 of this object's S3K SST holds its live ROM code pointer.
+     * ROM {@code Obj_PachinkoTriangleBumper} is installed from the S3K object pointer table at
+     * {@code $00049AAE} (table read from the user-supplied ROM; the
+     * label is defined at docs/skdisasm/sonic3k.asm:96251).
+     * Its whole code block lies in one bank, so the HIGH word that
+     * {@code sub_13EFC} latches into {@code Tails_CPU_interact} and compares
+     * on the next off-screen on-object frame is {@code $0004}
+     * (docs/skdisasm/sonic3k.asm:26816-26843).
+     */
+    @Override
+    public int romObjectCodePointerHighWord() {
+        return 0x0004;
+    }
+
 
     private static final SolidObjectParams SOLID_PARAMS = new SolidObjectParams(0x23, 0x40, 0x41);
     private static final int BOUNCE_X_SPEED = 0x800;
@@ -38,7 +57,12 @@ public class PachinkoTriangleBumperObjectInstance extends AbstractObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public PachinkoTriangleBumperObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new PachinkoTriangleBumperObjectInstance(ctx.spawn());
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         if (hitAnimationFrame >= 0) {
             hitAnimationFrame++;
             if (hitAnimationFrame >= HIT_ANIMATION.length) {

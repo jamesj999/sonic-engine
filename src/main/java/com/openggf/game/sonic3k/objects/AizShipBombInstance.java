@@ -1,14 +1,16 @@
 package com.openggf.game.sonic3k.objects;
 
 import com.openggf.game.PlayableEntity;
-import com.openggf.game.sonic3k.Sonic3kLevelEventManager;
 import com.openggf.game.sonic3k.Sonic3kObjectArtKeys;
 import com.openggf.game.sonic3k.audio.Sonic3kSfx;
-import com.openggf.game.sonic3k.events.Sonic3kAIZEvents;
+import com.openggf.game.sonic3k.events.S3kAizEventWriteSupport;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
+import com.openggf.level.objects.ObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.ObjectTerrainUtils;
@@ -34,8 +36,7 @@ import java.util.List;
  * it is actually released, matching the ROM's {@code Translate_Camera2ObjPosition}
  * and {@code Translate_Camera2ObjX} calls.
  */
-public class AizShipBombInstance extends AbstractObjectInstance implements TouchResponseProvider {
-    private static final int COLLISION_FLAGS = 0x8B;
+public class AizShipBombInstance extends AbstractObjectInstance implements TouchResponseProvider, RewindRecreatable {
     private static final int GRAVITY = 0x20;       // 8:8 fixed-point
     private static final int Y_RADIUS = 0x10;
     private static final int IMPACT_DISTANCE_THRESHOLD = -8;
@@ -56,12 +57,15 @@ public class AizShipBombInstance extends AbstractObjectInstance implements Touch
     // ROM: move.w #$10,(Screen_shake_flag).w — screen shake duration on impact
     private static final int SCREEN_SHAKE_FRAMES = 0x10;
 
-    /** Bomb-port X in the battleship's secondary-camera space (ROM: $2E). */
-    private final int sourceSecondaryX;
+    /**
+     * Bomb-port X in the battleship's secondary-camera space (ROM: $2E).
+     * Non-final so the rewind field capturer reapplies it after generic recreate.
+     */
+    private int sourceSecondaryX;
     /** Ship object that owns the live secondary-camera translation. */
     private final AizBattleshipInstance sourceShip;
     /** Initial world Y used as a fallback when the source ship is unavailable. */
-    private final int initialWorldY;
+    private int initialWorldY;
 
     private int state;
     private int portYOffset;    // ROM: $30(a0) — Y offset within the bomb port
@@ -70,6 +74,10 @@ public class AizShipBombInstance extends AbstractObjectInstance implements Touch
     private int ySub;
     private int yVel;
     private int frameCounter;
+    private boolean initRoutinePending;
+    private boolean lastFloorFound;
+    private int lastFloorDistance;
+    private int lastFloorTile;
 
     /**
      * @param spawn            object spawn (engine bookkeeping)
@@ -89,15 +97,46 @@ public class AizShipBombInstance extends AbstractObjectInstance implements Touch
         this.ySub = 0;
         this.yVel = 0;
         this.frameCounter = 0;
+        this.initRoutinePending = true;
         this.state = STATE_READY_DROP;
         this.portYOffset = READY_DROP_START;  // ROM: $30(a0) = $A60
         this.delayCounter = DROP_DELAY_FRAMES;
     }
 
+    AizShipBombInstance(ObjectSpawn spawn, AizBattleshipInstance sourceShip) {
+        this(spawn, sourceShip, 0, spawn != null ? spawn.y() : 0);
+    }
+
     @Override
-    public void update(int frameCounter, PlayableEntity player) {
+    public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        if (ctx == null || ctx.spawn() == null || ctx.objectServices() == null
+                || ctx.objectServices().objectManager() == null) {
+            return null;
+        }
+        for (ObjectInstance instance : ctx.objectServices().objectManager().getActiveObjects()) {
+            if (instance instanceof AizBattleshipInstance ship && !ship.isDestroyed()) {
+                return new AizShipBombInstance(ctx.spawn(), ship, 0, ctx.spawn().y());
+            }
+        }
+        return null;
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity player) {
         if (isDestroyed()) return;
         this.frameCounter++;
+        if (initRoutinePending) {
+            // ROM: Obj_AIZShipBomb's init ends at `move.w #6,$32(a0)` and is
+            // followed immediately by the label Obj_AIZShipBombMain, with no
+            // rts between them (sonic3k.asm:105367-105379), which dispatches
+            // routine 0 straight into AIZShipBomb_ReadyDrop (:105384,:105391).
+            // The ship creates the bomb with AllocateObjectAfterCurrent, so the
+            // bomb's slot is still ahead of the pass and it runs on its creation
+            // frame -- init AND the first ReadyDrop step, not init alone.
+            // Returning here spent an extra frame in the air and made the fall
+            // one row longer than the recording's.
+            initRoutinePending = false;
+        }
 
         switch (state) {
             case STATE_READY_DROP -> {
@@ -130,6 +169,9 @@ public class AizShipBombInstance extends AbstractObjectInstance implements Touch
                 int worldX = getX();
                 TerrainCheckResult floorResult = ObjectTerrainUtils.checkFloorDist(
                         worldX, currentY, Y_RADIUS);
+                lastFloorFound = floorResult != null && floorResult.foundSurface();
+                lastFloorDistance = lastFloorFound ? floorResult.distance() : 0x7FFF;
+                lastFloorTile = floorResult != null ? floorResult.tileIndex() : 0;
                 if (floorResult != null && floorResult.distance() <= IMPACT_DISTANCE_THRESHOLD) {
                     onGroundImpact();
                     return;
@@ -148,23 +190,13 @@ public class AizShipBombInstance extends AbstractObjectInstance implements Touch
         services().playSfx(Sonic3kSfx.MISSILE_EXPLODE.id);
 
         // ROM: move.w #$10,(Screen_shake_flag).w — 16-frame timed screen shake
-        try {
-            Sonic3kAIZEvents events = ((Sonic3kLevelEventManager) services().levelEventProvider()).getAizEvents();
-            if (events != null) {
-                events.triggerScreenShake(SCREEN_SHAKE_FRAMES);
-            }
-        } catch (Exception e) {
-            // Non-fatal
-        }
+        S3kAizEventWriteSupport.triggerScreenShake(services(), SCREEN_SHAKE_FRAMES);
 
         spawnExplosionFragments();
         setDestroyed(true);
     }
 
     private void spawnExplosionFragments() {
-        var om = services().objectManager();
-        if (om == null) return;
-
         int[][] fragmentData = {
                 {0, -0x3C, 0, 0x0A},
                 {0, -0x0C, 1, 0x09},
@@ -179,9 +211,11 @@ public class AizShipBombInstance extends AbstractObjectInstance implements Touch
         for (int[] data : fragmentData) {
             int fragX = getX() + data[0];
             int fragY = currentY + data[1];
-            AizBombExplosionInstance fragment = new AizBombExplosionInstance(
-                    fragX, fragY, data[2], data[3]);
-            om.addDynamicObject(fragment);
+            // ROM Obj_AIZShipBomb uses AllocateObjectAfterCurrent for each
+            // fragment (sonic3k.asm:105424), so children consume slots after
+            // the bomb and may still execute later in the same object pass.
+            spawnChild(() -> new AizBombExplosionInstance(
+                    fragX, fragY, data[2], data[3]));
         }
     }
 
@@ -219,8 +253,10 @@ public class AizShipBombInstance extends AbstractObjectInstance implements Touch
 
     @Override
     public int getCollisionFlags() {
-        // Only damaging during drop phase
-        return (state == STATE_DROP) ? COLLISION_FLAGS : 0;
+        // ROM AIZShipBomb_Drop draws and checks floor distance only. The falling
+        // bomb never sets collision_flags or calls Add_SpriteToCollisionResponseList;
+        // collision starts on Obj_AIZBombExplosionAnim after the impact.
+        return 0;
     }
 
     @Override
@@ -243,6 +279,20 @@ public class AizShipBombInstance extends AbstractObjectInstance implements Touch
 
     @Override
     public int getY() { return currentY; }
+
+    @Override
+    public String traceDebugDetails() {
+        return String.format("state=%d port=%04X delay=%d ySub=%02X yVel=%04X fc=%d floor=%s/%d tile=%04X",
+                state,
+                portYOffset & 0xFFFF,
+                delayCounter,
+                ySub & 0xFF,
+                yVel & 0xFFFF,
+                frameCounter,
+                lastFloorFound,
+                lastFloorDistance,
+                lastFloorTile & 0xFFFF);
+    }
 
     /** The live secondary-camera translation already tracks wrap-back correctly. */
     public void applyWrapOffset(int offset) { }
@@ -267,4 +317,18 @@ public class AizShipBombInstance extends AbstractObjectInstance implements Touch
 
     @Override
     public int getPriorityBucket() { return 2; }
+
+    // --- Test/rewind inspection ---
+
+    /** ROM drop state ($00 ready-drop, $01 delay, $02 drop). Exposed for rewind tests. */
+    public int stateForTest() { return state; }
+
+    /** Bomb-port Y offset within the ship (ROM $30). Exposed for rewind tests. */
+    public int portYOffsetForTest() { return portYOffset; }
+
+    /** Bomb-port X in the ship's secondary-camera space (ROM $2E). Exposed for rewind tests. */
+    public int sourceSecondaryXForTest() { return sourceSecondaryX; }
+
+    /** The live battleship driving the secondary-camera translation. Exposed for rewind tests. */
+    public AizBattleshipInstance sourceShipForTest() { return sourceShip; }
 }

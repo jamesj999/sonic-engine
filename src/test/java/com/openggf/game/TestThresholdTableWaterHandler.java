@@ -1,11 +1,11 @@
 package com.openggf.game;
 
 import com.openggf.level.WaterSystem;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class TestThresholdTableWaterHandler {
 
@@ -44,7 +44,7 @@ public class TestThresholdTableWaterHandler {
 
         handler.update(state, 0x9000, 0); // past all thresholds
 
-        assertEquals("Target should stay at initial", 0x0600, state.getTargetLevel());
+        assertEquals(0x0600, state.getTargetLevel(), "Target should stay at initial");
     }
 
     @Test
@@ -57,8 +57,8 @@ public class TestThresholdTableWaterHandler {
 
         handler.update(state, 0x0400, 0);
 
-        assertEquals("Mean should be set directly", 0x0900, state.getMeanLevel());
-        assertEquals("Current should match mean", 0x0900, state.getCurrentLevel());
+        assertEquals(0x0900, state.getMeanLevel(), "Mean should be set directly");
+        assertEquals(0x0900, state.getCurrentLevel(), "Current should match mean");
     }
 
     @Test
@@ -71,6 +71,8 @@ public class TestThresholdTableWaterHandler {
 
         handler.update(state, 0x0500, 0); // exactly at first threshold
 
-        assertEquals("Should match at exact threshold", 0x0900, state.getTargetLevel());
+        assertEquals(0x0900, state.getTargetLevel(), "Should match at exact threshold");
     }
 }
+
+

@@ -8,11 +8,15 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
+import com.openggf.level.objects.ObjectPlayerParticipationPolicy;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
 import java.util.List;
+import java.util.ArrayList;
 
 /**
  * OOZ Fan (Object 0x3F).
@@ -27,7 +31,7 @@ import java.util.List;
  * <p>
  * Render flag bit 0 controls X-flip for horizontal fans.
  */
-public class FanObjectInstance extends AbstractObjectInstance {
+public class FanObjectInstance extends AbstractObjectInstance implements RewindRecreatable {
 
     // Timer durations (in frames)
     private static final int ACTIVE_DURATION = 0xB4;  // 180 frames
@@ -36,15 +40,20 @@ public class FanObjectInstance extends AbstractObjectInstance {
     // Number of mapping frames per variant
     private static final int MAPPING_FRAME_COUNT = 11;
 
-    private final boolean isVertical;
-    private final boolean reverseDirection;
-    private final boolean alwaysOn;
-    private final boolean xFlipped;
+    private boolean isVertical;
+    private boolean reverseDirection;
+    private boolean alwaysOn;
+    private boolean xFlipped;
 
     // Timer state machine
     // NOTE: 'spinUp' maps to objoff_32 != 0 in the disassembly.
-    // When spinUp=true (180 frames): fan accelerates animation, no wind push.
-    // When spinUp=false (120 frames): fan blows at full speed, pushes player.
+    // ROM Obj3F_Vertical/Horizontal (s2.asm:57606-57615, 57704-57713) reloads
+    // objoff_30 = #$78 by default, then BCHG #0,objoff_32 (which sets Z from the
+    // ORIGINAL bit) and BEQ skips the #$B4 override when the new objoff_32 bit0 == 1.
+    // Result: objoff_32 -> 1 (spinUp=true, NO push) keeps #$78 = 120 = IDLE_DURATION;
+    // objoff_32 -> 0 (spinUp=false, BLOW/push) overrides to #$B4 = 180 = ACTIVE_DURATION.
+    // When spinUp=true (120 frames): fan accelerates animation, no wind push.
+    // When spinUp=false (180 frames): fan blows at full speed, pushes player.
     private int timer;
     private boolean spinUp; // objoff_32: true = spinning up, false = blowing
 
@@ -70,7 +79,12 @@ public class FanObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public FanObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new FanObjectInstance(ctx.spawn(), getName());
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // Timer state machine (skipped for always-on fans)
         if (!alwaysOn) {
@@ -78,7 +92,10 @@ public class FanObjectInstance extends AbstractObjectInstance {
             if (timer < 0) {
                 accumulator = 0;
                 spinUp = !spinUp;
-                timer = spinUp ? ACTIVE_DURATION : IDLE_DURATION;
+                // ROM s2.asm:57710-57713 / 57612-57615: default #$78 (IDLE) kept when
+                // objoff_32 toggles to 1 (spinUp, no push); overridden to #$B4 (ACTIVE)
+                // when objoff_32 toggles to 0 (blow/push). BCHG sets Z from the original bit.
+                timer = spinUp ? IDLE_DURATION : ACTIVE_DURATION;
             }
         }
 
@@ -87,19 +104,20 @@ public class FanObjectInstance extends AbstractObjectInstance {
             updateSpinUpAnimation();
         } else {
             // Blowing phase (objoff_32 == 0): push players, fast animation
-            if (player != null) {
-                if (isVertical) {
-                    applyVerticalPush(player);
-                } else {
-                    applyHorizontalPush(player);
-                }
+            List<PlayableEntity> participants = services().playerQuery().playersFor(
+                    ObjectPlayerParticipationPolicy.MAIN_PLUS_ENGINE_SIDEKICKS_AS_NATIVE_P2_EXTENDED);
+            if (player != null && !participants.contains(player)) {
+                ArrayList<PlayableEntity> withUpdatePlayer = new ArrayList<>(participants.size() + 1);
+                withUpdatePlayer.add(player);
+                withUpdatePlayer.addAll(participants);
+                participants = withUpdatePlayer;
             }
-
-            for (PlayableEntity sidekick : services().sidekicks()) {
+            for (PlayableEntity participant : participants) {
+                AbstractPlayableSprite playable = (AbstractPlayableSprite) participant;
                 if (isVertical) {
-                    applyVerticalPush((AbstractPlayableSprite) sidekick);
+                    applyVerticalPush(playable);
                 } else {
-                    applyHorizontalPush((AbstractPlayableSprite) sidekick);
+                    applyHorizontalPush(playable);
                 }
             }
             updateBlowingAnimation();
@@ -196,7 +214,11 @@ public class FanObjectInstance extends AbstractObjectInstance {
             push = -push;
         }
 
-        player.setCentreX((short) (player.getCentreX() + push));
+        // ROM: add.w d0,x_pos(a1) (Obj3F_Horizontal, s2.asm:57698). As with the
+        // vertical push, the ROM adds to the x_pos PIXEL word and leaves x_sub
+        // untouched; shiftX() preserves the sub-pixel where setCentreX() would
+        // zero it.
+        player.shiftX(push);
     }
 
     /**
@@ -235,9 +257,15 @@ public class FanObjectInstance extends AbstractObjectInstance {
             dy = ((~dy & 0xFFFF) << 1) & 0xFFFF; // not.w d1; add.w d1,d1 (16-bit)
         }
         dy = (dy + 0x60) & 0xFFFF; // addi.w #$60,d1 (16-bit)
-        // ROM: neg.w d1 / asr.w #4,d1 / add.w d1,y_pos(a1)
+        // ROM: neg.w d1 / asr.w #4,d1 / add.w d1,y_pos(a1) (Obj3F_Vertical,
+        // s2.asm:57775-57780). The ROM adds the push directly to the y_pos
+        // PIXEL word, leaving the y_sub fraction untouched. shiftY() mirrors
+        // that (yPixel += push, y_sub preserved); setCentreY() would wipe the
+        // sub-pixel to 0 each frame the fan pushes, dropping ~0x9C00 of
+        // accumulated y_sub and producing a 1-pixel-Y carry divergence one
+        // frame later (OOZ1 trace f756: ROM y_sub 9C00 vs engine 0000).
         int push = ((short) (-dy & 0xFFFF)) >> 4;
-        player.setCentreY((short) (player.getCentreY() + push));
+        player.shiftY(push);
 
         // Set player airborne state and tumble
         player.setAir(true);

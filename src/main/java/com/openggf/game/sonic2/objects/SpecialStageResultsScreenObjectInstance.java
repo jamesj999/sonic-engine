@@ -1,26 +1,26 @@
 package com.openggf.game.sonic2.objects;
 
-import com.openggf.audio.AudioManager;
-import com.openggf.game.GameServices;
-import com.openggf.game.GameStateManager;
 import com.openggf.game.ResultsScreen;
 import com.openggf.game.sonic2.audio.Sonic2Sfx;
 import com.openggf.game.sonic2.constants.Sonic2Constants;
+import com.openggf.game.sonic2.resources.Sonic2PlcService;
 import com.openggf.game.sonic2.specialstage.Sonic2SpecialStageConstants;
 import com.openggf.game.sonic2.specialstage.Sonic2SpecialStageDataLoader;
 import com.openggf.game.sonic2.specialstage.Sonic2SpecialStageManager;
 import com.openggf.data.Rom;
-import com.openggf.data.RomManager;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.GraphicsManager;
+import com.openggf.graphics.PatternAtlasRange;
 import com.openggf.level.Palette;
 import com.openggf.level.Pattern;
 import com.openggf.level.PatternDesc;
+import com.openggf.level.objects.ObjectServices;
 import com.openggf.util.PatternDecompressor;
 
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 import java.util.logging.Logger;
 
 /**
@@ -54,6 +54,9 @@ public class SpecialStageResultsScreenObjectInstance implements ResultsScreen {
     // Screen dimensions
     private static final int SCREEN_WIDTH = 320;
     private static final int SCREEN_CENTER_X = SCREEN_WIDTH / 2;
+
+    // Widescreen support — default 320 (native); Engine sets this before each draw.
+    private int viewportWidth = SCREEN_WIDTH;
 
     // Y positions for text elements (screen coordinates, Y increases downward)
     // From Obj6F_SubObjectMetaData in s2.asm
@@ -126,8 +129,8 @@ public class SpecialStageResultsScreenObjectInstance implements ResultsScreen {
     private static final int VRAM_HUD = 0x06CA;
     private static final int VRAM_END = 0x0710;        // End of HUD region (generous)
 
-    private static final int PATTERN_BASE = 0x40000;   // High ID to avoid conflicts (0x30000 used by water surface)
-    private static final int SOURCE_DIGITS_PATTERN_BASE = 0x41000;  // Separate base for preserved source digits
+    private static final int PATTERN_BASE = PatternAtlasRange.TITLE_CARDS.base();
+    private static final int SOURCE_DIGITS_PATTERN_BASE = PatternAtlasRange.TITLE_CARDS.base() + 0x1000;
 
     // State tracking
     private int state = STATE_SLIDE_IN;
@@ -136,15 +139,27 @@ public class SpecialStageResultsScreenObjectInstance implements ResultsScreen {
     private int totalFrames = 0;
     private int slideProgress = 0;
     private boolean complete = false;
+    /** True once Obj6F_Init has observed an empty PLC queue. */
+    private boolean plcReadinessPassed;
 
     // Input data
     private final int ringsCollected;
+    private final int ringsCollectedP2;
     private final boolean gotEmerald;
     private final int stageIndex;
     private final int totalEmeraldCount;
+    private final ObjectServices services;
 
     // Bonus values
     private int displayedRingCount;
+    /**
+     * The ROM's second bonus countdown, {@code Bonus_Countdown_2}
+     * (docs/s2disasm/s2.asm:6785). {@code Obj6F_TallyScore} drains it in the
+     * same pass as the first, by its own {@code subq.w #1}
+     * (docs/s2disasm/s2.asm:28385-28388), so the tally's length is the LONGER
+     * of the two players' ring totals -- never their sum.
+     */
+    private int displayedRingCountP2;
     private int emeraldBonus;
     private int totalBonus;
 
@@ -184,11 +199,28 @@ public class SpecialStageResultsScreenObjectInstance implements ResultsScreen {
     private static final int DIGITS_PER_VALUE = 8;          // 4 digits x 2 tiles each
 
     public SpecialStageResultsScreenObjectInstance(int ringsCollected, boolean gotEmerald,
-                                                    int stageIndex, int totalEmeraldCount) {
+                                                    int stageIndex, int totalEmeraldCount,
+                                                    ObjectServices services) {
+        this(ringsCollected, 0, gotEmerald, stageIndex, totalEmeraldCount, services);
+    }
+
+    /**
+     * @param ringsCollected   rings belonging to player 1 -- the ROM's
+     *                         {@code Ring_count} -> {@code Bonus_Countdown_1}
+     * @param ringsCollectedP2 rings belonging to player 2 -- the ROM's
+     *                         {@code Ring_count_2P} -> {@code Bonus_Countdown_2}
+     *                         (docs/s2disasm/s2.asm:6784-6785)
+     */
+    public SpecialStageResultsScreenObjectInstance(int ringsCollected, int ringsCollectedP2,
+                                                    boolean gotEmerald,
+                                                    int stageIndex, int totalEmeraldCount,
+                                                    ObjectServices services) {
         this.ringsCollected = ringsCollected;
+        this.ringsCollectedP2 = ringsCollectedP2;
         this.gotEmerald = gotEmerald;
         this.stageIndex = stageIndex;
         this.totalEmeraldCount = totalEmeraldCount;
+        this.services = Objects.requireNonNull(services, "services");
 
         calculateBonuses();
         // Don't load art in constructor - do it lazily in ensureArtCached()
@@ -197,6 +229,27 @@ public class SpecialStageResultsScreenObjectInstance implements ResultsScreen {
         LOGGER.info("Special Stage Results: rings=" + ringsCollected + ", gotEmerald=" + gotEmerald +
                 ", stage=" + (stageIndex + 1) + ", totalEmeralds=" + totalEmeraldCount +
                 ", displayedRingCount=" + displayedRingCount + ", emeraldBonus=" + emeraldBonus);
+    }
+
+    private ObjectServices services() {
+        return services;
+    }
+
+    /**
+     * Sets the projection-space viewport width for widescreen centering.
+     * At native width 320 {@link #xOffset()} returns 0 — byte-identical output.
+     */
+    @Override
+    public void setViewportWidth(int width) {
+        this.viewportWidth = Math.max(SCREEN_WIDTH, width);
+    }
+
+    /**
+     * Horizontal pixel offset to apply to every X position so that native-320
+     * content is centred within the current viewport. Returns 0 at native 320.
+     */
+    private int xOffset() {
+        return (viewportWidth - SCREEN_WIDTH) / 2;
     }
 
     /**
@@ -213,12 +266,12 @@ public class SpecialStageResultsScreenObjectInstance implements ResultsScreen {
      */
     private void loadArt() {
         try {
-            RomManager romManager = RomManager.getInstance();
+            var romManager = services().romManager();
             if (!romManager.isRomAvailable()) {
                 LOGGER.warning("ROM not available for results art loading");
                 return;
             }
-            Rom rom = romManager.getRom();
+            Rom rom = services().rom();
 
             // Load ArtNem_TitleCard2 - contains other letters (A,B,C,D,F,G,H,I,J,K,L,M,P,Q,R,S,T,U,V,W,X,Y)
             Pattern[] titleCard2Patterns = PatternDecompressor.nemesis(rom,
@@ -238,7 +291,7 @@ public class SpecialStageResultsScreenObjectInstance implements ResultsScreen {
 
             // Load special stage results art from DataLoader
             Pattern[] resultsArtPatterns = null;
-            Sonic2SpecialStageManager manager = Sonic2SpecialStageManager.getInstance();
+            Sonic2SpecialStageManager manager = services().gameService(Sonic2SpecialStageManager.class);
             if (manager != null) {
                 Sonic2SpecialStageDataLoader dataLoader = manager.getDataLoader();
                 if (dataLoader != null) {
@@ -487,7 +540,7 @@ public class SpecialStageResultsScreenObjectInstance implements ResultsScreen {
             return;
         }
 
-        GraphicsManager graphicsManager = GraphicsManager.getInstance();
+        GraphicsManager graphicsManager = services().graphicsManager();
         if (graphicsManager == null) {
             LOGGER.warning("ensureArtCached: GraphicsManager is null");
             return;
@@ -530,6 +583,7 @@ public class SpecialStageResultsScreenObjectInstance implements ResultsScreen {
     private void calculateBonuses() {
         // Display actual ring count (score tally will multiply by 10 when adding to score)
         displayedRingCount = ringsCollected;
+        displayedRingCountP2 = ringsCollectedP2;
 
         // Emerald bonus: 1000 if collected an emerald
         emeraldBonus = gotEmerald ? Sonic2SpecialStageConstants.RESULTS_EMERALD_BONUS : 0;
@@ -566,7 +620,7 @@ public class SpecialStageResultsScreenObjectInstance implements ResultsScreen {
         }
 
         // Re-cache the updated patterns to GPU
-        GraphicsManager graphicsManager = GraphicsManager.getInstance();
+        GraphicsManager graphicsManager = services().graphicsManager();
         if (graphicsManager != null) {
             // Re-cache ring bonus digit patterns (offset 8-15)
             for (int i = 0; i < DIGITS_PER_VALUE; i++) {
@@ -653,8 +707,13 @@ public class SpecialStageResultsScreenObjectInstance implements ResultsScreen {
     // ── State machine (inlined from AbstractResultsScreen) ─────────────
 
     private void updateSlideIn() {
-        slideProgress = Math.min(stateTimer, Sonic2SpecialStageConstants.RESULTS_SLIDE_DURATION);
-        if (stateTimer >= Sonic2SpecialStageConstants.RESULTS_SLIDE_DURATION) {
+        // ROM: the routine chain is owned by the "Special Stage" title object,
+        // which arrives after 288/16 = 18 move frames and latches its $B4 wait
+        // on the frame after that (Obj6F_InitEmeraldText, s2.asm:28243-28248).
+        // The remaining rows are still sliding in at that point -- their offsets
+        // are driven independently by getSlideOffset()'s 16 px/frame ramp -- so
+        // this state must not wait for them.
+        if (stateTimer >= Sonic2SpecialStageConstants.RESULTS_TITLE_ARRIVAL_FRAMES) {
             state = STATE_PRE_TALLY_DELAY;
             stateTimer = 0;
         }
@@ -680,6 +739,15 @@ public class SpecialStageResultsScreenObjectInstance implements ResultsScreen {
             anyRemaining = true;
         }
 
+        // ROM Obj6F_TallyScore tests and decrements Bonus_Countdown_2 in the
+        // same pass as Bonus_Countdown_1 (docs/s2disasm/s2.asm:28385-28388), so
+        // the two players' rings drain side by side rather than end to end.
+        if (displayedRingCountP2 > 0) {
+            displayedRingCountP2--;
+            totalIncrement += Sonic2SpecialStageConstants.RESULTS_RING_MULTIPLIER;
+            anyRemaining = true;
+        }
+
         // Decrement emerald bonus
         int decrement = Math.min(Sonic2SpecialStageConstants.RESULTS_TALLY_DECREMENT, emeraldBonus);
         if (decrement > 0) {
@@ -692,7 +760,7 @@ public class SpecialStageResultsScreenObjectInstance implements ResultsScreen {
         totalBonus += totalIncrement;
 
         if (totalIncrement > 0) {
-            GameServices.gameState().addScore(totalIncrement);
+            services().gameState().addScore(totalIncrement);
         }
 
         // Play tick sound every N frames while tallying
@@ -727,8 +795,18 @@ public class SpecialStageResultsScreenObjectInstance implements ResultsScreen {
     @Override
     public void update(int frameCounter, Object context) {
         this.frameCounter = frameCounter;
+        if (!plcReadinessPassed) {
+            Sonic2PlcService plcService = services().gameService(Sonic2PlcService.class);
+            if (plcService != null && plcService.isBusy()) {
+                return;
+            }
+            plcReadinessPassed = true;
+        }
         stateTimer++;
         totalFrames++;
+        // Render-only fade ramp for the sliding rows; runs off the object's own
+        // lifetime so it is unaffected by when the title object latches.
+        slideProgress = Math.min(totalFrames, Sonic2SpecialStageConstants.RESULTS_SLIDE_DURATION);
 
         if (state == STATE_SUPER_SONIC_DISPLAY) {
             updateSuperSonicMessages();
@@ -762,7 +840,10 @@ public class SpecialStageResultsScreenObjectInstance implements ResultsScreen {
 
     @Override
     public boolean isComplete() {
-        return complete;
+        // Obj6F's initialization gate is one-shot, but the special-stage mode
+        // loop performs its own final FIFO poll before it leaves results.
+        Sonic2PlcService plcService = services().gameService(Sonic2PlcService.class);
+        return complete && (plcService == null || !plcService.isBusy());
     }
 
     @Override
@@ -770,7 +851,7 @@ public class SpecialStageResultsScreenObjectInstance implements ResultsScreen {
         // Ensure art is cached for rendering
         ensureArtCached();
 
-        GraphicsManager graphicsManager = GraphicsManager.getInstance();
+        GraphicsManager graphicsManager = services().graphicsManager();
         if (graphicsManager == null) {
             return;
         }
@@ -782,13 +863,17 @@ public class SpecialStageResultsScreenObjectInstance implements ResultsScreen {
         // Use ROM art if available, otherwise fall back to placeholders
         boolean useRomArt = artLoaded && combinedPatterns != null;
 
+        // Widescreen: shift the entire native-320 content block right by xOffset()
+        // so it is centred within the viewport. xOffset() == 0 at native 320 — byte-identical.
+        final int xOff = xOffset();
+
         // All elements use ROM-accurate 16 pixels/frame slide speed
         // From Obj6F_SubObjectMetaData in s2.asm - all elements start sliding at frame 0
 
         // "SPECIAL STAGE" title - slides from right (only shown when emerald NOT collected)
         // start=320+128=448, target=160, distance=288
         int titleOffset = getSlideOffset(288);
-        int titleX = SCREEN_CENTER_X + titleOffset;
+        int titleX = xOff + SCREEN_CENTER_X + titleOffset;
         if (!gotEmerald) {
             if (useRomArt) {
                 renderMappingFrame(Sonic2SpecialStageResultsMappings.FRAME_SPECIAL_STAGE,
@@ -804,7 +889,7 @@ public class SpecialStageResultsScreenObjectInstance implements ResultsScreen {
         if (gotEmerald && state < STATE_SUPER_SONIC_DISPLAY) {
             // "Sonic got a" slides from left: start=-128, target=160, distance=288
             int gotTextOffset = getSlideOffset(288);
-            int gotTextX = SCREEN_CENTER_X - gotTextOffset;
+            int gotTextX = xOff + SCREEN_CENTER_X - gotTextOffset;
 
             if (totalEmeraldCount >= 7) {
                 // "SONIC HAS ALL THE" + "CHAOS EMERALDS"
@@ -839,9 +924,9 @@ public class SpecialStageResultsScreenObjectInstance implements ResultsScreen {
         // Hide during Super Sonic message sequence
         if (state < STATE_SUPER_SONIC_DISPLAY) {
             if (useRomArt) {
-                renderEmeralds(0, 0, slideAlpha);
+                renderEmeralds(xOff, 0, slideAlpha);
             } else {
-                renderEmeraldsPlaceholder(commands, 0, 0, slideAlpha);
+                renderEmeraldsPlaceholder(commands, xOff, 0, slideAlpha);
             }
         }
 
@@ -863,7 +948,7 @@ public class SpecialStageResultsScreenObjectInstance implements ResultsScreen {
 
             // Line 1: Y=136 - "SCORE" - distance = 528 (688 - 160)
             int scoreOffset = getSlideOffset(528);
-            int scoreX = SCREEN_CENTER_X + scoreOffset;
+            int scoreX = xOff + SCREEN_CENTER_X + scoreOffset;
             renderMappingFrameWithoutNumbers(Sonic2SpecialStageResultsMappings.FRAME_EMERALD_BONUS,
                     scoreX, SCORE_LINE_Y);
             // Numbers always visible with the label
@@ -871,7 +956,7 @@ public class SpecialStageResultsScreenObjectInstance implements ResultsScreen {
 
             // Line 2: Y=152 - "SONIC RINGS" - distance = 544 (704 - 160)
             int ringsOffset = getSlideOffset(544);
-            int ringsX = SCREEN_CENTER_X + ringsOffset;
+            int ringsX = xOff + SCREEN_CENTER_X + ringsOffset;
             renderMappingFrameWithoutNumbers(Sonic2SpecialStageResultsMappings.FRAME_RING_BONUS,
                     ringsX, SONIC_RINGS_Y);
             // Numbers always visible with the label
@@ -880,7 +965,7 @@ public class SpecialStageResultsScreenObjectInstance implements ResultsScreen {
             // Line 3: Y=184 - "GEMS BONUS" - distance = 576 (736 - 160)
             if (gotEmerald) {
                 int gemsOffset = getSlideOffset(576);
-                int gemsX = SCREEN_CENTER_X + gemsOffset;
+                int gemsX = xOff + SCREEN_CENTER_X + gemsOffset;
                 renderMappingFrameWithoutNumbers(Sonic2SpecialStageResultsMappings.FRAME_PERFECT_BONUS,
                         gemsX, GEMS_BONUS_Y);
                 // Numbers always visible with the label
@@ -891,15 +976,15 @@ public class SpecialStageResultsScreenObjectInstance implements ResultsScreen {
             int scoreOffset = getSlideOffset(528);
             int ringsOffset = getSlideOffset(544);
 
-            renderPlaceholderText(commands, SCREEN_CENTER_X + scoreOffset, SCORE_LINE_Y,
+            renderPlaceholderText(commands, xOff + SCREEN_CENTER_X + scoreOffset, SCORE_LINE_Y,
                     "SCORE: " + totalBonus, 1.0f, 1.0f, 0.5f);
 
-            renderPlaceholderText(commands, SCREEN_CENTER_X + ringsOffset, SONIC_RINGS_Y,
+            renderPlaceholderText(commands, xOff + SCREEN_CENTER_X + ringsOffset, SONIC_RINGS_Y,
                     "SONIC RINGS: " + displayedRingCount, 1.0f, 1.0f, 0.5f);
 
             if (gotEmerald) {
                 int gemsOffset = getSlideOffset(576);
-                renderPlaceholderText(commands, SCREEN_CENTER_X + gemsOffset, GEMS_BONUS_Y,
+                renderPlaceholderText(commands, xOff + SCREEN_CENTER_X + gemsOffset, GEMS_BONUS_Y,
                         "GEMS BONUS: " + emeraldBonus, 0.5f, 1.0f, 0.5f);
             }
         }
@@ -909,18 +994,18 @@ public class SpecialStageResultsScreenObjectInstance implements ResultsScreen {
             if (useRomArt) {
                 // Render all three messages at their respective Y positions
                 renderMappingFrame(Sonic2SpecialStageResultsMappings.FRAME_NOW_SONIC_CAN,
-                        SCREEN_CENTER_X, NOW_SONIC_CAN_Y);
+                        xOff + SCREEN_CENTER_X, NOW_SONIC_CAN_Y);
                 renderMappingFrame(Sonic2SpecialStageResultsMappings.FRAME_CHANGE_INTO,
-                        SCREEN_CENTER_X, CHANGE_INTO_Y);
+                        xOff + SCREEN_CENTER_X, CHANGE_INTO_Y);
                 renderMappingFrame(Sonic2SpecialStageResultsMappings.FRAME_SUPER_SONIC,
-                        SCREEN_CENTER_X, SUPER_SONIC_Y);
+                        xOff + SCREEN_CENTER_X, SUPER_SONIC_Y);
             } else {
                 // Placeholder text for all three messages
-                renderPlaceholderText(commands, SCREEN_CENTER_X, NOW_SONIC_CAN_Y,
+                renderPlaceholderText(commands, xOff + SCREEN_CENTER_X, NOW_SONIC_CAN_Y,
                         "NOW SONIC CAN", 1.0f, 0.8f, 0.0f);
-                renderPlaceholderText(commands, SCREEN_CENTER_X, CHANGE_INTO_Y,
+                renderPlaceholderText(commands, xOff + SCREEN_CENTER_X, CHANGE_INTO_Y,
                         "CHANGE INTO", 1.0f, 0.8f, 0.0f);
-                renderPlaceholderText(commands, SCREEN_CENTER_X, SUPER_SONIC_Y,
+                renderPlaceholderText(commands, xOff + SCREEN_CENTER_X, SUPER_SONIC_Y,
                         "SUPER SONIC", 1.0f, 0.8f, 0.0f);
             }
         }
@@ -962,7 +1047,7 @@ public class SpecialStageResultsScreenObjectInstance implements ResultsScreen {
             return;
         }
 
-        GraphicsManager graphicsManager = GraphicsManager.getInstance();
+        GraphicsManager graphicsManager = services().graphicsManager();
         if (graphicsManager == null) {
             return;
         }
@@ -1092,7 +1177,7 @@ public class SpecialStageResultsScreenObjectInstance implements ResultsScreen {
         };
 
         for (int i = 0; i < 7; i++) {
-            boolean hasThisEmerald = GameServices.gameState().hasEmerald(i);
+            boolean hasThisEmerald = services().gameState().hasEmerald(i);
 
             if (hasThisEmerald) {
                 // ROM-accurate flash: display on odd frames only (btst #0)
@@ -1124,7 +1209,7 @@ public class SpecialStageResultsScreenObjectInstance implements ResultsScreen {
         };
 
         for (int i = 0; i < 7; i++) {
-            boolean hasThisEmerald = GameServices.gameState().hasEmerald(i);
+            boolean hasThisEmerald = services().gameState().hasEmerald(i);
 
             if (hasThisEmerald) {
                 // ROM-accurate flash: display on odd frames only (btst #0)
@@ -1157,7 +1242,7 @@ public class SpecialStageResultsScreenObjectInstance implements ResultsScreen {
             return;
         }
 
-        GraphicsManager graphicsManager = GraphicsManager.getInstance();
+        GraphicsManager graphicsManager = services().graphicsManager();
         if (graphicsManager == null) {
             return;
         }
@@ -1199,7 +1284,7 @@ public class SpecialStageResultsScreenObjectInstance implements ResultsScreen {
 
     private void playTickSound() {
         try {
-            GameServices.audio().playSfx(Sonic2Sfx.BLIP.id);
+            services().audioManager().playSfx(Sonic2Sfx.BLIP.id);
         } catch (Exception e) {
             // Ignore audio errors
         }
@@ -1207,7 +1292,7 @@ public class SpecialStageResultsScreenObjectInstance implements ResultsScreen {
 
     private void playTallyEndSound() {
         try {
-            GameServices.audio().playSfx(Sonic2Sfx.TALLY_END.id);
+            services().audioManager().playSfx(Sonic2Sfx.TALLY_END.id);
         } catch (Exception e) {
             // Ignore audio errors
         }
@@ -1251,9 +1336,10 @@ public class SpecialStageResultsScreenObjectInstance implements ResultsScreen {
 
     // Getters for testing
     public int getDisplayedRingCount() { return displayedRingCount; }
+    /** The ROM's {@code Bonus_Countdown_2} (docs/s2disasm/s2.asm:6785). */
+    public int getDisplayedRingCountP2() { return displayedRingCountP2; }
     public int getEmeraldBonus() { return emeraldBonus; }
     public int getTotalBonus() { return totalBonus; }
     public boolean didGetEmerald() { return gotEmerald; }
     public int getState() { return state; }
 }
-

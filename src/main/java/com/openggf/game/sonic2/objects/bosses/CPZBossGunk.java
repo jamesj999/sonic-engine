@@ -10,6 +10,8 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.ObjectTerrainUtils;
@@ -23,7 +25,7 @@ import java.util.List;
  * ROM Reference: s2.asm Obj5D (ROUTINE_GUNK = 0x0C)
  * Falls, hits ground, splashes into droplets, or sticks to boss.
  */
-public class CPZBossGunk extends AbstractObjectInstance implements TouchResponseProvider {
+public class CPZBossGunk extends AbstractObjectInstance implements TouchResponseProvider, RewindRecreatable {
 
     private static final int SUB_INIT = 0;
     private static final int SUB_FALLING = 2;
@@ -79,6 +81,16 @@ public class CPZBossGunk extends AbstractObjectInstance implements TouchResponse
         }
     }
 
+    private CPZBossGunk(ObjectSpawn spawn) {
+        this(spawn, null, false);
+    }
+
+    @Override
+    public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        Sonic2CPZBossInstance boss = CpzBossRewindLinks.nearestBoss(ctx);
+        return boss == null ? null : new CPZBossGunk(ctx.spawn(), boss, false);
+    }
+
     private CPZBossGunk(ObjectSpawn spawn, Sonic2CPZBossInstance mainBoss,
                         int x, int y, int xVel, int yVel, int renderFlags) {
         super(spawn, "CPZ Boss Gunk Droplet");
@@ -99,7 +111,7 @@ public class CPZBossGunk extends AbstractObjectInstance implements TouchResponse
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) {
             return;
@@ -225,8 +237,7 @@ public class CPZBossGunk extends AbstractObjectInstance implements TouchResponse
         }
         var velocity = Sonic2Rng.nextCpzGunkDropletVelocity(services().rng(), yVel);
 
-        CPZBossGunk droplet = new CPZBossGunk(spawn, mainBoss, x, y, velocity.xVel(), velocity.yVel(), renderFlags);
-        services().objectManager().addDynamicObject(droplet);
+        spawnChild(() -> new CPZBossGunk(spawn, mainBoss, x, y, velocity.xVel(), velocity.yVel(), renderFlags));
     }
 
     private void applyMove() {

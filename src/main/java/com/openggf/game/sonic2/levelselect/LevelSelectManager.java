@@ -13,6 +13,7 @@ import com.openggf.game.sonic2.menu.MenuBackgroundDataLoader;
 import com.openggf.game.sonic2.menu.MenuBackgroundRenderer;
 import com.openggf.level.Palette;
 import com.openggf.level.PatternDesc;
+import com.openggf.sprites.playable.AbstractPlayableSprite;
 
 import java.util.logging.Logger;
 
@@ -36,7 +37,7 @@ public class LevelSelectManager implements LevelSelectProvider {
 
     private static LevelSelectManager instance;
 
-    private final SonicConfigurationService configService = SonicConfigurationService.getInstance();
+    private final SonicConfigurationService configService;
     private final LevelSelectDataLoader dataLoader = new LevelSelectDataLoader();
     private final MenuBackgroundDataLoader menuBackgroundDataLoader = new MenuBackgroundDataLoader();
     private final MenuBackgroundRenderer menuBackgroundRenderer = new MenuBackgroundRenderer();
@@ -67,7 +68,19 @@ public class LevelSelectManager implements LevelSelectProvider {
     private static final int HIGHLIGHT_PALETTE_INDEX = 3;
     private static final int ICON_PALETTE_INDEX = 2;
 
-    private LevelSelectManager() {
+    /** Projection-space viewport width; default 320 (native). */
+    private int viewportWidth = LevelSelectConstants.SCREEN_WIDTH;
+
+    public LevelSelectManager() {
+        this(null);
+    }
+
+    LevelSelectManager(SonicConfigurationService configService) {
+        this.configService = configService;
+    }
+
+    private SonicConfigurationService configuration() {
+        return configService != null ? configService : GameServices.configuration();
     }
 
     public static synchronized LevelSelectManager getInstance() {
@@ -75,6 +88,27 @@ public class LevelSelectManager implements LevelSelectProvider {
             instance = new LevelSelectManager();
         }
         return instance;
+    }
+
+    /**
+     * Sets the projection-space viewport width for widescreen centering.
+     *
+     * <p>The level select content is always 320 px wide (one VDP plane). At widths
+     * greater than 320 the content is shifted right by {@code (viewportWidth - 320) / 2}
+     * so it stays visually centered. At native width 320 the offset is 0 — byte-identical.
+     */
+    @Override
+    public void setViewportWidth(int width) {
+        this.viewportWidth = Math.max(LevelSelectConstants.SCREEN_WIDTH, width);
+    }
+
+    /**
+     * Returns the horizontal pixel offset to apply to all rendered elements so that
+     * the 320-px-wide content block is centered within the current viewport.
+     * Returns 0 at native width 320.
+     */
+    private int xOffset() {
+        return (viewportWidth - LevelSelectConstants.SCREEN_WIDTH) / 2;
     }
 
     /**
@@ -134,14 +168,14 @@ public class LevelSelectManager implements LevelSelectProvider {
 
     private void updateActive(InputHandler input) {
         // Navigation keys
-        int upKey = configService.getInt(SonicConfiguration.UP);
-        int downKey = configService.getInt(SonicConfiguration.DOWN);
-        int leftKey = configService.getInt(SonicConfiguration.LEFT);
-        int rightKey = configService.getInt(SonicConfiguration.RIGHT);
-        int jumpKey = configService.getInt(SonicConfiguration.JUMP);
+        int upKey = configuration().getInt(SonicConfiguration.UP);
+        int downKey = configuration().getInt(SonicConfiguration.DOWN);
+        int leftKey = configuration().getInt(SonicConfiguration.LEFT);
+        int rightKey = configuration().getInt(SonicConfiguration.RIGHT);
+        int jumpKey = configuration().getInt(SonicConfiguration.JUMP);
 
         // Handle up/down navigation
-        if (input.isKeyDown(upKey)) {
+        if (input.isDirectionHeld(upKey, AbstractPlayableSprite.INPUT_UP)) {
             if (upHoldTimer == 0 || (upHoldTimer >= LevelSelectConstants.HOLD_REPEAT_DELAY && upHoldTimer % LevelSelectConstants.HOLD_REPEAT_RATE == 0)) {
                 moveUp();
             }
@@ -150,7 +184,7 @@ public class LevelSelectManager implements LevelSelectProvider {
             upHoldTimer = 0;
         }
 
-        if (input.isKeyDown(downKey)) {
+        if (input.isDirectionHeld(downKey, AbstractPlayableSprite.INPUT_DOWN)) {
             if (downHoldTimer == 0 || (downHoldTimer >= LevelSelectConstants.HOLD_REPEAT_DELAY && downHoldTimer % LevelSelectConstants.HOLD_REPEAT_RATE == 0)) {
                 moveDown();
             }
@@ -160,7 +194,7 @@ public class LevelSelectManager implements LevelSelectProvider {
         }
 
         // Handle left/right (column switch or sound test adjustment)
-        if (input.isKeyDown(leftKey)) {
+        if (input.isDirectionHeld(leftKey, AbstractPlayableSprite.INPUT_LEFT)) {
             if (leftHoldTimer == 0 || (leftHoldTimer >= LevelSelectConstants.HOLD_REPEAT_DELAY && leftHoldTimer % LevelSelectConstants.HOLD_REPEAT_RATE == 0)) {
                 moveLeft();
             }
@@ -169,7 +203,7 @@ public class LevelSelectManager implements LevelSelectProvider {
             leftHoldTimer = 0;
         }
 
-        if (input.isKeyDown(rightKey)) {
+        if (input.isDirectionHeld(rightKey, AbstractPlayableSprite.INPUT_RIGHT)) {
             if (rightHoldTimer == 0 || (rightHoldTimer >= LevelSelectConstants.HOLD_REPEAT_DELAY && rightHoldTimer % LevelSelectConstants.HOLD_REPEAT_RATE == 0)) {
                 moveRight();
             }
@@ -179,13 +213,13 @@ public class LevelSelectManager implements LevelSelectProvider {
         }
 
         // Handle start/jump to select
-        if (input.isKeyPressed(jumpKey)) {
+        if (input.isKeyPressed(jumpKey) || input.logical().menuAccept()) {
             handleSelect();
         }
 
         // A button adds 16 to sound test value (like original game)
         // We'll use the 'A' key for this
-        if (input.isKeyPressed(configService.getInt(SonicConfiguration.TEST))) {
+        if (input.isKeyPressed(configuration().getInt(SonicConfiguration.TEST))) {
             if (selectedIndex == LevelSelectConstants.MENU_ENTRY_COUNT - 1) { // Sound test
                 soundTestValue = (soundTestValue + 16) & 0x7F;
             }
@@ -276,19 +310,19 @@ public class LevelSelectManager implements LevelSelectProvider {
         if (!menuBackgroundDataLoader.isDataLoaded()) {
             menuBackgroundDataLoader.loadData();
         }
-        dataLoader.cacheToGpu();
-        menuBackgroundDataLoader.cacheToGpu(LevelSelectConstants.PATTERN_BASE, LevelSelectConstants.MENU_BACK_OFFSET);
-
-        GraphicsManager gm = GraphicsManager.getInstance();
+        GraphicsManager gm = GameServices.graphics();
         if (gm == null || gm.isHeadlessMode()) {
             return;
         }
+        dataLoader.cacheToGpu(gm);
+        menuBackgroundDataLoader.cacheToGpu(gm, LevelSelectConstants.PATTERN_BASE, LevelSelectConstants.MENU_BACK_OFFSET);
 
         if (menuBackgroundAnimator == null
                 && menuBackgroundDataLoader.getMenuBackPatterns() != null
                 && menuBackgroundDataLoader.getMenuBackPatterns().length > 0) {
             menuBackgroundAnimator = new MenuBackgroundAnimator(
                     menuBackgroundDataLoader.getMenuBackPatterns(),
+                    gm,
                     LevelSelectConstants.PATTERN_BASE + LevelSelectConstants.MENU_BACK_OFFSET);
             menuBackgroundAnimator.prime();
         }
@@ -309,13 +343,17 @@ public class LevelSelectManager implements LevelSelectProvider {
 
         gm.beginPatternBatch();
         if (renderMenuBack) {
-            menuBackgroundRenderer.render(
+            // Background expands to fill the full viewport width (tiled horizontally).
+            // Do NOT apply xOffset() — the background is not centered, it fills everything.
+            // At native width 320 this is identical to the previous centered draw.
+            menuBackgroundRenderer.renderTiled(
                     gm,
                     menuBackgroundDataLoader.getMenuBackMappings(),
                     menuBackgroundDataLoader.getMenuBackWidth(),
                     menuBackgroundDataLoader.getMenuBackHeight(),
                     LevelSelectConstants.PATTERN_BASE,
-                    LevelSelectConstants.MENU_BACK_OFFSET
+                    LevelSelectConstants.MENU_BACK_OFFSET,
+                    viewportWidth
             );
         }
 
@@ -347,7 +385,7 @@ public class LevelSelectManager implements LevelSelectProvider {
                     -1,
                     GLCommand.BlendType.ONE_MINUS_SRC_ALPHA,
                     0.0f, 0.0f, 0.0f, fadeAmount,
-                    0, 0, LevelSelectConstants.SCREEN_WIDTH, LevelSelectConstants.SCREEN_HEIGHT
+                    0, 0, viewportWidth, LevelSelectConstants.SCREEN_HEIGHT
             ));
         }
     }
@@ -360,6 +398,7 @@ public class LevelSelectManager implements LevelSelectProvider {
             return;
         }
 
+        int xOff = xOffset();
         for (int ty = 0; ty < height; ty++) {
             int baseIndex = ty * width;
             for (int tx = 0; tx < width; tx++) {
@@ -373,7 +412,7 @@ public class LevelSelectManager implements LevelSelectProvider {
                 }
                 reusableDesc.set(word);
                 int patternId = LevelSelectConstants.PATTERN_BASE + reusableDesc.getPatternIndex();
-                gm.renderPatternWithId(patternId, reusableDesc, tx * 8, ty * 8);
+                gm.renderPatternWithId(patternId, reusableDesc, xOff + tx * 8, ty * 8);
             }
         }
     }
@@ -401,8 +440,9 @@ public class LevelSelectManager implements LevelSelectProvider {
         String[] leftZoneNames = {"EMERALD HILL", "CHEMICAL PLANT", "AQUATIC RUIN",
                 "CASINO NIGHT", "HILL TOP", "MYSTIC CAVE", "OIL OCEAN"};
         int[] leftZoneLines = {3, 6, 9, 12, 15, 18, 21};
-        int leftZoneX = 24;   // col=6 → tile 3 → X=24
-        int leftActX = 144;   // col=0x24 → tile 18 → X=144
+        int xOff = xOffset();
+        int leftZoneX = xOff + 24;   // col=6 → tile 3 → X=24
+        int leftActX = xOff + 144;   // col=0x24 → tile 18 → X=144
 
         for (int zone = 0; zone < 7; zone++) {
             int zoneY = leftZoneLines[zone] * 8;
@@ -420,8 +460,8 @@ public class LevelSelectManager implements LevelSelectProvider {
         }
 
         // Right column
-        int rightZoneX = 176;  // col=0x2C → tile 22 → X=176
-        int rightActX = 288;   // col=0x48 → tile 36 → X=288
+        int rightZoneX = xOff + 176;  // col=0x2C → tile 22 → X=176
+        int rightActX = xOff + 288;   // col=0x48 → tile 36 → X=288
 
         // Metropolis (3 acts) - line 3
         int mtzY = 3 * 8;
@@ -508,8 +548,8 @@ public class LevelSelectManager implements LevelSelectProvider {
             return;
         }
 
-        // Icon position (bottom right area of screen)
-        int iconX = 216;
+        // Icon position (bottom right area of screen), shifted by xOffset() for widescreen
+        int iconX = xOffset() + 216;
         int iconY = 176;
 
         int[] iconMappings = dataLoader.getIconMappings();
@@ -596,15 +636,15 @@ public class LevelSelectManager implements LevelSelectProvider {
         int adjusted = (flags & ~0x6000) | ((HIGHLIGHT_PALETTE_INDEX & 0x3) << 13) | patternIndex;
         highlightDesc.set(adjusted);
         int patternId = LevelSelectConstants.PATTERN_BASE + patternIndex;
-        gm.renderPatternWithId(patternId, highlightDesc, col * 8, row * 8);
+        gm.renderPatternWithId(patternId, highlightDesc, xOffset() + col * 8, row * 8);
     }
 
     /**
      * Draws the sound test value as hex digits.
      */
     private void drawSoundTestValue(GraphicsManager gm, int paletteIndex) {
-        // Draw the sound test value at tile (34,18)
-        int x = 34 * 8;
+        // Draw the sound test value at tile (34,18), shifted by xOffset() for widescreen
+        int x = xOffset() + 34 * 8;
         int y = 18 * 8;   // line 18 → Y=144
 
         // Convert to 2-digit hex

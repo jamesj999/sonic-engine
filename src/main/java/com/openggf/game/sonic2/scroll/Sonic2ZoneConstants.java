@@ -30,6 +30,7 @@ public class Sonic2ZoneConstants implements ZoneConstants {
     public static final int ROM_ZONE_EHZ = 0x00;  // emerald_hill_zone
     public static final int ROM_ZONE_WZ  = 0x02;  // wood_zone (unused)
     public static final int ROM_ZONE_MTZ = 0x04;  // metropolis_zone
+    public static final int ROM_ZONE_MTZ_3 = 0x05; // metropolis_zone_2 (MTZ Act 3)
     public static final int ROM_ZONE_WFZ = 0x06;  // wing_fortress_zone
     public static final int ROM_ZONE_HTZ = 0x07;  // hill_top_zone
     public static final int ROM_ZONE_HPZ = 0x08;  // hidden_palace_zone (unused)

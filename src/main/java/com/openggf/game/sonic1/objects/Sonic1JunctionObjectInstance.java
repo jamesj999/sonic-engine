@@ -8,6 +8,8 @@ import com.openggf.debug.DebugOverlayToggle;
 import com.openggf.debug.DebugRenderContext;
 import com.openggf.game.sonic1.Sonic1SwitchManager;
 import com.openggf.game.PlayableEntity;
+import com.openggf.game.solid.PlayerSolidContactResult;
+import com.openggf.game.solid.SolidCheckpointBatch;
 import com.openggf.game.sonic1.constants.Sonic1AnimationIds;
 import com.openggf.game.GameServices;
 import com.openggf.graphics.GLCommand;
@@ -17,11 +19,15 @@ import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.SolidContact;
+import com.openggf.level.objects.SolidExecutionMode;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
+import com.openggf.level.objects.SolidRoutineProfile;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
+import com.openggf.sprites.playable.ObjectControlState;
 
 import com.openggf.debug.DebugColor;
 import java.util.List;
@@ -55,7 +61,7 @@ import java.util.List;
  * Reference: docs/s1disasm/_incObj/66 Rotating Junction.asm
  */
 public class Sonic1JunctionObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, SpawnRewindRecreatable {
 
     // ========================================================================
     // ROM Constants
@@ -65,8 +71,13 @@ public class Sonic1JunctionObjectInstance extends AbstractObjectInstance
     private static final int SOLID_HALF_WIDTH = 0x30;
     private static final int SOLID_AIR_HALF_HEIGHT = 0x30;
     private static final int SOLID_GROUND_HALF_HEIGHT = 0x31;
+    // Jun_Main: move.b #96/2,obActWid(a0) for the parent
+    // (66 SBZ Rotating Junction.asm:47-48). The #112/2 at :43 is the
+    // display-only cover-up child, which is never solid.
+    private static final int ACT_WIDTH = 0x30;
+
     private static final SolidObjectParams SOLID_PARAMS =
-            new SolidObjectParams(SOLID_HALF_WIDTH, SOLID_AIR_HALF_HEIGHT, SOLID_GROUND_HALF_HEIGHT);
+            SolidObjectParams.of(SOLID_HALF_WIDTH, SOLID_AIR_HALF_HEIGHT, SOLID_GROUND_HALF_HEIGHT);
 
     // move.b #4,obPriority(a0) — main object priority
     private static final int PRIORITY_MAIN = 4;
@@ -152,16 +163,13 @@ public class Sonic1JunctionObjectInstance extends AbstractObjectInstance
     private boolean switchReversed;
 
     /** Switch index from subtype (jun_switch). */
-    private final int switchIndex;
+    private int switchIndex;
 
     /** Frame animation timer (counts down from FRAME_TIMER_PERIOD). */
     private int frameTimer;
 
     /** Frame at which Sonic entered the gap (objoff_32). */
     private int grabFrame;
-
-    /** Whether the player is pushing against this object (obStatus bit 5). */
-    private boolean playerPushing;
 
     /** Child display object. */
     private Sonic1JunctionChildInstance childInstance;
@@ -174,10 +182,9 @@ public class Sonic1JunctionObjectInstance extends AbstractObjectInstance
         this.frameDirection = INITIAL_FRAME_DIRECTION;
         // move.b obSubtype(a0),jun_switch(a0) — switch index from subtype
         this.switchIndex = spawn.subtype() & 0xFF;
-        // Start at frame 0
-        this.mappingFrame = 0;
-        // move.b #7,obTimeFrame(a0) (set in Jun_ChkSwitch .animate path first time)
-        this.frameTimer = FRAME_TIMER_PERIOD;
+        // Jun_Main does not seed obFrame/obTimeFrame. Fresh object RAM starts at
+        // frame 0 with a zero timer, and the first Jun_Action pass advances that
+        // to frame 1 with a reloaded timer.
     }
 
     // ========================================================================
@@ -185,7 +192,7 @@ public class Sonic1JunctionObjectInstance extends AbstractObjectInstance
     // ========================================================================
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) {
             return;
@@ -193,8 +200,7 @@ public class Sonic1JunctionObjectInstance extends AbstractObjectInstance
 
         // Lazily create child display object on first update
         if (childInstance == null) {
-            childInstance = new Sonic1JunctionChildInstance(spawn);
-            services().objectManager().addDynamicObject(childInstance);
+            childInstance = spawnFreeChild(() -> new Sonic1JunctionChildInstance(spawn));
         }
 
         switch (routine) {
@@ -225,86 +231,15 @@ public class Sonic1JunctionObjectInstance extends AbstractObjectInstance
      */
     private void updateAction(AbstractPlayableSprite player) {
         checkSwitch();
-
-        // Solid object interaction is handled by the SolidObjectProvider/Listener interface.
-        // The ObjectManager calls SolidObject logic and notifies us via onSolidContact().
-        // We check the pushing state that was set during the previous frame's contact resolution.
-
-        if (!playerPushing || player == null) {
-            // Not pushing or no player — reset pushing for next frame
-            playerPushing = false;
-            return;
+        SolidCheckpointBatch batch = checkpointAll();
+        PlayerSolidContactResult mainResult = player != null ? batch.perPlayer().get(player) : null;
+        if (player != null && mainResult != null
+                && (mainResult.pushingNow() || mainResult.pushingLastFrame())) {
+            int gapCheckFrame = player.getCentreX() < getX() ? GAP_FRAME_LEFT : GAP_FRAME_RIGHT;
+            if (mappingFrame == gapCheckFrame) {
+                beginGrab(player, gapCheckFrame);
+            }
         }
-
-        // btst #5,obStatus(a0) — player is pushing
-        // Check if the gap is next to Sonic
-        int gapCheckFrame;
-        if (player.getCentreX() < getX()) {
-            // Sonic is to the left: moveq #$E,d1
-            gapCheckFrame = GAP_FRAME_LEFT;
-        } else {
-            // Sonic is to the right: moveq #7,d1
-            gapCheckFrame = GAP_FRAME_RIGHT;
-        }
-
-        // cmp.b obFrame(a0),d1 — is the gap next to Sonic?
-        if (mappingFrame != gapCheckFrame) {
-            // Gap not aligned, reset pushing for next frame
-            playerPushing = false;
-            return;
-        }
-
-        // Gap is aligned — grab Sonic!
-        // move.b d1,objoff_32(a0) — remember entry frame
-        grabFrame = gapCheckFrame;
-
-        // addq.b #4,obRoutine(a0) — goto Jun_Release
-        routine = Routine.RELEASE;
-
-        // move.b #1,(f_playerctrl).w — lock controls
-        // S1 ROM: f_playerctrl=$01 (bit 0) causes Sonic_Modes to be skipped entirely.
-        // Engine: isObjectControlled() gates the movement-skip at PlayableSpriteMovement line 124.
-        player.setObjectControlled(true);
-        player.setControlLocked(true);
-
-        // move.b #id_Roll,obAnim(a1) — make Sonic use "rolling" animation
-        player.setRolling(true);
-        player.setAnimationId(Sonic1AnimationIds.ROLL);
-        player.setForcedAnimationId(Sonic1AnimationIds.ROLL);
-
-        // move.w #$800,obInertia(a1)
-        player.setGSpeed((short) GRAB_INERTIA);
-
-        // move.w #0,obVelX(a1) / move.w #0,obVelY(a1)
-        player.setXSpeed((short) 0);
-        player.setYSpeed((short) 0);
-
-        // bclr #5,obStatus(a0) — clear object pushing status
-        playerPushing = false;
-
-        // bclr #5,obStatus(a1) — clear Sonic pushing status
-        player.setPushing(false);
-
-        // bset #1,obStatus(a1) — set Sonic airborne
-        player.setAir(true);
-
-        // Smooth snap: save player position, compute target, average
-        // move.w obX(a1),d2 / move.w obY(a1),d3
-        int savedX = player.getCentreX();
-        int savedY = player.getCentreY();
-
-        // bsr.w Jun_ChgPos — sets player to target position
-        changePlayerPosition(player);
-
-        // add.w d2,obX(a1) / add.w d3,obY(a1) — add saved position
-        // asr obX(a1) / asr obY(a1) — halve (average)
-        int targetX = player.getCentreX();
-        int targetY = player.getCentreY();
-        player.setCentreX((short) ((targetX + savedX) >> 1));
-        player.setCentreY((short) ((targetY + savedY) >> 1));
-
-        // Reset pushing for next frame
-        playerPushing = false;
     }
 
     // ========================================================================
@@ -358,7 +293,7 @@ public class Sonic1JunctionObjectInstance extends AbstractObjectInstance
             }
 
             // clr.b (f_playerctrl).w — unlock controls
-            player.setObjectControlled(false);
+            ObjectControlState.none().applyTo(player);
             player.setControlLocked(false);
             player.setForcedAnimationId(-1);
 
@@ -462,9 +397,19 @@ public class Sonic1JunctionObjectInstance extends AbstractObjectInstance
         int xOff = POSITION_DATA[dataIndex];      // signed byte -> sign-extended
         int yOff = POSITION_DATA[dataIndex + 1];   // signed byte -> sign-extended
 
-        // Set player centre to disc position + offset
-        player.setCentreX((short) (getX() + xOff));
-        player.setCentreY((short) (getY() + yOff));
+        // Set player centre to disc position + offset.
+        //
+        // ROM Jun_ChgPos (docs/s1disasm/_incObj/66 Rotating Junction.asm:167-172) uses
+        //   add.w obX(a0),d0 / move.w d0,obX(a1)
+        //   add.w obY(a0),d0 / move.w d0,obY(a1)
+        // The move.w writes only the upper word (pixel) of the 32-bit position field
+        // and leaves obSubpixelX/obSubpixelY untouched. The plain setCentreX/setCentreY
+        // helpers zero the subpixel; use the *PreserveSubpixel variants to mirror the
+        // ROM. Without this preservation the SBZ1 credits demo desyncs by 1 pixel after
+        // the junction releases the player and gravity-driven SpeedToPos resumes
+        // (manifested as a 0x7800 sub-y mismatch at trace frame 285).
+        player.setCentreXPreserveSubpixel((short) (getX() + xOff));
+        player.setCentreYPreserveSubpixel((short) (getY() + yOff));
     }
 
     // ========================================================================
@@ -474,6 +419,36 @@ public class Sonic1JunctionObjectInstance extends AbstractObjectInstance
     @Override
     public SolidObjectParams getSolidParams() {
         return SOLID_PARAMS;
+    }
+
+    /**
+     * The junction parent's ROM {@code obActWid}.
+     *
+     * <p>{@code Jun_Main} writes {@code move.b #96/2,obActWid(a0)} = 48 for the
+     * parent (docs/s1disasm/_incObj/66 SBZ Rotating Junction.asm:47-48). The
+     * {@code #112/2} = 56 at {@code :43} belongs to the circular cover-up
+     * children, which are put straight into routine 4 ({@code Jun_Display},
+     * "do nothing but display") at {@code :32} and never made solid — so the
+     * parent is the only slot the player can be standing on, and 48 is the only
+     * value the balance test can read.
+     *
+     * <p>Supplied here rather than at {@link #getBalanceWidthPixels()} because
+     * both ROM consumers want the byte: {@code BuildSprites}' horizontal cull
+     * (docs/s1disasm/_inc/BuildSprites.asm:49-58) and {@code Sonic_Balance}
+     * (docs/s1disasm/_incObj/01 Sonic.asm:422-431). The class is full-solid, so
+     * the balance accessor inherits this one. {@code Jun_Action}'s separately
+     * authored {@code d1 = #74/2+sonic_solid_width} at {@code :60} is unchanged.
+     */
+    @Override
+    public int getOnScreenHalfWidth() {
+        return ACT_WIDTH;
+    }
+
+    @Override
+    public SolidRoutineProfile getSolidRoutineProfile() {
+        // ROM SolidObject uses `bhi` for the right edge (docs/s1disasm/_incObj/sub
+        // SolidObject.asm:126-127), so relX == 2*width remains a valid side contact.
+        return SolidRoutineProfile.fullSolid(false, true, false);
     }
 
     /**
@@ -496,13 +471,51 @@ public class Sonic1JunctionObjectInstance extends AbstractObjectInstance
 
     @Override
     public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        // Track whether the player is pushing against the disc.
-        // In the ROM: btst #5,obStatus(a0) checks if player is pushing.
-        // The SolidObject routine sets this bit, and our engine reports it via contact.pushing().
-        if (contact.pushing()) {
-            playerPushing = true;
-        }
+        // Manual checkpoints drive current-frame push/grab handling from update().
+    }
+
+    @Override
+    public SolidExecutionMode solidExecutionMode() {
+        return SolidExecutionMode.MANUAL_CHECKPOINT;
+    }
+
+    private void beginGrab(AbstractPlayableSprite player, int gapFrame) {
+        grabFrame = gapFrame;
+        routine = Routine.RELEASE;
+        // ROM: move.b #1,(f_playerctrl).w -- bit 0 only, sign bit CLEAR
+        // (docs/s1disasm/_incObj/66 SBZ Rotating Junction.asm:82). Bit 0 makes
+        // Sonic_Control skip Sonic_Modes, but the object-interaction gate is the
+        // sign bit (tst.b f_playerctrl / bmi.s .ignoreobjcoll,
+        // docs/s1disasm/_incObj/01 Sonic.asm:94-97), so ReactToItem keeps running
+        // every frame Sonic is riding the junction.
+        ObjectControlState.nativeBits0To6CpuAllowedMovementSuppressed().applyTo(player);
+        player.setControlLocked(true);
+        player.setRolling(false);
+        player.setAnimationId(Sonic1AnimationIds.ROLL);
+        player.setForcedAnimationId(Sonic1AnimationIds.ROLL);
+        player.setGSpeed((short) GRAB_INERTIA);
+        player.setXSpeed((short) 0);
+        player.setYSpeed((short) 0);
+        // ROM Jun_Move's grab clears the junction's OWN pushed flag before the
+        // player's (docs/s1disasm/_incObj/66 SBZ Rotating Junction.asm:87-88).
+        services().objectManager().solidContacts().releaseObjectPushLatch(player, this);
+        player.setPushing(false);
+        player.setAir(true);
+
+        int savedX = player.getCentreX();
+        int savedY = player.getCentreY();
+        changePlayerPosition(player);
+        int targetX = player.getCentreX();
+        int targetY = player.getCentreY();
+        // ROM Jun_Action grab body (docs/s1disasm/_incObj/66 Rotating Junction.asm:87-93):
+        //   move.w obX(a1),d2 / move.w obY(a1),d3   ; save player x/y (pixel only)
+        //   bsr.w  Jun_ChgPos                       ; positions player via move.w
+        //   add.w  d2,obX(a1) / add.w  d3,obY(a1)   ; word-add to obX/obY pixel words
+        //   asr.w  obX(a1)    / asr.w  obY(a1)      ; word-shift the pixel words
+        // Each instruction operates on the upper 16 bits only, leaving the subpixel
+        // fraction (obSubpixelX/Y) untouched. Use *PreserveSubpixel to mirror.
+        player.setCentreXPreserveSubpixel((short) ((targetX + savedX) >> 1));
+        player.setCentreYPreserveSubpixel((short) ((targetY + savedY) >> 1));
     }
 
     // ========================================================================
@@ -543,7 +556,7 @@ public class Sonic1JunctionObjectInstance extends AbstractObjectInstance
         if (routine == Routine.RELEASE) {
             AbstractPlayableSprite player = getPlayer();
             if (player != null) {
-                player.setObjectControlled(false);
+                ObjectControlState.none().applyTo(player);
                 player.setControlLocked(false);
             }
             routine = Routine.ACTION;
@@ -595,14 +608,15 @@ public class Sonic1JunctionObjectInstance extends AbstractObjectInstance
      * behind the main junction disc. In the ROM, this is a separate SST entry created
      * by Jun_Main with obRoutine=4 (Jun_Display), which just calls RememberState.
      */
-    static class Sonic1JunctionChildInstance extends AbstractObjectInstance {
+    static class Sonic1JunctionChildInstance extends AbstractObjectInstance
+            implements SpawnRewindRecreatable {
 
         Sonic1JunctionChildInstance(ObjectSpawn parentSpawn) {
             super(parentSpawn, "JunctionChild");
         }
 
         @Override
-        public void update(int frameCounter, PlayableEntity playerEntity) {
+        public void update(int vIntRunCount, PlayableEntity playerEntity) {
             AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
             // Jun_Display (Routine 4): bra.w RememberState
             // No logic, just display. RememberState is handled by the engine persistence system.

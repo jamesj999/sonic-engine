@@ -64,6 +64,13 @@ public interface DonorCapabilities {
     boolean hasInstaShield();
 
     /**
+     * Returns whether this game's Tails implementation includes the flight ability.
+     *
+     * @return {@code true} if Tails flight mechanics can be donated
+     */
+    boolean hasTailsFlight();
+
+    /**
      * Returns whether this game supports elemental shields (fire, lightning,
      * bubble) introduced in Sonic 3&K, including their ability animations.
      *

@@ -1,0 +1,391 @@
+diff --git a/bizhawk-headless/BizHawk.Headless.Gpgx.Tests.csproj b/bizhawk-headless/BizHawk.Headless.Gpgx.Tests.csproj
+index 5070380..729b7c2 100644
+--- a/bizhawk-headless/BizHawk.Headless.Gpgx.Tests.csproj
++++ b/bizhawk-headless/BizHawk.Headless.Gpgx.Tests.csproj
+@@ -82,6 +82,8 @@
+     <Compile Include="tests/S2AudioObserverProfileTests.cs" />
+     <Compile Include="tests/S2CompleteAudioCaptureRunnerTests.cs" />
+     <Compile Include="tests/S2CompleteAudioRawSinkTests.cs" />
++    <Compile Include="tests/S2OracleWindowCaptureTests.cs" />
++    <Compile Include="tests/S2OracleWindowRawSink.cs" />
+     <Compile Include="tests/S2AuxEventEngineTests.cs" />
+     <Compile Include="tests/S2RunCaptureRunnerTests.cs" />
+     <Compile Include="tests/S2RunManifestWriterTests.cs" />
+diff --git a/bizhawk-headless/tests/S2OracleWindowCaptureTests.cs b/bizhawk-headless/tests/S2OracleWindowCaptureTests.cs
+new file mode 100644
+index 0000000..c118a68
+--- /dev/null
++++ b/bizhawk-headless/tests/S2OracleWindowCaptureTests.cs
+@@ -0,0 +1,140 @@
++using System;
++using System.Collections.Generic;
++using System.Globalization;
++using System.IO;
++
++namespace OpenGGF.BizHawk.Headless.Tests
++{
++    /// <summary>
++    /// Environment-gated windowed Sonic 2 driver-oracle capture. It replays
++    /// the pinned complete-emeralds movie from power-on and publishes the
++    /// raw per-frame staging stream (full Z80 RAM image plus attributed
++    /// observer events) for rows [769, OGGF_S2_ORACLE_END_ROW), using the
++    /// same profile validation, observer manifest, publication boundary and
++    /// sink as the pinned full-run capture. The only departures from
++    /// S2CompleteAudioCaptureRunner.CaptureRawPinned are the configurable
++    /// exclusive end row and that the movie's preserved tail is not
++    /// consumed (the prefix shape CapturePrefixForTesting already proves).
++    /// </summary>
++    internal static class S2OracleWindowCaptureTests
++    {
++        public static void Register(ICollection<TestMain.TestCase> tests)
++        {
++            if (Environment.GetEnvironmentVariable("OGGF_S2_ORACLE_CAPTURE") != "1")
++            {
++                return;
++            }
++            tests.Add(new TestMain.TestCase(
++                "S2OracleWindowCaptureTests capture a bounded raw oracle window",
++                CaptureBoundedRawOracleWindow,
++                game: "s2",
++                movie: "s2-sonic-tails-complete-emeralds",
++                kind: TestKind.Gate,
++                serial: true,
++                estimatedSeconds: 120.0));
++        }
++
++        private static void CaptureBoundedRawOracleWindow()
++        {
++            string rom = RequiredPath("S2_ROM_PATH");
++            string movie = RequiredPath("S2_BK2_PATH");
++            string manifest = RequiredPath("OGGF_S2_ORACLE_MANIFEST");
++            string capability = RequiredPath("OGGF_S2_ORACLE_CAPABILITY");
++            string output = RequiredValue("OGGF_S2_ORACLE_OUTPUT");
++            int endRow = int.Parse(RequiredValue("OGGF_S2_ORACLE_END_ROW"),
++                NumberStyles.Integer, CultureInfo.InvariantCulture);
++            string firstRowValue =
++                Environment.GetEnvironmentVariable("OGGF_S2_ORACLE_FIRST_ROW");
++            int firstRow = string.IsNullOrEmpty(firstRowValue)
++                ? S2AudioObserverProfile.FirstRow
++                : int.Parse(firstRowValue, NumberStyles.Integer,
++                    CultureInfo.InvariantCulture);
++            if (firstRow < S2AudioObserverProfile.FirstRow
++                || endRow <= firstRow
++                || endRow > S2AudioObserverProfile.ExclusiveEnd)
++            {
++                throw new ArgumentOutOfRangeException("endRow", endRow,
++                    "The oracle window must lie inside the pinned interval.");
++            }
++
++            S2AudioObserverProfile.ValidateRom(rom);
++            Bk2Movie bk2 = S2AudioObserverProfile.OpenMovie(movie);
++            S2AudioObserverProfile.LoadCapability(manifest, capability);
++            S2AudioObserverProfile.InstallationIdentity installation =
++                S2AudioObserverProfile.VerifyInstallation(
++                    Environment.GetEnvironmentVariable("BIZHAWK_HOME"));
++            Console.WriteLine("S2 oracle window: observer installation "
++                + installation.InstallationId + " core " + installation.CoreId
++                + " abi " + installation.AbiVersion.ToString(CultureInfo.InvariantCulture)
++                + " build " + installation.BuildId);
++
++            int published = 0;
++            S2CompleteAudioCaptureRunner.PublishRawForTesting(output, writer =>
++            {
++                using (GpgxHost host = GpgxHost.Open(rom, bk2.SyncSettings))
++                {
++                    CompleteRunAudioObserver observer =
++                        S2AudioObserverProfile.CreateObserver(
++                            manifest, capability, host.CreateAudioTraceApi());
++                    var sink = new S2OracleWindowRawSink(
++                        new GpgxS2CompleteAudioStateSource(host), writer,
++                        firstRow, endRow);
++                    using (var rows = bk2.OpenFrameStream().GetEnumerator())
++                    {
++                        for (int row = 0; row < endRow; row++)
++                        {
++                            if (!rows.MoveNext())
++                            {
++                                throw new InvalidDataException(
++                                    "The S2 oracle movie ended before row "
++                                    + endRow.ToString(CultureInfo.InvariantCulture) + ".");
++                            }
++                            if (row == firstRow)
++                            {
++                                sink.Begin(observer
++                                    .CaptureBoundaryFrontierAndResetPublication());
++                            }
++                            S1TraceCaptureRunner.ApplyFrame(rows.Current, host);
++                            CompleteRunAudioObserver.FrameCapture capture =
++                                observer.CaptureCanonicalFrame(host.Advance);
++                            if (row >= firstRow)
++                            {
++                                sink.Frame(row, capture);
++                                published++;
++                            }
++                        }
++                    }
++                    sink.Complete(observer.CaptureCutoffFrontier());
++                }
++            });
++            AssertEx.Equal(endRow - firstRow, published);
++            Console.WriteLine("S2 oracle window: published rows "
++                + firstRow.ToString(CultureInfo.InvariantCulture)
++                + ".." + (endRow - 1).ToString(CultureInfo.InvariantCulture)
++                + " (" + published.ToString(CultureInfo.InvariantCulture)
++                + " rows) to " + output);
++        }
++
++        private static string RequiredPath(string name)
++        {
++            string value = RequiredValue(name);
++            if (!Path.IsPathRooted(value) || !File.Exists(value))
++            {
++                throw new InvalidDataException(
++                    name + " must be an existing absolute file: " + value);
++            }
++            return value;
++        }
++
++        private static string RequiredValue(string name)
++        {
++            string value = Environment.GetEnvironmentVariable(name);
++            if (string.IsNullOrEmpty(value))
++            {
++                throw new InvalidDataException(
++                    name + " is required for the S2 oracle window capture.");
++            }
++            return value;
++        }
++    }
++}
+diff --git a/bizhawk-headless/tests/S2OracleWindowRawSink.cs b/bizhawk-headless/tests/S2OracleWindowRawSink.cs
+new file mode 100644
+index 0000000..b4cd781
+--- /dev/null
++++ b/bizhawk-headless/tests/S2OracleWindowRawSink.cs
+@@ -0,0 +1,214 @@
++using System;
++using System.Globalization;
++using System.IO;
++using Newtonsoft.Json.Linq;
++
++namespace OpenGGF.BizHawk.Headless.Tests
++{
++    /// <summary>
++    /// Windowed variant of <see cref="S2CompleteAudioRawSink"/> for the S2
++    /// driver-oracle fixture. Identical per-record shapes, but the metadata
++    /// carries the window's own first row and exclusive end, and contiguity
++    /// is enforced from that window start instead of the pinned full-run
++    /// boundary. Native observation still runs from power-on; the window
++    /// start is a publication-epoch boundary exactly like row 769 in the
++    /// pinned capture.
++    /// </summary>
++    internal sealed class S2OracleWindowRawSink : IS2CompleteAudioCaptureSink
++    {
++        internal const string Schema = "openggf.s2-oracle-audio-raw.v1";
++        private readonly IS2CompleteAudioStateSource state;
++        private readonly TextWriter output;
++        private readonly int firstRow;
++        private readonly int exclusiveEnd;
++        private int lastRow = -1;
++        private bool begun;
++        private bool complete;
++
++        internal S2OracleWindowRawSink(IS2CompleteAudioStateSource stateSource,
++            TextWriter writer, int firstRow, int exclusiveEnd)
++        {
++            state = stateSource ?? throw new ArgumentNullException("stateSource");
++            output = writer ?? throw new ArgumentNullException("writer");
++            if (firstRow < S2AudioObserverProfile.FirstRow
++                || exclusiveEnd <= firstRow
++                || exclusiveEnd > S2AudioObserverProfile.ExclusiveEnd)
++            {
++                throw new ArgumentOutOfRangeException("firstRow", firstRow,
++                    "The oracle window must lie inside the pinned comparison interval.");
++            }
++            this.firstRow = firstRow;
++            this.exclusiveEnd = exclusiveEnd;
++        }
++
++        public void Begin(CompleteRunAudioObserver.CutoffFrontier boundary)
++        {
++            if (begun) throw new InvalidOperationException("The S2 oracle raw epoch already began.");
++            if (boundary == null) throw new ArgumentNullException("boundary");
++            Write(new JObject
++            {
++                ["type"] = "metadata", ["schema"] = Schema,
++                ["rom_sha1"] = S2AudioObserverProfile.RomSha1,
++                ["bk2_sha256"] = S2AudioObserverProfile.MovieSha256,
++                ["service_manifest_sha256"] = S2AudioObserverProfile.ServiceManifestSha256,
++                ["first_row"] = firstRow,
++                ["exclusive_end"] = exclusiveEnd,
++                ["state_start"] = S2AudioObserverProfile.DriverStateStart,
++                ["state_exclusive_end"] = S2AudioObserverProfile.DriverStateExclusiveEnd
++            });
++            JObject baseline = Boundary("baseline", boundary);
++            baseline["row"] = firstRow;
++            Write(baseline);
++            begun = true;
++        }
++
++        public void Frame(int row, CompleteRunAudioObserver.FrameCapture frame)
++        {
++            RequireActive();
++            if (frame == null) throw new ArgumentNullException("frame");
++            int expected = lastRow < 0 ? firstRow : lastRow + 1;
++            if (row != expected || row >= exclusiveEnd)
++                throw new InvalidDataException("The S2 oracle raw rows are not contiguous and in range.");
++            var events = new JArray();
++            foreach (GpgxAudioTraceEvent value in frame.RawEvents)
++            {
++                events.Add(new JObject
++                {
++                    ["ordinal"] = value.Ordinal, ["service_token"] = value.ServiceToken,
++                    ["parent_token"] = value.ParentToken, ["pc"] = value.Pc,
++                    ["subject"] = value.Subject, ["offset"] = value.Offset,
++                    ["kind"] = value.Kind, ["service_kind"] = value.ServiceKindId,
++                    ["depth"] = value.Depth, ["source_cpu"] = value.SourceCpu,
++                    ["payload_length"] = value.PayloadLength, ["value"] = value.Value,
++                    ["flags"] = value.Flags, ["reserved"] = value.Reserved,
++                    ["payload"] = value.Payload.ToString(CultureInfo.InvariantCulture)
++                });
++            }
++            Write(new JObject
++            {
++                ["type"] = "frame", ["row"] = row, ["lag"] = state.IsLagged,
++                ["state_hex"] = StateHex(), ["events"] = events
++            });
++            lastRow = row;
++        }
++
++        public void Complete(CompleteRunAudioObserver.CutoffFrontier cutoff)
++        {
++            RequireActive();
++            if (cutoff == null) throw new ArgumentNullException("cutoff");
++            JObject value = Boundary("cutoff", cutoff);
++            value["exclusive_end"] = lastRow < 0 ? firstRow : lastRow + 1;
++            Write(value);
++            complete = true;
++        }
++
++        private JObject Boundary(string type, CompleteRunAudioObserver.CutoffFrontier frontier)
++        {
++            var active = new JArray();
++            foreach (CompleteRunAudioObserver.DriverService service in frontier.ActiveServices)
++                active.Add(Service(service));
++            var pending = new JArray();
++            foreach (CompleteRunAudioObserver.DriverService service in frontier.PendingServices)
++                pending.Add(Service(service));
++            return new JObject
++            {
++                ["type"] = type, ["state_hex"] = StateHex(),
++                ["ym_port0_latch"] = frontier.YmPort0Address,
++                ["ym_port1_latch"] = frontier.YmPort1Address,
++                ["native_arm_epoch"] = frontier.ArmEpoch,
++                ["native_armed"] = frontier.IsArmed,
++                ["active_services"] = active, ["pending_descendants"] = pending
++            };
++        }
++
++        private static JObject Service(CompleteRunAudioObserver.DriverService service)
++        {
++            var chips = new JArray();
++            foreach (CompleteRunAudioObserver.OwnedChipEvent chip in service.OwnedChipEvents)
++            {
++                chips.Add(new JObject
++                {
++                    ["coordinate"] = chip.Coordinate, ["native_ordinal"] = chip.NativeOrdinal,
++                    ["event_kind"] = chip.EventKind, ["subject"] = chip.Subject,
++                    ["value"] = chip.Value, ["pc"] = chip.Pc,
++                    ["source_cpu"] = chip.SourceCpu, ["data"] = chip.IsData,
++                    ["port"] = chip.Port, ["register"] = chip.Register
++                });
++            }
++            var snapshots = new JArray();
++            foreach (CompleteRunAudioObserver.SnapshotGroup snapshot in service.Snapshots)
++            {
++                snapshots.Add(new JObject
++                {
++                    ["range_id"] = snapshot.RangeId, ["source_cpu"] = snapshot.SourceCpu,
++                    ["pc"] = snapshot.Pc, ["bytes_hex"] = Hex(snapshot.Bytes)
++                });
++            }
++            var ancestry = new JArray();
++            foreach (CompleteRunAudioObserver.AncestryTransition transition in service.AncestryTransitions)
++            {
++                ancestry.Add(new JObject
++                {
++                    ["coordinate"] = transition.Coordinate,
++                    ["native_ordinal"] = transition.NativeOrdinal,
++                    ["previous_parent_token"] = transition.PreviousParentToken,
++                    ["previous_depth"] = transition.PreviousDepth,
++                    ["current_parent_token"] = transition.CurrentParentToken,
++                    ["current_depth"] = transition.CurrentDepth,
++                    ["hook_token"] = transition.HookToken,
++                    ["source_cpu"] = transition.SourceCpu, ["pc"] = transition.Pc
++                });
++            }
++            return new JObject
++            {
++                ["token"] = service.Token, ["parent_token"] = service.ParentToken,
++                ["kind"] = service.Kind, ["depth"] = service.Depth,
++                ["current_parent_token"] = service.CurrentParentToken,
++                ["current_depth"] = service.CurrentDepth,
++                ["begin_coordinate"] = service.BeginCoordinate,
++                ["end_coordinate"] = service.EndCoordinate,
++                ["begin_pc"] = service.BeginPc, ["end_pc"] = service.EndPc,
++                ["begin_hook_token"] = service.BeginHookToken,
++                ["end_hook_token"] = service.EndHookToken,
++                ["begin_source_cpu"] = service.BeginSourceCpu,
++                ["cancelled"] = service.Cancelled, ["complete"] = service.IsComplete,
++                ["chips"] = chips, ["snapshots"] = snapshots,
++                ["ancestry_transitions"] = ancestry
++            };
++        }
++
++        private string StateHex()
++        {
++            byte[] bytes = state.CaptureDriverState();
++            int expected = S2AudioObserverProfile.DriverStateExclusiveEnd
++                - S2AudioObserverProfile.DriverStateStart;
++            if (bytes == null || bytes.Length != expected)
++                throw new InvalidDataException("The S2 oracle raw state snapshot is not exactly $0000..$1FFF.");
++            return Hex(bytes);
++        }
++
++        private static string Hex(byte[] bytes)
++        {
++            char[] value = new char[bytes.Length * 2];
++            const string alphabet = "0123456789abcdef";
++            for (int index = 0; index < bytes.Length; index++)
++            {
++                value[index * 2] = alphabet[bytes[index] >> 4];
++                value[index * 2 + 1] = alphabet[bytes[index] & 15];
++            }
++            return new string(value);
++        }
++
++        private void Write(JObject value)
++        {
++            output.Write(value.ToString(Newtonsoft.Json.Formatting.None));
++            output.Write('\n');
++        }
++
++        private void RequireActive()
++        {
++            if (!begun || complete)
++                throw new InvalidOperationException("The S2 oracle raw epoch is not active.");
++        }
++    }
++}
+diff --git a/bizhawk-headless/tests/TestMain.cs b/bizhawk-headless/tests/TestMain.cs
+index 2b39330..3e76c6d 100644
+--- a/bizhawk-headless/tests/TestMain.cs
++++ b/bizhawk-headless/tests/TestMain.cs
+@@ -180,6 +180,7 @@ namespace OpenGGF.BizHawk.Headless.Tests
+             RegisterSerial(tests, S2AudioObserverProfileTests.Register);
+             RegisterSerial(tests, S2CompleteAudioCaptureRunnerTests.Register);
+             RegisterSerial(tests, S2CompleteAudioRawSinkTests.Register);
++            RegisterSerial(tests, S2OracleWindowCaptureTests.Register);
+             S1SmokeRecorderTests.Register(tests);
+             S1TraceCsvWriterTests.Register(tests);
+             S1TraceMetadataWriterTests.Register(tests);

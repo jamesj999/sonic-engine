@@ -5,7 +5,9 @@ import com.openggf.configuration.SonicConfiguration;
 import com.openggf.configuration.SonicConfigurationService;
 import com.openggf.game.sonic2.audio.Sonic2Music;
 import com.openggf.game.sonic2.audio.Sonic2Sfx;
+import com.openggf.game.sonic2.audio.Sonic2SmpsConstants;
 import com.openggf.game.TitleScreenProvider;
+import com.openggf.game.titlescreen.SegaPaletteFade;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.GraphicsManager;
 import com.openggf.level.Palette;
@@ -14,12 +16,14 @@ import com.openggf.level.objects.ObjectSpriteSheet;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.level.render.SpriteFramePiece;
 import com.openggf.level.render.SpriteMappingFrame;
+import com.openggf.level.render.SpritePieceRenderer;
 
 import java.util.List;
 import java.util.logging.Logger;
 
 import static org.lwjgl.opengl.GL11.glClearColor;
 import com.openggf.game.GameServices;
+import com.openggf.game.sonic2.resources.Sonic2PlcService;
 
 /**
  * Manages the Sonic 2 Title Screen with full intro animation.
@@ -46,7 +50,7 @@ public class TitleScreenManager implements TitleScreenProvider {
 
     private static TitleScreenManager instance;
 
-    private final SonicConfigurationService configService = SonicConfigurationService.getInstance();
+    private final SonicConfigurationService configService;
     private final TitleScreenDataLoader dataLoader = new TitleScreenDataLoader();
     private final PatternDesc reusableDesc = new PatternDesc();
 
@@ -65,6 +69,26 @@ public class TitleScreenManager implements TitleScreenProvider {
     private static final int INTRO_TEXT_FADE_DURATION = 22;
     private static final int INTRO_TEXT_HOLD_DURATION = 96;
     private boolean creditTextCached = false;
+    private int segaLogoTimer = 0;
+    private boolean segaPcmStarted = false;
+    private SegaLogoFadePhase segaLogoFadePhase = SegaLogoFadePhase.FADING_IN;
+    private int segaLogoFadeTimer = 0;
+    private static final int SEGA_LOGO_FADE_FRAMES = 22;
+    private static final int SEGA_LOGO_VISUAL_FRAMES = 106;
+    private static final int SEGA_LOGO_PCM_WINDOW_FRAMES = 180;
+    private static final int SEGA_SONIC_RUN_LEFT_FRAMES = 12;
+    private static final int SEGA_SONIC_MID_WIPE_FRAMES = 42;
+    private static final int SEGA_SONIC_RUN_RIGHT_START = SEGA_SONIC_RUN_LEFT_FRAMES + SEGA_SONIC_MID_WIPE_FRAMES;
+    private static final int SEGA_SONIC_RUN_RIGHT_FRAMES = 12;
+
+    private enum SegaLogoFadePhase {
+        FADING_IN,
+        ACTIVE,
+        FADING_OUT
+    }
+
+    record SegaGiantSonicPose(int localFrame, int centerX, boolean hFlip) {
+    }
 
     // Screen dimensions
     private static final int SCREEN_WIDTH = 320;
@@ -87,6 +111,7 @@ public class TitleScreenManager implements TitleScreenProvider {
     private PatternSpriteRenderer spriteRenderer;
     private List<SpriteMappingFrame> titleMappingFrames;
     private boolean spritesInitialized = false;
+    private boolean titlePlcPending;
 
     // --- Intro animation state ---
     private boolean introComplete = false;
@@ -105,6 +130,64 @@ public class TitleScreenManager implements TitleScreenProvider {
     private final AnimatedSprite flashingStarSprite = new AnimatedSprite();
     private final AnimatedSprite fallingStarSprite = new AnimatedSprite();
     private final AnimatedSprite logoTopSprite = new AnimatedSprite();
+
+    public TitleScreenManager() {
+        this(null);
+    }
+
+    TitleScreenManager(SonicConfigurationService configService) {
+        this.configService = configService;
+    }
+
+    private SonicConfigurationService configuration() {
+        return configService != null ? configService : GameServices.configuration();
+    }
+
+    // -----------------------------------------------------------------------
+    // Widescreen helpers
+    // -----------------------------------------------------------------------
+
+    /**
+     * Current projection viewport width in game pixels (320 native, wider in
+     * widescreen). Falls back to {@link #SCREEN_WIDTH} when headless.
+     */
+    private int viewportWidth() {
+        try {
+            int w = GameServices.graphics().getProjectionWidth();
+            return w > 0 ? w : SCREEN_WIDTH;
+        } catch (Exception ignored) {
+            return SCREEN_WIDTH;
+        }
+    }
+
+    /**
+     * Horizontal offset that centres the 320-wide foreground (logo, sprites,
+     * text) in the viewport. Zero at native 320 — byte-identical. The background
+     * plane (Plane B) is instead extended to fill the full width, so it does not
+     * use this offset.
+     */
+    private int xOffset() {
+        return (viewportWidth() - SCREEN_WIDTH) / 2;
+    }
+
+    /**
+     * Maps a projection-space X span {@code [mdX, mdX+mdW)} to a window-space
+     * scissor span {@code [x, x+width)} using the active viewport. Returns null
+     * when the span is fully clipped. Pure function — unit-tested.
+     *
+     * @param projWidth the live projection width the viewport represents
+     */
+    public static int[] scissorXSpan(int mdX, int mdW, int projWidth, int vpX, int vpW) {
+        int clippedX = Math.max(0, mdX);
+        int clippedX2 = Math.min(projWidth, mdX + mdW);
+        if (clippedX2 <= clippedX) {
+            return null;
+        }
+        float scaleX = (float) vpW / projWidth;
+        int x = vpX + (int) Math.floor(clippedX * scaleX);
+        int width = Math.max(1, (int) Math.ceil((clippedX2 - clippedX) * scaleX));
+        return new int[] {x, width};
+    }
 
     // Animation frame sequences (from Ani_obj0E in disassembly)
     // Ani_obj0E_Sonic: duration=1, frames: 5, 6, 7, end ($FA)
@@ -214,9 +297,6 @@ public class TitleScreenManager implements TitleScreenProvider {
     private int tailsHandPosIndex = 0;
     private int tailsHandPosCounter = 0;
 
-    private TitleScreenManager() {
-    }
-
     public static synchronized TitleScreenManager getInstance() {
         if (instance == null) {
             instance = new TitleScreenManager();
@@ -233,13 +313,18 @@ public class TitleScreenManager implements TitleScreenProvider {
             dataLoader.loadData();
         }
 
+        titlePlcPending = !queueTitlePlc();
+
         // Force palette re-upload on next draw
         dataLoader.resetCache();
 
-        // Reset state - start with intro text screen
-        state = State.INTRO_TEXT_FADE_IN;
+        state = State.SEGA_LOGO;
         fadeTimer = 0;
         introTextTimer = 0;
+        segaLogoTimer = 0;
+        segaPcmStarted = false;
+        segaLogoFadePhase = SegaLogoFadePhase.FADING_IN;
+        segaLogoFadeTimer = 0;
         creditTextCached = false;
         cameraX = -0x280;  // From disassembly: move.w #-$280,(Camera_X_pos).w
         frameCounter = 0;
@@ -301,15 +386,30 @@ public class TitleScreenManager implements TitleScreenProvider {
         logoTopSprite.x = 128 + 160;  // 128 + 320/2
         logoTopSprite.y = 128 + 104;
 
-        // Play sparkle sound at init (index 0)
-        playSparkleAtIndex(0);
+        LOGGER.info("Title screen initialized, entering SEGA_LOGO state");
+    }
 
-        LOGGER.info("Title screen initialized, entering INTRO_TEXT_FADE_IN state");
+    private boolean queueTitlePlc() {
+        try {
+            Sonic2PlcService plcService = GameServices.module().getGameService(Sonic2PlcService.class);
+            if (plcService != null) {
+                plcService.transact(Sonic2PlcService.replaceOperation(0));
+            }
+            return true;
+        } catch (Exception ignored) {
+            // The presentation renderer also runs without a gameplay module in focused tests.
+            return false;
+        }
     }
 
     @Override
     public void update(InputHandler input) {
+        if (titlePlcPending) {
+            titlePlcPending = !queueTitlePlc();
+            if (titlePlcPending) return;
+        }
         switch (state) {
+            case SEGA_LOGO -> updateSegaLogo(input);
             case INTRO_TEXT_FADE_IN -> updateIntroTextFadeIn(input);
             case INTRO_TEXT_HOLD -> updateIntroTextHold(input);
             case INTRO_TEXT_FADE_OUT -> updateIntroTextFadeOut(input);
@@ -319,18 +419,91 @@ public class TitleScreenManager implements TitleScreenProvider {
         }
     }
 
+    private void updateSegaLogo(InputHandler input) {
+        int jumpKey = configuration().getInt(SonicConfiguration.JUMP);
+        if (updateSegaLogoFadeIn()) {
+            return;
+        }
+        if (updateSegaLogoFadeOut()) {
+            return;
+        }
+
+        segaLogoTimer++;
+        if (!segaPcmStarted && segaLogoTimer >= SEGA_LOGO_VISUAL_FRAMES) {
+            segaPcmStarted = true;
+            GameServices.audio().playMusic(Sonic2SmpsConstants.CMD_SEGA);
+        }
+        boolean skipable = segaLogoTimer >= SEGA_LOGO_VISUAL_FRAMES;
+        boolean autoEnd = segaLogoTimer >= SEGA_LOGO_VISUAL_FRAMES + SEGA_LOGO_PCM_WINDOW_FRAMES;
+        if (autoEnd || (skipable && confirmPressed(input, jumpKey))) {
+            beginSegaLogoFadeOut();
+        }
+    }
+
+    private boolean updateSegaLogoFadeIn() {
+        if (segaLogoFadePhase != SegaLogoFadePhase.FADING_IN) {
+            return false;
+        }
+        segaLogoFadeTimer++;
+        if (segaLogoFadeTimer < SEGA_LOGO_FADE_FRAMES) {
+            return true;
+        }
+        segaLogoFadePhase = SegaLogoFadePhase.ACTIVE;
+        segaLogoFadeTimer = 0;
+        return false;
+    }
+
+    private boolean updateSegaLogoFadeOut() {
+        if (segaLogoFadePhase != SegaLogoFadePhase.FADING_OUT) {
+            return false;
+        }
+        segaLogoFadeTimer++;
+        if (segaLogoFadeTimer < SEGA_LOGO_FADE_FRAMES) {
+            return true;
+        }
+        beginIntroTextScreen();
+        segaLogoFadePhase = SegaLogoFadePhase.FADING_IN;
+        segaLogoFadeTimer = 0;
+        return true;
+    }
+
+    private void beginSegaLogoFadeOut() {
+        if (segaLogoFadePhase == SegaLogoFadePhase.FADING_OUT) {
+            return;
+        }
+        GameServices.audio().stopSegaPcm();
+        segaLogoFadePhase = SegaLogoFadePhase.FADING_OUT;
+        segaLogoFadeTimer = 0;
+    }
+
+    private void beginIntroTextScreen() {
+        segaLogoTimer = 0;
+        segaPcmStarted = false;
+        introTextTimer = 0;
+        state = State.INTRO_TEXT_FADE_IN;
+        LOGGER.info("SEGA screen complete, entering INTRO_TEXT_FADE_IN state");
+    }
+
+    /**
+     * Keyboard Jump press or gamepad confirm (Start / any face action button),
+     * matching {@link com.openggf.game.MasterTitleScreen}'s gamepad-aware confirm gate.
+     */
+    private static boolean confirmPressed(InputHandler input, int jumpKey) {
+        return input.isKeyPressed(jumpKey) || input.logical().menuAccept();
+    }
+
     private void skipIntroText() {
         introTextTimer = 0;
         creditTextCached = false;
         // Force palette re-upload for main title screen
         dataLoader.resetCache();
-        state = State.FADE_IN;
+        beginTitleFadeIn();
         LOGGER.info("Intro text skipped, entering FADE_IN state");
     }
 
     private void updateIntroTextFadeIn(InputHandler input) {
-        int jumpKey = configService.getInt(SonicConfiguration.JUMP);
-        if (input.isKeyPressed(jumpKey)) {
+        int jumpKey = configuration().getInt(SonicConfiguration.JUMP);
+        if (confirmPressed(input, jumpKey)) {
             skipIntroText();
             return;
         }
@@ -343,8 +516,8 @@ public class TitleScreenManager implements TitleScreenProvider {
     }
 
     private void updateIntroTextHold(InputHandler input) {
-        int jumpKey = configService.getInt(SonicConfiguration.JUMP);
-        if (input.isKeyPressed(jumpKey)) {
+        int jumpKey = configuration().getInt(SonicConfiguration.JUMP);
+        if (confirmPressed(input, jumpKey)) {
             skipIntroText();
             return;
         }
@@ -357,8 +530,8 @@ public class TitleScreenManager implements TitleScreenProvider {
     }
 
     private void updateIntroTextFadeOut(InputHandler input) {
-        int jumpKey = configService.getInt(SonicConfiguration.JUMP);
-        if (input.isKeyPressed(jumpKey)) {
+        int jumpKey = configuration().getInt(SonicConfiguration.JUMP);
+        if (confirmPressed(input, jumpKey)) {
             skipIntroText();
             return;
         }
@@ -368,9 +541,22 @@ public class TitleScreenManager implements TitleScreenProvider {
             creditTextCached = false;
             // Force palette re-upload for main title screen
             dataLoader.resetCache();
-            state = State.FADE_IN;
+            beginTitleFadeIn();
             LOGGER.info("Intro text complete, entering FADE_IN state");
         }
+    }
+
+    /**
+     * Enters the title-screen fade-in. In the ROM the intro text has already
+     * faded to black by this point and {@code TitleScreen} spawns the intro
+     * object and runs it for one frame before {@code Pal_FadeFromBlack};
+     * {@code Obj0E_Sonic_Init} plays {@code SndID_Sparkle} on that frame, so the
+     * twinkle is heard on the black screen as the title starts to fade in, not
+     * when the "SONIC AND MILES 'TAILS' PROWER IN" text appears.
+     */
+    private void beginTitleFadeIn() {
+        state = State.FADE_IN;
+        playSparkleAtIndex(0);
     }
 
     private void updateFadeIn(InputHandler input) {
@@ -396,8 +582,8 @@ public class TitleScreenManager implements TitleScreenProvider {
 
         // Check for jump/start press to exit (only after intro completes)
         if (introComplete) {
-            int jumpKey = configService.getInt(SonicConfiguration.JUMP);
-            if (input.isKeyPressed(jumpKey)) {
+            int jumpKey = configuration().getInt(SonicConfiguration.JUMP);
+            if (confirmPressed(input, jumpKey)) {
                 state = State.EXITING;
                 LOGGER.info("Title screen exiting");
             }
@@ -410,8 +596,8 @@ public class TitleScreenManager implements TitleScreenProvider {
     private void updateIntroAnimation(InputHandler input) {
         // Check for skip (Start pressed before frame 288)
         if (!introComplete) {
-            int jumpKey = configService.getInt(SonicConfiguration.JUMP);
-            if (input.isKeyPressed(jumpKey)) {
+            int jumpKey = configuration().getInt(SonicConfiguration.JUMP);
+            if (confirmPressed(input, jumpKey)) {
                 skipToFinalState();
                 return;
             }
@@ -767,8 +953,13 @@ public class TitleScreenManager implements TitleScreenProvider {
             dataLoader.loadData();
         }
 
-        GraphicsManager gm = GraphicsManager.getInstance();
+        GraphicsManager gm = GameServices.graphics();
         if (gm == null || gm.isHeadlessMode()) {
+            return;
+        }
+
+        if (state == State.SEGA_LOGO) {
+            drawSegaLogo(gm);
             return;
         }
 
@@ -846,7 +1037,7 @@ public class TitleScreenManager implements TitleScreenProvider {
                     -1,
                     GLCommand.BlendType.ONE_MINUS_SRC_ALPHA,
                     0.0f, 0.0f, 0.0f, emblemDarkness,
-                    0, 0, SCREEN_WIDTH, SCREEN_HEIGHT
+                    0, 0, viewportWidth(), SCREEN_HEIGHT
             ));
         }
 
@@ -859,7 +1050,7 @@ public class TitleScreenManager implements TitleScreenProvider {
                         -1,
                         GLCommand.BlendType.ONE_MINUS_SRC_ALPHA,
                         1.0f, 1.0f, 1.0f, flashAlpha,
-                        0, 0, SCREEN_WIDTH, SCREEN_HEIGHT
+                        0, 0, viewportWidth(), SCREEN_HEIGHT
                 ));
             }
         }
@@ -916,10 +1107,102 @@ public class TitleScreenManager implements TitleScreenProvider {
                         -1,
                         GLCommand.BlendType.ONE_MINUS_SRC_ALPHA,
                         0.0f, 0.0f, 0.0f, fadeAmount,
-                        0, 0, SCREEN_WIDTH, SCREEN_HEIGHT
+                        0, 0, viewportWidth(), SCREEN_HEIGHT
                 ));
             }
         }
+    }
+
+    private void drawSegaLogo(GraphicsManager gm) {
+        dataLoader.cacheSegaLogoToGpu();
+        dataLoader.applySegaLogoPaletteForFrame(segaLogoTimer, segaLogoFadeMode(), segaLogoFadeTimer);
+        int[] map = dataLoader.getSegaLogoMap();
+        if (map == null || map.length == 0) {
+            return;
+        }
+        gm.beginPatternBatch();
+        int width = dataLoader.getSegaLogoWidth();
+        int height = dataLoader.getSegaLogoHeight();
+        for (int ty = 0; ty < height; ty++) {
+            for (int tx = 0; tx < width; tx++) {
+                int word = map[ty * width + tx];
+                if (word == 0) {
+                    continue;
+                }
+                reusableDesc.set(word);
+                gm.renderPatternWithId(
+                        TitleScreenDataLoader.SEGA_LOGO_PATTERN_BASE + reusableDesc.getPatternIndex(),
+                        reusableDesc,
+                        xOffset() + tx * 8,
+                        ty * 8);
+            }
+        }
+        gm.flushPatternBatch();
+        drawSegaGiantSonic(gm);
+    }
+
+    private SegaPaletteFade.Mode segaLogoFadeMode() {
+        if (segaLogoFadePhase == SegaLogoFadePhase.FADING_IN) {
+            return SegaPaletteFade.Mode.FROM_BLACK;
+        }
+        if (segaLogoFadePhase == SegaLogoFadePhase.FADING_OUT) {
+            return SegaPaletteFade.Mode.TO_BLACK;
+        }
+        return SegaPaletteFade.Mode.NONE;
+    }
+
+    private void drawSegaGiantSonic(GraphicsManager gm) {
+        SegaGiantSonicPose pose = resolveSegaGiantSonicPose();
+        if (pose == null) {
+            return;
+        }
+        dataLoader.cacheSegaGiantSonicToGpu();
+        SpriteMappingFrame mapping = dataLoader.getSegaGiantSonicMappingFrame(pose.localFrame());
+        if (mapping == null) {
+            return;
+        }
+        int originX = xOffset() + pose.centerX();
+        int originY = SCREEN_HEIGHT / 2;
+        SpritePieceRenderer.renderPieces(
+                mapping.pieces(),
+                originX,
+                originY,
+                TitleScreenDataLoader.SEGA_GIANT_SONIC_PATTERN_BASE,
+                2,
+                pose.hFlip(),
+                false,
+                (patternIndex, hFlip, vFlip, paletteIndex, drawX, drawY) ->
+                        drawSegaSonicTile(gm, patternIndex, hFlip, vFlip, paletteIndex, drawX, drawY));
+    }
+
+    SegaGiantSonicPose resolveSegaGiantSonicPose() {
+        if (segaLogoFadePhase != SegaLogoFadePhase.ACTIVE || segaLogoTimer <= 0) {
+            return null;
+        }
+        int frame = segaLogoTimer;
+        if (frame <= SEGA_SONIC_RUN_LEFT_FRAMES) {
+            int step = Math.max(0, frame - 1);
+            return new SegaGiantSonicPose(step & 3, 360 - 32 * (step + 1), true);
+        } else if (frame >= SEGA_SONIC_RUN_RIGHT_START
+                && frame < SEGA_SONIC_RUN_RIGHT_START + SEGA_SONIC_RUN_RIGHT_FRAMES) {
+            int step = frame - SEGA_SONIC_RUN_RIGHT_START;
+            return new SegaGiantSonicPose(step & 3, -64 + 32 * (step + 1), false);
+        }
+        return null;
+    }
+
+    private void drawSegaSonicTile(GraphicsManager gm, int patternIndex, boolean hFlip, boolean vFlip,
+                                   int paletteIndex, int drawX, int drawY) {
+        int tileOffset = patternIndex - TitleScreenDataLoader.SEGA_GIANT_SONIC_PATTERN_BASE;
+        if (tileOffset < 0 || tileOffset >= dataLoader.getSegaGiantSonicPatternCount()) {
+            return;
+        }
+        reusableDesc.set(patternIndex & 0x7FF);
+        reusableDesc.setHFlip(hFlip);
+        reusableDesc.setVFlip(vFlip);
+        reusableDesc.setPaletteIndex(paletteIndex);
+        reusableDesc.setPriority(true);
+        gm.renderPatternWithId(patternIndex, reusableDesc, drawX, drawY);
     }
 
     /**
@@ -975,7 +1258,7 @@ public class TitleScreenManager implements TitleScreenProvider {
                     -1,
                     GLCommand.BlendType.ONE_MINUS_SRC_ALPHA,
                     0.0f, 0.0f, 0.0f, fadeAmount,
-                    0, 0, SCREEN_WIDTH, SCREEN_HEIGHT
+                    0, 0, viewportWidth(), SCREEN_HEIGHT
             ));
         }
     }
@@ -1039,7 +1322,7 @@ public class TitleScreenManager implements TitleScreenProvider {
      * </ul>
      */
     private void drawCreditTextLine(GraphicsManager gm, String text, int startCol, int row) {
-        int x = startCol * 8;
+        int x = startCol * 8 + xOffset(); // centre the credit text (0 at native)
         int y = row * 8;
 
         reusableDesc.set(0); // Clear: no flip, palette 0, no priority
@@ -1112,7 +1395,7 @@ public class TitleScreenManager implements TitleScreenProvider {
      * Draws a sprite at its VDP position (subtracting 128 for screen coords).
      */
     private void drawSprite(AnimatedSprite sprite) {
-        int screenX = sprite.x - 128;
+        int screenX = sprite.x - 128 + xOffset(); // centre with the logo (0 at native)
         int screenY = sprite.y - 128;
         spriteRenderer.drawFrameIndex(sprite.mappingFrame, screenX, screenY);
     }
@@ -1147,7 +1430,7 @@ public class TitleScreenManager implements TitleScreenProvider {
             return;
         }
 
-        int screenX = sprite.x - 128;
+        int screenX = sprite.x - 128 + xOffset(); // centre with the logo (0 at native)
         int screenY = sprite.y - 128;
         List<? extends SpriteFramePiece> pieces = frame.pieces();
 
@@ -1175,12 +1458,20 @@ public class TitleScreenManager implements TitleScreenProvider {
         int tileScrollOffset = pixelScroll >> 3;
         int subTileOffset = pixelScroll & 7;
 
+        // Number of screen tile columns needed to fill the viewport. At native
+        // 320 this is 40 — byte-identical; wider viewports reveal more of the
+        // 64-tile-wide plane (Plane B is the background and fills the screen
+        // rather than being centred).
+        int screenCols = (viewportWidth() + 7) / 8;
+
         for (int ty = 0; ty < 24 && ty * 8 < SCREEN_HEIGHT; ty++) {
             if (ty < SCROLL_START_ROW) {
-                // Static rows: render cols 0-39 directly
+                // Static rows: render columns left to right, wrapping into the
+                // 64-wide plane so the extra widescreen columns are filled.
                 int baseIndex = ty * planeWidth;
-                for (int tx = 0; tx < 40; tx++) {
-                    int idx = baseIndex + tx;
+                for (int tx = 0; tx < screenCols; tx++) {
+                    int planeTile = ((tx % planeWidth) + planeWidth) % planeWidth;
+                    int idx = baseIndex + planeTile;
                     if (idx < 0 || idx >= map.length) {
                         continue;
                     }
@@ -1195,7 +1486,7 @@ public class TitleScreenManager implements TitleScreenProvider {
             } else {
                 // Scrolling rows (20-23): scroll with camera, no ripple
                 int baseIndex = ty * planeWidth;
-                for (int screenTile = -1; screenTile < 41; screenTile++) {
+                for (int screenTile = -1; screenTile < screenCols + 1; screenTile++) {
                     int planeTile = screenTile - tileScrollOffset;
                     planeTile = ((planeTile % planeWidth) + planeWidth) % planeWidth;
 
@@ -1238,6 +1529,9 @@ public class TitleScreenManager implements TitleScreenProvider {
         // Base scroll for scrolling rows
         int pixelScroll = -(cameraX) >> 2;
 
+        // Number of screen tile columns to fill the viewport (40 at native 320).
+        int screenCols = (viewportWidth() + 7) / 8;
+
         // Ripple index, wrapped
         int currentRippleIndex = rippleIndex & 0x1F;
 
@@ -1277,7 +1571,7 @@ public class TitleScreenManager implements TitleScreenProvider {
             gm.beginPatternBatch();
 
             int baseIndex = ty * planeWidth;
-            for (int screenTile = -1; screenTile < 41; screenTile++) {
+            for (int screenTile = -1; screenTile < screenCols + 1; screenTile++) {
                 int planeTile = screenTile - lineTileScroll;
                 planeTile = ((planeTile % planeWidth) + planeWidth) % planeWidth;
 
@@ -1315,6 +1609,7 @@ public class TitleScreenManager implements TitleScreenProvider {
 
         int width = dataLoader.getPlaneAWidth();   // 40
         int height = dataLoader.getPlaneAHeight();  // 28
+        int ox = xOffset(); // centre the 320-wide logo (0 at native)
 
         for (int ty = 0; ty < height && ty * 8 < SCREEN_HEIGHT; ty++) {
             int baseIndex = ty * width;
@@ -1324,14 +1619,32 @@ public class TitleScreenManager implements TitleScreenProvider {
                     continue;
                 }
                 int word = map[idx];
-                if (word == 0) {
+                if (!planeATileVisible(word)) {
                     continue;
                 }
                 reusableDesc.set(word);
                 int patternId = TitleScreenDataLoader.PATTERN_BASE + reusableDesc.getPatternIndex();
-                gm.renderPatternWithId(patternId, reusableDesc, tx * 8, ty * 8);
+                gm.renderPatternWithId(patternId, reusableDesc, tx * 8 + ox, ty * 8);
             }
         }
+    }
+
+    /**
+     * Whether a Plane A map word draws this frame.
+     *
+     * <p>Word 0 is the blank tile. Palette line 0 words are the "@ 1992 SEGA"
+     * copyright line ({@link TitleScreenCopyrightText}); in the ROM that line
+     * is cleared by {@code clearRAM Normal_palette} during setup and stays black
+     * until {@code Obj0E_Sonic_LoadPalette} copies {@code Pal_133EC} into it at
+     * frame 128, so the text pops in together with Sonic's palette. The other
+     * palette lines fade through {@code ObjC9}, which the emblem gating models.
+     */
+    private boolean planeATileVisible(int word) {
+        if (word == 0) {
+            return false;
+        }
+        int paletteLine = (word >> 13) & 0x03;
+        return paletteLine != 0 || sonicPaletteLoaded;
     }
 
     /**
@@ -1348,7 +1661,10 @@ public class TitleScreenManager implements TitleScreenProvider {
 
         int width = dataLoader.getPlaneAWidth();   // 40
         int height = dataLoader.getPlaneAHeight();  // 28
+        int ox = xOffset(); // logo is centred, so shift the occlusion with it
 
+        // mdX iterates the logo's own 320-wide space; the curve centre stays at
+        // the logo centre. Scissor/draw are shifted into projection space by ox.
         for (int mdX = 0; mdX < SCREEN_WIDTH; mdX += LOGO_OCCLUSION_COLUMN_WIDTH) {
             int mdW = Math.min(LOGO_OCCLUSION_COLUMN_WIDTH, SCREEN_WIDTH - mdX);
             int startY = getLogoOcclusionStartPixel(mdX + (mdW >> 1));
@@ -1361,7 +1677,7 @@ public class TitleScreenManager implements TitleScreenProvider {
                 continue;
             }
 
-            if (!enableMdScissorRect(gm, mdX, startY, mdW, SCREEN_HEIGHT - startY)) {
+            if (!enableMdScissorRect(gm, mdX + ox, startY, mdW, SCREEN_HEIGHT - startY)) {
                 continue;
             }
 
@@ -1375,31 +1691,36 @@ public class TitleScreenManager implements TitleScreenProvider {
     }
 
     private void renderPlaneAColumn(GraphicsManager gm, int[] map, int width, int height, int tx, int startTileRow) {
+        int ox = xOffset(); // centre the 320-wide logo (0 at native)
         for (int ty = startTileRow; ty < height && ty * 8 < SCREEN_HEIGHT; ty++) {
             int idx = ty * width + tx;
             if (idx < 0 || idx >= map.length) {
                 continue;
             }
             int word = map[idx];
-            if (word == 0) {
+            if (!planeATileVisible(word)) {
                 continue;
             }
             reusableDesc.set(word);
             int patternId = TitleScreenDataLoader.PATTERN_BASE + reusableDesc.getPatternIndex();
-            gm.renderPatternWithId(patternId, reusableDesc, tx * 8, ty * 8);
+            gm.renderPatternWithId(patternId, reusableDesc, tx * 8 + ox, ty * 8);
         }
     }
 
+    /**
+     * Enables a GL scissor for a projection-space rectangle. {@code mdX} is in
+     * projection space (0..viewportWidth), so the X axis is mapped against the
+     * live projection width — not a hardcoded 320 — so the curved occlusion
+     * clips correctly at widescreen. The Y axis is unchanged (height is fixed).
+     */
     private boolean enableMdScissorRect(GraphicsManager gm, int mdX, int mdY, int mdW, int mdH) {
         if (mdW <= 0 || mdH <= 0) {
             return false;
         }
 
-        int clippedX = Math.max(0, mdX);
         int clippedY = Math.max(0, mdY);
-        int clippedX2 = Math.min(SCREEN_WIDTH, mdX + mdW);
         int clippedY2 = Math.min(SCREEN_HEIGHT, mdY + mdH);
-        if (clippedX2 <= clippedX || clippedY2 <= clippedY) {
+        if (clippedY2 <= clippedY) {
             return false;
         }
 
@@ -1407,15 +1728,17 @@ public class TitleScreenManager implements TitleScreenProvider {
         int vpY = gm.getViewportY();
         int vpW = gm.getViewportWidth();
         int vpH = gm.getViewportHeight();
-        float scaleX = (float) vpW / SCREEN_WIDTH;
-        float scaleY = (float) vpH / SCREEN_HEIGHT;
 
-        int scissorX = vpX + (int) Math.floor(clippedX * scaleX);
-        int scissorW = Math.max(1, (int) Math.ceil((clippedX2 - clippedX) * scaleX));
+        int[] xSpan = scissorXSpan(mdX, mdW, viewportWidth(), vpX, vpW);
+        if (xSpan == null) {
+            return false;
+        }
+
+        float scaleY = (float) vpH / SCREEN_HEIGHT;
         int scissorY = vpY + (int) Math.floor((SCREEN_HEIGHT - clippedY2) * scaleY);
         int scissorH = Math.max(1, (int) Math.ceil((clippedY2 - clippedY) * scaleY));
 
-        gm.enableScissor(scissorX, scissorY, scissorW, scissorH);
+        gm.enableScissor(xSpan[0], scissorY, xSpan[1], scissorH);
         return true;
     }
 
@@ -1471,11 +1794,16 @@ public class TitleScreenManager implements TitleScreenProvider {
 
     @Override
     public void reset() {
+        GameServices.audio().stopSegaPcm();
         state = State.INACTIVE;
         cameraX = -0x280;
         frameCounter = 0;
         fadeTimer = 0;
         introTextTimer = 0;
+        segaLogoTimer = 0;
+        segaPcmStarted = false;
+        segaLogoFadePhase = SegaLogoFadePhase.FADING_IN;
+        segaLogoFadeTimer = 0;
         creditTextCached = false;
         introComplete = false;
         musicPlaying = false;
@@ -1497,6 +1825,11 @@ public class TitleScreenManager implements TitleScreenProvider {
     @Override
     public boolean isActive() {
         return state != State.INACTIVE;
+    }
+
+    @Override
+    public TitleScreenAction consumeExitAction() {
+        return TitleScreenAction.ONE_PLAYER;
     }
 
     /**

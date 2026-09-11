@@ -76,3 +76,5 @@ class TestS3kSlotPrizeCalculator {
         assertEquals(-4, S3kSlotPrizeCalculator.calculate(4, (byte) 0x00));
     }
 }
+
+

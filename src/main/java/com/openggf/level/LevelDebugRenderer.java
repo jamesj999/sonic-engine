@@ -3,6 +3,7 @@ package com.openggf.level;
 import com.openggf.Engine;
 import com.openggf.camera.Camera;
 import com.openggf.game.GameServices;
+import com.openggf.game.session.ActiveGameplayTeamResolver;
 import com.openggf.configuration.SonicConfiguration;
 import com.openggf.configuration.SonicConfigurationService;
 import com.openggf.debug.DebugOption;
@@ -719,7 +720,7 @@ public class LevelDebugRenderer {
             debugObjectCommands.clear();
             debugSwitcherLineCommands.clear();
             debugSwitcherAreaCommands.clear();
-            Sprite player = spriteManager.getSprite(configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE));
+            Sprite player = spriteManager.getSprite(ActiveGameplayTeamResolver.resolveMainCharacterCode(configService));
             AbstractPlayableSprite playable = player instanceof AbstractPlayableSprite
                     ? (AbstractPlayableSprite) player
                     : null;
@@ -871,7 +872,7 @@ public class LevelDebugRenderer {
         }
 
         if (overlayEnabled) {
-            Sprite player = spriteManager.getSprite(configService.getString(SonicConfiguration.MAIN_CHARACTER_CODE));
+            Sprite player = spriteManager.getSprite(ActiveGameplayTeamResolver.resolveMainCharacterCode(configService));
             if (player instanceof AbstractPlayableSprite playable) {
                 if (ctx.overlayManager().isEnabled(DebugOverlayToggle.CAMERA_BOUNDS)) {
                     drawCameraBounds();

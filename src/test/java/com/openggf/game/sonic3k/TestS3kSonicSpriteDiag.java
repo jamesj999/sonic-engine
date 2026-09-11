@@ -1,8 +1,7 @@
 package com.openggf.game.sonic3k;
 
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import com.openggf.data.Rom;
 import com.openggf.data.RomByteReader;
 import com.openggf.level.render.SpriteDplcFrame;
@@ -13,10 +12,9 @@ import com.openggf.sprites.animation.SpriteAnimationScript;
 import com.openggf.sprites.animation.SpriteAnimationSet;
 import com.openggf.sprites.art.SpriteArtSet;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Diagnostic test for S3K Sonic sprite tile ordering bug.
@@ -24,30 +22,26 @@ import static org.junit.Assert.*;
  */
 @RequiresRom(SonicGame.SONIC_3K)
 public class TestS3kSonicSpriteDiag {
-
-    @Rule
-    public RequiresRomRule romRule = new RequiresRomRule();
-
     private SpriteArtSet artSet;
     private SpriteAnimationSet animSet;
     private RomByteReader reader;
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
-        Rom rom = romRule.rom();
+        Rom rom = com.openggf.tests.TestEnvironment.currentRom();
         reader = RomByteReader.fromRom(rom);
         Sonic3kPlayerArt art = new Sonic3kPlayerArt(reader);
         artSet = art.loadSonic();
-        assertNotNull("Art set should load", artSet);
+        assertNotNull(artSet, "Art set should load");
         animSet = artSet.animationSet();
-        assertNotNull("Animation set should load", animSet);
+        assertNotNull(animSet, "Animation set should load");
     }
 
     @Test
     public void dumpIdleAndRollFrames() {
         // WAIT animation = id 5
         SpriteAnimationScript waitScript = animSet.getScript(5);
-        assertNotNull("WAIT animation script should exist", waitScript);
+        assertNotNull(waitScript, "WAIT animation script should exist");
         System.out.println("=== WAIT Animation (id=5) ===");
         System.out.println("Delay: " + waitScript.delay());
         System.out.println("Frame indices: " + waitScript.frames());
@@ -55,7 +49,7 @@ public class TestS3kSonicSpriteDiag {
 
         // WALK animation = id 0
         SpriteAnimationScript walkScript = animSet.getScript(0);
-        assertNotNull("WALK animation script should exist", walkScript);
+        assertNotNull(walkScript, "WALK animation script should exist");
         System.out.println("=== WALK Animation (id=0) ===");
         System.out.println("Delay: " + walkScript.delay());
         System.out.println("Frame indices: " + walkScript.frames());
@@ -63,7 +57,7 @@ public class TestS3kSonicSpriteDiag {
 
         // ROLL animation = id 2
         SpriteAnimationScript rollScript = animSet.getScript(2);
-        assertNotNull("ROLL animation script should exist", rollScript);
+        assertNotNull(rollScript, "ROLL animation script should exist");
         System.out.println("=== ROLL Animation (id=2) ===");
         System.out.println("Delay: " + rollScript.delay());
         System.out.println("Frame indices: " + rollScript.frames());
@@ -122,11 +116,9 @@ public class TestS3kSonicSpriteDiag {
         System.out.println("Incremental DPLC frames (mapping needs > DPLC loads): " + issues);
         // ROM intentionally uses incremental DPLCs - frames share tiles from
         // previous loads. This is NOT a bug - just verify we handle it.
-        assertTrue("Should have checked at least one frame for DPLC/mapping consistency",
-                artSet.mappingFrames().size() > 0);
+        assertTrue(artSet.mappingFrames().size() > 0, "Should have checked at least one frame for DPLC/mapping consistency");
         // Incremental DPLC frames are expected but should be a minority
-        assertTrue("Incremental DPLC frame count should be less than total frames",
-                issues < artSet.mappingFrames().size());
+        assertTrue(issues < artSet.mappingFrames().size(), "Incremental DPLC frame count should be less than total frames");
     }
 
     @Test
@@ -156,10 +148,8 @@ public class TestS3kSonicSpriteDiag {
 
         // With correct 1P mapping data, every frame's DPLC should load
         // exactly the tiles needed by the mapping (no incremental loading).
-        assertEquals("DPLC and mapping tile counts should match",
-                maxMappingTileIndex, maxDplcTotal);
-        assertEquals("Bank size should equal max tile requirement",
-                maxMappingTileIndex, artSet.bankSize());
+        assertEquals(maxMappingTileIndex, maxDplcTotal, "DPLC and mapping tile counts should match");
+        assertEquals(maxMappingTileIndex, artSet.bankSize(), "Bank size should equal max tile requirement");
     }
 
     private void dumpFrame(int frameIndex) {
@@ -200,3 +190,5 @@ public class TestS3kSonicSpriteDiag {
     }
 
 }
+
+

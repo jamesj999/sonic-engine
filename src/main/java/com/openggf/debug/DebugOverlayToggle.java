@@ -11,7 +11,7 @@ public enum DebugOverlayToggle {
     CAMERA_BOUNDS("Camera Bounds", GLFW_KEY_F6, true),
     PLAYER_BOUNDS("Player Bounds", GLFW_KEY_F7, true),
     OBJECT_POINTS("Object Points", GLFW_KEY_F8, true),
-    RING_BOUNDS("Ring Bounds", GLFW_KEY_F9, true),
+    RING_BOUNDS("Ring Bounds", GLFW_KEY_K, true),
     PLANE_SWITCHERS("Plane Switchers", GLFW_KEY_F10, true),
     TOUCH_RESPONSE("Touch Response", GLFW_KEY_F11, false),
     OBJECT_ART_VIEWER("Art Viewer", GLFW_KEY_F12, false),
@@ -62,6 +62,7 @@ public enum DebugOverlayToggle {
             case GLFW_KEY_F12 -> "F12";
             case GLFW_KEY_GRAVE_ACCENT -> "`";
             case GLFW_KEY_EQUAL -> "=";
+            case GLFW_KEY_K -> "K";
             case GLFW_KEY_P -> "P";
             case GLFW_KEY_O -> "O";
             default -> "?";

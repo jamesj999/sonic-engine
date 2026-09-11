@@ -9,6 +9,7 @@ import com.openggf.game.PlayableEntity;
 import com.openggf.level.objects.DestructionEffects.DestructionConfig;
 import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
@@ -45,7 +46,7 @@ import java.util.List;
  *   <li>Frame 3 (.shut2): body mouth shut + tail vFlipped</li>
  * </ul>
  */
-public class Sonic1JawsBadnikInstance extends AbstractBadnikInstance {
+public class Sonic1JawsBadnikInstance extends AbstractBadnikInstance implements SpawnRewindRecreatable {
 
     // From disassembly: move.b #$A,obColType(a0) (enemy, collision size index $A)
     private static final int COLLISION_SIZE_INDEX = 0x0A;
@@ -61,7 +62,7 @@ public class Sonic1JawsBadnikInstance extends AbstractBadnikInstance {
     private static final int ANIM_FRAME_COUNT = 4;
 
     private int turnTimeCount;       // jaws_timecount (objoff_30): current countdown timer
-    private final int turnTimeDelay; // jaws_timedelay (objoff_32): reload value for timer
+    private int turnTimeDelay;       // jaws_timedelay (objoff_32): reload value for timer
     private final SubpixelMotion.State motionState; // Subpixel position/velocity state
     private int animTickCounter;     // Ticks within current animation frame
     private int prevAnim;            // obPrevAni: tracks animation reset trigger
@@ -93,7 +94,7 @@ public class Sonic1JawsBadnikInstance extends AbstractBadnikInstance {
     }
 
     @Override
-    protected void updateMovement(int frameCounter, PlayableEntity playerEntity) {
+    protected void updateMovement(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // Jaws_Turn (Routine 2):
 
@@ -127,7 +128,7 @@ public class Sonic1JawsBadnikInstance extends AbstractBadnikInstance {
     }
 
     @Override
-    protected void updateAnimation(int frameCounter) {
+    protected void updateAnimation(int vIntRunCount) {
         // AnimateSprite: advance swim animation
         animTickCounter++;
     }
@@ -157,8 +158,11 @@ public class Sonic1JawsBadnikInstance extends AbstractBadnikInstance {
 
     @Override
     public boolean isPersistent() {
-        // RememberState: persists while on screen
-        return !isDestroyed() && isOnScreenX(160);
+        // docs/s1disasm/s1disasm/_incObj/2C Badnik - Jaws.asm:
+        // Jaws_Turn ends with SpeedToPos then RememberState. The shared S1
+        // counter-based unload path performs that exact out_of_range check, so
+        // do not add a wider isOnScreenX margin here.
+        return false;
     }
 
     @Override

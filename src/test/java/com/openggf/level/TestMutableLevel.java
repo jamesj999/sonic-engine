@@ -58,8 +58,16 @@ class TestMutableLevel {
             blocks = new Block[blockCount];
             for (int i = 0; i < blockCount; i++) {
                 blocks[i] = new Block(8);
-                // Set first ChunkDesc to reference chunk index i
-                blocks[i].setChunkDesc(0, 0, new ChunkDesc(i));
+                if (i == 1) {
+                    for (int y = 0; y < blocks[i].getGridSide(); y++) {
+                        for (int x = 0; x < blocks[i].getGridSide(); x++) {
+                            blocks[i].setChunkDesc(x, y, new ChunkDesc(1));
+                        }
+                    }
+                } else {
+                    // Set first ChunkDesc to reference chunk index i
+                    blocks[i].setChunkDesc(0, 0, new ChunkDesc(i));
+                }
             }
 
             // Solid tiles
@@ -282,6 +290,22 @@ class TestMutableLevel {
     }
 
     @Test
+    void setChunkInBlock_updatesReverseLookupForFutureChunkDirtying() {
+        MutableLevel ml = MutableLevel.snapshot(createSyntheticLevel());
+
+        ml.setChunkInBlock(1, 0, 0, new ChunkDesc(0));
+        ml.consumeDirtyBlocks();
+        ml.consumeDirtyMapCells();
+
+        ml.setPatternDescInChunk(0, 0, 0, new PatternDesc(555));
+
+        BitSet dirtyBlocks = ml.consumeDirtyBlocks();
+        BitSet dirtyMapCells = ml.consumeDirtyMapCells();
+        assertTrue(dirtyBlocks.get(1));
+        assertTrue(dirtyMapCells.get(1));
+    }
+
+    @Test
     void setBlockInMap_marksDirtyMapCell() {
         MutableLevel ml = MutableLevel.snapshot(createSyntheticLevel());
 
@@ -290,6 +314,19 @@ class TestMutableLevel {
         BitSet dirty = ml.consumeDirtyMapCells();
         // Cell index: layer=0, w=4, h=4 -> 0*4*4 + 1*4 + 2 = 6
         assertTrue(dirty.get(6));
+    }
+
+    @Test
+    void setBlockInMap_updatesReverseLookupForFutureBlockDirtying() {
+        MutableLevel ml = MutableLevel.snapshot(createSyntheticLevel());
+
+        ml.setBlockInMap(0, 2, 1, 1);
+        ml.consumeDirtyMapCells();
+
+        ml.setChunkInBlock(1, 0, 0, new ChunkDesc(777));
+
+        BitSet dirtyMapCells = ml.consumeDirtyMapCells();
+        assertTrue(dirtyMapCells.get(6));
     }
 
     @Test
@@ -543,3 +580,5 @@ class TestMutableLevel {
         assertFalse(level.getRings().isEmpty());
     }
 }
+
+

@@ -1,10 +1,15 @@
 package com.openggf.game.sonic2.objects;
 
+import com.openggf.game.rewind.RewindTransient;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
+import com.openggf.level.objects.ObjectInstance;
+import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 import com.openggf.game.PlayableEntity;
@@ -22,15 +27,17 @@ import java.util.List;
  * - sin * $C00 >> 16 = Y offset
  * </p>
  */
-public class CheckpointDongleInstance extends AbstractObjectInstance {
+public class CheckpointDongleInstance extends AbstractObjectInstance implements RewindRecreatable {
     private static final int INITIAL_LIFETIME = 0x20;
     private static final int ANGLE_DECREMENT = 0x10;
     private static final int SWING_RADIUS = 0x0C00;
     private static final int DONGLE_FRAME = 2; // Mapping frame for dongle
-
+    @RewindTransient(reason = "Structural parent link; relinked to the live S2 checkpoint "
+            + "with matching captured center on rewind recreate. Scalar orbit state is "
+            + "reapplied by the generic field capturer.")
     private final CheckpointObjectInstance parent;
-    private final int centerX;
-    private final int centerY;
+    private int centerX;
+    private int centerY;
     private int lifetime;
     private int angle;
     private int currentX;
@@ -43,8 +50,10 @@ public class CheckpointDongleInstance extends AbstractObjectInstance {
         this.centerY = parent.getCenterY() - 0x14; // Y offset from ROM
         this.lifetime = INITIAL_LIFETIME;
         this.angle = 0;
-        this.currentX = centerX;
-        this.currentY = centerY;
+        // Obj79_CheckActivation seeds objoff_30/32 but leaves child x_pos/y_pos
+        // at RAM default until Obj79_MoveDonglyThing runs.
+        this.currentX = 0;
+        this.currentY = 0;
     }
 
     private static ObjectSpawn createDummySpawn(CheckpointObjectInstance parent) {
@@ -52,7 +61,34 @@ public class CheckpointDongleInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        if (ctx == null || ctx.spawn() == null || ctx.objectServices() == null) {
+            return null;
+        }
+        CheckpointObjectInstance liveParent =
+                findLiveParentForRewind(ctx.objectServices().objectManager(), ctx.spawn());
+        return liveParent == null ? null : new CheckpointDongleInstance(liveParent);
+    }
+
+    static CheckpointObjectInstance findLiveParentForRewind(
+            ObjectManager objectManager,
+            ObjectSpawn childSpawn) {
+        if (objectManager == null || childSpawn == null) {
+            return null;
+        }
+        for (ObjectInstance instance : objectManager.getActiveObjects()) {
+            if (instance instanceof CheckpointObjectInstance checkpoint
+                    && !checkpoint.isDestroyed()
+                    && checkpoint.getCenterX() == childSpawn.x()
+                    && checkpoint.getCenterY() == childSpawn.y()) {
+                return checkpoint;
+            }
+        }
+        return null;
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (lifetime <= 0) {
             return;
@@ -104,5 +140,15 @@ public class CheckpointDongleInstance extends AbstractObjectInstance {
     @Override
     public int getPriorityBucket() {
         return RenderPriority.clamp(5);
+    }
+
+    @Override
+    public int getX() {
+        return currentX;
+    }
+
+    @Override
+    public int getY() {
+        return currentY;
     }
 }

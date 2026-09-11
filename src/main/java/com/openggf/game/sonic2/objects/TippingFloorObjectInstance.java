@@ -6,6 +6,8 @@ import com.openggf.game.sonic2.Sonic2ObjectArtKeys;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.*;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -21,13 +23,13 @@ import java.util.List;
  * <b>Subtype format:</b>
  * <ul>
  *   <li>Bits 0-3: Delay multiplier -> {@code (value + 1) * 16} frames initial delay</li>
- *   <li>Bits 4-7: Duration -> {@code value + 0x10} frames between animation direction toggles</li>
+ *   <li>Bits 4-7: Duration -> {@code (value & 0xF0) + 0x10} frames between animation direction toggles</li>
  * </ul>
  * <p>
  * <b>Disassembly Reference:</b> s2.asm lines 45379-45485 (Obj0B code)
  */
 public class TippingFloorObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
 
     // Animation IDs
     private static final int ANIM_FORWARD = 0;  // Frames 0->1->2->3->4
@@ -43,8 +45,8 @@ public class TippingFloorObjectInstance extends AbstractObjectInstance
     private int mappingFrame = 0;
 
     // Timing from subtype
-    private final int delay;           // Sync delay with global frame counter
-    private final int durationInitial; // Duration between animation toggles
+    private int delay;           // Sync delay with global frame counter
+    private int durationInitial; // Duration between animation toggles
     private int durationCurrent;       // Current countdown
 
     // Animation direction: 0 = forward (0->4), 1 = reverse (4->0)
@@ -58,10 +60,15 @@ public class TippingFloorObjectInstance extends AbstractObjectInstance
         int delayMultiplier = (spawn.subtype() & 0x0F) + 1;
         this.delay = delayMultiplier * 16;
 
-        // ROM: d0 = (subtype >> 4) + 0x10, then subq.w #1,d0
-        int durationValue = ((spawn.subtype() >> 4) & 0x0F) + 0x10;
+        // ROM masks the high nibble in place before adding 0x10, then subq.w #1,d0.
+        int durationValue = (spawn.subtype() & 0xF0) + 0x10;
         this.durationInitial = durationValue - 1;  // ROM subtracts 1 before storing
         this.durationCurrent = durationValue - 1;
+    }
+
+    @Override
+    public TippingFloorObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new TippingFloorObjectInstance(ctx.spawn(), getName());
     }
 
     private void ensureInitialized() {
@@ -77,11 +84,11 @@ public class TippingFloorObjectInstance extends AbstractObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         ensureInitialized();
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         switch (routine) {
-            case ROUTINE_DELAY -> updateDelay(frameCounter);
+            case ROUTINE_DELAY -> updateDelay(vIntRunCount);
             case ROUTINE_MAIN -> updateMain();
         }
     }
@@ -90,8 +97,8 @@ public class TippingFloorObjectInstance extends AbstractObjectInstance
      * Delay phase: wait until synchronized with global frame counter.
      * ROM: loc_2AFE0 - waits until ((frameCounter + delay) & 0xFF) == 0
      */
-    private void updateDelay(int frameCounter) {
-        int sum = (frameCounter & 0xFF) + delay;
+    private void updateDelay(int vIntRunCount) {
+        int sum = (vIntRunCount & 0xFF) + delay;
         if ((sum & 0xFF) == 0) {
             routine = ROUTINE_MAIN;
         }
@@ -145,7 +152,7 @@ public class TippingFloorObjectInstance extends AbstractObjectInstance
      */
     @Override
     public SolidObjectParams getSolidParams() {
-        return new SolidObjectParams(0x10, 0x11, 0x11);
+        return SolidObjectParams.of(0x10, 0x11, 0x11);
     }
 
     @Override

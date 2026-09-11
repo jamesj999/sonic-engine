@@ -6,8 +6,11 @@ import com.openggf.game.sonic1.constants.Sonic1ObjectIds;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
+import com.openggf.level.objects.ObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
@@ -32,7 +35,7 @@ import java.util.List;
  * Art: Map_BossBlock, make_art_tile(ArtTile_Level,2,0) — level art, palette line 2
  */
 public class Sonic1BossBlockInstance extends AbstractObjectInstance
-        implements SolidObjectProvider {
+        implements SolidObjectProvider, RewindRecreatable {
 
     // Block states
     private static final int STATE_SOLID = 0;
@@ -42,7 +45,7 @@ public class Sonic1BossBlockInstance extends AbstractObjectInstance
 
     // Solid collision: d1=$1B, d2=$10, d3=$11
     private static final SolidObjectParams SOLID_PARAMS =
-            new SolidObjectParams(0x1B, 0x10, 0x11);
+            SolidObjectParams.of(0x1B, 0x10, 0x11);
 
     // Arena constants
     private static final int BOSS_SYZ_X = 0x2C00;
@@ -78,7 +81,10 @@ public class Sonic1BossBlockInstance extends AbstractObjectInstance
     private int y;
 
     // Instance fields
-    private final int blockColumn;   // 0-9, from low byte of obSubtype
+    // Un-finaled for rewind: blockColumn is NOT spawn-derivable for the fragment form
+    // (it is -1 while spawn.subtype()==0), so the generic field capturer reapplies the
+    // captured value after the recreate hook uses the public column ctor.
+    private int blockColumn;   // 0-9, from low byte of obSubtype
     private int blockState;
     private Sonic1SYZBossInstance grabbingBoss;
 
@@ -105,6 +111,24 @@ public class Sonic1BossBlockInstance extends AbstractObjectInstance
         this.blockState = STATE_SOLID;
         this.x = BLOCK_START_X + (column * BLOCK_SPACING);
         this.y = BLOCK_Y;
+    }
+
+    Sonic1BossBlockInstance() {
+        this(0);
+    }
+
+    @Override
+    public Sonic1BossBlockInstance recreateForRewind(RewindRecreateContext ctx) {
+        Sonic1BossBlockInstance block = new Sonic1BossBlockInstance(ctx.spawn().subtype());
+        if (ctx.objectServices() != null && ctx.objectServices().objectManager() != null) {
+            for (ObjectInstance inst : ctx.objectServices().objectManager().getActiveObjects()) {
+                if (inst instanceof Sonic1SYZBossInstance boss) {
+                    block.relinkGrabbingBoss(boss);
+                    break;
+                }
+            }
+        }
+        return block;
     }
 
     /**
@@ -134,9 +158,13 @@ public class Sonic1BossBlockInstance extends AbstractObjectInstance
         if (objectManager == null) {
             return;
         }
+        // Called from Sonic1SYZEvents (LevelEventManager), not from inside an
+        // AbstractObjectInstance — spawnFreeChild() is unreachable here, so use
+        // ObjectManager.createDynamicObject which sets CONSTRUCTION_CONTEXT
+        // before invoking the factory.
         for (int col = 0; col < BLOCK_COUNT; col++) {
-            Sonic1BossBlockInstance block = new Sonic1BossBlockInstance(col);
-            objectManager.addDynamicObject(block);
+            final int colIndex = col;
+            objectManager.createDynamicObject(() -> new Sonic1BossBlockInstance(colIndex));
         }
     }
 
@@ -176,6 +204,16 @@ public class Sonic1BossBlockInstance extends AbstractObjectInstance
     }
 
     /**
+     * Rewind relink: reattach the grabbing-boss object reference to the live SYZ boss
+     * after a held-rewind restore, WITHOUT touching blockState (the generic capturer
+     * reapplies the captured blockState; setGrabbedByBoss() would corrupt it). Only
+     * meaningful when blockState==STATE_GRABBED; harmless otherwise.
+     */
+    public void relinkGrabbingBoss(Sonic1SYZBossInstance boss) {
+        this.grabbingBoss = boss;
+    }
+
+    /**
      * Called by boss when releasing the block — triggers break into 4 fragments.
      * ROM: move.b #$A,objoff_29(a1) → BossBlock_Break
      */
@@ -186,6 +224,26 @@ public class Sonic1BossBlockInstance extends AbstractObjectInstance
     // ========================================================================
     // SolidObjectProvider
     // ========================================================================
+
+    /**
+     * ROM: the solid boss blocks (BossBlock_Action routine 2 -> BossBlock_Solid ->
+     * SolidObject -> BossBlock_Display) have NO out_of_range / DeleteObject path
+     * (docs/s1disasm/_incObj/75, 76 Boss - SYZ Main and Blocks.asm:757-791). All 10
+     * blocks are created at once by BossBlock_Main's FindFreeObj loop (x =
+     * boss_syz_x+$10 .. +$130 = 0x2C10..0x2D30, asm:725-753) while the camera is
+     * still left of the arena, so the two rightmost blocks (0x2D10, 0x2D30) spawn
+     * off-screen and must stay alive for the player to walk onto them. Mark the
+     * solid/grabbed/breaking block persistent so the engine's generic out-of-range
+     * unload does not cull the off-screen blocks (which would never respawn — they
+     * are dynamically spawned, not layout objects). Fragments (routine 4) DO delete
+     * off-screen (BossBlock_Frag: tst.b obRender / bpl BossBlock_Delete, asm:798-804)
+     * and are handled by updateFragment()'s own isOnScreen() check, so they remain
+     * non-persistent.
+     */
+    @Override
+    public boolean isPersistent() {
+        return blockState != STATE_FRAGMENT;
+    }
 
     @Override
     public SolidObjectParams getSolidParams() {
@@ -203,7 +261,7 @@ public class Sonic1BossBlockInstance extends AbstractObjectInstance
     // ========================================================================
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         switch (blockState) {
             case STATE_SOLID -> { /* Solid collision handled by engine */ }
@@ -239,18 +297,16 @@ public class Sonic1BossBlockInstance extends AbstractObjectInstance
      * ROM: BossBlock_Break — Create 4 quarter fragments with velocities.
      */
     private void doBreak() {
-        var objectManager = services().objectManager();
-        if (objectManager != null) {
+        if (services().objectManager() != null) {
             for (int i = 0; i < 4; i++) {
-                int fragX = x + FRAG_POSITIONS[i][0];
-                int fragY = y + FRAG_POSITIONS[i][1];
-                int fragXVel = FRAG_VELOCITIES[i][0];
-                int fragYVel = FRAG_VELOCITIES[i][1];
-                int fragFrame = i + 1; // frames 1-4 for quarter pieces
+                final int fragX = x + FRAG_POSITIONS[i][0];
+                final int fragY = y + FRAG_POSITIONS[i][1];
+                final int fragXVel = FRAG_VELOCITIES[i][0];
+                final int fragYVel = FRAG_VELOCITIES[i][1];
+                final int fragFrame = i + 1; // frames 1-4 for quarter pieces
 
-                Sonic1BossBlockInstance frag = new Sonic1BossBlockInstance(
-                        fragX, fragY, fragXVel, fragYVel, fragFrame);
-                objectManager.addDynamicObject(frag);
+                spawnFreeChild(() -> new Sonic1BossBlockInstance(
+                        fragX, fragY, fragXVel, fragYVel, fragFrame));
             }
         }
 

@@ -11,7 +11,7 @@ import com.openggf.game.BonusStageType;
 import com.openggf.game.GameMode;
 import com.openggf.game.GameModuleRegistry;
 import com.openggf.game.GameServices;
-import com.openggf.game.sonic3k.objects.InstaShieldObjectInstance;
+import com.openggf.game.rules.GameRules;
 import com.openggf.game.sonic3k.objects.PachinkoEnergyTrapObjectInstance;
 import com.openggf.level.LevelManager;
 import com.openggf.level.objects.AbstractObjectInstance;
@@ -20,24 +20,20 @@ import com.openggf.level.objects.ObjectInstance;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 import com.openggf.tests.HeadlessTestFixture;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @RequiresRom(SonicGame.SONIC_3K)
 public class TestPachinkoTitleCardIntegration {
-
-    @ClassRule public static RequiresRomRule romRule = new RequiresRomRule();
-
-    @BeforeClass
+    @BeforeAll
     public static void configure() {
         SonicConfigurationService.getInstance()
                 .setConfigValue(SonicConfiguration.S3K_SKIP_INTROS, true);
@@ -72,7 +68,7 @@ public class TestPachinkoTitleCardIntegration {
         }
 
         assertEquals(GameMode.BONUS_STAGE, loop.getCurrentGameMode());
-        assertNotNull("Trap should exist after title card exit", trap);
+        assertNotNull(trap, "Trap should exist after title card exit");
 
         int updatesAtExit = trap.getUpdateCount();
         int riseDelayAtExit = trap.getRiseDelayFrames();
@@ -81,14 +77,12 @@ public class TestPachinkoTitleCardIntegration {
             loop.step();
         }
 
-        assertTrue("Trap update count should continue advancing after title card exit (exit frame="
+        assertTrue(trap.getUpdateCount() > updatesAtExit, "Trap update count should continue advancing after title card exit (exit frame="
                         + titleCardExitFrame + ", updatesAtExit=" + updatesAtExit
-                        + ", final=" + trap.getUpdateCount() + ")",
-                trap.getUpdateCount() > updatesAtExit);
-        assertTrue("Trap rise delay should continue decreasing after title card exit (exit frame="
+                        + ", final=" + trap.getUpdateCount() + ")");
+        assertTrue(trap.getRiseDelayFrames() < riseDelayAtExit, "Trap rise delay should continue decreasing after title card exit (exit frame="
                         + titleCardExitFrame + ", delayAtExit=" + riseDelayAtExit
-                        + ", final=" + trap.getRiseDelayFrames() + ")",
-                trap.getRiseDelayFrames() < riseDelayAtExit);
+                        + ", final=" + trap.getRiseDelayFrames() + ")");
     }
 
     @Test
@@ -103,13 +97,14 @@ public class TestPachinkoTitleCardIntegration {
         AbstractPlayableSprite player = fixture.sprite();
         DefaultPowerUpSpawner spawner = new DefaultPowerUpSpawner(GameServices.level().getObjectManager());
         if (player.getInstaShieldObject() == null) {
-            player.setInstaShieldObject(new InstaShieldObjectInstance(player));
+            player.setInstaShieldObject(spawner.createInstaShield(player));
         }
-        assertNotNull("Sonic should have a persistent insta-shield object", player.getInstaShieldObject());
+        assertNotNull(player.getInstaShieldObject(), "Sonic should have a persistent insta-shield object");
         spawner.registerObject(player.getInstaShieldObject());
 
-        assertTrue("Insta-shield should be registered in the level before bonus entry",
-                ((AbstractObjectInstance) player.getInstaShieldObject()).getSlotIndex() >= 32);
+        int instaShieldSlot = ((AbstractObjectInstance) player.getInstaShieldObject()).getSlotIndex();
+        assertEquals(GameRules.SONIC_3K.powerUp().shieldObjectFixedSlotIndex(), instaShieldSlot,
+                "S3K insta-shield reuses the ROM shield fixed Level_object_RAM slot before bonus entry");
 
         BonusStageProvider provider = GameModuleRegistry.getCurrent().getBonusStageProvider();
         BonusStageState savedState = captureSavedState(player, fixture.camera());
@@ -129,19 +124,16 @@ public class TestPachinkoTitleCardIntegration {
         }
 
         assertEquals(GameMode.BONUS_STAGE, loop.getCurrentGameMode());
-        assertNotNull("Trap should exist after bonus title card exit", trap);
+        assertNotNull(trap, "Trap should exist after bonus title card exit");
 
         int updatesAtExit = trap.getUpdateCount();
-        int trapSlot = trap.getSlotIndex();
-
         for (int i = 0; i < 120; i++) {
             loop.step();
         }
 
-        assertTrue("Trap update count should continue advancing after title card exit",
-                trap.getUpdateCount() > updatesAtExit);
-        assertEquals("Trap slot should not be shared after insta-shield re-registration",
-                1, countObjectsAtSlot(trapSlot));
+        assertTrue(trap.getUpdateCount() > updatesAtExit, "Trap update count should continue advancing after title card exit");
+        assertSame(trap, findTrap(),
+                "The same trap instance should remain active after insta-shield re-registration");
     }
 
     private static BonusStageState captureSavedState(AbstractPlayableSprite player, Camera camera) {
@@ -185,14 +177,6 @@ public class TestPachinkoTitleCardIntegration {
         }
         return null;
     }
-
-    private static int countObjectsAtSlot(int slotIndex) {
-        int count = 0;
-        for (ObjectInstance instance : GameServices.level().getObjectManager().getActiveObjects()) {
-            if (instance instanceof AbstractObjectInstance aoi && aoi.getSlotIndex() == slotIndex) {
-                count++;
-            }
-        }
-        return count;
-    }
 }
+
+

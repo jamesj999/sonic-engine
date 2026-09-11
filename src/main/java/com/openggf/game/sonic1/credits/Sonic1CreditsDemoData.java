@@ -5,9 +5,10 @@ package com.openggf.game.sonic1.credits;
  * <p>
  * From the S1 disassembly:
  * <ul>
- *   <li>{@code EndDemo_Levels} (sonic.asm:4171) — level order</li>
+ *   <li>{@code EndingDemoLoad} (sonic.asm:3827) — credits demo entry point</li>
+ *   <li>{@code EndDemo_Levels} (sonic.asm:3865) — level order</li>
  *   <li>{@code DemoEndDataPtr} (MoveSonicInDemo.asm:100) — demo input pointers</li>
- *   <li>{@code EndDemo_LampVar} (sonic.asm:4176) — SLZ lamppost state</li>
+ *   <li>{@code EndDemo_LampVar} (sonic.asm:3879) — LZ lamppost state</li>
  * </ul>
  */
 public final class Sonic1CreditsDemoData {
@@ -88,8 +89,9 @@ public final class Sonic1CreditsDemoData {
 
     /**
      * Demo playback duration for each credit (frames).
-     * ROM: sonic.asm:2987-2990 — checks v_creditsnum==4 (already incremented),
-     * so the 510-frame timer applies to original credit 3 (LZ Act 3).
+     * ROM: sonic.asm:2890-2896 (Level_Demo) — credits demos default to 540
+     * frames; v_creditsnum==4 (already incremented after EndingDemoLoad)
+     * shortens the LZ Act 3 demo to 510 frames.
      */
     public static final int[] DEMO_TIMER = {
         540, // Credit 0: GHZ1
@@ -132,7 +134,7 @@ public final class Sonic1CreditsDemoData {
 
     // ========================================================================
     // LZ lamppost state (credit 3 only)
-    // From EndDemo_LampVar (sonic.asm:4176-4187)
+    // From EndDemo_LampVar (sonic.asm:3879-3890)
     // ROM checks v_creditsnum==4 (already incremented) → original credit 3 (LZ Act 3).
     // Despite the s1disasm label saying "Star Light Zone", the water height (0x308)
     // and position data confirm this is for Labyrinth Zone.
@@ -156,31 +158,25 @@ public final class Sonic1CreditsDemoData {
     public static final int LZ_LAMP_WATER_HEIGHT = 0x0308;
     /** LZ demo water routine at lamppost. ROM: EndDemo_LampVar dc.b 1 (v_wtr_routine) */
     public static final int LZ_LAMP_WATER_ROUTINE = 1;
+    // There is deliberately no LZ vblank-phase constant here. EndDemo_LampVar
+    // (s1disasm/sonic.asm:3879) has no v_vblank_count field, and the ROM's
+    // v_vblank_count is only ever written by VBlank_Exit's addq.l #1
+    // (s1disasm/sonic.asm:685) -- it free-runs from console reset and is never
+    // reset on level load. Any constant here would be measured from one
+    // recording, not read from the ROM.
 
     /** Text display duration (frames). ROM: move.w #120,(v_generictimer).w */
     public static final int TEXT_DISPLAY_FRAMES = 120;
 
-    /**
-     * Hidden pacing delay after each credits card's base 120-frame display.
-     * <p>
-     * ROM: {@code Cred_WaitLoop} keeps the card on-screen until both
-     * {@code v_generictimer==0} and the PLC buffer is empty. On modern hardware
-     * our level/object art loads are effectively instantaneous, so the sequence
-     * runs ahead of the credits music. These per-credit shim values emulate the
-     * missing PLC/decompression wait and can be tuned against captures later.
-     * Credit 8 ("PRESENTED BY SEGA") has no following demo, so it uses 0.
-     */
-    public static final int[] TEXT_PACING_DELAY_FRAMES = {
-        48, // Credit 0: GHZ1
-        60, // Credit 1: MZ2
-        54, // Credit 2: SYZ3
-        66, // Credit 3: LZ3
-        54, // Credit 4: SLZ3
-        60, // Credit 5: SBZ1
-        58, // Credit 6: SBZ2
-        48, // Credit 7: GHZ1 (second demo)
-        0   // Credit 8: PRESENTED BY SEGA
-    };
+    // There is deliberately no per-credit text pacing table here. Cred_WaitLoop
+    // (s1disasm/sonic.asm:3880-3889) holds a credits page up on a joint gate --
+    // `tst.w (v_generictimer).w` (TEXT_DISPLAY_FRAMES above) and
+    // `tst.l (v_plc_buffer).w` -- so the extra hold is exactly the residual PLC
+    // drain of the next demo's level PLC plus plcid_Main2, decompressing nine
+    // tiles per frame under VBlank_Title's ProcessPLC_9Tiles (sonic.asm:781).
+    // Sonic1CreditsManager.plcBufferOccupied models that second gate against the
+    // live Sonic1PlcService FIFO; any array here would be measured from one
+    // recording rather than read out of the ROM.
 
     /**
      * ROM: Level_Delay runs 4 hidden frames after level load and before

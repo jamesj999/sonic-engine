@@ -1,0 +1,453 @@
+{
+ "schema": "openggf.s2-request-stimuli.v2",
+ "movie": {
+  "name": "s2-lvl-select-CPZ.bk2",
+  "sha256": "7e28cf822d5dbbe64646965cd857f264bf51d3349075af94db1a818cac7311e4"
+ },
+ "window": {
+  "first_row": 120,
+  "exclusive_end": 3450
+ },
+ "source": {
+  "payload_schema": "openggf.s2-oracle-audio-raw.v2",
+  "payload_sha256": "dba52df22f553b4f6c397535649dfa503a55f380291bc9d397285abeb420d028",
+  "capture_raw_v4_sha256": "ea668dffa065f421919062a79d2c79f8d833a7867da965649851704edc54f37f"
+ },
+ "projection": "every request_transfer of the extracted payload, in stream order, reduced to row, order, site, request and slot. Both of sndDriverInput's stores are present: the SFX one inside .loop and the music one at loc_10C0 (docs/s2disasm/s2.asm:1302-1304, :1317-1326). Which mailbox carried a request does not decide what it plays, because the driver classifies it by range at QueueToPlay, so a sound id arriving through the music store is still that sound.",
+ "transfers": [
+  {
+   "row": 249,
+   "order": 0,
+   "site": "sfx",
+   "request": 250,
+   "slot": 0
+  },
+  {
+   "row": 282,
+   "order": 0,
+   "site": "music",
+   "request": 253,
+   "slot": 4
+  },
+  {
+   "row": 420,
+   "order": 0,
+   "site": "sfx",
+   "request": 167,
+   "slot": 0
+  },
+  {
+   "row": 449,
+   "order": 0,
+   "site": "music",
+   "request": 153,
+   "slot": 4
+  },
+  {
+   "row": 466,
+   "order": 0,
+   "site": "sfx",
+   "request": 205,
+   "slot": 0
+  },
+  {
+   "row": 472,
+   "order": 0,
+   "site": "sfx",
+   "request": 205,
+   "slot": 0
+  },
+  {
+   "row": 510,
+   "order": 0,
+   "site": "sfx",
+   "request": 249,
+   "slot": 0
+  },
+  {
+   "row": 551,
+   "order": 0,
+   "site": "music",
+   "request": 145,
+   "slot": 4
+  },
+  {
+   "row": 833,
+   "order": 0,
+   "site": "music",
+   "request": 153,
+   "slot": 4
+  },
+  {
+   "row": 1068,
+   "order": 0,
+   "site": "music",
+   "request": 229,
+   "slot": 4
+  },
+  {
+   "row": 1274,
+   "order": 0,
+   "site": "music",
+   "request": 137,
+   "slot": 4
+  },
+  {
+   "row": 1432,
+   "order": 0,
+   "site": "sfx",
+   "request": 181,
+   "slot": 0
+  },
+  {
+   "row": 1432,
+   "order": 1,
+   "site": "music",
+   "request": 151,
+   "slot": 4
+  },
+  {
+   "row": 1771,
+   "order": 0,
+   "site": "sfx",
+   "request": 249,
+   "slot": 0
+  },
+  {
+   "row": 1804,
+   "order": 0,
+   "site": "music",
+   "request": 130,
+   "slot": 4
+  },
+  {
+   "row": 1960,
+   "order": 0,
+   "site": "sfx",
+   "request": 160,
+   "slot": 0
+  },
+  {
+   "row": 1976,
+   "order": 0,
+   "site": "sfx",
+   "request": 160,
+   "slot": 0
+  },
+  {
+   "row": 1994,
+   "order": 0,
+   "site": "music",
+   "request": 253,
+   "slot": 4
+  },
+  {
+   "row": 2132,
+   "order": 0,
+   "site": "sfx",
+   "request": 167,
+   "slot": 0
+  },
+  {
+   "row": 2171,
+   "order": 0,
+   "site": "sfx",
+   "request": 167,
+   "slot": 0
+  },
+  {
+   "row": 2190,
+   "order": 0,
+   "site": "sfx",
+   "request": 167,
+   "slot": 0
+  },
+  {
+   "row": 2209,
+   "order": 0,
+   "site": "sfx",
+   "request": 167,
+   "slot": 0
+  },
+  {
+   "row": 2209,
+   "order": 1,
+   "site": "music",
+   "request": 153,
+   "slot": 4
+  },
+  {
+   "row": 2228,
+   "order": 0,
+   "site": "sfx",
+   "request": 167,
+   "slot": 0
+  },
+  {
+   "row": 2388,
+   "order": 0,
+   "site": "sfx",
+   "request": 249,
+   "slot": 0
+  },
+  {
+   "row": 2430,
+   "order": 0,
+   "site": "music",
+   "request": 145,
+   "slot": 4
+  },
+  {
+   "row": 2691,
+   "order": 0,
+   "site": "sfx",
+   "request": 249,
+   "slot": 0
+  },
+  {
+   "row": 2724,
+   "order": 0,
+   "site": "music",
+   "request": 142,
+   "slot": 4
+  },
+  {
+   "row": 2959,
+   "order": 0,
+   "site": "sfx",
+   "request": 160,
+   "slot": 0
+  },
+  {
+   "row": 2968,
+   "order": 0,
+   "site": "sfx",
+   "request": 181,
+   "slot": 1
+  },
+  {
+   "row": 2974,
+   "order": 0,
+   "site": "sfx",
+   "request": 181,
+   "slot": 1
+  },
+  {
+   "row": 2975,
+   "order": 0,
+   "site": "sfx",
+   "request": 160,
+   "slot": 0
+  },
+  {
+   "row": 3004,
+   "order": 0,
+   "site": "sfx",
+   "request": 181,
+   "slot": 1
+  },
+  {
+   "row": 3018,
+   "order": 0,
+   "site": "sfx",
+   "request": 160,
+   "slot": 0
+  },
+  {
+   "row": 3034,
+   "order": 0,
+   "site": "sfx",
+   "request": 160,
+   "slot": 0
+  },
+  {
+   "row": 3069,
+   "order": 0,
+   "site": "sfx",
+   "request": 181,
+   "slot": 1
+  },
+  {
+   "row": 3124,
+   "order": 0,
+   "site": "sfx",
+   "request": 164,
+   "slot": 0
+  },
+  {
+   "row": 3125,
+   "order": 0,
+   "site": "sfx",
+   "request": 164,
+   "slot": 0
+  },
+  {
+   "row": 3126,
+   "order": 0,
+   "site": "sfx",
+   "request": 164,
+   "slot": 0
+  },
+  {
+   "row": 3127,
+   "order": 0,
+   "site": "sfx",
+   "request": 164,
+   "slot": 0
+  },
+  {
+   "row": 3128,
+   "order": 0,
+   "site": "sfx",
+   "request": 164,
+   "slot": 0
+  },
+  {
+   "row": 3129,
+   "order": 0,
+   "site": "sfx",
+   "request": 164,
+   "slot": 0
+  },
+  {
+   "row": 3130,
+   "order": 0,
+   "site": "sfx",
+   "request": 164,
+   "slot": 0
+  },
+  {
+   "row": 3140,
+   "order": 0,
+   "site": "sfx",
+   "request": 164,
+   "slot": 0
+  },
+  {
+   "row": 3141,
+   "order": 0,
+   "site": "sfx",
+   "request": 164,
+   "slot": 0
+  },
+  {
+   "row": 3142,
+   "order": 0,
+   "site": "sfx",
+   "request": 164,
+   "slot": 0
+  },
+  {
+   "row": 3143,
+   "order": 0,
+   "site": "sfx",
+   "request": 164,
+   "slot": 0
+  },
+  {
+   "row": 3144,
+   "order": 0,
+   "site": "sfx",
+   "request": 164,
+   "slot": 0
+  },
+  {
+   "row": 3145,
+   "order": 0,
+   "site": "sfx",
+   "request": 164,
+   "slot": 0
+  },
+  {
+   "row": 3146,
+   "order": 0,
+   "site": "sfx",
+   "request": 164,
+   "slot": 0
+  },
+  {
+   "row": 3159,
+   "order": 0,
+   "site": "sfx",
+   "request": 160,
+   "slot": 0
+  },
+  {
+   "row": 3191,
+   "order": 0,
+   "site": "sfx",
+   "request": 190,
+   "slot": 0
+  },
+  {
+   "row": 3192,
+   "order": 0,
+   "site": "sfx",
+   "request": 193,
+   "slot": 0
+  },
+  {
+   "row": 3209,
+   "order": 0,
+   "site": "sfx",
+   "request": 190,
+   "slot": 0
+  },
+  {
+   "row": 3225,
+   "order": 0,
+   "site": "music",
+   "request": 181,
+   "slot": 4
+  },
+  {
+   "row": 3315,
+   "order": 0,
+   "site": "sfx",
+   "request": 160,
+   "slot": 0
+  },
+  {
+   "row": 3331,
+   "order": 0,
+   "site": "sfx",
+   "request": 160,
+   "slot": 0
+  },
+  {
+   "row": 3413,
+   "order": 0,
+   "site": "sfx",
+   "request": 160,
+   "slot": 0
+  },
+  {
+   "row": 3429,
+   "order": 0,
+   "site": "sfx",
+   "request": 160,
+   "slot": 0
+  },
+  {
+   "row": 3437,
+   "order": 0,
+   "site": "sfx",
+   "request": 181,
+   "slot": 1
+  },
+  {
+   "row": 3440,
+   "order": 0,
+   "site": "sfx",
+   "request": 181,
+   "slot": 1
+  },
+  {
+   "row": 3448,
+   "order": 0,
+   "site": "sfx",
+   "request": 181,
+   "slot": 1
+  }
+ ]
+}

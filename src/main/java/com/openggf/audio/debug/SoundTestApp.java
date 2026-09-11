@@ -1,10 +1,7 @@
 package com.openggf.audio.debug;
 
-import com.openggf.audio.AudioBackend;
 import com.openggf.audio.ChannelType;
 import com.openggf.audio.GameAudioProfile;
-import com.openggf.audio.LWJGLAudioBackend;
-import com.openggf.audio.NullAudioBackend;
 import com.openggf.audio.smps.AbstractSmpsData;
 import com.openggf.audio.smps.DacData;
 import com.openggf.audio.smps.SmpsLoader;
@@ -15,8 +12,13 @@ import com.openggf.data.Rom;
 import com.openggf.data.RomManager;
 
 import com.openggf.audio.driver.SmpsDriver;
+import com.openggf.audio.session.LegacyCompatibilitySmpsPhysicalPolicy;
+import com.openggf.audio.session.OwnedSmpsAudioStream;
+import com.openggf.audio.session.SmpsPhysicalDevice;
 import com.openggf.audio.smps.SmpsSequencer;
+import com.openggf.audio.synth.ChipWriteObserver;
 import com.openggf.audio.synth.Ym2612Chip;
+import com.openggf.game.GameServices;
 import com.openggf.game.sonic1.audio.Sonic1AudioProfile;
 import com.openggf.game.sonic1.audio.Sonic1SoundTestCatalog;
 import com.openggf.game.sonic2.audio.Sonic2AudioProfile;
@@ -44,6 +46,7 @@ import java.io.InputStreamReader;
 import java.io.RandomAccessFile;
 import java.util.Locale;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.swing.JPanel;
@@ -104,21 +107,42 @@ public final class SoundTestApp {
         TreeSet<Integer> validSfx = probeValidSfx(loader, catalog.getSfxIdBase(), catalog.getSfxIdMax());
         System.out.println("Found " + validSfx.size() + " valid SFX.");
 
-        AudioBackend backend = options.nullAudio ? new NullAudioBackend() : new LWJGLAudioBackend();
-        backend.init();
-        backend.setAudioProfile(profile);
-        Runtime.getRuntime().addShutdownHook(new Thread(backend::destroy));
+        StandaloneAudioPresentationHost host =
+                StandaloneAudioPresentationHost.open(
+                        options.gameId,
+                        SonicConfigurationService.createStandalone(),
+                        null, options.nullAudio);
+        // Abnormal-exit safety net only; removed on the normal path below so
+        // the host's owner executor performs destruction exactly once.
+        Thread destroyOnExit = new Thread(host::close);
+        Runtime.getRuntime().addShutdownHook(destroyOnExit);
 
         int startSongId = options.songId >= 0 ? options.songId : catalog.getDefaultSongId();
 
-        if (options.interactiveWindow) {
-            runInteractiveWindow(options, loader, dacData, backend, catalog, seqConfig, validSfx, startSongId);
-        } else {
-            runConsole(options, loader, dacData, backend, catalog, startSongId);
+        try {
+            if (options.interactiveWindow) {
+                runInteractiveWindow(options, loader, dacData, host, catalog, seqConfig, validSfx, startSongId);
+            } else {
+                runConsole(options, loader, dacData, host, catalog, startSongId);
+            }
+        } finally {
+            boolean hostClosed = false;
+            try {
+                host.close();
+                hostClosed = true;
+            } finally {
+                if (hostClosed) {
+                    try {
+                        Runtime.getRuntime().removeShutdownHook(destroyOnExit);
+                    } catch (IllegalStateException ignored) {
+                        // JVM already shutting down; the hook owns cleanup.
+                    }
+                }
+            }
         }
     }
 
-    private static GameAudioProfile createProfileForGame(String gameId) {
+    static GameAudioProfile createProfileForGame(String gameId) {
         return switch (gameId) {
             case "s1" -> new Sonic1AudioProfile();
             case "s3k" -> new Sonic3kAudioProfile();
@@ -128,9 +152,9 @@ public final class SoundTestApp {
 
     private static SoundTestCatalog createCatalogForGame(String gameId) {
         return switch (gameId) {
-            case "s1" -> Sonic1SoundTestCatalog.getInstance();
-            case "s3k" -> Sonic3kSoundTestCatalog.getInstance();
-            default -> Sonic2SoundTestCatalog.getInstance();
+            case "s1" -> new Sonic1SoundTestCatalog();
+            case "s3k" -> new Sonic3kSoundTestCatalog();
+            default -> new Sonic2SoundTestCatalog();
         };
     }
 
@@ -145,28 +169,36 @@ public final class SoundTestApp {
     }
 
     private static void runInteractiveWindow(Options options, SmpsLoader loader, DacData dacData,
-            AudioBackend backend, SoundTestCatalog catalog, SmpsSequencerConfig seqConfig,
+            StandaloneAudioPresentationHost host, SoundTestCatalog catalog, SmpsSequencerConfig seqConfig,
             TreeSet<Integer> validSfx, int startSongId) throws Exception {
-        InteractiveState state = new InteractiveState(startSongId, loader, dacData, backend,
-                catalog, seqConfig, validSfx);
-        SwingUtilities.invokeAndWait(() -> state.show(options.nullAudio, options.romPath));
+        // The single command thread serializes the 16ms ticks and Swing
+        // handlers' play/stop/mute requests. The host marshals these calls to
+        // its producer owner executor, so the EDT never touches audio state.
         ScheduledExecutorService exec = Executors.newSingleThreadScheduledExecutor();
-        exec.scheduleAtFixedRate(backend::update, 0, 16, TimeUnit.MILLISECONDS);
+        InteractiveState state = new InteractiveState(startSongId, loader, dacData, host,
+                catalog, seqConfig, validSfx, exec);
+        SwingUtilities.invokeAndWait(() -> state.show(options.nullAudio, options.romPath));
+        exec.scheduleAtFixedRate(host::presentFrame, 0, 16, TimeUnit.MILLISECONDS);
         state.awaitClose();
-        exec.shutdownNow();
-        backend.destroy();
+        // Orderly shutdown: queued commands (e.g. the close-time stopPlayback)
+        // still run, and no update() can be in flight when destroy() follows.
+        exec.shutdown();
+        if (!exec.awaitTermination(2, TimeUnit.SECONDS)) {
+            exec.shutdownNow();
+        }
     }
 
-    private static void runConsole(Options options, SmpsLoader loader, DacData dacData, AudioBackend backend,
+    private static void runConsole(Options options, SmpsLoader loader, DacData dacData,
+            StandaloneAudioPresentationHost host,
             SoundTestCatalog catalog, int startSongId) throws Exception {
         System.out.println("Sound test ready. [" + catalog.getGameName() + "]");
         System.out.println("ROM: " + options.romPath);
-        System.out.println("Backend: " + backend.getClass().getSimpleName() + (options.nullAudio ? " (silent)" : ""));
+        System.out.println("Output: unified PCM presentation" + (options.nullAudio ? " (silent)" : ""));
         printControls(startSongId);
 
         int currentSong = startSongId;
         boolean speedShoes = false;
-        playSong(loader, dacData, backend, currentSong, catalog);
+        playSong(loader, dacData, host, currentSong, catalog);
 
         BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
         boolean running = true;
@@ -185,26 +217,26 @@ public final class SoundTestApp {
                         running = false;
                         break;
                     case "r":
-                        playSong(loader, dacData, backend, currentSong, catalog);
+                        playSong(loader, dacData, host, currentSong, catalog);
                         break;
                     case "s":
                         speedShoes = !speedShoes;
-                        backend.setSpeedShoes(speedShoes);
+                        host.setSpeedShoes(speedShoes);
                         System.out.println("Speed shoes: " + (speedShoes ? "ON" : "OFF"));
                         break;
                     case "n":
                         currentSong = getNextValidSong(currentSong, catalog);
-                        playSong(loader, dacData, backend, currentSong, catalog);
+                        playSong(loader, dacData, host, currentSong, catalog);
                         break;
                     case "p":
                         currentSong = getPreviousValidSong(currentSong, catalog);
-                        playSong(loader, dacData, backend, currentSong, catalog);
+                        playSong(loader, dacData, host, currentSong, catalog);
                         break;
                     default:
                         int parsed = parseSongId(line);
                         if (parsed >= 0) {
                             currentSong = parsed;
-                            playSong(loader, dacData, backend, currentSong, catalog);
+                            playSong(loader, dacData, host, currentSong, catalog);
                         } else {
                             System.out.println("Unrecognised command: " + line);
                             printControls(currentSong);
@@ -212,14 +244,14 @@ public final class SoundTestApp {
                         break;
                 }
             }
-            backend.update();
+            host.presentFrame();
             Thread.sleep(16L);
         }
-        backend.destroy();
         System.out.println("Sound test exited.");
     }
 
-    private static void playSong(SmpsLoader loader, DacData dacData, AudioBackend backend,
+    private static void playSong(SmpsLoader loader, DacData dacData,
+            StandaloneAudioPresentationHost host,
             int songId, SoundTestCatalog catalog) {
         int offset = loader.findMusicOffset(songId);
         AbstractSmpsData data = loader.loadMusic(songId);
@@ -243,7 +275,7 @@ public final class SoundTestApp {
                 toHex(data.getVoicePtr()), toHex(data.getDacPointer()),
                 data.getChannels(), data.getPsgChannels(),
                 data.getTempo(), data.getDividingTiming()));
-        backend.playSmps(data, dacData);
+        host.playMusic(data, dacData);
     }
 
     private static void printControls(int currentSong) {
@@ -268,10 +300,100 @@ public final class SoundTestApp {
         return "0x" + Integer.toHexString(value).toUpperCase(Locale.ROOT);
     }
 
+    static int renderToWav(
+            AbstractSmpsData data,
+            DacData dacSamples,
+            SmpsSequencerConfig seqConfig,
+            File outputFile,
+            boolean isSfx,
+            double outputRate,
+            int maxSamples) throws IOException {
+        try (OwnedSmpsAudioStream stream = new OwnedSmpsAudioStream(
+                "sound-test", 0,
+                new SmpsPhysicalDevice.Settings(outputRate, true),
+                LegacyCompatibilitySmpsPhysicalPolicy.INSTANCE,
+                ChipWriteObserver.NONE)) {
+            SmpsDriver driver = stream.logicalDriver();
+            driver.setRegion(SmpsSequencer.Region.NTSC);
+
+            SmpsSequencer seq = new SmpsSequencer(
+                    data, dacSamples, driver, seqConfig);
+            seq.setSampleRate(outputRate);
+            seq.setSfxMode(isSfx);
+            driver.addSequencer(seq, isSfx);
+
+            int sampleRate = (int) Math.round(outputRate);
+            short[] buffer = new short[1024 * 2];
+            try (RandomAccessFile raf = new RandomAccessFile(
+                    outputFile, "rw")) {
+                raf.setLength(0);
+                raf.write(new byte[44]);
+
+                int totalSamples = 0;
+                while (totalSamples < maxSamples) {
+                    int frames = Math.min(1024,
+                            maxSamples - totalSamples);
+                    int shorts = frames * 2;
+                    stream.read(buffer, shorts);
+                    for (int i = 0; i < shorts; i++) {
+                        raf.writeByte(buffer[i] & 0xFF);
+                        raf.writeByte((buffer[i] >> 8) & 0xFF);
+                    }
+                    totalSamples += frames;
+                    if (isSfx && driver.isComplete()) {
+                        break;
+                    }
+                }
+
+                int dataSize = totalSamples * 2 * 2;
+                raf.seek(0);
+                writeWavHeader(raf, sampleRate, 2, 16, dataSize);
+                return totalSamples;
+            }
+        }
+    }
+
+    private static void writeWavHeader(
+            RandomAccessFile raf,
+            int sampleRate,
+            int channels,
+            int bitsPerSample,
+            int dataSize) throws IOException {
+        int byteRate = sampleRate * channels * bitsPerSample / 8;
+        int blockAlign = channels * bitsPerSample / 8;
+        raf.writeBytes("RIFF");
+        writeIntLE(raf, dataSize + 36);
+        raf.writeBytes("WAVE");
+        raf.writeBytes("fmt ");
+        writeIntLE(raf, 16);
+        writeShortLE(raf, (short) 1);
+        writeShortLE(raf, (short) channels);
+        writeIntLE(raf, sampleRate);
+        writeIntLE(raf, byteRate);
+        writeShortLE(raf, (short) blockAlign);
+        writeShortLE(raf, (short) bitsPerSample);
+        raf.writeBytes("data");
+        writeIntLE(raf, dataSize);
+    }
+
+    private static void writeIntLE(
+            RandomAccessFile raf, int value) throws IOException {
+        raf.writeByte(value & 0xFF);
+        raf.writeByte((value >> 8) & 0xFF);
+        raf.writeByte((value >> 16) & 0xFF);
+        raf.writeByte((value >> 24) & 0xFF);
+    }
+
+    private static void writeShortLE(
+            RandomAccessFile raf, short value) throws IOException {
+        raf.writeByte(value & 0xFF);
+        raf.writeByte((value >> 8) & 0xFF);
+    }
+
     private static class InteractiveState {
         private final SmpsLoader loader;
         private final DacData dacData;
-        private final AudioBackend backend;
+        private final StandaloneAudioPresentationHost host;
         private final SoundTestCatalog catalog;
         private final SmpsSequencerConfig seqConfig;
         private int songId;
@@ -290,13 +412,17 @@ public final class SoundTestApp {
         private boolean speedShoes = false;
         private final TreeSet<Integer> validSfx;
         private final Map<Integer, String> sfxNames;
+        private final ScheduledExecutorService audioExec;
 
-        InteractiveState(int songId, SmpsLoader loader, DacData dacData, AudioBackend backend,
-                SoundTestCatalog catalog, SmpsSequencerConfig seqConfig, TreeSet<Integer> validSfx) {
+        InteractiveState(int songId, SmpsLoader loader, DacData dacData,
+                StandaloneAudioPresentationHost host,
+                SoundTestCatalog catalog, SmpsSequencerConfig seqConfig, TreeSet<Integer> validSfx,
+                ScheduledExecutorService audioExec) {
+            this.audioExec = audioExec;
             this.songId = songId;
             this.loader = loader;
             this.dacData = dacData;
-            this.backend = backend;
+            this.host = host;
             this.catalog = catalog;
             this.seqConfig = seqConfig;
             this.sfxNames = catalog.getSfxNames();
@@ -333,7 +459,7 @@ public final class SoundTestApp {
             frame.getContentPane().add(tracksPanel, BorderLayout.CENTER);
             JLabel info = new JLabel(String.format(
                     "[%s] ROM: %s | Backend: %s%s | Tab: Music/SFX | Up/Down change | Enter play | S Speed | Ctrl+E export WAV | Esc quit",
-                    catalog.getGameName(), romPath, backend.getClass().getSimpleName(), nullAudio ? " (silent)" : ""),
+                    catalog.getGameName(), romPath, "unified PCM", nullAudio ? " (silent)" : ""),
                     SwingConstants.CENTER);
             info.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
             frame.getContentPane().add(info, BorderLayout.SOUTH);
@@ -348,9 +474,9 @@ public final class SoundTestApp {
                     if (code >= KeyEvent.VK_F1 && code <= KeyEvent.VK_F5) {
                         int ch = code - KeyEvent.VK_F1;
                         if (shift)
-                            backend.toggleSolo(ChannelType.FM, ch);
+                            onAudioThread(() -> host.toggleSolo(ChannelType.FM, ch));
                         else
-                            backend.toggleMute(ChannelType.FM, ch);
+                            onAudioThread(() -> host.toggleMute(ChannelType.FM, ch));
                         return;
                     }
 
@@ -358,9 +484,9 @@ public final class SoundTestApp {
                     if (code >= KeyEvent.VK_1 && code <= KeyEvent.VK_4) {
                         int ch = code - KeyEvent.VK_1;
                         if (shift)
-                            backend.toggleSolo(ChannelType.PSG, ch);
+                            onAudioThread(() -> host.toggleSolo(ChannelType.PSG, ch));
                         else
-                            backend.toggleMute(ChannelType.PSG, ch);
+                            onAudioThread(() -> host.toggleMute(ChannelType.PSG, ch));
                         return;
                     }
 
@@ -389,14 +515,14 @@ public final class SoundTestApp {
                             if (sfxMode) {
                                 playCurrentSfx();
                             } else {
-                                backend.stopPlayback();
+                                onAudioThread(host::stopPlayback);
                                 playing = false;
                                 playingSongId = null;
                                 playCurrent();
                             }
                             break;
                         case KeyEvent.VK_SPACE:
-                            backend.stopPlayback();
+                            onAudioThread(host::stopPlayback);
                             playing = false;
                             playingSongId = null;
                             break;
@@ -406,13 +532,14 @@ public final class SoundTestApp {
                         case KeyEvent.VK_D:
                             // DAC (FM5 / Channel 5)
                             if (shift)
-                                backend.toggleSolo(ChannelType.DAC, 5);
+                                onAudioThread(() -> host.toggleSolo(ChannelType.DAC, 5));
                             else
-                                backend.toggleMute(ChannelType.DAC, 5);
+                                onAudioThread(() -> host.toggleMute(ChannelType.DAC, 5));
                             break;
                         case KeyEvent.VK_S:
                             speedShoes = !speedShoes;
-                            backend.setSpeedShoes(speedShoes);
+                            boolean speedShoesNow = speedShoes;
+                            onAudioThread(() -> host.setSpeedShoes(speedShoesNow));
                             updateLabel();
                             break;
                         case KeyEvent.VK_E:
@@ -450,10 +577,23 @@ public final class SoundTestApp {
             }
         }
 
+        /**
+         * Runs a backend command on the audio executor that also drives
+         * {@code host.presentFrame()}, keeping all presentation mutation on
+         * one thread. Commands arriving after shutdown are moot and dropped.
+         */
+        private void onAudioThread(Runnable command) {
+            try {
+                audioExec.execute(command);
+            } catch (RejectedExecutionException ignored) {
+                // Executor already shut down during close.
+            }
+        }
+
         private void playCurrent() {
             AbstractSmpsData data = loader.loadMusic(songId);
             if (data != null) {
-                backend.playSmps(data, dacData);
+                onAudioThread(() -> host.playMusic(data, dacData));
                 playing = true;
                 playingSongId = songId;
             }
@@ -466,7 +606,7 @@ public final class SoundTestApp {
                 System.out.println(String.format("Playing SFX %s (Size: %d) | FM: %d PSG: %d Tempo: %d Div: %d",
                         toHex(sfxId), data.getData().length,
                         data.getChannels(), data.getPsgChannels(), data.getTempo(), data.getDividingTiming()));
-                backend.playSfxSmps(data, dacData);
+                onAudioThread(() -> host.playSfx(data, dacData, 1.0f));
             } else {
                 System.out.println("Failed to load SFX " + toHex(sfxId));
             }
@@ -546,71 +686,17 @@ public final class SoundTestApp {
         private void updateDetails() {
             if (tracksPanel == null)
                 return;
-            if (backend instanceof LWJGLAudioBackend joal) {
-                var dbg = joal.getDebugState();
-                Set<String> touched = new HashSet<>();
-                if (dbg != null) {
-                    heading.setText(String.format("Channels (Tempo %d Div %d)", dbg.tempoWeight, dbg.dividingTiming));
-                    for (var t : dbg.tracks) {
-                        String key = t.type + "-" + t.channelId;
-                        touched.add(key);
-                        JLabel l = trackLabels.computeIfAbsent(key, k -> {
-                            JLabel nl = new JLabel();
-                            nl.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-                            nl.setAlignmentX(JLabel.LEFT_ALIGNMENT);
-                            tracksPanel.add(nl);
-                            tracksPanel.revalidate();
-                            return nl;
-                        });
-                        ChannelType ct = switch (t.type) {
-                            case FM -> ChannelType.FM;
-                            case PSG -> ChannelType.PSG;
-                            case DAC -> ChannelType.DAC;
-                        };
-                        boolean muted = backend.isMuted(ct, t.channelId);
-                        boolean soloed = backend.isSoloed(ct, t.channelId);
-
-                        String statusMarker = "";
-                        if (muted)
-                            statusMarker += "[M]";
-                        if (soloed)
-                            statusMarker += "[S]";
-
-                        String txt = String.format(
-                                "%-4s%s %-3s%1d %s note=%s v=%02X dur=%03d vol=%d key=%d pan=%02X mod=%s",
-                                statusMarker,
-                                "", // spacer
-                                t.type, t.channelId + 1,
-                                t.active ? "ON " : "off",
-                                t.note == 0 ? "--" : toHex(t.note),
-                                t.voiceId,
-                                t.duration,
-                                t.volumeOffset,
-                                t.keyOffset,
-                                t.pan,
-                                t.modEnabled ? "Y" : "N");
-                        l.setText(txt);
-                    }
-                } else {
-                    heading.setText("Channels (no SMPS debug)");
-                }
-                // Mark untouched labels as idle
-                for (Map.Entry<String, JLabel> e : trackLabels.entrySet()) {
-                    if (!touched.contains(e.getKey())) {
-                        e.getValue().setText(e.getKey() + " idle");
-                    }
-                }
-            } else {
-                heading.setText("Channels (debug unavailable)");
-            }
+            heading.setText("Channels (unified presentation)");
         }
 
         private void close() {
-            closed = true;
             if (refreshTimer != null) {
                 refreshTimer.stop();
             }
-            backend.stopPlayback();
+            // Queue the stop before raising the closed flag: awaitClose() then
+            // shuts the executor down with shutdown(), which still drains this.
+            onAudioThread(host::stopPlayback);
+            closed = true;
             playing = false;
             playingSongId = null;
             if (frame != null) {
@@ -697,101 +783,18 @@ public final class SoundTestApp {
          * For SFX, renders until complete.
          * For music, renders for a fixed duration (default 60 seconds).
          */
-        private int renderToWav(AbstractSmpsData data, DacData dacSamples, File outputFile, boolean isSfx) throws IOException {
-            // Create a standalone driver for rendering
-            SmpsDriver driver = new SmpsDriver(getOutputSampleRate());
-            driver.setRegion(SmpsSequencer.Region.NTSC);
-            driver.setDacInterpolate(true);
-
-            SmpsSequencer seq = new SmpsSequencer(data, dacSamples, driver, seqConfig);
-            seq.setSampleRate(driver.getOutputSampleRate());
-            if (isSfx) {
-                seq.setSfxMode(true);
-            }
-            driver.addSequencer(seq, isSfx);
-
-            // Render parameters
-            int sampleRate = (int) Math.round(driver.getOutputSampleRate());
-            int maxSamples = isSfx ? sampleRate * 10 : sampleRate * 60; // 10s for SFX, 60s for music
-            int bufferSize = 1024;
-            short[] buffer = new short[bufferSize * 2]; // Stereo
-
-            // Use RandomAccessFile so we can update header after writing
-            try (RandomAccessFile raf = new RandomAccessFile(outputFile, "rw")) {
-                // Write placeholder header (44 bytes)
-                byte[] header = new byte[44];
-                raf.write(header);
-
-                int totalSamples = 0;
-                while (totalSamples < maxSamples) {
-                    driver.read(buffer);
-
-                    // Write samples as little-endian 16-bit
-                    for (int i = 0; i < buffer.length; i++) {
-                        raf.writeByte(buffer[i] & 0xFF);
-                        raf.writeByte((buffer[i] >> 8) & 0xFF);
-                    }
-
-                    totalSamples += bufferSize;
-
-                    // Check if SFX is complete
-                    if (isSfx && driver.isComplete()) {
-                        break;
-                    }
-                }
-
-                // Calculate sizes
-                int dataSize = totalSamples * 2 * 2; // samples * 2 channels * 2 bytes per sample
-
-                // Go back and write proper WAV header
-                raf.seek(0);
-                writeWavHeader(raf, sampleRate, 2, 16, dataSize);
-
-                return totalSamples;
-            }
-        }
-
-        /**
-         * Writes a WAV file header.
-         */
-        private void writeWavHeader(RandomAccessFile raf, int sampleRate, int channels, int bitsPerSample, int dataSize) throws IOException {
-            int byteRate = sampleRate * channels * bitsPerSample / 8;
-            int blockAlign = channels * bitsPerSample / 8;
-
-            // RIFF header
-            raf.writeBytes("RIFF");
-            writeIntLE(raf, dataSize + 36); // File size - 8
-            raf.writeBytes("WAVE");
-
-            // fmt chunk
-            raf.writeBytes("fmt ");
-            writeIntLE(raf, 16); // Chunk size
-            writeShortLE(raf, (short) 1); // Audio format (PCM)
-            writeShortLE(raf, (short) channels);
-            writeIntLE(raf, sampleRate);
-            writeIntLE(raf, byteRate);
-            writeShortLE(raf, (short) blockAlign);
-            writeShortLE(raf, (short) bitsPerSample);
-
-            // data chunk
-            raf.writeBytes("data");
-            writeIntLE(raf, dataSize);
-        }
-
-        private void writeIntLE(RandomAccessFile raf, int value) throws IOException {
-            raf.writeByte(value & 0xFF);
-            raf.writeByte((value >> 8) & 0xFF);
-            raf.writeByte((value >> 16) & 0xFF);
-            raf.writeByte((value >> 24) & 0xFF);
-        }
-
-        private void writeShortLE(RandomAccessFile raf, short value) throws IOException {
-            raf.writeByte(value & 0xFF);
-            raf.writeByte((value >> 8) & 0xFF);
+        private int renderToWav(AbstractSmpsData data, DacData dacSamples,
+                File outputFile, boolean isSfx) throws IOException {
+            double outputRate = getOutputSampleRate();
+            int sampleRate = (int) Math.round(outputRate);
+            return SoundTestApp.renderToWav(
+                    data, dacSamples, seqConfig, outputFile, isSfx,
+                    outputRate,
+                    isSfx ? sampleRate * 10 : sampleRate * 60);
         }
 
         private double getOutputSampleRate() {
-            boolean internalRate = SonicConfigurationService.getInstance()
+            boolean internalRate = GameServices.configuration()
                     .getBoolean(SonicConfiguration.AUDIO_INTERNAL_RATE_OUTPUT);
             return internalRate ? Ym2612Chip.getInternalRate() : Ym2612Chip.getDefaultOutputRate();
         }
@@ -827,7 +830,7 @@ public final class SoundTestApp {
         }
 
         static Options fromArgs(String[] args) {
-            String configGame = SonicConfigurationService.getInstance()
+            String configGame = GameServices.configuration()
                     .getString(SonicConfiguration.DEFAULT_ROM);
             String gameId = configGame != null ? configGame.toLowerCase(Locale.ROOT) : "s2";
             String romPath = null;

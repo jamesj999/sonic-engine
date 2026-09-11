@@ -8,13 +8,14 @@ import com.openggf.data.RomManager;
 import com.openggf.game.GameServices;
 import com.openggf.game.sonic2.constants.Sonic2Constants;
 import com.openggf.graphics.GraphicsManager;
+import com.openggf.graphics.PatternAtlasRange;
 import com.openggf.level.Palette;
 import com.openggf.level.Pattern;
 import com.openggf.level.objects.ObjectSpriteSheet;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.level.render.SpriteMappingFrame;
 import com.openggf.level.render.SpriteMappingPiece;
-import com.openggf.tools.EnigmaReader;
+import com.openggf.data.compression.EnigmaReader;
 import com.openggf.util.PatternDecompressor;
 
 import java.io.ByteArrayInputStream;
@@ -59,7 +60,7 @@ public class Sonic2LogoFlashManager {
      * Avoids collision with credit text (0xE0000), S1 credit text (0xB0000),
      * title screen credit text (0x80000), and other ranges.
      */
-    private static final int PATTERN_BASE = 0xF6000;
+    private static final int PATTERN_BASE = PatternAtlasRange.SONIC2_CREDITS_LOGO.base();
 
     /** Enigma mapping grid dimensions (from ROM: 16-1 and 6-1 in d1/d2). */
     private static final int LOGO_TILE_WIDTH = 16;
@@ -277,7 +278,7 @@ public class Sonic2LogoFlashManager {
             return;
         }
 
-        GraphicsManager gm = GraphicsManager.getInstance();
+        GraphicsManager gm = GameServices.graphics();
         gm.beginPatternBatch();
         // Draw at screen center; piece offsets are relative to center
         renderer.drawFrameIndex(0, SCREEN_CENTER_X, SCREEN_CENTER_Y);
@@ -490,7 +491,7 @@ public class Sonic2LogoFlashManager {
         }
 
         // Upload modified palette to GPU
-        GraphicsManager gm = GraphicsManager.getInstance();
+        GraphicsManager gm = GameServices.graphics();
         if (gm != null && !gm.isHeadlessMode()) {
             gm.cachePaletteTexture(basePalette, 0);
         }
@@ -509,11 +510,12 @@ public class Sonic2LogoFlashManager {
         if (inputHandler == null) {
             return false;
         }
-        SonicConfigurationService config = SonicConfigurationService.getInstance();
+        SonicConfigurationService config = GameServices.configuration();
         int jumpKey = config.getInt(SonicConfiguration.JUMP);
         int startKey = config.getInt(SonicConfiguration.PAUSE_KEY);
         return (jumpKey > 0 && inputHandler.isKeyPressed(jumpKey))
-                || (startKey > 0 && inputHandler.isKeyPressed(startKey));
+                || (startKey > 0 && inputHandler.isKeyPressed(startKey))
+                || inputHandler.logical().menuAccept();
     }
 
     // ========================================================================
@@ -524,7 +526,7 @@ public class Sonic2LogoFlashManager {
      * Caches logo patterns and initial palette to GPU.
      */
     private void cacheToGpu() {
-        GraphicsManager gm = GraphicsManager.getInstance();
+        GraphicsManager gm = GameServices.graphics();
         if (gm == null || gm.isHeadlessMode()) {
             return;
         }

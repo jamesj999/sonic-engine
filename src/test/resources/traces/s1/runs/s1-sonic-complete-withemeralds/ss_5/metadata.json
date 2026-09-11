@@ -1,0 +1,19 @@
+{
+  "game": "s1",
+  "trace_profile": "s1_special_stage",
+  "special_stage_index": 4,
+  "aux_schema_extras": ["dynamic_art_transfer_state_per_frame"],
+  "characters": ["sonic"],
+  "main_character": "sonic",
+  "sidekicks": [],
+  "bk2_frame_offset": 87703,
+  "trace_frame_count": 5079,
+  "source_bk2": "sonic1-complete-withemeralds.bk2",
+  "recorder": "native-bizhawk-headless",
+  "recorder_version": "3.0",
+  "trace_schema": 5,
+  "recording_date": "2026-08-04",
+  "run_id": "s1-sonic-complete-withemeralds",
+  "fresh_load": false,
+  "segment_index": 17
+}

@@ -3,23 +3,28 @@ import com.openggf.game.PlayableEntity;
 
 import com.openggf.debug.DebugRenderContext;
 import com.openggf.game.sonic1.Sonic1ConveyorState;
+import com.openggf.game.sonic1.Sonic1ObjectPlacement;
 import com.openggf.game.sonic1.Sonic1SwitchManager;
 import com.openggf.game.sonic1.constants.Sonic1ObjectIds;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
+import com.openggf.level.objects.ObjectLifetimeOps;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.level.objects.WaypointPathFollower;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
+import java.io.IOException;
 import java.util.List;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
@@ -48,7 +53,7 @@ import java.util.logging.Logger;
  * Reference: docs/s1disasm/_incObj/63 LZ Conveyor.asm
  */
 public class Sonic1LZConveyorObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SpawnRewindRecreatable, SolidObjectProvider, SolidObjectListener {
 
     private static final Logger LOGGER = Logger.getLogger(Sonic1LZConveyorObjectInstance.class.getName());
 
@@ -57,8 +62,11 @@ public class Sonic1LZConveyorObjectInstance extends AbstractObjectInstance
     // From disassembly: move.b #$10,obActWid(a0)
     private static final int HALF_WIDTH = 0x10;
 
-    // Platform surface height for SolidObjectParams
-    private static final int HALF_HEIGHT = 0x08;
+    // MvSonicOnPtfm2 hardcodes "subi.w #9,d0" for the ground half-height
+    // (docs/s1disasm/_incObj/sub MvSonicOnPtfm.asm). PlatformObject uses obY-8
+    // for detection (sub PlatformObject.asm:17); the -1 adjustment in
+    // getTopLandingSnapAdjustment() compensates so detection lands at obY-8.
+    private static final int HALF_HEIGHT = 9;
 
     // From disassembly: move.b #4,obPriority(a0)
     private static final int PLATFORM_PRIORITY = 4;
@@ -81,59 +89,12 @@ public class Sonic1LZConveyorObjectInstance extends AbstractObjectInstance
     // Platform mapping frame index: move.b #4,obFrame(a0)
     private static final int PLATFORM_FRAME = 4;
 
-    // ---- Path data tables (from LCon_Data in disassembly) ----
-    // Each entry: {waypointCount, baseX, waypoints[][2]}
-    // waypoints are (x, y) pairs forming a closed loop.
-
-    // word_125F4: path 0 (6 waypoints)
-    private static final int[][] PATH_0 = {
-            {0x1078, 0x021A}, {0x10BE, 0x0260}, {0x10BE, 0x0393},
-            {0x108C, 0x03C5}, {0x1022, 0x0390}, {0x1022, 0x0244}
-    };
-    private static final int PATH_0_BASE_X = 0x1070;
-
-    // word_12610: path 1 (5 waypoints)
-    private static final int[][] PATH_1 = {
-            {0x127E, 0x0280}, {0x12CE, 0x02D0}, {0x12CE, 0x046E},
-            {0x1232, 0x0420}, {0x1232, 0x02CC}
-    };
-    private static final int PATH_1_BASE_X = 0x1280;
-
-    // word_12628: path 2 (4 waypoints)
-    private static final int[][] PATH_2 = {
-            {0x0D22, 0x0482}, {0x0D22, 0x05DE}, {0x0DAE, 0x05DE}, {0x0DAE, 0x0482}
-    };
-    private static final int PATH_2_BASE_X = 0x0D68;
-
-    // word_1263C: path 3 (4 waypoints)
-    private static final int[][] PATH_3 = {
-            {0x0D62, 0x03A2}, {0x0DEE, 0x03A2}, {0x0DEE, 0x04DE}, {0x0D62, 0x04DE}
-    };
-    private static final int PATH_3_BASE_X = 0x0DA0;
-
-    // word_12650: path 4 (5 waypoints)
-    private static final int[][] PATH_4 = {
-            {0x0CAC, 0x0242}, {0x0DDE, 0x0242}, {0x0DDE, 0x03DE},
-            {0x0C52, 0x03DE}, {0x0C52, 0x029C}
-    };
-    private static final int PATH_4_BASE_X = 0x0D00;
-
-    // word_12668: path 5 (4 waypoints)
-    private static final int[][] PATH_5 = {
-            {0x1252, 0x020A}, {0x13DE, 0x020A}, {0x13DE, 0x02BE}, {0x1252, 0x02BE}
-    };
-    private static final int PATH_5_BASE_X = 0x1300;
-
-    private static final int[][][] ALL_PATHS = {PATH_0, PATH_1, PATH_2, PATH_3, PATH_4, PATH_5};
-    private static final int[] ALL_BASE_X = {PATH_0_BASE_X, PATH_1_BASE_X, PATH_2_BASE_X,
-            PATH_3_BASE_X, PATH_4_BASE_X, PATH_5_BASE_X};
-
     // ---- Instance state ----
 
     /** Object mode: SPAWNER, PLATFORM, or WHEEL. */
     private enum Mode { SPAWNER, PLATFORM, WHEEL }
 
-    private final Mode mode;
+    private Mode mode;
 
     // Current position (updated by movement for platforms)
     private int x;
@@ -153,6 +114,7 @@ public class Sonic1LZConveyorObjectInstance extends AbstractObjectInstance
 
     /** Reusable state for SubpixelMotion calls (avoids per-frame allocation). */
     private final SubpixelMotion.State motion = new SubpixelMotion.State(0, 0, 0, 0, 0, 0);
+    private int pathIndex;           // subtype bits 4-6 selecting LCon_Data entry
     private int baseX;               // base X for out_of_range check (objoff_30)
     private boolean dirReversed;     // local tracking of f_conveyrev state (objoff_3B)
     private int routine;             // platform routine: 2 = PlatformObject, 4 = ExitPlatform+MvSonicOnPtfm2
@@ -161,6 +123,14 @@ public class Sonic1LZConveyorObjectInstance extends AbstractObjectInstance
     // Spawner mode state
     private int spawnerSlotIndex;    // v_obj63 slot index (objoff_2F & 0x7F)
     private boolean spawnerDone;     // set after spawning children
+
+    // Platform #0 only: the maker's v_obj63 dedup slot it must clear when it
+    // goes out of range, so the spawner re-creates the cluster on re-entry.
+    // ROM: the maker reuses its own slot for platform #0 (movea.l a0,a1) leaving
+    // objoff_2F holding the maker subtype ($80+); loc_12378 does
+    // bclr #0,(v_obj63,objoff_2F&$7F) on that platform's out_of_range delete
+    // (docs/s1disasm/_incObj/63 LZ Conveyor.asm:22-28). -1 = not platform #0.
+    private int makerDedupSlot = -1;
 
     // Wheel mode state
     private int wheelFrame;          // current animation frame (0-3)
@@ -197,14 +167,10 @@ public class Sonic1LZConveyorObjectInstance extends AbstractObjectInstance
 
             // Parse path index from subtype bits 4-6
             // From disassembly: lsr.w #3,d0 / andi.w #$1E,d0
-            int pathIndex = (subtype >> 4) & 0x07;
-            if (pathIndex >= ALL_PATHS.length) {
+            this.pathIndex = (subtype >> 4) & 0x07;
+            if (pathIndex >= 6) {
                 pathIndex = 0; // safety fallback
             }
-
-            this.waypoints = ALL_PATHS[pathIndex];
-            this.waypointCount = waypoints.length * WAYPOINT_STEP;
-            this.baseX = ALL_BASE_X[pathIndex];
 
             // Starting waypoint from subtype bits 0-3
             // From disassembly: andi.w #$F,d1 / lsl.w #2,d1
@@ -214,16 +180,6 @@ public class Sonic1LZConveyorObjectInstance extends AbstractObjectInstance
             // Default step: +4 (forward)
             // From disassembly: move.b #4,objoff_3A(a0)
             this.waypointStep = WAYPOINT_STEP;
-
-            // Set initial target from current waypoint (before potential reverse adjustment)
-            // From disassembly loc_1244C:
-            //   move.w (a2,d1.w),objoff_34(a0)  ; target X
-            //   move.w 2(a2,d1.w),objoff_36(a0)  ; target Y
-            int wpArrayIdx = currentWaypointIdx / WAYPOINT_STEP;
-            if (wpArrayIdx >= 0 && wpArrayIdx < waypoints.length) {
-                targetX = waypoints[wpArrayIdx][0];
-                targetY = waypoints[wpArrayIdx][1];
-            }
 
             // Initialize velocity and subpixel fractions
             this.velX = 0;
@@ -254,6 +210,11 @@ public class Sonic1LZConveyorObjectInstance extends AbstractObjectInstance
         }
         initialized = true;
         if (mode == Mode.PLATFORM) {
+            if (!loadPathData()) {
+                ObjectLifetimeOps.deleteNoRespawn(this);
+                return;
+            }
+
             // Check f_conveyrev at init time
             Sonic1ConveyorState conveyorState = services().gameService(Sonic1ConveyorState.class);
             if (conveyorState.isReversed()) {
@@ -278,6 +239,60 @@ public class Sonic1LZConveyorObjectInstance extends AbstractObjectInstance
         }
     }
 
+    private boolean loadPathData() {
+        try {
+            Sonic1ObjectPlacement.ConveyorPathData data =
+                    new Sonic1ObjectPlacement(services().romReader()).loadLzConveyorPath(pathIndex);
+            if (data == null) {
+                return false;
+            }
+            this.waypoints = data.waypoints();
+            this.waypointCount = waypoints.length * WAYPOINT_STEP;
+            this.baseX = data.baseX();
+
+            int wpArrayIdx = currentWaypointIdx / WAYPOINT_STEP;
+            if (wpArrayIdx >= 0 && wpArrayIdx < waypoints.length) {
+                targetX = waypoints[wpArrayIdx][0];
+                targetY = waypoints[wpArrayIdx][1];
+            }
+            return true;
+        } catch (IOException | RuntimeException e) {
+            LOGGER.log(Level.WARNING, "Failed to load LZ conveyor path data from ROM", e);
+            return false;
+        }
+    }
+
+    /**
+     * Clears the maker's {@code v_obj63} dedup latch when platform #0 leaves the
+     * camera window, so the spawner re-creates the conveyor cluster on re-entry.
+     * <p>
+     * ROM models this in {@code loc_12378}: when a conveyor object hits
+     * {@code out_of_range}, it reads {@code objoff_2F}; only platform #0 (the
+     * maker's reincarnated slot) has it negative, so only platform #0 runs
+     * {@code andi.w #$7F,d0 / bclr #0,(v_obj63,d0.w)}
+     * (docs/s1disasm/_incObj/63 LZ Conveyor.asm:22-28). Platforms #1..N have
+     * {@code objoff_2F=0} and just delete. Without this, the spawner's
+     * {@code bset #0,(v_obj63,slot)} latch (set on first spawn) is never cleared,
+     * so re-entering the spawner window deletes the maker without re-creating the
+     * platforms — the cluster permanently disappears after the first visit
+     * (S1 LZ1 group1 conveyor, trace frame 9716: player falls through the empty
+     * loop instead of landing on the re-spawned platform at @129D,0455).
+     * <p>
+     * Mirrors the SBZ spin-conveyor precedent
+     * ({@code Sonic1SpinConveyorObjectInstance.onUnload}). Gated to the
+     * out_of_range unload path ({@code !isDestroyed()}) so the maker's own
+     * self-delete after spawning never clears the latch.
+     */
+    @Override
+    public void onUnload() {
+        if (mode == Mode.PLATFORM && makerDedupSlot >= 0 && initialized && !isDestroyed()) {
+            Sonic1ConveyorState conveyorState = services().gameService(Sonic1ConveyorState.class);
+            if (conveyorState != null) {
+                conveyorState.clearSpawned(makerDedupSlot);
+            }
+        }
+    }
+
     @Override
     public int getX() {
         return x;
@@ -288,13 +303,13 @@ public class Sonic1LZConveyorObjectInstance extends AbstractObjectInstance
         return y;
     }
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         ensureInitialized();
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         switch (mode) {
             case SPAWNER -> updateSpawner();
-            case PLATFORM -> updatePlatform(frameCounter, player);
-            case WHEEL -> updateWheel(frameCounter);
+            case PLATFORM -> updatePlatform(vIntRunCount, player);
+            case WHEEL -> updateWheel(vIntRunCount);
         }
     }
 
@@ -322,7 +337,7 @@ public class Sonic1LZConveyorObjectInstance extends AbstractObjectInstance
     @Override
     public SolidObjectParams getSolidParams() {
         if (mode == Mode.PLATFORM) {
-            return new SolidObjectParams(HALF_WIDTH, HALF_HEIGHT, HALF_HEIGHT);
+            return SolidObjectParams.of(HALF_WIDTH, HALF_HEIGHT, HALF_HEIGHT);
         }
         return null;
     }
@@ -330,6 +345,49 @@ public class Sonic1LZConveyorObjectInstance extends AbstractObjectInstance
     @Override
     public boolean isTopSolidOnly() {
         return true;
+    }
+
+    @Override
+    public boolean usesPreUpdatePositionForSolidContact(PlayableEntity player) {
+        // LCon_Platform (routine 2) calls PlatformObject before LCon_Platform_Update
+        // which calls SpeedToPos (docs/s1disasm/_incObj/63 LZ Conveyor.asm:149-153,
+        // 191-232). Contact must be checked at the pre-move position, matching the
+        // same pattern as S1 Obj18 (Sonic1PlatformObjectInstance).
+        return true;
+    }
+
+    @Override
+    public boolean rejectsZeroDistanceTopSolidLanding() {
+        // PlatformObject (docs/s1disasm/_incObj/sub PlatformObject.asm:21-22) uses
+        // UNSIGNED cmpi.w #-16,d0 / blo — rejects d0=0 (exact touch), standable
+        // band is d0 in [-16,-1]. Matches Sonic1PlatformObjectInstance.
+        return true;
+    }
+
+    @Override
+    public boolean usesCollisionHalfWidthForTopLanding() {
+        // LCon_Platform passes obActWid directly as PlatformObject's d1
+        // (docs/s1disasm/_incObj/63 LZ Conveyor.asm:150-152), so collision
+        // half-width is already the standable width and must not be narrowed again.
+        return true;
+    }
+
+    @Override
+    public boolean carriesAirborneRiderAfterExitPlatform() {
+        // LCon_OnPlatform (routine 4) calls ExitPlatform then unconditionally calls
+        // MvSonicOnPtfm2 (docs/s1disasm/_incObj/63 LZ Conveyor.asm:157-164),
+        // matching S1 Obj18 behaviour (Sonic1PlatformObjectInstance).
+        return true;
+    }
+
+    @Override
+    public int getTopLandingSnapAdjustment(PlayableEntity player, int solidTopYRadius) {
+        // PlatformObject builds its entry surface from obY-8 (subq.w #8,d0 at
+        // docs/s1disasm/_incObj/sub PlatformObject.asm:17), while MvSonicOnPtfm2
+        // uses obY-9 for the riding surface. With HALF_HEIGHT=9 (riding surface),
+        // this -1 offset shifts the detection band to obY-8. Matches
+        // Sonic1PlatformObjectInstance.getTopLandingSnapAdjustment().
+        return -1;
     }
 
     @Override
@@ -362,16 +420,67 @@ public class Sonic1LZConveyorObjectInstance extends AbstractObjectInstance
             return false;
         }
         if (mode == Mode.WHEEL) {
-            // Wheel uses RememberState: always persistent
-            return true;
+            // ROM LCon_Wheel ends with bra.w RememberState
+            // (docs/s1disasm/_incObj/63 LZ Conveyor.asm:213-215). RememberState
+            // still DELETES the sprite once it leaves the out_of_range window and
+            // only preserves the placement's respawn flag — the SST slot frees.
+            // Treating it as always-persistent kept every wheel alive (and its
+            // dynamic slot pinned) through the end of the act, pushing the LZ3
+            // capsule animals above the released-game Pri_EndAct slot-63 scan
+            // ceiling. Fall through to the standard remembered-object culling.
+            return false;
         }
         if (mode == Mode.SPAWNER) {
             // Spawner is transient - only needs one frame to spawn children
             return !spawnerDone;
         }
         // Platform: out_of_range uses objoff_30 (base X)
-        return isOnScreenX(baseX, 320);
+        // ROM: out_of_range.s loc_1236A, objoff_30(a0)
+        // (docs/s1disasm/_incObj/63 LZ Conveyor.asm, line 10)
+        //
+        // ROM runs the routine (LabyrinthConvey -> LCon_Index -> LCon_Main) which
+        // sets objoff_30 (baseX) BEFORE the out_of_range macro that follows the
+        // jsr (docs/s1disasm/_incObj/63 LZ Conveyor.asm:5-13). A freshly spawned
+        // platform therefore always has a valid objoff_30 when its first
+        // out_of_range check runs. The engine loads baseX lazily in
+        // ensureInitialized() on the first update(); until then baseX is the
+        // sentinel 0 and must NOT be treated as an off-screen position, or the
+        // platform is despawned before it can initialise (it would otherwise
+        // self-cull on the spawn frame whenever the spawn pre-pass checks
+        // out_of_range before the object's first routine runs).
+        if (!initialized) {
+            return true;
+        }
+        return isConveyorInRange(baseX);
     }
+
+    /**
+     * out_of_range for the conveyor platform, with the ROM's act-3 left-extension.
+     * <p>
+     * The base {@code out_of_range} macro keeps an object whose chunk-aligned
+     * reference X is within {@code [screenAligned, screenAligned + 640]}
+     * ({@code cmpi.w #128+320+192,d0 / bhi exit}). In <b>act 3 only</b>, the
+     * LZ Conveyor's out-of-range tail does NOT immediately delete: it runs
+     * {@code cmpi.w #-$80,d0 / bhs.s LCon_Display}
+     * (docs/s1disasm/_incObj/63 LZ Conveyor.asm:16-20), so a platform whose
+     * aligned baseX is up to one chunk (0x80) to the LEFT of the window
+     * ({@code d0 in [0xFF80,0xFFFF]}) is kept alive and displayed instead of
+     * deleted. Modelled on the ROM act value (not the zone/trace), so it is a
+     * ROM-state branch, not a carve-out: the same object in acts 1/2 uses the
+     * standard window.
+     */
+    private boolean isConveyorInRange(int referenceX) {
+        // Act 3 only: ROM keeps platforms within one chunk (0x80) to the left of
+        // the window (cmpi.w #-$80,d0 / bhs LCon_Display); acts 1/2 use the
+        // standard window.
+        if (services().currentAct() == ACT3) {
+            return isInRangeAtWithLeftExtension(referenceX, 1);
+        }
+        return isInRangeAt(referenceX);
+    }
+
+    // From disassembly: cmpi.b #act3,(v_act).w. Act index is 0-based (act 3 = 2).
+    private static final int ACT3 = 2;
 
     // ---- Spawner mode ----
 
@@ -397,8 +506,8 @@ public class Sonic1LZConveyorObjectInstance extends AbstractObjectInstance
      *   ...                              ; spawn loop: X, Y, subtype words
      * </pre>
      * <p>
-     * Rather than reading from the binary objpos files in ROM, we embed the
-     * platform position data directly (it is small and static).
+     * Child position data is loaded from the ROM-backed ObjPosLZPlatform_Index
+     * table through {@link Sonic1ObjectPlacement}.
      */
     private void updateSpawner() {
         if (spawnerDone) {
@@ -409,105 +518,77 @@ public class Sonic1LZConveyorObjectInstance extends AbstractObjectInstance
         Sonic1ConveyorState conveyorState = services().gameService(Sonic1ConveyorState.class);
         if (conveyorState.testAndSetSpawned(spawnerSlotIndex)) {
             // Already spawned - delete self (FixBugs: avoid returning to main loop)
-            setDestroyed(true);
+            ObjectLifetimeOps.deleteNoRespawn(this);
             return;
         }
 
         // Get platform position data for this spawner slot
-        int[][] positionData = getSpawnerPositionData(spawnerSlotIndex);
+        int[][] positionData = loadSpawnerPositionData(spawnerSlotIndex);
         if (positionData == null) {
-            setDestroyed(true);
+            ObjectLifetimeOps.deleteNoRespawn(this);
             return;
         }
 
         if (services().objectManager() == null) {
-            setDestroyed(true);
+            ObjectLifetimeOps.deleteNoRespawn(this);
             return;
         }
 
-        // Spawn child platforms - first one replaces this object's identity,
-        // rest are new dynamic objects.
-        // Set construction context so children can call services() in their constructors.
-        setConstructionContext(services());
-        try {
-            for (int i = 0; i < positionData.length; i++) {
-                int childX = positionData[i][0];
-                int childY = positionData[i][1];
-                int childSubtype = positionData[i][2];
+        // Spawn child platforms.
+        //
+        // ROM parity (docs/s1disasm/_incObj/63 LZ Conveyor.asm:95-145): the maker
+        // reuses ITS OWN object slot for platform #0 (loc_12460:
+        // "movea.l a0,a1 / bra.s LCon_MakePtfms"), keeping obRoutine 0 so that
+        // platform #0 does not run its first PlatformObject/SpeedToPos pass until
+        // the FOLLOWING frame. Only platforms #1..N are allocated via FindFreeObj
+        // (LCon_Loop, line 130, non-FixBugs REV01 path).
+        //
+        // Reusing the maker's slot is load-bearing for spawn cadence: it places
+        // platform #0 in the maker's (high) slot and shifts the FindFreeObj
+        // children down by one, so a descending-leg platform lands in a slot
+        // BELOW the maker (already processed this frame -> first move next frame)
+        // instead of above it (executed same frame). Spawning platform #0 as a
+        // fresh FindFreeObj child instead made every belt platform start one
+        // executed frame early, leaving ridden platforms a constant 1px ahead of
+        // ROM (S1 LZ1 conveyor ride, trace frame 5745: y 0x02ED vs 0x02EE).
+        final int makerSlot = ObjectLifetimeOps.detachSlotForTransfer(this);
+        final int dedupSlot = spawnerSlotIndex;
+        for (int i = 0; i < positionData.length; i++) {
+            final int childX = positionData[i][0];
+            final int childY = positionData[i][1];
+            final int childSubtype = positionData[i][2];
+            final boolean reuseMakerSlot = (i == 0);
 
+            spawnFreeChild(() -> {
                 Sonic1LZConveyorObjectInstance child =
                         new Sonic1LZConveyorObjectInstance(childX, childY, childSubtype);
-                services().objectManager().addDynamicObject(child);
-            }
-        } finally {
-            clearConstructionContext();
+                if (reuseMakerSlot && makerSlot >= 0) {
+                    // Platform #0 takes the maker's own slot (movea.l a0,a1);
+                    // FindFreeObj is only used for platforms #1..N.
+                    child.setSlotIndex(makerSlot);
+                    // Platform #0 inherits the maker's negative objoff_2F, so it
+                    // is the platform that clears the v_obj63 dedup latch on its
+                    // out_of_range delete (ROM loc_12378). Platforms #1..N keep
+                    // objoff_2F=0 and just delete.
+                    child.makerDedupSlot = dedupSlot;
+                }
+                return child;
+            });
         }
 
-        // Spawner itself is consumed after spawning
-        setDestroyed(true);
+        // Spawner itself is consumed after spawning. Its slot was transferred to
+        // platform #0 above (slotIndex now -1), so the self-delete does not
+        // release that slot from the allocator.
+        ObjectLifetimeOps.deleteNoRespawn(this);
     }
 
-    /**
-     * Returns platform position data for a given spawner slot index.
-     * Data sourced from the binary objpos/lzNpfN.bin files in the ROM.
-     * <p>
-     * Each entry is {x, y, subtype}. The subtype word from ROM has the subtype
-     * in the low byte; the high byte is the render/status flags word.
-     * <p>
-     * Data extracted from docs/s1disasm/objpos/lz*pf*.bin files.
-     * Format per entry: word X, word Y, word (subtype in low byte).
-     */
-    private static int[][] getSpawnerPositionData(int slotIndex) {
-        // Data extracted from docs/s1disasm/objpos/lzNpfN.bin files.
-        // Format per ROM entry: word count-1, then per platform: word X, word Y, word (subtype in low byte).
-        return switch (slotIndex) {
-            // LZ1 pf1 (objpos/lz1pf1.bin): 8 platforms
-            case 0 -> new int[][] {
-                    {0x1078, 0x021A, 0x00}, {0x10BE, 0x0291, 0x02},
-                    {0x10BE, 0x0307, 0x02}, {0x10BE, 0x037E, 0x02},
-                    {0x105C, 0x0390, 0x04}, {0x1022, 0x0352, 0x05},
-                    {0x1022, 0x02DB, 0x05}, {0x1022, 0x0265, 0x05}
-            };
-            // LZ1 pf2 (objpos/lz1pf2.bin): 8 platforms
-            case 1 -> new int[][] {
-                    {0x127E, 0x0280, 0x10}, {0x12CE, 0x0305, 0x12},
-                    {0x12CE, 0x038A, 0x12}, {0x12CE, 0x040F, 0x12},
-                    {0x12A7, 0x046E, 0x13}, {0x1232, 0x040F, 0x14},
-                    {0x1232, 0x038A, 0x14}, {0x1232, 0x0305, 0x14}
-            };
-            // LZ2 pf1 (objpos/lz2pf1.bin): 8 platforms
-            case 2 -> new int[][] {
-                    {0x0D22, 0x0483, 0x21}, {0x0D9C, 0x0482, 0x20},
-                    {0x0DAE, 0x04EA, 0x23}, {0x0DAE, 0x0564, 0x23},
-                    {0x0DAE, 0x05DD, 0x23}, {0x0D34, 0x05DE, 0x22},
-                    {0x0D22, 0x0576, 0x21}, {0x0D22, 0x04FC, 0x21}
-            };
-            // LZ2 pf2 (objpos/lz2pf2.bin): 8 platforms
-            case 3 -> new int[][] {
-                    {0x0D62, 0x03A2, 0x30}, {0x0DD4, 0x03A2, 0x31},
-                    {0x0DEE, 0x03FA, 0x32}, {0x0DEE, 0x046C, 0x32},
-                    {0x0DEE, 0x04DD, 0x32}, {0x0D7C, 0x04DE, 0x33},
-                    {0x0D62, 0x0486, 0x30}, {0x0D62, 0x0414, 0x30}
-            };
-            // LZ3 pf1 (objpos/lz3pf1.bin): 12 platforms
-            case 4 -> new int[][] {
-                    {0x0CAD, 0x0242, 0x41}, {0x0D2D, 0x0242, 0x41},
-                    {0x0DAC, 0x0242, 0x41}, {0x0DDE, 0x028F, 0x42},
-                    {0x0DDE, 0x030E, 0x42}, {0x0DDE, 0x038D, 0x42},
-                    {0x0DB0, 0x03DE, 0x43}, {0x0D31, 0x03DE, 0x43},
-                    {0x0CB2, 0x03DE, 0x43}, {0x0C52, 0x03BF, 0x44},
-                    {0x0C52, 0x0340, 0x44}, {0x0C52, 0x02C1, 0x44}
-            };
-            // LZ3 pf2 (objpos/lz3pf2.bin): 9 platforms
-            case 5 -> new int[][] {
-                    {0x1252, 0x020A, 0x50}, {0x12D2, 0x020A, 0x51},
-                    {0x1352, 0x020A, 0x51}, {0x13D2, 0x020A, 0x51},
-                    {0x13DE, 0x027E, 0x52}, {0x139E, 0x02BE, 0x53},
-                    {0x131E, 0x02BE, 0x53}, {0x129E, 0x02BE, 0x53},
-                    {0x1252, 0x028A, 0x50}
-            };
-            default -> null;
-        };
+    private int[][] loadSpawnerPositionData(int slotIndex) {
+        try {
+            return new Sonic1ObjectPlacement(services().romReader()).loadLzPlatformChildren(slotIndex);
+        } catch (IOException | RuntimeException e) {
+            LOGGER.log(Level.WARNING, "Failed to load LZ conveyor child positions from ROM", e);
+            return null;
+        }
     }
 
     // ---- Platform mode ----
@@ -521,7 +602,7 @@ public class Sonic1LZConveyorObjectInstance extends AbstractObjectInstance
      * loc_124C2 (routine 4): ExitPlatform + sub_12502 + MvSonicOnPtfm2
      * </pre>
      */
-    private void updatePlatform(int frameCounter, AbstractPlayableSprite player) {
+    private void updatePlatform(int vIntRunCount, AbstractPlayableSprite player) {
         // Check for player standing (transitions between routine 2 and 4)
         boolean playerRiding = isPlayerRiding();
         if (playerRiding) {
@@ -662,9 +743,9 @@ public class Sonic1LZConveyorObjectInstance extends AbstractObjectInstance
      *   andi.b  #3,obFrame(a0)         ; wrap to 0-3
      * </pre>
      */
-    private void updateWheel(int frameCounter) {
+    private void updateWheel(int vIntRunCount) {
         // Every 4th frame: advance animation
-        if ((frameCounter & WHEEL_ANIM_FRAME_MASK) == 0) {
+        if ((vIntRunCount & WHEEL_ANIM_FRAME_MASK) == 0) {
             int step = 1;
             if (services().gameService(Sonic1ConveyorState.class).isReversed()) {
                 step = -1;
@@ -674,21 +755,6 @@ public class Sonic1LZConveyorObjectInstance extends AbstractObjectInstance
     }
 
     // ---- Utility methods ----
-
-    /**
-     * Check if the object is within out-of-range distance from camera.
-     * Matches the S1 out_of_range.s macro with objoff_30 as the reference X.
-     */
-    private boolean isOnScreenX(int objectX, int range) {
-        var camera = services().camera();
-        if (camera == null) {
-            return true;
-        }
-        int objRounded = objectX & 0xFF80;
-        int camRounded = (camera.getX() - 128) & 0xFF80;
-        int distance = (objRounded - camRounded) & 0xFFFF;
-        return distance <= (128 + 320 + 192);
-    }
 
     @Override
     public boolean isHighPriority() {

@@ -4,11 +4,11 @@ import com.openggf.level.Pattern;
 import com.openggf.level.rings.RingFrame;
 import com.openggf.level.rings.RingFramePiece;
 import com.openggf.level.rings.RingSpriteSheet;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class TestRingSparkleDelay {
 
@@ -51,3 +51,5 @@ public class TestRingSparkleDelay {
         return new RingSpriteSheet(new Pattern[]{pattern}, frames, 1, spinDelay, sparkleDelay, spinFrames, sparkleFrames);
     }
 }
+
+

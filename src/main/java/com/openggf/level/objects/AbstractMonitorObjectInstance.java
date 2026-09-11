@@ -1,6 +1,10 @@
 package com.openggf.level.objects;
 
 import com.openggf.game.PlayableEntity;
+import com.openggf.game.rewind.GenericFieldCapturer;
+import com.openggf.game.rewind.schema.RewindCaptureContext;
+import com.openggf.sprites.Sprite;
+import com.openggf.sprites.managers.SpriteManager;
 
 /**
  * Shared base class for monitor (item box) objects across all games.
@@ -31,7 +35,12 @@ public abstract class AbstractMonitorObjectInstance extends AbstractObjectInstan
     protected int iconVelY;
     protected int iconWaitFrames;
     protected boolean effectApplied;
+    // Captured/restored explicitly via captureRewindState/restoreRewindState
+    // overrides below using the player's stable sprite code, because
+    // PlayableEntity is a live reference type that the generic field capturer
+    // cannot serialize.
     protected PlayableEntity effectTarget;
+    protected boolean iconPendingInit;
 
     protected AbstractMonitorObjectInstance(ObjectSpawn spawn, String name) {
         super(spawn, name);
@@ -51,6 +60,14 @@ public abstract class AbstractMonitorObjectInstance extends AbstractObjectInstan
         iconWaitFrames = 0;
         effectApplied = false;
         effectTarget = player;
+        // ROM Pow_Main / Obj2E_Init falls through to the rise routine on the
+        // monitor-content object's first execution. Embedded monitor shells can
+        // opt into skipping the parent shell's same-frame post-break update.
+        iconPendingInit = delayFirstIconUpdateAfterBreak();
+    }
+
+    protected boolean delayFirstIconUpdateAfterBreak() {
+        return false;
     }
 
     /**
@@ -64,19 +81,26 @@ public abstract class AbstractMonitorObjectInstance extends AbstractObjectInstan
         if (!iconActive) {
             return;
         }
+        if (iconPendingInit) {
+            iconPendingInit = false;
+            return;
+        }
         if (iconVelY < 0) {
             // Rising phase: apply velocity and deceleration
             iconSubY += iconVelY;
             iconVelY += ICON_RISE_ACCEL;
-            if (iconVelY >= 0) {
-                iconVelY = 0;
-                iconWaitFrames = ICON_WAIT_FRAMES;
-                if (!effectApplied && effectTarget != null) {
-                    applyPowerup(effectTarget);
-                    effectApplied = true;
-                    effectTarget = null;
-                }
-            }
+            return;
+        }
+        if (!effectApplied && effectTarget != null) {
+            // ROM tests y_vel before moving the monitor icon. When the
+            // previous rise step adds $18 up to zero, the effect branch waits
+            // until the next object update (S2 Obj2E_Raise, s2.asm:25618-25631;
+            // S1 Pow_Move, 2E Monitor Content Power-Up.asm:35-43).
+            iconVelY = 0;
+            iconWaitFrames = ICON_WAIT_FRAMES;
+            applyPowerup(effectTarget);
+            effectApplied = true;
+            effectTarget = null;
             return;
         }
 
@@ -99,10 +123,43 @@ public abstract class AbstractMonitorObjectInstance extends AbstractObjectInstan
 
     /**
      * Hook called when the icon finishes its wait timer and deactivates.
-     * Subclasses can override to clear rendering references (e.g. iconPlayer).
+     * Subclasses can override to clear rendering references or child slots.
      * Default implementation does nothing.
      */
     protected void onIconDeactivated() {
         // Default no-op; subclasses may override.
+    }
+
+    @Override
+    public PerObjectRewindSnapshot captureRewindState(RewindCaptureContext context) {
+        PerObjectRewindSnapshot snapshot = super.captureRewindState(context);
+        if (snapshot.genericState() == null && snapshot.compactGenericState() == null) {
+            var genericState = GenericFieldCapturer.captureObjectSubclassScalars(this);
+            if (!genericState.keys().isEmpty()) {
+                snapshot = snapshot.withGenericState(genericState);
+            }
+        }
+        String code = (effectTarget instanceof Sprite sprite) ? sprite.getCode() : null;
+        return snapshot.withObjectSubclassExtra(
+                new PerObjectRewindSnapshot.MonitorRewindExtra(code));
+    }
+
+    @Override
+    public void restoreRewindState(PerObjectRewindSnapshot snapshot, RewindCaptureContext context) {
+        super.restoreRewindState(snapshot, context);
+        // Default to null so a missing/unmatched extra leaves no stale recipient.
+        effectTarget = null;
+        if (snapshot.objectSubclassExtra()
+                instanceof PerObjectRewindSnapshot.MonitorRewindExtra extra
+                && extra.effectTargetSpriteCode() != null) {
+            ObjectServices ctx = tryServices();
+            SpriteManager spriteManager = ctx != null ? ctx.spriteManager() : null;
+            if (spriteManager != null) {
+                Sprite sprite = spriteManager.getSprite(extra.effectTargetSpriteCode());
+                if (sprite instanceof PlayableEntity player) {
+                    effectTarget = player;
+                }
+            }
+        }
     }
 }

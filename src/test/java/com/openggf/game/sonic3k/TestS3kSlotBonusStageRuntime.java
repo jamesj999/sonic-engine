@@ -16,11 +16,9 @@ import com.openggf.sprites.playable.AbstractPlayableSprite;
 import com.openggf.tests.HeadlessTestFixture;
 import com.openggf.tests.HeadlessTestRunner;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomCondition;
 import com.openggf.tests.rules.SonicGame;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -30,7 +28,6 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @RequiresRom(SonicGame.SONIC_3K)
-@ExtendWith(RequiresRomCondition.class)
 class TestS3kSlotBonusStageRuntime {
 
     private HeadlessTestFixture fixture;
@@ -225,3 +222,5 @@ class TestS3kSlotBonusStageRuntime {
                 0x460, 0x430, 0x400, 0x400, (byte) 0x0C, (byte) 0x0D, 0x600, 0L);
     }
 }
+
+

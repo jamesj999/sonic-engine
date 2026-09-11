@@ -1,9 +1,9 @@
 package com.openggf.tests;
 
 import com.openggf.game.PlayerCharacter;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * Verify PlayerCharacter enum ordinals match S3K ROM Player_mode values.
@@ -13,20 +13,17 @@ public class TestTodo14_PlayerModeValues {
 
     @Test
     public void testPlayerCharacterEnumOrdinalsMatchRom() {
-        assertEquals("SONIC_AND_TAILS should be Player_mode 0",
-                0, PlayerCharacter.SONIC_AND_TAILS.ordinal());
-        assertEquals("SONIC_ALONE should be Player_mode 1",
-                1, PlayerCharacter.SONIC_ALONE.ordinal());
-        assertEquals("TAILS_ALONE should be Player_mode 2",
-                2, PlayerCharacter.TAILS_ALONE.ordinal());
-        assertEquals("KNUCKLES should be Player_mode 3",
-                3, PlayerCharacter.KNUCKLES.ordinal());
+        assertEquals(0, PlayerCharacter.SONIC_AND_TAILS.ordinal(), "SONIC_AND_TAILS should be Player_mode 0");
+        assertEquals(1, PlayerCharacter.SONIC_ALONE.ordinal(), "SONIC_ALONE should be Player_mode 1");
+        assertEquals(2, PlayerCharacter.TAILS_ALONE.ordinal(), "TAILS_ALONE should be Player_mode 2");
+        assertEquals(3, PlayerCharacter.KNUCKLES.ordinal(), "KNUCKLES should be Player_mode 3");
     }
 
     @Test
     public void testPlayerCharacterCount() {
-        assertEquals("Should have exactly 4 player modes",
-                4, PlayerCharacter.values().length);
+        assertEquals(4, PlayerCharacter.values().length, "Should have exactly 4 player modes");
     }
 
 }
+
+

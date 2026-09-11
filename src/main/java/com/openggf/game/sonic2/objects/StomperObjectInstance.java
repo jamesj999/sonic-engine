@@ -11,6 +11,8 @@ import com.openggf.graphics.RenderPriority;
 import com.openggf.level.PatternDesc;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.render.SpriteMappingFrame;
@@ -48,7 +50,7 @@ import java.util.List;
  * Uses MCZ level art tiles (palette 2).
  */
 public class StomperObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider {
+        implements SolidObjectProvider, RewindRecreatable {
 
     private static final boolean DEBUG_VIEW_ENABLED = staticDebugViewEnabled();
     private static final DebugOverlayManager OVERLAY_MANAGER = staticDebugOverlay();
@@ -77,7 +79,7 @@ public class StomperObjectInstance extends AbstractObjectInstance
     ));
 
     // State
-    private final int baseY;           // Original spawn Y position (objoff_32)
+    private int baseY;           // Original spawn Y position (objoff_32)
     private int currentY;              // Current Y position
     private int timer = 0;             // Movement timer (objoff_30)
     private boolean crushing = false;  // routine_secondary != 0
@@ -90,6 +92,11 @@ public class StomperObjectInstance extends AbstractObjectInstance
     }
 
     @Override
+    public StomperObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new StomperObjectInstance(ctx.spawn(), getName());
+    }
+
+    @Override
     public int getX() {
         return spawn.x();
     }
@@ -99,7 +106,7 @@ public class StomperObjectInstance extends AbstractObjectInstance
         return currentY;
     }
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) {
             return;
@@ -175,13 +182,36 @@ public class StomperObjectInstance extends AbstractObjectInstance
     @Override
     public SolidObjectParams getSolidParams() {
         // From disassembly lines 24113-24120
-        return new SolidObjectParams(COLLISION_HALF_WIDTH, COLLISION_HEIGHT, COLLISION_Y_RADIUS);
+        return SolidObjectParams.of(COLLISION_HALF_WIDTH, COLLISION_HEIGHT, COLLISION_Y_RADIUS);
     }
 
     @Override
     public boolean isTopSolidOnly() {
         // Stomper is solid from all sides - crushes player
         return false;
+    }
+
+    @Override
+    public boolean usesInstanceSolidStateLatchKey() {
+        // Obj2A rewrites y_pos every frame while the live SST slot continues to
+        // own p1/p2 pushing and standing bits. Dynamic-spawn coordinates are a
+        // placement/rendering detail and must not change the solid latch owner.
+        // docs/s2disasm/s2.asm:24200-24255
+        return true;
+    }
+
+    @Override
+    public boolean usesInclusiveRightEdge() {
+        // Obj2A passes width_pixels+$B to standard SolidObject. Its unsigned
+        // BHI rejection accepts the exact +$1B edge and reaches AtEdge.
+        return true;
+    }
+
+    @Override
+    public boolean preservesEdgeSubpixelMotion() {
+        // SolidObject_AtEdge has d0=0, sets Status_Push, and bypasses
+        // StopCharacter, leaving x_vel, inertia, and x_sub live.
+        return true;
     }
 
     @Override

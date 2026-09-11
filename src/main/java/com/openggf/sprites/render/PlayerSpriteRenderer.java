@@ -1,5 +1,7 @@
 package com.openggf.sprites.render;
 
+import com.openggf.game.GameServices;
+import com.openggf.game.resources.DynamicArtLifecycleService;
 import com.openggf.graphics.GraphicsManager;
 import com.openggf.graphics.RenderContext;
 import com.openggf.level.PatternDesc;
@@ -9,19 +11,26 @@ import com.openggf.level.render.SpriteDplcFrame;
 import com.openggf.level.render.SpriteMappingFrame;
 import com.openggf.sprites.art.SpriteArtSet;
 
+import java.util.Objects;
+
 /**
  * Renders playable sprites using mapping frames and DPLC-driven tile updates.
  */
 public class PlayerSpriteRenderer {
     private final SpriteArtSet artSet;
     private final DynamicPatternBank patternBank;
-    private final GraphicsManager graphicsManager = GraphicsManager.getInstance();
+    private final GraphicsManager graphicsManager;
     private final PatternDesc reusableDesc = new PatternDesc();
     private RenderContext renderContext;
     private int lastFrame = -1;
 
     public PlayerSpriteRenderer(SpriteArtSet artSet) {
+        this(artSet, GameServices.graphics());
+    }
+
+    public PlayerSpriteRenderer(SpriteArtSet artSet, GraphicsManager graphicsManager) {
         this.artSet = artSet;
+        this.graphicsManager = Objects.requireNonNull(graphicsManager, "graphicsManager");
         int capacity = Math.max(0, artSet.bankSize());
         this.patternBank = new DynamicPatternBank(artSet.basePatternIndex(), capacity);
     }
@@ -114,6 +123,32 @@ public class PlayerSpriteRenderer {
                     graphicsManager.renderPatternWithId(patternIndex, reusableDesc, drawX, drawY);
                 }
         );
+    }
+
+    public SpriteDplcFrame dplcFrame(int frameIndex) {
+        if (frameIndex < 0 || frameIndex >= artSet.dplcFrames().size()) {
+            return null;
+        }
+        return artSet.dplcFrames().get(frameIndex);
+    }
+
+    /**
+     * Consumes a production-owned art decision. Duplicate suppression and
+     * diagnostic lifecycle identity have already been decided by the owner.
+     */
+    public void applyRuntimeArtUpdate(
+            int mappingFrame,
+            DynamicArtLifecycleService.ArtUpdate update) {
+        if (update == null || !update.mappingChanged()) {
+            return;
+        }
+        if (update.submitted()) {
+            patternBank.consumeRuntimeArtState(
+                    update.tileRequests(), artSet.artTiles());
+            lastFrame = mappingFrame;
+        } else if (lastFrame == -1 && forceInitialDplc()) {
+            lastFrame = mappingFrame;
+        }
     }
 
     public SpritePieceRenderer.FrameBounds getFrameBounds(int frameIndex, boolean hFlip, boolean vFlip) {

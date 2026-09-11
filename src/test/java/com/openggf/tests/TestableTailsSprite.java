@@ -1,5 +1,6 @@
 package com.openggf.tests;
 
+import com.openggf.game.rules.GameRules;
 import com.openggf.sprites.playable.Tails;
 
 /**
@@ -24,4 +25,9 @@ public class TestableTailsSprite extends Tails {
     public void setTestY(short y) {
         this.yPixel = y;
     }
+
+    public void setGameRulesForTest(GameRules rules) {
+        super.setGameRulesForTest(rules);
+    }
 }
+

@@ -1,0 +1,21 @@
+# rom_sha1	CFBF98C36C776677290A872547AC47C53D2761D6
+# measurement_schema	1
+# recorder_version	load-time-measurement-v1
+# recorder_commit	420ff09a6
+# generator	S3kLoadTimeProfileGenerator-v1
+# input_set_key	sha256:cd6bb5db1efc67a6f0604cc43dec2e4528b53f752875b57845fb1174b2cd2c87
+# capture_command	BIZHAWK_HOME=<bizhawk> tools/bizhawk-headless/run.sh --mode load-time --rom <s3k-rom> --movie <movie-path> --output target/load-time-measurements/<fixture>
+# generation_command	mvn -q exec:java -Dexec.mainClass=com.openggf.tools.timing.S3kLoadTimeProfileGenerator -DloadTime.recorderCommit=420ff09a6 -Dexec.args="src/main/resources/load-time-profiles/s3k-v1.json docs/architecture/audits/2026-07-29-s3k-load-time-profile-validation.md docs/architecture/audits/2026-07-29-s3k-load-time-publication.tsv target/load-time-measurements/aiz/load_time_measurements.jsonl target/load-time-measurements/cnz/load_time_measurements.jsonl target/load-time-measurements/mgz/load_time_measurements.jsonl target/load-time-measurements/knux/load_time_measurements.jsonl target/load-time-measurements/complete/load_time_measurements.jsonl"
+record	path	digest_algorithm	digest	bytes	observations
+movie	src/test/resources/traces/s3k/_movies/s3-knux-multibonus-ss.bk2	sha256	d7485e13f427d1b335cbbb3c405ff6136a77326239b79d3aed61e902078af45c	46216
+movie	src/test/resources/traces/s3k/_movies/s3k-complete-sonic-tails.bk2	sha256	82eabfbc65e33c160ce209baa1ca3f967cb677fe22350bc100625d8c41a8e1bf	192715
+movie	src/test/resources/traces/s3k/aiz1_to_hcz_fullrun/s3-aiz1-2-sonictails.bk2	sha256	6837de0f67db7eb68f20b6f6df6a2872713a613d8b4dbc804847209c16b56e97	9133
+movie	src/test/resources/traces/s3k/cnz/s3k-cnz-sonic-tails.bk2	sha256	09bd6fa87f41ed85113254f80c5cbadcc31bbdb43605389933e2836339c9c340	20682
+movie	src/test/resources/traces/s3k/mgz/s3k-mgz-sonic-tails.bk2	sha256	fd576d4096c9208742162449e756491d1030decae28d52ae7c93a4d249d60c02	18982
+measurement	target/load-time-measurements/aiz/load_time_measurements.jsonl	sha256	b16880aafee111b965f491f8fc89ef34c0feb72654e6fa6b6c3c964b8704ff4b	57851	68
+measurement	target/load-time-measurements/cnz/load_time_measurements.jsonl	sha256	9e8c4d1620d53aed1a15c3c87a51dda034cb58997df5bce06ebc641874a1a54e	55459	65
+measurement	target/load-time-measurements/complete/load_time_measurements.jsonl	sha256	9196b5273343669fdf46f995e740c8381273af3042b3b14f69fa6a395914d360	555462	646
+measurement	target/load-time-measurements/knux/load_time_measurements.jsonl	sha256	35888be35b82be849ae40f4c8f15f5e39c47d0a6de0cf57084aa1e32af107d03	337024	393
+measurement	target/load-time-measurements/mgz/load_time_measurements.jsonl	sha256	0df7d156163d84e1304788ace8811a924ccbf4bff71ba6a789d2ba02316d1c62	83629	98
+output	src/main/resources/load-time-profiles/s3k-v1.json	sha256	f3be0612b98e964d62e214e721991df2a9ad18fa9f9dafa00d6b4a10a0fa6794	56927
+output	docs/architecture/audits/2026-07-29-s3k-load-time-profile-validation.md	sha256	3127d5e5d8b05a5922ca1b9cff271c7c41b68574ca51a7af901c86a44c4c62f0	867

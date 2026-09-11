@@ -1,7 +1,9 @@
 package com.openggf.game.sonic2.scroll;
 
+import com.openggf.game.GameServices;
 import com.openggf.level.scroll.AbstractZoneScrollHandler;
 import com.openggf.level.scroll.M68KMath;
+import com.openggf.level.scroll.compose.ScrollEffectComposer;
 
 /**
  * ROM-accurate implementation of SwScrl_DEZ (Death Egg Zone scroll routine).
@@ -25,10 +27,17 @@ import com.openggf.level.scroll.M68KMath;
 public class SwScrlDez extends AbstractZoneScrollHandler {
 
     private final ParallaxTables tables;
+    private final BackgroundCamera bgCamera;
 
-    // Persistent TempArray (36 words, accumulate each frame)
-    // In the original, this is TempArray_LayerDef in RAM
+    // Persistent TempArray (36 words). The star/edge/transition words accumulate
+    // a fixed amount each frame (ROM TempArray_LayerDef). They are derived from
+    // the frame counter rather than accumulated on the update-call count so they
+    // rewind correctly — a call-count accumulator drifts, snapping back only at
+    // keyframe boundaries. See FrameScrollAccumulator for the same fix on cloud
+    // layers; DEZ uses one shared anchor for all star words.
     private final int[] tempArray = new int[36];
+    private int starBaseFrame;
+    private boolean starBaseFrameSet = false;
 
     // Row heights from ROM ($D48A)
     // Default values matching the disassembly
@@ -48,8 +57,18 @@ public class SwScrlDez extends AbstractZoneScrollHandler {
 
     private int[] rowHeights = DEFAULT_ROW_HEIGHTS;
 
+    private final ScrollEffectComposer composer = new ScrollEffectComposer();
+    private int shakeTimer = -1;
+    private int shakeOffsetX;
+    private int shakeOffsetY;
+
     public SwScrlDez(ParallaxTables tables) {
+        this(tables, null);
+    }
+
+    public SwScrlDez(ParallaxTables tables, BackgroundCamera bgCamera) {
         this.tables = tables;
+        this.bgCamera = bgCamera;
         loadRowHeights();
     }
 
@@ -73,6 +92,39 @@ public class SwScrlDez extends AbstractZoneScrollHandler {
                        int actId) {
 
         resetScrollTracking();
+        composer.reset();
+        shakeOffsetX = 0;
+        shakeOffsetY = 0;
+
+        // ROM InitCameraValues seeds Camera_BG_Y_pos and InitCam_Null3 preserves
+        // it. SwScrl_DEZ then reads that shared word after the generic
+        // camera-delta update. Read its owner here rather than using the
+        // handler's zero default.
+        int effectiveBgY = bgCamera != null
+                ? bgCamera.getBgYPos() & 0xFFFF
+                : vscrollFactorBG & 0xFFFF;
+        if (shakeTimer >= 0) {
+            int rippleIndex = frameCounter & 0x3F;
+            shakeOffsetY = tables != null ? tables.getRippleSigned(rippleIndex) : 0;
+            shakeOffsetX = tables != null ? tables.getRippleSigned(rippleIndex + 1) : 0;
+            composer.setVscrollFactorFG((short) (cameraY + shakeOffsetY));
+            composer.setVscrollFactorBG((short) (effectiveBgY + shakeOffsetY));
+            // fixBugs (s2.asm:27 `fixBugs = 0`): the shipped branch does NOT feed the
+            // shake's Y component into the row-segment search. `add.w d3,d1` at
+            // s2.asm:17566-17569 exists only under fixBugs=1, together with hoisting the
+            // whole shake block from the end of SwScrl_DEZ (s2.asm:17600-17627) to the
+            // start (s2.asm:17451-17480) so that d3 is live. On the shipped ROM the fill
+            // uses the unshaken Camera_BG_Y_pos, which is exactly why the DEZ background
+            // parallax visibly distorts while the final boss explodes; that distortion is
+            // the behaviour to reproduce. Only the Vscroll factors and the camera copies
+            // (above) take the shake.
+            shakeTimer--;
+            if (shakeTimer < 0 && GameServices.gameStateOrNull() != null) {
+                GameServices.gameStateOrNull().setScreenShakeActive(false);
+            }
+        } else {
+            composer.setVscrollFactorBG((short) effectiveBgY);
+        }
 
         // ==================== Step 1: Vertical Scroll ====================
         // DEZ BG Y tracks via Camera_Y_pos_diff << 8 through SetHorizVertiScrollFlagsBG
@@ -81,10 +133,10 @@ public class SwScrlDez extends AbstractZoneScrollHandler {
         // The disassembly writes Camera_BG_Y_pos to Vscroll_Factor_BG directly
 
         // ==================== Step 2: Update TempArray ====================
-        updateTempArray(cameraX);
+        updateTempArray(cameraX, frameCounter);
 
         // ==================== Step 3: Fill hscroll buffer ====================
-        fillScrollBuffer(horizScrollBuf, cameraX);
+        fillScrollBuffer(horizScrollBuf, cameraX, effectiveBgY);
     }
 
     /**
@@ -100,13 +152,24 @@ public class SwScrlDez extends AbstractZoneScrollHandler {
      * 6. Word 32: addq.w #1
      * 7. Words 33-35: Camera_X_pos (sky, static)
      */
-    private void updateTempArray(int cameraX) {
+    private void updateTempArray(int cameraX, int frameCounter) {
+        // Anchor the star accumulators on the first frame so their value counts
+        // frames since the counters were zeroed (ROM clears TempArray at load),
+        // independent of the update-call count. frames-1 offset reproduces the
+        // "one increment on the first sampled frame" (increment-then-read).
+        if (!starBaseFrameSet) {
+            starBaseFrame = frameCounter - 1;
+            starBaseFrameSet = true;
+        }
+        int frames = frameCounter - starBaseFrame;
+
         // Word 0: static with camera
         tempArray[0] = cameraX & 0xFFFF;
 
-        // Words 1-24: accumulate star speeds (wrapping at 16 bits)
+        // Words 1-24: star speeds accumulated over `frames` (wrapping at 16 bits).
+        // int multiply wraps mod 2^32 identically to repeated addition.
         for (int i = 0; i < STAR_SPEEDS.length; i++) {
-            tempArray[1 + i] = (tempArray[1 + i] + STAR_SPEEDS[i]) & 0xFFFF;
+            tempArray[1 + i] = (frames * STAR_SPEEDS[i]) & 0xFFFF;
         }
 
         // Word 24 (index 24) was the last star row just accumulated above
@@ -122,9 +185,9 @@ public class SwScrlDez extends AbstractZoneScrollHandler {
         tempArray[25] = d0Half;
 
         // Words 26-28: more star speeds
-        tempArray[26] = (tempArray[26] + 3) & 0xFFFF;
-        tempArray[27] = (tempArray[27] + 2) & 0xFFFF;
-        tempArray[28] = (tempArray[28] + 4) & 0xFFFF;
+        tempArray[26] = (frames * 3) & 0xFFFF;
+        tempArray[27] = (frames * 2) & 0xFFFF;
+        tempArray[28] = (frames * 4) & 0xFFFF;
 
         // Earth computation (words 29-31):
         // swap d1 -> d1 = word24Value << 16 (low word becomes high word, high word was 0)
@@ -153,7 +216,7 @@ public class SwScrlDez extends AbstractZoneScrollHandler {
         tempArray[29] = (int) ((d0_32 >> 16) & 0xFFFF);
 
         // Word 32: transition row, accumulates at +1
-        tempArray[32] = (tempArray[32] + 1) & 0xFFFF;
+        tempArray[32] = (frames * 1) & 0xFFFF;
 
         // Words 33-35: sky (static with camera)
         tempArray[33] = cameraX & 0xFFFF;
@@ -173,12 +236,12 @@ public class SwScrlDez extends AbstractZoneScrollHandler {
      * FG scroll = negWord(cameraX) for all lines
      * BG scroll = negWord(tempArray[segmentIndex]) for each segment
      */
-    private void fillScrollBuffer(int[] horizScrollBuf, int cameraX) {
+    private void fillScrollBuffer(int[] horizScrollBuf, int cameraX, int effectiveBgY) {
         int[] heights = rowHeights;
         int numSegments = Math.min(heights.length, tempArray.length);
 
         // d1 = Camera_BG_Y_pos (word)
-        int d1 = vscrollFactorBG & 0xFFFF;
+        int d1 = effectiveBgY & 0xFFFF;
 
         // Find first visible segment by subtracting row heights
         int segIdx = 0;
@@ -214,13 +277,11 @@ public class SwScrlDez extends AbstractZoneScrollHandler {
 
         // Get initial BG scroll from tempArray
         short bgScroll = M68KMath.negWord(tempArray[segIdx]);
-        int packed = M68KMath.packScrollWords(fgScroll, bgScroll);
-        trackOffset(fgScroll, bgScroll);
         segIdx++;
 
         // Fill 224 lines (dbf d2,.rowLoop with d2 starting at 223)
         for (int line = 0; line < M68KMath.VISIBLE_LINES; line++) {
-            horizScrollBuf[line] = packed;
+            composer.writePackedScrollWord(line, fgScroll, bgScroll);
 
             linesInSegment--;
             if (linesInSegment == 0 && line < M68KMath.VISIBLE_LINES - 1) {
@@ -228,12 +289,14 @@ public class SwScrlDez extends AbstractZoneScrollHandler {
                 if (segIdx < numSegments) {
                     linesInSegment = heights[segIdx] & 0xFF;
                     bgScroll = M68KMath.negWord(tempArray[segIdx]);
-                    packed = M68KMath.packScrollWords(fgScroll, bgScroll);
-                    trackOffset(fgScroll, bgScroll);
                     segIdx++;
                 }
             }
         }
+
+        composer.copyPackedScrollWordsTo(horizScrollBuf);
+        minScrollOffset = composer.getMinScrollOffset();
+        maxScrollOffset = composer.getMaxScrollOffset();
     }
 
     /**
@@ -242,6 +305,38 @@ public class SwScrlDez extends AbstractZoneScrollHandler {
      */
     public void setVscrollFactorBG(short value) {
         this.vscrollFactorBG = value;
+    }
+
+    /**
+     * ROM: ObjC7 writes Screen_Shaking_Flag=1 and DEZ_Shake_Timer to drive
+     * SwScrl_DEZ's ripple offsets during stomp and ending rumble sequences.
+     */
+    public void triggerScreenShake(int frames) {
+        this.shakeTimer = Math.max(0, frames);
+    }
+
+    public int getDezShakeTimer() {
+        return shakeTimer;
+    }
+
+    @Override
+    public short getVscrollFactorFG() {
+        return composer.getVscrollFactorFG();
+    }
+
+    @Override
+    public short getVscrollFactorBG() {
+        return composer.getVscrollFactorBG();
+    }
+
+    @Override
+    public int getShakeOffsetX() {
+        return shakeOffsetX;
+    }
+
+    @Override
+    public int getShakeOffsetY() {
+        return shakeOffsetY;
     }
 
     // ==================== Test Access Methods ====================

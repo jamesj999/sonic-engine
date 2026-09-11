@@ -1,5 +1,6 @@
 package com.openggf.graphics;
 
+import com.openggf.util.ShortIndexedView;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.FloatBuffer;
@@ -24,6 +25,10 @@ public class VScrollBuffer {
     private final int entryCount;
     private final float[] scrollData;
     private boolean initialized = false;
+    // Persistent native staging buffer, reused across frames. Lazily allocated on
+    // first upload (after GL init, so headless code paths never touch native
+    // memory); freed in cleanup().
+    private FloatBuffer uploadBuffer;
 
     public VScrollBuffer() {
         this(VISIBLE_LINES);
@@ -73,23 +78,50 @@ public class VScrollBuffer {
             scrollData[i] = normalized;
         }
 
-        FloatBuffer buffer = MemoryUtil.memAllocFloat(entryCount);
-        try {
-            buffer.put(scrollData);
-            buffer.flip();
-            glBindTexture(GL_TEXTURE_1D, textureId);
-            glTexSubImage1D(
-                    GL_TEXTURE_1D,
-                    0,
-                    0,
-                    entryCount,
-                    GL_RED,
-                    GL_FLOAT,
-                    buffer);
-            glBindTexture(GL_TEXTURE_1D, 0);
-        } finally {
-            MemoryUtil.memFree(buffer);
+        if (uploadBuffer == null) {
+            uploadBuffer = MemoryUtil.memAllocFloat(entryCount);
         }
+        uploadBuffer.clear();
+        uploadBuffer.put(scrollData);
+        uploadBuffer.flip();
+        glBindTexture(GL_TEXTURE_1D, textureId);
+        glTexSubImage1D(
+                GL_TEXTURE_1D,
+                0,
+                0,
+                entryCount,
+                GL_RED,
+                GL_FLOAT,
+                uploadBuffer);
+        glBindTexture(GL_TEXTURE_1D, 0);
+    }
+
+    /** Uploads a read-only frame view without requiring an intermediate array copy. */
+    public void upload(ShortIndexedView vScroll) {
+        if (!initialized || vScroll == null) {
+            return;
+        }
+
+        for (int i = 0; i < entryCount; i++) {
+            int raw = i < vScroll.size() ? vScroll.get(i) : 0;
+            float normalized = raw / 32767.0f;
+            if (normalized > 1.0f) {
+                normalized = 1.0f;
+            } else if (normalized < -1.0f) {
+                normalized = -1.0f;
+            }
+            scrollData[i] = normalized;
+        }
+
+        if (uploadBuffer == null) {
+            uploadBuffer = MemoryUtil.memAllocFloat(entryCount);
+        }
+        uploadBuffer.clear();
+        uploadBuffer.put(scrollData);
+        uploadBuffer.flip();
+        glBindTexture(GL_TEXTURE_1D, textureId);
+        glTexSubImage1D(GL_TEXTURE_1D, 0, 0, entryCount, GL_RED, GL_FLOAT, uploadBuffer);
+        glBindTexture(GL_TEXTURE_1D, 0);
     }
 
     public void bind(int textureUnit) {
@@ -109,11 +141,19 @@ public class VScrollBuffer {
         return textureId;
     }
 
+    public int getEntryCount() {
+        return entryCount;
+    }
+
     public void cleanup() {
         if (textureId > 0) {
             glDeleteTextures(textureId);
             textureId = -1;
         }
         initialized = false;
+        if (uploadBuffer != null) {
+            MemoryUtil.memFree(uploadBuffer);
+            uploadBuffer = null;
+        }
     }
 }

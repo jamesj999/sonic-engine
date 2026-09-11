@@ -1,7 +1,7 @@
 package com.openggf.level.scroll;
 
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 
@@ -9,7 +9,7 @@ import com.openggf.data.Rom;
 import com.openggf.game.sonic2.scroll.ParallaxTables;
 import com.openggf.game.sonic2.scroll.SwScrlCpz;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static com.openggf.level.scroll.M68KMath.*;
 
 /**
@@ -29,7 +29,7 @@ public class SwScrlCpzTest {
     private SwScrlCpz handler;
     private int[] horizScrollBuf;
 
-    @Before
+    @BeforeEach
     public void setUp() throws IOException {
         mockRom = new MockCpzRom();
         tables = new ParallaxTables(mockRom);
@@ -49,8 +49,7 @@ public class SwScrlCpzTest {
         // Run 7 frames - phase should NOT change
         for (int frame = 0; frame < 7; frame++) {
             handler.update(horizScrollBuf, 0, 0, frame, 0);
-            assertEquals("Ripple phase should not change within 8 frames at frame " + frame,
-                    initialPhase, handler.getRipplePhase());
+            assertEquals(initialPhase, handler.getRipplePhase(), "Ripple phase should not change within 8 frames at frame " + frame);
         }
     }
 
@@ -72,8 +71,7 @@ public class SwScrlCpzTest {
         }
 
         // Should have exactly 3 phase changes in 24 frames (24/8 = 3)
-        assertEquals("Should have 3 phase decrements in 24 frames (one per 8 frames)",
-                3, phaseChanges);
+        assertEquals(3, phaseChanges, "Should have 3 phase decrements in 24 frames (one per 8 frames)");
     }
 
     // ==================== Parallax Split Tests ====================
@@ -88,8 +86,7 @@ public class SwScrlCpzTest {
 
         // BG1 should be at 800 / 8 = 100 pixels
         int expectedBg1 = cameraX / 8;
-        assertEquals("BG1 X should be 1/8 of camera X",
-                expectedBg1, handler.getBg1Xpx());
+        assertEquals(expectedBg1, handler.getBg1Xpx(), "BG1 X should be 1/8 of camera X");
     }
 
     @Test
@@ -102,8 +99,7 @@ public class SwScrlCpzTest {
 
         // BG2 should be at 800 / 2 = 400 pixels
         int expectedBg2 = cameraX / 2;
-        assertEquals("BG2 X should be 1/2 of camera X",
-                expectedBg2, handler.getBg2Xpx());
+        assertEquals(expectedBg2, handler.getBg2Xpx(), "BG2 X should be 1/2 of camera X");
     }
 
     @Test
@@ -116,8 +112,7 @@ public class SwScrlCpzTest {
 
         // BG Y should be at 800 / 4 = 200 pixels
         int expectedBgY = cameraY / 4;
-        assertEquals("BG Y should be 1/4 of camera Y",
-                expectedBgY, handler.getBgYpx());
+        assertEquals(expectedBgY, handler.getBgYpx(), "BG Y should be 1/4 of camera Y");
     }
 
     @Test
@@ -134,8 +129,7 @@ public class SwScrlCpzTest {
         // BG2 should scroll 4x faster than BG1 (1/2 vs 1/8)
         assertEquals(cameraX / 8, bg1);
         assertEquals(cameraX / 2, bg2);
-        assertEquals("BG2 should be 4x BG1 position (1/2 vs 1/8 ratio)",
-                bg2, bg1 * 4);
+        assertEquals(bg2, bg1 * 4, "BG2 should be 4x BG1 position (1/2 vs 1/8 ratio)");
     }
 
     // ==================== Line Block Tests ====================
@@ -151,7 +145,7 @@ public class SwScrlCpzTest {
             int packed = horizScrollBuf[i];
             short fg = (short) (packed >> 16);
             // FG should be -cameraX = -100
-            assertEquals("FG scroll should be -cameraX at line " + i, (short) -100, fg);
+            assertEquals((short) -100, fg, "FG scroll should be -cameraX at line " + i);
         }
     }
 
@@ -165,7 +159,7 @@ public class SwScrlCpzTest {
         short expectedFg = (short) -1000;
         for (int line = 0; line < 224; line++) {
             short fg = unpackFG(horizScrollBuf[line]);
-            assertEquals("FG should be consistent at line " + line, expectedFg, fg);
+            assertEquals(expectedFg, fg, "FG should be consistent at line " + line);
         }
     }
 
@@ -185,7 +179,7 @@ public class SwScrlCpzTest {
         int bgYpx = handler.getBgYpx();
         int lineBlockIndex = ((bgYpx & 0x3F0) >> 4);
 
-        assertEquals("Seam should be at block index 18", 18, lineBlockIndex);
+        assertEquals(18, lineBlockIndex, "Seam should be at block index 18");
     }
 
     @Test
@@ -202,7 +196,7 @@ public class SwScrlCpzTest {
         handler.update(horizScrollBuf, 1000, cameraY, 0, 0);
 
         // Verify bgYpx is what we expect
-        assertEquals("bgYpx should be 290", 290, handler.getBgYpx());
+        assertEquals(290, handler.getBgYpx(), "bgYpx should be 290");
 
         // Lines 0-13 should be in block 18 (the seam block with ripple)
         // Lines 14+ should be in block 19 (BG2 scroll)
@@ -212,7 +206,7 @@ public class SwScrlCpzTest {
 
         // Check that lines after the partial block (lines 14+) use BG2
         short bgLine14 = unpackBG(horizScrollBuf[14]);
-        assertEquals("Line 14 should use BG2 scroll", bg2Scroll, bgLine14);
+        assertEquals(bg2Scroll, bgLine14, "Line 14 should use BG2 scroll");
 
         // Lines 0-13 should be in the seam block and have ripple applied
         // The base scroll is BG1, with small ripple offsets
@@ -220,8 +214,7 @@ public class SwScrlCpzTest {
             short bg = unpackBG(horizScrollBuf[line]);
             // Seam block uses BG1 base with 0-3 pixel ripple, so should be close to
             // bg1Scroll
-            assertTrue("Line " + line + " should be near BG1 scroll (seam block)",
-                    Math.abs(bg - bg1Scroll) <= 3);
+            assertTrue(Math.abs(bg - bg1Scroll) <= 3, "Line " + line + " should be near BG1 scroll (seam block)");
         }
     }
 
@@ -244,8 +237,7 @@ public class SwScrlCpzTest {
 
             // All values should remain identical (no float drift)
             for (int line = 0; line < 224; line++) {
-                assertEquals("Scroll value should be stable at line " + line + " frame " + i,
-                        firstFrame[line], horizScrollBuf[line]);
+                assertEquals(firstFrame[line], horizScrollBuf[line], "Scroll value should be stable at line " + line + " frame " + i);
             }
         }
     }
@@ -263,10 +255,8 @@ public class SwScrlCpzTest {
             int bg2 = handler.getBg2Xpx();
 
             // Verify they're clean integer values
-            assertTrue("BG1 should be in valid range for cameraX=" + x,
-                    bg1 >= 0 && bg1 <= x);
-            assertTrue("BG2 should be in valid range for cameraX=" + x,
-                    bg2 >= 0 && bg2 <= x);
+            assertTrue(bg1 >= 0 && bg1 <= x, "BG1 should be in valid range for cameraX=" + x);
+            assertTrue(bg2 >= 0 && bg2 <= x, "BG2 should be in valid range for cameraX=" + x);
         }
     }
 
@@ -284,17 +274,15 @@ public class SwScrlCpzTest {
         int maxOffset = handler.getMaxScrollOffset();
 
         // Min and max should be valid (min <= max)
-        assertTrue("Min offset should be <= max offset", minOffset <= maxOffset);
+        assertTrue(minOffset <= maxOffset, "Min offset should be <= max offset");
 
         // When camera is at a position, offsets should be reasonable
         // BG1 at 1/8x gives -125, BG2 at 1/2x gives -500
         // Offset = BG - FG where FG = -1000
         // Since we're likely in mostly one region, min might equal max
         // At minimum, both should be in a reasonable range
-        assertTrue("Min offset should be reasonable",
-                minOffset > -1000 && minOffset < 1000);
-        assertTrue("Max offset should be reasonable",
-                maxOffset > -1000 && maxOffset < 1000);
+        assertTrue(minOffset > -1000 && minOffset < 1000, "Min offset should be reasonable");
+        assertTrue(maxOffset > -1000 && maxOffset < 1000, "Max offset should be reasonable");
     }
 
     // ==================== Reset Tests ====================
@@ -305,16 +293,16 @@ public class SwScrlCpzTest {
         handler.init(1000, 500);
         handler.update(horizScrollBuf, 1000, 500, 0, 0);
 
-        assertTrue("BG1 should be non-zero before reset", handler.getBg1Xpx() > 0);
+        assertTrue(handler.getBg1Xpx() > 0, "BG1 should be non-zero before reset");
 
         // Reset
         handler.reset();
 
         // After reset, state should be cleared
-        assertEquals("BG1 should be 0 after reset", 0, handler.getBg1Xpx());
-        assertEquals("BG2 should be 0 after reset", 0, handler.getBg2Xpx());
-        assertEquals("BG Y should be 0 after reset", 0, handler.getBgYpx());
-        assertEquals("Ripple phase should be 0 after reset", 0, handler.getRipplePhase());
+        assertEquals(0, handler.getBg1Xpx(), "BG1 should be 0 after reset");
+        assertEquals(0, handler.getBg2Xpx(), "BG2 should be 0 after reset");
+        assertEquals(0, handler.getBgYpx(), "BG Y should be 0 after reset");
+        assertEquals(0, handler.getRipplePhase(), "Ripple phase should be 0 after reset");
     }
 
     // ==================== Mock ROM for Testing ====================
@@ -404,3 +392,5 @@ public class SwScrlCpzTest {
         }
     }
 }
+
+

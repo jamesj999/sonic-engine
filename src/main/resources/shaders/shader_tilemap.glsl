@@ -9,6 +9,8 @@ uniform float TotalPaletteLines;
 
 uniform float TilemapWidth;          // In tiles
 uniform float TilemapHeight;         // In tiles
+uniform float TilemapRingBaseX;      // Physical X origin for logical BG column zero
+uniform float TilemapRingBaseY;      // Physical Y origin for logical BG row zero
 uniform float AtlasWidth;            // In pixels
 uniform float AtlasHeight;           // In pixels
 uniform float LookupSize;            // Pattern lookup width
@@ -27,12 +29,16 @@ uniform int UseUnderwaterPalette;
 uniform float WaterlineScreenY;
 uniform sampler1D HScrollTexture;    // Per-scanline BG scroll (R32F, 224 entries)
 uniform int PerLineScroll;           // 1 = per-scanline HScroll, 0 = uniform WorldOffsetX
-uniform sampler1D VScrollColumnTexture; // Per-column VScroll (R32F, 20 entries)
+uniform sampler1D VScrollColumnTexture; // Per-column VScroll (R32F, ceil(displayWidth / 16) entries)
 uniform int PerColumnVScroll;        // 1 = apply per-column VScroll to worldY
+uniform float VScrollColumnCount;    // Texel count of VScrollColumnTexture; WindowWidth is the FBO width for BG passes and must not size the lookup
 uniform float ScreenHeight;          // Visible scanline count (224.0)
+uniform float PerLineScrollSampleYOffsetPx;
 uniform float VDPWrapWidth;          // VDP nametable width in tiles (64.0), 0 = use TilemapWidth
 uniform float VDPWrapHeight;         // VDP nametable height in tiles, 0 = disabled
 uniform float NametableBase;         // Starting tilemap column for VDP-style wrapping
+uniform float UpperBandWrapHeightPx; // If >0, rows above this BG-local Y wrap within UpperBandWrapWidthTiles
+uniform float UpperBandWrapWidthTiles;
 uniform int FrameCounter;            // For shimmer animation
 uniform int ShimmerStyle;            // 0 = none, 1 = S1 integer-snapped shimmer
 
@@ -108,7 +114,7 @@ void main()
     if (PerLineScroll == 1) {
         // Per-scanline horizontal scroll: each scanline has its own BG offset.
         // Matches VDP behavior where HScroll RAM provides per-line offsets.
-        float scanline = clamp(pixelYFromTop, 0.0, ScreenHeight - 1.0);
+        float scanline = clamp(pixelYFromTop - PerLineScrollSampleYOffsetPx, 0.0, ScreenHeight - 1.0);
         float scanlineTexCoord = (scanline + 0.5) / ScreenHeight;
         float hScrollThis = texture(HScrollTexture, scanlineTexCoord).r * 32767.0;
         worldX = pixelX - hScrollThis;
@@ -117,16 +123,28 @@ void main()
     }
     float columnVScroll = 0.0;
     if (PerColumnVScroll == 1) {
-        float column = clamp(floor(pixelX / 16.0), 0.0, 19.0);
-        float columnTexCoord = (column + 0.5) / 20.0;
+        float vScrollColumnCount = VScrollColumnCount > 0.0
+            ? VScrollColumnCount
+            : max(1.0, ceil(WindowWidth / 16.0));
+        float column = clamp(floor(pixelX / 16.0), 0.0, vScrollColumnCount - 1.0);
+        float columnTexCoord = (column + 0.5) / vScrollColumnCount;
         columnVScroll = texture(VScrollColumnTexture, columnTexCoord).r * 32767.0;
     }
     float worldY = WorldOffsetY + pixelYFromTop + columnVScroll;
 
     float tileXf = floor(worldX / 8.0);
     float tileYf = floor(worldY / 8.0);
+    float localBandY = worldY;
+    if (WrapY == 1) {
+        float wrapHeightPx = TilemapHeight * 8.0;
+        localBandY = mod(localBandY, wrapHeightPx);
+        if (localBandY < 0.0) localBandY += wrapHeightPx;
+    }
 
-    if (VDPWrapWidth > 0.0) {
+    if (UpperBandWrapWidthTiles > 0.0 && UpperBandWrapHeightPx > 0.0 && localBandY < UpperBandWrapHeightPx) {
+        tileXf = mod(tileXf, UpperBandWrapWidthTiles);
+        if (tileXf < 0.0) tileXf += UpperBandWrapWidthTiles;
+    } else if (VDPWrapWidth > 0.0) {
         // VDP nametable simulation for AIZ ocean-to-beach transition.
         // Two modes based on whether the camera has started revealing beach tiles:
         //
@@ -172,7 +190,12 @@ void main()
         if (tileYf < 0.0) tileYf += VDPWrapHeight;
     }
 
-    vec2 tileUv = vec2((tileXf + 0.5) / TilemapWidth, (tileYf + 0.5) / TilemapHeight);
+    float physicalTileX = mod(tileXf + TilemapRingBaseX, TilemapWidth);
+    if (physicalTileX < 0.0) physicalTileX += TilemapWidth;
+    float physicalTileY = mod(tileYf + TilemapRingBaseY, TilemapHeight);
+    if (physicalTileY < 0.0) physicalTileY += TilemapHeight;
+    vec2 tileUv = vec2((physicalTileX + 0.5) / TilemapWidth,
+            (physicalTileY + 0.5) / TilemapHeight);
     vec4 desc = texture(TilemapTexture, tileUv);
 
     if (desc.a < 0.5) {
@@ -232,10 +255,10 @@ void main()
         color = texture(Palette, vec2(paletteX, paletteY));
     }
 
-    // When MaskOutput is set, output white as a binary priority mask
-    // Otherwise output the actual tile color
+    // Preserve the palette line in the priority buffer. Some ROM scenes use
+    // palette priority to place a sprite between two high-priority tile groups.
     if (MaskOutput == 1) {
-        FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+        FragColor = vec4(1.0, paletteIndex / 3.0, 0.0, 1.0);
     } else {
         FragColor = color;
     }

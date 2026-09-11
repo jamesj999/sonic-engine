@@ -7,6 +7,7 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectRenderManager;
+import com.openggf.level.objects.ZeroArgRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -30,7 +31,8 @@ import java.util.logging.Logger;
  * <p>
  * Reference: docs/s1disasm/_incObj/89 Ending Sequence STH.asm
  */
-public class Sonic1EndingSTHObjectInstance extends AbstractObjectInstance {
+public class Sonic1EndingSTHObjectInstance extends AbstractObjectInstance
+        implements ZeroArgRewindRecreatable {
     private static final Logger LOGGER = Logger.getLogger(Sonic1EndingSTHObjectInstance.class.getName());
 
     // ========================================================================
@@ -82,7 +84,7 @@ public class Sonic1EndingSTHObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         ensureRenderer();
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) {

@@ -23,6 +23,7 @@ public class TestDonorCapabilities {
             public boolean hasSuperTransform() { return false; }
             public boolean hasHyperTransform() { return false; }
             public boolean hasInstaShield() { return false; }
+            public boolean hasTailsFlight() { return false; }
             public boolean hasElementalShields() { return false; }
             public boolean hasSidekick() { return false; }
             public java.util.Map<CanonicalAnimation, CanonicalAnimation> getAnimationFallbacks() {
@@ -40,6 +41,7 @@ public class TestDonorCapabilities {
         assertFalse(caps.hasSuperTransform());
         assertFalse(caps.hasHyperTransform());
         assertFalse(caps.hasInstaShield());
+        assertFalse(caps.hasTailsFlight());
         assertFalse(caps.hasElementalShields());
         assertFalse(caps.hasSidekick());
         assertTrue(caps.getAnimationFallbacks().isEmpty());
@@ -58,6 +60,7 @@ public class TestDonorCapabilities {
         assertFalse(caps.hasSuperTransform());
         assertFalse(caps.hasHyperTransform());
         assertFalse(caps.hasInstaShield());
+        assertFalse(caps.hasTailsFlight());
         assertFalse(caps.hasElementalShields());
         assertFalse(caps.hasSidekick());
         var fallbacks = caps.getAnimationFallbacks();
@@ -84,11 +87,13 @@ public class TestDonorCapabilities {
         assertTrue(caps.hasSuperTransform());
         assertFalse(caps.hasHyperTransform());
         assertFalse(caps.hasInstaShield());
+        assertFalse(caps.hasTailsFlight());
         assertFalse(caps.hasElementalShields());
         assertTrue(caps.hasSidekick());
         var fallbacks = caps.getAnimationFallbacks();
         assertEquals(CanonicalAnimation.ROLL, fallbacks.get(CanonicalAnimation.WARP1));
-        assertEquals(CanonicalAnimation.WAIT, fallbacks.get(CanonicalAnimation.BLINK));
+        assertEquals(CanonicalAnimation.BLINK, fallbacks.get(CanonicalAnimation.BLINK));
+        assertEquals(CanonicalAnimation.GET_UP, fallbacks.get(CanonicalAnimation.GET_UP));
         assertEquals(CanonicalAnimation.BUBBLE, fallbacks.get(CanonicalAnimation.GET_AIR));
     }
 
@@ -103,6 +108,7 @@ public class TestDonorCapabilities {
         assertTrue(caps.hasSuperTransform());
         assertTrue(caps.hasHyperTransform());
         assertTrue(caps.hasInstaShield());
+        assertTrue(caps.hasTailsFlight());
         assertTrue(caps.hasElementalShields());
         assertTrue(caps.hasSidekick());
         var fallbacks = caps.getAnimationFallbacks();

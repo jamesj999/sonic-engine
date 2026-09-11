@@ -1,6 +1,7 @@
 package com.openggf.game.sonic2.objects;
 
 import com.openggf.game.PlayableEntity;
+import com.openggf.debug.DebugColor;
 import com.openggf.debug.DebugRenderContext;
 import com.openggf.game.sonic2.audio.Sonic2Sfx;
 import com.openggf.game.sonic2.constants.Sonic2AnimationIds;
@@ -10,10 +11,16 @@ import com.openggf.game.sonic2.Sonic2ObjectArtKeys;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
+import com.openggf.level.objects.ObjectServices;
+import com.openggf.level.objects.ObjectPlayerParticipationPolicy;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
+import com.openggf.sprites.playable.ObjectControlState;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Logger;
 
@@ -39,9 +46,11 @@ import java.util.logging.Logger;
  *   <li>WFZ: Hook on chain - max extension 0xA0 (or 0x60), frame = extension/16 + 1, palette 1</li>
  * </ul>
  */
-public class MovingVineObjectInstance extends AbstractObjectInstance {
+public class MovingVineObjectInstance extends AbstractObjectInstance implements RewindRecreatable {
 
     private static final Logger LOGGER = Logger.getLogger(MovingVineObjectInstance.class.getName());
+    private static final ObjectPlayerParticipationPolicy PLAYER_PARTICIPATION =
+            ObjectPlayerParticipationPolicy.MAIN_PLUS_ENGINE_SIDEKICKS_AS_NATIVE_P2_EXTENDED;
 
     /**
      * Zone variant configuration.
@@ -80,12 +89,12 @@ public class MovingVineObjectInstance extends AbstractObjectInstance {
     }
 
     // === Object Configuration ===
-    private final ZoneVariant variant;
-    private final int initialY;             // objoff_3C: Saved initial Y position
-    private final int maxExtension;         // objoff_2E: Maximum extension distance
-    private final boolean reversedMode;     // objoff_36: If true, retract when player hanging
-    private final boolean buttonVineMode;   // objoff_34: Button switch mode flag
-    private final int buttonSwitchId;       // subtype & 0x0F: Switch ID for ButtonVine_Trigger
+    private ZoneVariant variant;
+    private int initialY;             // objoff_3C: Saved initial Y position
+    private int maxExtension;         // objoff_2E: Maximum extension distance
+    private boolean reversedMode;     // objoff_36: If true, retract when player hanging
+    private boolean buttonVineMode;   // objoff_34: Button switch mode flag
+    private int buttonSwitchId;       // subtype & 0x0F: Switch ID for ButtonVine_Trigger
 
     // === Movement State ===
     private int currentExtension;           // objoff_38: Current extension value
@@ -168,13 +177,19 @@ public class MovingVineObjectInstance extends AbstractObjectInstance {
                 spawn.x(), initialY, subtype, variant, maxExtension, reversedMode, buttonVineMode, buttonSwitchId));
     }
 
+    @Override
+    public MovingVineObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new MovingVineObjectInstance(ctx.spawn(), "MovingVine");
+    }
+
     /**
      * Determines zone variant based on current level.
      * ROM: cmpi.b #wing_fortress_zone,(Current_Zone).w
      */
     private ZoneVariant determineZoneVariant() {
-        if (services().currentLevel() != null) {
-            int zoneId = services().currentLevel().getZoneIndex();
+        ObjectServices svc = tryServices();
+        if (svc != null && svc.currentLevel() != null) {
+            int zoneId = svc.currentLevel().getZoneIndex();
             if (zoneId == Sonic2ZoneConstants.ROM_ZONE_WFZ) {
                 return ZoneVariant.WFZ;
             }
@@ -193,8 +208,7 @@ public class MovingVineObjectInstance extends AbstractObjectInstance {
         return currentY;  // Y position varies with extension
     }
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         if (isDestroyed()) {
             return;
         }
@@ -210,12 +224,26 @@ public class MovingVineObjectInstance extends AbstractObjectInstance {
 
         // 3. Process player interactions
         // ROM: Obj80_Action processes each player via a2 pointer
-        // Note: We only have one player in current engine, but structure supports two
-        processPlayerInteraction(player, false);  // Player 1 (MainCharacter)
-        // TODO: Player 2 (Sidekick) when multiplayer is implemented
+        List<PlayableEntity> participants = interactionParticipants(playerEntity);
+        for (int i = 0; i < participants.size(); i++) {
+            if (participants.get(i) instanceof AbstractPlayableSprite player) {
+                processPlayerInteraction(player, i != 0);
+            }
+        }
 
         // 4. Update dynamic spawn for collision system
         updateDynamicSpawn(spawn.x(), currentY);
+    }
+
+    private List<PlayableEntity> interactionParticipants(PlayableEntity updatePlayer) {
+        List<PlayableEntity> participants = services().playerQuery().playersFor(PLAYER_PARTICIPATION);
+        if (updatePlayer != null && !participants.contains(updatePlayer)) {
+            ArrayList<PlayableEntity> withUpdatePlayer = new ArrayList<>(participants.size() + 1);
+            withUpdatePlayer.add(updatePlayer);
+            withUpdatePlayer.addAll(participants);
+            return withUpdatePlayer;
+        }
+        return participants;
     }
 
     /**
@@ -350,27 +378,62 @@ public class MovingVineObjectInstance extends AbstractObjectInstance {
         // ROM: tst.b (a2) / beq.w loc_29B5E
         // (a2) points to objoff_30/31 grab flag
 
+        // ROM Obj80_Action immediately tests render_flags.on_screen on the
+        // grabbed character and branches to loc_29B42 (the no-jump release
+        // path) when it is clear, BEFORE checking routine>=4 or any A/B/C
+        // press (docs/s2disasm/s2.asm:56707-56708). loc_29B42 clears
+        // obj_control(a1), clears the grab flag (a2), and sets a 60-frame
+        // release delay with NO jump velocity
+        // (docs/s2disasm/s2.asm:56741-56744). This matters for a CPU sidekick
+        // (Tails): when the camera tracks the leader (Sonic) far enough that
+        // the pinned, vine-grabbed Tails scrolls off the LEFT edge, the ROM
+        // releases Tails here and it resumes normal CPU following / free-fall
+        // (x_speed climbs by air accel 0x18, y_speed by gravity 0x38). The CPU
+        // sidekick can never satisfy the A/B/C-press release (it only writes
+        // Ctrl_2_Logical, never the raw (Ctrl_2) word), so the off-screen
+        // branch is the only release path for it. render_flags.on_screen is
+        // refreshed every frame per playable by SpriteManager via
+        // camera.isVisibleForRenderFlag; we only consult it once it has been
+        // populated (hasRenderFlagOnScreenState) so a yet-uninitialised state
+        // does not spuriously release the grab.
+        if (player.hasRenderFlagOnScreenState() && !player.isRenderFlagOnScreen()) {
+            releasePlayer(player, isPlayer2, false);
+            return;
+        }
+
         // Check if player should be released (dead, debug mode, etc.)
-        // ROM: _btst #render_flags.on_screen,render_flags(a1) / _beq.s loc_29B42
         // ROM: cmpi.b #4,routine(a1) / bhs.s loc_29B42
-        // Note: We skip the on-screen check since it's just a safeguard
         if (player.isHurt() || player.isDebugMode()) {
             releasePlayer(player, isPlayer2, false);
             return;
         }
 
-        // Check for A/B/C button press to release
-        // ROM: andi.b #button_B_mask|button_C_mask|button_A_mask,d0 / beq.w loc_29B50
-        if (player.isJumpPressed()) {
+        // Check for a new A/B/C press to release. Obj80_Action reads the RAW
+        // HELD controller word -- (Ctrl_1) for the MainCharacter and (Ctrl_2)
+        // for the Sidekick (docs/s2disasm/s2.asm:56695,56699) -- and releases
+        // only on an A/B/C press bit in that raw word
+        // (andi.b #button_B_mask|button_C_mask|button_A_mask,d0 / beq.w loc_29B50,
+        // docs/s2disasm/s2.asm:56711-56712). The S2 Tails CPU writes its
+        // synthesized follow-jump only to Ctrl_2_Logical
+        // (docs/s2disasm/s2.asm:39375), never to the physical (Ctrl_2); in 1P
+        // Sonic+Tails mode no controller 2 is plugged in, so (Ctrl_2)=0 and the
+        // CPU sidekick can never satisfy this release -- it stays pinned to the
+        // vine. isRawControllerJumpJustPressed() models exactly that raw (Ctrl_2)
+        // semantic (0 for a CPU sidekick) and falls through to isJumpJustPressed()
+        // for human-controlled sprites, so Sonic on controller 1 is unaffected.
+        // This matches the sister object Obj7F (VineSwitchObjectInstance, which
+        // reads the same raw (Ctrl_1)/(Ctrl_2) word, docs/s2disasm/s2.asm:56463-56491).
+        if (player.isRawControllerJumpJustPressed()) {
             releasePlayer(player, isPlayer2, true);
             return;
         }
 
-        // Keep player attached to vine (using center coordinates per CLAUDE.md)
-        // ROM: loc_29B50 - move.w x_pos(a0),x_pos(a1) / move.w y_pos(a0),y_pos(a1) / addi.w #$94,y_pos(a1)
-        player.setCentreX((short) spawn.x());
+        // Keep player attached to vine (using center coordinates per CLAUDE.md).
+        // ROM loc_29B50 only refreshes y_pos while grabbed; x_pos is written on
+        // initial grab at loc_29BC8 and then left alone.
+        // ROM: move.w y_pos(a0),y_pos(a1) / addi.w #$94,y_pos(a1)
         int hangY = currentY + 0x94;
-        player.setCentreY((short) hangY);
+        player.setCentreYPreserveSubpixel((short) hangY);
     }
 
     /**
@@ -435,11 +498,12 @@ public class MovingVineObjectInstance extends AbstractObjectInstance {
         player.setYSpeed((short) 0);
         player.setGSpeed((short) 0);
 
-        // Position player on vine (using center coordinates per CLAUDE.md)
+        // Position player on vine (using center coordinates per CLAUDE.md).
+        // The ROM uses move.w x_pos/y_pos, so x_sub/y_sub are preserved.
         // ROM: move.w x_pos(a0),x_pos(a1) / move.w y_pos(a0),y_pos(a1) / addi.w #$94,y_pos(a1)
-        player.setCentreX((short) spawn.x());
+        player.setCentreXPreserveSubpixel((short) spawn.x());
         int hangY = currentY + 0x94;
-        player.setCentreY((short) hangY);
+        player.setCentreYPreserveSubpixel((short) hangY);
 
         // Set animation to hanging pose
         // ROM: move.b #AniIDSonAni_Hang2,anim(a1)
@@ -447,7 +511,7 @@ public class MovingVineObjectInstance extends AbstractObjectInstance {
 
         // Lock player control
         // ROM: move.b #1,obj_control(a1)
-        player.setObjectControlled(true);
+        ObjectControlState.nativeBits0To6CpuAllowedMovementSuppressed().applyTo(player);
 
         // Mark as grabbed
         // ROM: move.b #1,(a2)
@@ -484,7 +548,7 @@ public class MovingVineObjectInstance extends AbstractObjectInstance {
     private void releasePlayer(AbstractPlayableSprite player, boolean isPlayer2, boolean jumped) {
         // Clear control lock
         // ROM: clr.b obj_control(a1)
-        player.setObjectControlled(false);
+        ObjectControlState.none().applyTo(player);
 
         // Clear grab flag
         // ROM: clr.b (a2)
@@ -619,6 +683,22 @@ public class MovingVineObjectInstance extends AbstractObjectInstance {
         float grabG = (player1Grabbed || player2Grabbed) ? 0.0f : 0.5f;
         ctx.drawLine(x - 8, currentY - 8, x + 8, currentY + 8, grabR, grabG, 0.0f);
         ctx.drawLine(x + 8, currentY - 8, x - 8, currentY + 8, grabR, grabG, 0.0f);
+
+        // Object bounding box (ROM Obj80_Init: width_pixels $10, y_radius $80; s2.asm:56659-56661).
+        int boxLeft = x - 0x10;
+        int boxRight = x + 0x10;
+        int boxTop = currentY - 0x80;
+        int boxBottom = currentY + 0x80;
+        ctx.drawLine(boxLeft, boxTop, boxRight, boxTop, 0.9f, 0.9f, 0.2f);
+        ctx.drawLine(boxRight, boxTop, boxRight, boxBottom, 0.9f, 0.9f, 0.2f);
+        ctx.drawLine(boxRight, boxBottom, boxLeft, boxBottom, 0.9f, 0.9f, 0.2f);
+        ctx.drawLine(boxLeft, boxBottom, boxLeft, boxTop, 0.9f, 0.9f, 0.2f);
+
+        // Label anchored at the bottom of the object (the hook, ~currentY+0x94) and
+        // rendered one line below (+1 offset) instead of above the anchor.
+        ctx.drawWorldLabel(x, currentY + 0x94, 1,
+                String.format("MovingVine ext%d/%d", currentExtension, maxExtension),
+                DebugColor.CYAN);
     }
 
 }

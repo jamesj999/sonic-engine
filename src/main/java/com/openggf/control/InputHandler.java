@@ -1,5 +1,10 @@
 package com.openggf.control;
 
+import com.openggf.InputBindingFactory;
+
+import java.util.Objects;
+import java.util.function.Supplier;
+
 import static org.lwjgl.glfw.GLFW.*;
 
 /**
@@ -9,14 +14,50 @@ import static org.lwjgl.glfw.GLFW.*;
 public class InputHandler {
 	// GLFW key codes can range from 0 to GLFW_KEY_LAST (348)
 	private static final int MAX_KEYS = 512;
+	private static final int MAX_MOUSE_BUTTONS = 16;
 	boolean[] keys = new boolean[MAX_KEYS];
 	boolean[] previousKeys = new boolean[MAX_KEYS];
+	boolean[] mouseButtons = new boolean[MAX_MOUSE_BUTTONS];
+	boolean[] previousMouseButtons = new boolean[MAX_MOUSE_BUTTONS];
+	private final Supplier<InputBindings> inputBindingsSource;
+	private InputBindings inputBindings;
+	private final KeyboardInputMapper keyboardInputMapper;
+	private final GamepadInputManager gamepadInputManager;
+	private LogicalInputSnapshot logicalSnapshot = LogicalInputSnapshot.neutral();
+	private LogicalInputSnapshot logicalOverride;
+	private double mouseX;
+	private double mouseY;
+	private boolean mouseInputSeen;
 
 	/**
 	 * Creates a new InputHandler.
 	 * Key events should be delivered via handleKeyEvent() from GLFW callback.
 	 */
 	public InputHandler() {
+		this(InputBindingFactory.standaloneSupplier());
+	}
+
+	public InputHandler(Supplier<InputBindings> inputBindingsSource) {
+		this(inputBindingsSource, new GamepadInputManager(GamepadStateSource.noop()));
+	}
+
+	/**
+	 * Creates an InputHandler backed by a caller-supplied {@link GamepadStateSource},
+	 * for tests that need to drive gamepad state from outside {@code com.openggf.control}.
+	 */
+	public InputHandler(Supplier<InputBindings> inputBindingsSource, GamepadStateSource gamepadStateSource) {
+		this(inputBindingsSource, new GamepadInputManager(gamepadStateSource));
+	}
+
+	public static InputHandler live(Supplier<InputBindings> inputBindingsSource) {
+		return new InputHandler(inputBindingsSource, new GamepadInputManager(new GlfwGamepadStateSource()));
+	}
+
+	InputHandler(Supplier<InputBindings> inputBindingsSource, GamepadInputManager gamepadInputManager) {
+		this.inputBindingsSource = Objects.requireNonNull(inputBindingsSource, "inputBindingsSource");
+		this.gamepadInputManager = Objects.requireNonNull(gamepadInputManager, "gamepadInputManager");
+		this.inputBindings = Objects.requireNonNull(inputBindingsSource.get(), "inputBindings");
+		this.keyboardInputMapper = new KeyboardInputMapper();
 	}
 
 	/**
@@ -35,46 +76,176 @@ public class InputHandler {
 		}
 	}
 
+	public void handleMouseMove(double x, double y) {
+		mouseX = x;
+		mouseY = y;
+		mouseInputSeen = true;
+	}
+
+	public void handleMouseButton(int button, int action) {
+		mouseInputSeen = true;
+		if (button >= 0 && button < MAX_MOUSE_BUTTONS) {
+			if (action == GLFW_PRESS || action == GLFW_REPEAT) {
+				mouseButtons[button] = true;
+			} else if (action == GLFW_RELEASE) {
+				mouseButtons[button] = false;
+			}
+		}
+	}
+
 	/**
 	 * Checks whether a specific key is down.
 	 *
-	 * @param keyCode The GLFW key code to check
+	 * @param keyCode The GLFW key code to check, or a negative value for an
+	 *        unbound binding, which is never down
 	 * @return Whether the key is pressed or not
 	 */
 	public boolean isKeyDown(int keyCode) {
-		if (keyCode >= 0 && keyCode < MAX_KEYS) {
-			return keys[keyCode];
+		// The twin of the guard in isKeyPressed, and load-bearing for the same
+		// reason. An unbound binding is -1, and so is rewindKey() when live
+		// rewind is unbound, so without this the pad-substitution tail below
+		// reports every unbound binding as held for as long as the pad's rewind
+		// bumper is -- and rewindHeld is not gated on LIVE_REWIND_ENABLED.
+		// P1_B, P1_C, P2_B and P2_C ship unbound and are read here through
+		// KeyboardInputMapper, so a held bumper handed both players a phantom
+		// B and C with no matching press edge, held disagreeing with pressed.
+		if (keyCode < 0) {
+			return false;
 		}
-		return false;
+		if (keyCode < MAX_KEYS && keys[keyCode]) {
+			return true;
+		}
+		return keyCode == inputBindings.rewindKey() && gamepadInputManager.isRewindHeld();
+	}
+
+	/** Returns raw keyboard state, ignoring any trace/replay logical override. */
+	public boolean isPhysicalKeyDown(int keyCode) {
+		return keyCode >= 0 && keyCode < MAX_KEYS && keys[keyCode];
+	}
+
+	public boolean isPhysicalShiftDown() {
+		return isPhysicalKeyDown(GLFW_KEY_LEFT_SHIFT)
+				|| isPhysicalKeyDown(GLFW_KEY_RIGHT_SHIFT);
+	}
+
+	public boolean isPhysicalControlDown() {
+		return isPhysicalKeyDown(GLFW_KEY_LEFT_CONTROL)
+				|| isPhysicalKeyDown(GLFW_KEY_RIGHT_CONTROL);
+	}
+
+	public boolean isPhysicalAltDown() {
+		return isPhysicalKeyDown(GLFW_KEY_LEFT_ALT)
+				|| isPhysicalKeyDown(GLFW_KEY_RIGHT_ALT);
+	}
+
+	public boolean isPhysicalSuperDown() {
+		return isPhysicalKeyDown(GLFW_KEY_LEFT_SUPER)
+				|| isPhysicalKeyDown(GLFW_KEY_RIGHT_SUPER);
+	}
+
+	/**
+	 * Held state for a directional menu-cursor key, keyboard OR gamepad (D-pad/stick),
+	 * for callers that drive their own hold-repeat timer (e.g. level-select screens).
+	 * {@code directionMask} is one of {@code AbstractPlayableSprite.INPUT_UP/_DOWN/_LEFT/_RIGHT}.
+	 * For a single edge-triggered press instead, use {@link #logical()}'s
+	 * {@code menuUp()}/{@code menuDown()}/{@code menuLeft()}/{@code menuRight()}.
+	 */
+	public boolean isDirectionHeld(int keyCode, int directionMask) {
+		return isKeyDown(keyCode) || (logical().player1().heldMask() & directionMask) != 0;
 	}
 
 	/**
 	 * Checks whether a specific key was just pressed this frame.
 	 *
-	 * @param keyCode The GLFW key code to check
+	 * @param keyCode The GLFW key code to check, or a negative value for an
+	 *        unbound binding, which is never pressed
 	 * @return Whether the key was just pressed
 	 */
 	public boolean isKeyPressed(int keyCode) {
+		// An explicitly empty binding resolves to -1, and so do the unbound
+		// debugModeKey()/frameStepKey() bindings -- so without this an unbound
+		// shortcut matches a pad-substitution branch below and fires from a held
+		// gamepad button. Unbinding debug mode fired every other unbound binding
+		// with it, including all nine playback keys, which ship unbound.
+		if (keyCode < 0) {
+			return false;
+		}
+		if (keyCode == inputBindings.debugModeKey()) {
+			if (logicalOverride != null) {
+				return logicalOverride.debugModeTogglePressed();
+			}
+			return isRawKeyPressed(keyCode) || gamepadInputManager.isDebugModeTogglePressed();
+		}
+		if (keyCode == inputBindings.frameStepKey()) {
+			return isRawKeyPressed(keyCode) || gamepadInputManager.isFrameStepTogglePressed();
+		}
+		return isRawKeyPressed(keyCode);
+	}
+
+	/**
+	 * Edge-triggered: true only on the frame the gamepad Back/Select/View button on
+	 * the primary connected pad transitions to held. Scoped to the main-menu
+	 * options-panel Tab toggle ({@code MasterTitleScreen} / {@code LaunchConfigPanel}) —
+	 * unlike {@link #isKeyPressed(int)}'s debug-mode/frame-step wiring, this is not a
+	 * blanket substitute for every keyboard use of Tab (editor toggle, special stage
+	 * entry, art viewer), which are unrelated screens/modes.
+	 */
+	public boolean isGamepadBackButtonPressed() {
+		return logicalOverride == null && gamepadInputManager.isBackButtonPressed();
+	}
+
+	private boolean isRawKeyPressed(int keyCode) {
 		if (keyCode >= 0 && keyCode < MAX_KEYS) {
 			return keys[keyCode] && !previousKeys[keyCode];
 		}
 		return false;
 	}
 
+	/**
+	 * Returns true when at least one key transitioned from not-pressed to
+	 * pressed during the current frame. Mirrors {@link #isKeyPressed(int)}
+	 * but checks all keys at once. Used by full-screen prompts that
+	 * accept any input to dismiss.
+	 */
+	public boolean isAnyKeyJustPressed() {
+		for (int i = 0; i < MAX_KEYS; i++) {
+			if (keys[i] && !previousKeys[i]) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	public boolean isShiftDown() {
+		if (logicalOverride != null) {
+			return logicalOverride.debugShiftDown();
+		}
 		return isKeyDown(GLFW_KEY_LEFT_SHIFT) || isKeyDown(GLFW_KEY_RIGHT_SHIFT);
 	}
 
 	public boolean isControlDown() {
+		if (logicalOverride != null) {
+			return logicalOverride.debugControlDown();
+		}
 		return isKeyDown(GLFW_KEY_LEFT_CONTROL) || isKeyDown(GLFW_KEY_RIGHT_CONTROL);
 	}
 
 	public boolean isAltDown() {
+		if (logicalOverride != null) {
+			return logicalOverride.debugAltDown();
+		}
 		return isKeyDown(GLFW_KEY_LEFT_ALT) || isKeyDown(GLFW_KEY_RIGHT_ALT);
 	}
 
+	public boolean isSuperDown() {
+		if (logicalOverride != null) {
+			return logicalOverride.debugSuperDown();
+		}
+		return isKeyDown(GLFW_KEY_LEFT_SUPER) || isKeyDown(GLFW_KEY_RIGHT_SUPER);
+	}
+
 	public boolean isAnyModifierDown() {
-		return isShiftDown() || isControlDown() || isAltDown();
+		return isShiftDown() || isControlDown() || isAltDown() || isSuperDown();
 	}
 
 	public boolean isKeyPressedWithoutModifiers(int keyCode) {
@@ -82,164 +253,90 @@ public class InputHandler {
 	}
 
 	/**
+	 * Drops all key state. A key is otherwise cleared only by an observed
+	 * GLFW_RELEASE, and the release for a window-switch modifier goes to the
+	 * window that took focus, so the modifier would latch for the rest of the
+	 * process and disable every shortcut requiring no modifier held.
+	 *
+	 * <p>{@code previousKeys} is cleared too, or the first press after the clear
+	 * is not seen as a rising edge. Mouse state is untouched — a focus change
+	 * does not strand a mouse button the way it strands a modifier.
+	 */
+	public void clearKeyState() {
+		java.util.Arrays.fill(keys, false);
+		java.util.Arrays.fill(previousKeys, false);
+	}
+
+	public double getMouseX() {
+		return mouseX;
+	}
+
+	public double getMouseY() {
+		return mouseY;
+	}
+
+	public boolean isMouseButtonDown(int button) {
+		if (button >= 0 && button < MAX_MOUSE_BUTTONS) {
+			return mouseButtons[button];
+		}
+		return false;
+	}
+
+	public boolean isMouseButtonPressed(int button) {
+		if (button >= 0 && button < MAX_MOUSE_BUTTONS) {
+			return mouseButtons[button] && !previousMouseButtons[button];
+		}
+		return false;
+	}
+
+	public boolean hasMouseInputSeen() {
+		return mouseInputSeen;
+	}
+
+	public void setLogicalOverride(LogicalInputSnapshot override) {
+		logicalOverride = override != null ? override : LogicalInputSnapshot.neutral();
+		logicalSnapshot = logicalOverride;
+	}
+
+	public void clearLogicalOverride() {
+		logicalOverride = null;
+	}
+
+	public boolean hasLogicalOverride() {
+		return logicalOverride != null;
+	}
+
+	public void refreshLogicalSnapshot() {
+		inputBindings = Objects.requireNonNull(inputBindingsSource.get(), "inputBindings");
+		if (logicalOverride != null) {
+			gamepadInputManager.poll(inputBindings);
+			logicalSnapshot = logicalOverride;
+			return;
+		}
+		PlayerInputState keyboardP1 = keyboardInputMapper.mapPlayer1(this, inputBindings);
+		PlayerInputState keyboardP2 = keyboardInputMapper.mapPlayer2(this, inputBindings);
+		LogicalInputSnapshot gamepadSnapshot = gamepadInputManager.poll(inputBindings);
+		PlayerInputState p1 = keyboardP1.merge(gamepadSnapshot.player1());
+		PlayerInputState p2 = keyboardP2.merge(gamepadSnapshot.player2());
+		logicalSnapshot = LogicalInputSnapshot.ofPlayers(p1, p2);
+	}
+
+	public LogicalInputSnapshot logical() {
+		return logicalSnapshot;
+	}
+
+	public boolean menuAcceptExcludingBackAction() {
+		PlayerInputState p1 = logical().player1();
+		return (p1.actionPressedMask() & (InputActionMasks.ACTION_A | InputActionMasks.ACTION_B)) != 0
+				|| p1.startPressed();
+	}
+
+	/**
 	 * Updates the input handler state. Should be called at the end of the game loop.
 	 */
 	public void update() {
 		System.arraycopy(keys, 0, previousKeys, 0, MAX_KEYS);
+		System.arraycopy(mouseButtons, 0, previousMouseButtons, 0, MAX_MOUSE_BUTTONS);
 	}
 
-	// GLFW to AWT key code conversion for backwards compatibility
-	// This allows existing code that uses AWT KeyEvent codes to still work
-	// during the migration period.
-
-	/**
-	 * Convert GLFW key code to AWT KeyEvent key code.
-	 * This is for backwards compatibility with existing code.
-	 */
-	public static int glfwToAwt(int glfwKey) {
-		return switch (glfwKey) {
-			case GLFW_KEY_A -> java.awt.event.KeyEvent.VK_A;
-			case GLFW_KEY_B -> java.awt.event.KeyEvent.VK_B;
-			case GLFW_KEY_C -> java.awt.event.KeyEvent.VK_C;
-			case GLFW_KEY_D -> java.awt.event.KeyEvent.VK_D;
-			case GLFW_KEY_E -> java.awt.event.KeyEvent.VK_E;
-			case GLFW_KEY_F -> java.awt.event.KeyEvent.VK_F;
-			case GLFW_KEY_G -> java.awt.event.KeyEvent.VK_G;
-			case GLFW_KEY_H -> java.awt.event.KeyEvent.VK_H;
-			case GLFW_KEY_I -> java.awt.event.KeyEvent.VK_I;
-			case GLFW_KEY_J -> java.awt.event.KeyEvent.VK_J;
-			case GLFW_KEY_K -> java.awt.event.KeyEvent.VK_K;
-			case GLFW_KEY_L -> java.awt.event.KeyEvent.VK_L;
-			case GLFW_KEY_M -> java.awt.event.KeyEvent.VK_M;
-			case GLFW_KEY_N -> java.awt.event.KeyEvent.VK_N;
-			case GLFW_KEY_O -> java.awt.event.KeyEvent.VK_O;
-			case GLFW_KEY_P -> java.awt.event.KeyEvent.VK_P;
-			case GLFW_KEY_Q -> java.awt.event.KeyEvent.VK_Q;
-			case GLFW_KEY_R -> java.awt.event.KeyEvent.VK_R;
-			case GLFW_KEY_S -> java.awt.event.KeyEvent.VK_S;
-			case GLFW_KEY_T -> java.awt.event.KeyEvent.VK_T;
-			case GLFW_KEY_U -> java.awt.event.KeyEvent.VK_U;
-			case GLFW_KEY_V -> java.awt.event.KeyEvent.VK_V;
-			case GLFW_KEY_W -> java.awt.event.KeyEvent.VK_W;
-			case GLFW_KEY_X -> java.awt.event.KeyEvent.VK_X;
-			case GLFW_KEY_Y -> java.awt.event.KeyEvent.VK_Y;
-			case GLFW_KEY_Z -> java.awt.event.KeyEvent.VK_Z;
-			case GLFW_KEY_0 -> java.awt.event.KeyEvent.VK_0;
-			case GLFW_KEY_1 -> java.awt.event.KeyEvent.VK_1;
-			case GLFW_KEY_2 -> java.awt.event.KeyEvent.VK_2;
-			case GLFW_KEY_3 -> java.awt.event.KeyEvent.VK_3;
-			case GLFW_KEY_4 -> java.awt.event.KeyEvent.VK_4;
-			case GLFW_KEY_5 -> java.awt.event.KeyEvent.VK_5;
-			case GLFW_KEY_6 -> java.awt.event.KeyEvent.VK_6;
-			case GLFW_KEY_7 -> java.awt.event.KeyEvent.VK_7;
-			case GLFW_KEY_8 -> java.awt.event.KeyEvent.VK_8;
-			case GLFW_KEY_9 -> java.awt.event.KeyEvent.VK_9;
-			case GLFW_KEY_SPACE -> java.awt.event.KeyEvent.VK_SPACE;
-			case GLFW_KEY_ENTER -> java.awt.event.KeyEvent.VK_ENTER;
-			case GLFW_KEY_ESCAPE -> java.awt.event.KeyEvent.VK_ESCAPE;
-			case GLFW_KEY_TAB -> java.awt.event.KeyEvent.VK_TAB;
-			case GLFW_KEY_BACKSPACE -> java.awt.event.KeyEvent.VK_BACK_SPACE;
-			case GLFW_KEY_INSERT -> java.awt.event.KeyEvent.VK_INSERT;
-			case GLFW_KEY_DELETE -> java.awt.event.KeyEvent.VK_DELETE;
-			case GLFW_KEY_RIGHT -> java.awt.event.KeyEvent.VK_RIGHT;
-			case GLFW_KEY_LEFT -> java.awt.event.KeyEvent.VK_LEFT;
-			case GLFW_KEY_DOWN -> java.awt.event.KeyEvent.VK_DOWN;
-			case GLFW_KEY_UP -> java.awt.event.KeyEvent.VK_UP;
-			case GLFW_KEY_PAGE_UP -> java.awt.event.KeyEvent.VK_PAGE_UP;
-			case GLFW_KEY_PAGE_DOWN -> java.awt.event.KeyEvent.VK_PAGE_DOWN;
-			case GLFW_KEY_HOME -> java.awt.event.KeyEvent.VK_HOME;
-			case GLFW_KEY_END -> java.awt.event.KeyEvent.VK_END;
-			case GLFW_KEY_F1 -> java.awt.event.KeyEvent.VK_F1;
-			case GLFW_KEY_F2 -> java.awt.event.KeyEvent.VK_F2;
-			case GLFW_KEY_F3 -> java.awt.event.KeyEvent.VK_F3;
-			case GLFW_KEY_F4 -> java.awt.event.KeyEvent.VK_F4;
-			case GLFW_KEY_F5 -> java.awt.event.KeyEvent.VK_F5;
-			case GLFW_KEY_F6 -> java.awt.event.KeyEvent.VK_F6;
-			case GLFW_KEY_F7 -> java.awt.event.KeyEvent.VK_F7;
-			case GLFW_KEY_F8 -> java.awt.event.KeyEvent.VK_F8;
-			case GLFW_KEY_F9 -> java.awt.event.KeyEvent.VK_F9;
-			case GLFW_KEY_F10 -> java.awt.event.KeyEvent.VK_F10;
-			case GLFW_KEY_F11 -> java.awt.event.KeyEvent.VK_F11;
-			case GLFW_KEY_F12 -> java.awt.event.KeyEvent.VK_F12;
-			case GLFW_KEY_LEFT_SHIFT, GLFW_KEY_RIGHT_SHIFT -> java.awt.event.KeyEvent.VK_SHIFT;
-			case GLFW_KEY_LEFT_CONTROL, GLFW_KEY_RIGHT_CONTROL -> java.awt.event.KeyEvent.VK_CONTROL;
-			case GLFW_KEY_LEFT_ALT, GLFW_KEY_RIGHT_ALT -> java.awt.event.KeyEvent.VK_ALT;
-			default -> glfwKey;
-		};
-	}
-
-	/**
-	 * Convert AWT KeyEvent key code to GLFW key code.
-	 */
-	public static int awtToGlfw(int awtKey) {
-		return switch (awtKey) {
-			case java.awt.event.KeyEvent.VK_A -> GLFW_KEY_A;
-			case java.awt.event.KeyEvent.VK_B -> GLFW_KEY_B;
-			case java.awt.event.KeyEvent.VK_C -> GLFW_KEY_C;
-			case java.awt.event.KeyEvent.VK_D -> GLFW_KEY_D;
-			case java.awt.event.KeyEvent.VK_E -> GLFW_KEY_E;
-			case java.awt.event.KeyEvent.VK_F -> GLFW_KEY_F;
-			case java.awt.event.KeyEvent.VK_G -> GLFW_KEY_G;
-			case java.awt.event.KeyEvent.VK_H -> GLFW_KEY_H;
-			case java.awt.event.KeyEvent.VK_I -> GLFW_KEY_I;
-			case java.awt.event.KeyEvent.VK_J -> GLFW_KEY_J;
-			case java.awt.event.KeyEvent.VK_K -> GLFW_KEY_K;
-			case java.awt.event.KeyEvent.VK_L -> GLFW_KEY_L;
-			case java.awt.event.KeyEvent.VK_M -> GLFW_KEY_M;
-			case java.awt.event.KeyEvent.VK_N -> GLFW_KEY_N;
-			case java.awt.event.KeyEvent.VK_O -> GLFW_KEY_O;
-			case java.awt.event.KeyEvent.VK_P -> GLFW_KEY_P;
-			case java.awt.event.KeyEvent.VK_Q -> GLFW_KEY_Q;
-			case java.awt.event.KeyEvent.VK_R -> GLFW_KEY_R;
-			case java.awt.event.KeyEvent.VK_S -> GLFW_KEY_S;
-			case java.awt.event.KeyEvent.VK_T -> GLFW_KEY_T;
-			case java.awt.event.KeyEvent.VK_U -> GLFW_KEY_U;
-			case java.awt.event.KeyEvent.VK_V -> GLFW_KEY_V;
-			case java.awt.event.KeyEvent.VK_W -> GLFW_KEY_W;
-			case java.awt.event.KeyEvent.VK_X -> GLFW_KEY_X;
-			case java.awt.event.KeyEvent.VK_Y -> GLFW_KEY_Y;
-			case java.awt.event.KeyEvent.VK_Z -> GLFW_KEY_Z;
-			case java.awt.event.KeyEvent.VK_0 -> GLFW_KEY_0;
-			case java.awt.event.KeyEvent.VK_1 -> GLFW_KEY_1;
-			case java.awt.event.KeyEvent.VK_2 -> GLFW_KEY_2;
-			case java.awt.event.KeyEvent.VK_3 -> GLFW_KEY_3;
-			case java.awt.event.KeyEvent.VK_4 -> GLFW_KEY_4;
-			case java.awt.event.KeyEvent.VK_5 -> GLFW_KEY_5;
-			case java.awt.event.KeyEvent.VK_6 -> GLFW_KEY_6;
-			case java.awt.event.KeyEvent.VK_7 -> GLFW_KEY_7;
-			case java.awt.event.KeyEvent.VK_8 -> GLFW_KEY_8;
-			case java.awt.event.KeyEvent.VK_9 -> GLFW_KEY_9;
-			case java.awt.event.KeyEvent.VK_SPACE -> GLFW_KEY_SPACE;
-			case java.awt.event.KeyEvent.VK_ENTER -> GLFW_KEY_ENTER;
-			case java.awt.event.KeyEvent.VK_ESCAPE -> GLFW_KEY_ESCAPE;
-			case java.awt.event.KeyEvent.VK_TAB -> GLFW_KEY_TAB;
-			case java.awt.event.KeyEvent.VK_BACK_SPACE -> GLFW_KEY_BACKSPACE;
-			case java.awt.event.KeyEvent.VK_INSERT -> GLFW_KEY_INSERT;
-			case java.awt.event.KeyEvent.VK_DELETE -> GLFW_KEY_DELETE;
-			case java.awt.event.KeyEvent.VK_RIGHT -> GLFW_KEY_RIGHT;
-			case java.awt.event.KeyEvent.VK_LEFT -> GLFW_KEY_LEFT;
-			case java.awt.event.KeyEvent.VK_DOWN -> GLFW_KEY_DOWN;
-			case java.awt.event.KeyEvent.VK_UP -> GLFW_KEY_UP;
-			case java.awt.event.KeyEvent.VK_PAGE_UP -> GLFW_KEY_PAGE_UP;
-			case java.awt.event.KeyEvent.VK_PAGE_DOWN -> GLFW_KEY_PAGE_DOWN;
-			case java.awt.event.KeyEvent.VK_HOME -> GLFW_KEY_HOME;
-			case java.awt.event.KeyEvent.VK_END -> GLFW_KEY_END;
-			case java.awt.event.KeyEvent.VK_F1 -> GLFW_KEY_F1;
-			case java.awt.event.KeyEvent.VK_F2 -> GLFW_KEY_F2;
-			case java.awt.event.KeyEvent.VK_F3 -> GLFW_KEY_F3;
-			case java.awt.event.KeyEvent.VK_F4 -> GLFW_KEY_F4;
-			case java.awt.event.KeyEvent.VK_F5 -> GLFW_KEY_F5;
-			case java.awt.event.KeyEvent.VK_F6 -> GLFW_KEY_F6;
-			case java.awt.event.KeyEvent.VK_F7 -> GLFW_KEY_F7;
-			case java.awt.event.KeyEvent.VK_F8 -> GLFW_KEY_F8;
-			case java.awt.event.KeyEvent.VK_F9 -> GLFW_KEY_F9;
-			case java.awt.event.KeyEvent.VK_F10 -> GLFW_KEY_F10;
-			case java.awt.event.KeyEvent.VK_F11 -> GLFW_KEY_F11;
-			case java.awt.event.KeyEvent.VK_F12 -> GLFW_KEY_F12;
-			case java.awt.event.KeyEvent.VK_SHIFT -> GLFW_KEY_LEFT_SHIFT;
-			case java.awt.event.KeyEvent.VK_CONTROL -> GLFW_KEY_LEFT_CONTROL;
-			case java.awt.event.KeyEvent.VK_ALT -> GLFW_KEY_LEFT_ALT;
-			default -> awtKey;
-		};
-	}
 }

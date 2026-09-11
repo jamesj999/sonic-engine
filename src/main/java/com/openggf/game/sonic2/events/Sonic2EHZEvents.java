@@ -3,6 +3,7 @@ package com.openggf.game.sonic2.events;
 import com.openggf.game.sonic2.audio.Sonic2Music;
 import com.openggf.game.GameServices;
 import com.openggf.game.sonic2.constants.Sonic2ObjectIds;
+import com.openggf.game.sonic2.constants.Sonic2Constants;
 import com.openggf.game.sonic2.objects.bosses.Sonic2EHZBossInstance;
 import com.openggf.level.objects.ObjectSpawn;
 
@@ -27,6 +28,7 @@ public class Sonic2EHZEvents extends Sonic2ZoneEvents {
 
     @Override
     public void update(int act, int frameCounter) {
+        retryPendingPlc();
         if (act == 0) {
             // Act 1: No dynamic events (ROM: LevEvents_EHZ1 just returns)
             return;
@@ -60,6 +62,7 @@ public class Sonic2EHZEvents extends Sonic2ZoneEvents {
                     // ROM: Start music fade-out (s2.asm:20404)
                     // Fade runs during the 90-frame spawn delay
                     audio().fadeOutMusic();
+                    requestSonic2Plc(Sonic2Constants.PLC_EHZ_BOSS);
                 }
             }
             case 4 -> {
@@ -78,12 +81,29 @@ public class Sonic2EHZEvents extends Sonic2ZoneEvents {
                 }
             }
             case 6 -> {
-                // Routine 3 (s2.asm:20438+): Wait for boss defeat
-                syncSidekickBoundsToCamera();
+                // ROM: LevEvents_EHZ2_Routine4 (s2.asm:20468-20477). This is the
+                // TERMINAL routine of LevEvents_EHZ2_Index -- it never advances
+                // Dynamic_Resize_Routine, so it keeps running every frame for the
+                // rest of the act. While Boss_defeated_flag is clear it does
+                // nothing at all (tst.b / beq.s + / rts). Once the flag is set it
+                // re-copies, on EVERY subsequent frame:
+                //     move.w (Camera_Max_X_pos).w,(Tails_Max_X_pos).w
+                //     move.w (Camera_X_pos).w,(Tails_Min_X_pos).w
+                // (the third write in that block, Camera_X_pos -> Camera_Min_X_pos,
+                // is the camera-side release already owned by the boss defeat
+                // sequence.)
+                // This matters because the boss's own flee routine walks
+                // Camera_Max_X_pos up by 2 each frame (s2.asm:63596-63599), and
+                // Tails_LevelBound clamps against Tails_Max_X_pos + screen_width-24
+                // (+$40 while Current_Boss_ID is clear) -- s2.asm:40265-40276 --
+                // whereas Sonic_LevelBound reads Camera_Max_X_pos directly
+                // (s2.asm:37243-37250). Leaving Tails_Max_X_pos frozen at the arena
+                // value therefore pins the sidekick behind a boundary Sonic never
+                // sees. The pre-defeat per-frame sync this replaced has no ROM
+                // counterpart; Routine2 (s2.asm:20433-20434) already wrote the same
+                // arena values once, so dropping it changes no value during the fight.
                 if (ehzBoss != null && ehzBoss.isDefeated()) {
-                    // Boss handles camera unlock and EggPrison spawn in its defeat sequence
-                    // No additional action needed here
-                    eventRoutine += 2;
+                    setSidekickBounds((int) camera().getX(), (int) camera().getMaxX(), null);
                 }
             }
             default -> {

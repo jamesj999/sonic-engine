@@ -1,9 +1,9 @@
 package com.openggf.tests;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import com.openggf.audio.synth.Ym2612Chip;
 
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TestYm2612Attack {
 
@@ -12,8 +12,8 @@ public class TestYm2612Attack {
         Ym2612Chip chip = new Ym2612Chip();
 
         chip.write(0, 0xB0, 0xC7); // Algo 7
+        chip.write(0, 0xA4, 0x22); // block/fnum high latch first (hardware order)
         chip.write(0, 0xA0, 0x00);
-        chip.write(0, 0xA4, 0x22);
 
         // Slot 0
         chip.write(0, 0x30, 0x01);
@@ -43,8 +43,7 @@ public class TestYm2612Attack {
         // We expect volume to increase: max1 < max2 < max3
         // Note: initial samples might be 0.
 
-        assertTrue("Attack volume should increase monotonically: " + max1 + " < " + max2 + " < " + max3,
-                   max1 < max2 && max2 < max3);
+        assertTrue(max1 < max2 && max2 < max3, "Attack volume should increase monotonically: " + max1 + " < " + max2 + " < " + max3);
     }
 
     private int getMax(int[] buf) {
@@ -56,3 +55,5 @@ public class TestYm2612Attack {
         return m;
     }
 }
+
+

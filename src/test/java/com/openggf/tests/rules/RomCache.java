@@ -1,6 +1,9 @@
 package com.openggf.tests.rules;
 
 import com.openggf.data.Rom;
+import com.openggf.game.BuiltInRomDetectors;
+import com.openggf.game.GameId;
+import com.openggf.game.RomDetector;
 import com.openggf.tests.RomTestUtils;
 
 import java.io.File;
@@ -30,10 +33,12 @@ final class RomCache {
             return null;
         }
         if (cached != null) {
-            return cached;
+            if (cached.isOpen()) {
+                return cached;
+            }
+            cache.remove(game);
         }
 
-        // First access — attempt to load
         Rom rom = loadRom(game);
         cache.put(game, rom != null ? rom : UNAVAILABLE);
         return rom;
@@ -49,7 +54,22 @@ final class RomCache {
             return null;
         }
         Rom rom = new Rom();
-        rom.open(romFile.getAbsolutePath());
+        if (!rom.open(romFile.getAbsolutePath())) {
+            return null;
+        }
+        if (!detectorFor(game).canHandle(rom)) {
+            rom.close();
+            return null;
+        }
         return rom;
+    }
+
+    private static RomDetector detectorFor(SonicGame game) {
+        GameId gameId = switch (game) {
+            case SONIC_1 -> GameId.S1;
+            case SONIC_2 -> GameId.S2;
+            case SONIC_3K -> GameId.S3K;
+        };
+        return BuiltInRomDetectors.forGame(gameId);
     }
 }

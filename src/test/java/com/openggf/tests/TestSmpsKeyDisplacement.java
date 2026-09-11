@@ -1,7 +1,7 @@
 package com.openggf.tests;
 import com.openggf.game.sonic2.audio.Sonic2SmpsSequencerConfig;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import com.openggf.audio.smps.AbstractSmpsData;
 import com.openggf.audio.smps.DacData;
 import com.openggf.game.sonic2.audio.smps.Sonic2SmpsData;
@@ -12,7 +12,7 @@ import java.util.HashMap;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class TestSmpsKeyDisplacement {
 
@@ -89,7 +89,7 @@ public class TestSmpsKeyDisplacement {
         SmpsSequencer seq = new SmpsSequencer(smps, dac, synth, Sonic2SmpsSequencerConfig.CONFIG);
 
         short[] buf = new short[2000];
-        seq.read(buf);
+        seq.advanceSamples(buf.length);
 
         // Analyze writes
         int block = -1;
@@ -100,6 +100,8 @@ public class TestSmpsKeyDisplacement {
         }
 
         // Expect Octave 2 (base note offset of 1 + accumulated key offset of 24 = 25, 25/12 = 2)
-        assertEquals("Block should be 2 (Accumulated KeyOffset + base note)", 2, block);
+        assertEquals(2, block, "Block should be 2 (Accumulated KeyOffset + base note)");
     }
 }
+
+

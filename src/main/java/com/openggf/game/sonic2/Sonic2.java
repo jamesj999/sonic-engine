@@ -164,6 +164,18 @@ public class Sonic2 extends Game implements PlayerSpriteArtProvider, SpindashDus
         int collisionAddr = getCollisionMapAddr(zoneAct);
         int altCollisionAddr = getAltCollisionMapAddr(zoneAct);
 
+        // WFZ shares the SCZ pattern base and overlays the WFZ_Supp supplement (the
+        // getaway-ship and other WFZ-specific FG tiles); the ROM applies it as a
+        // hardcoded patch (s2.asm:6494-6499), like HTZ. Reuse the standard-resolved
+        // addresses and add only the missing pattern overlay.
+        if (zoneAct.zone() == Sonic2Constants.ZONE_WING_FORTRESS) {
+            LevelResourcePlan wfzPlan = Sonic2LevelResourcePlans.createWfzPlan(
+                    patternsAddr, chunksAddr, blocksAddr, collisionAddr, altCollisionAddr);
+            return new Sonic2Level(rom, zoneAct.zone(), characterPaletteAddr, levelPalettesAddr, levelPalettesSize,
+                    wfzPlan, mapAddr, solidTileHeightsAddr, solidTileWidthsAddr,
+                    solidTileAngleAddr, objectSpawns, ringSpawns, ringSpriteSheet, levelBoundariesAddr);
+        }
+
         return new Sonic2Level(rom, zoneAct.zone(), characterPaletteAddr, levelPalettesAddr, levelPalettesSize,
                 patternsAddr,
                 chunksAddr,

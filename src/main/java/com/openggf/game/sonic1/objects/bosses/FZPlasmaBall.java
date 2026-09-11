@@ -4,11 +4,14 @@ import com.openggf.game.sonic1.constants.Sonic1Constants;
 import com.openggf.game.PlayableEntity;
 import com.openggf.game.sonic1.constants.Sonic1ObjectIds;
 import com.openggf.graphics.GLCommand;
-import com.openggf.level.LevelManager;
 import com.openggf.level.objects.AbstractObjectInstance;
+import com.openggf.level.objects.ObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
+import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.animation.SpriteAnimationScript;
@@ -30,11 +33,10 @@ import java.util.List;
  * Uses palette line 1 (obGfx has palette bit set).
  * Collision type $9A = category 4 (hurt player), size $1A.
  */
-public class FZPlasmaBall extends AbstractObjectInstance implements TouchResponseProvider {
+public class FZPlasmaBall extends AbstractObjectInstance implements TouchResponseProvider, RewindRecreatable {
 
     private static final int BOSS_FZ_Y = Sonic1Constants.BOSS_FZ_Y;
     private static final SpriteAnimationSet PLASMA_ANIMATIONS = Sonic1BossAnimations.getPlasmaAnimations();
-
     private final FZPlasmaLauncher launcher;
 
     // Movement state
@@ -83,7 +85,35 @@ public class FZPlasmaBall extends AbstractObjectInstance implements TouchRespons
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        FZPlasmaLauncher liveLauncher = firstLiveLauncher(ctx);
+        if (liveLauncher == null) {
+            return null;
+        }
+        // FZ has one launcher group; preserve the deleted explicit restore path's
+        // first-live launcher matching and let compact restore reapply target/scalars.
+        FZPlasmaBall restored = new FZPlasmaBall(
+                liveLauncher, ctx.spawn().x(), ctx.spawn().y(), 0);
+        liveLauncher.adoptPlasmaBallForRewind(restored);
+        return restored;
+    }
+
+    private static FZPlasmaLauncher firstLiveLauncher(RewindRecreateContext ctx) {
+        if (ctx == null || ctx.objectServices() == null
+                || ctx.objectServices().objectManager() == null) {
+            return null;
+        }
+        ObjectManager objectManager = ctx.objectServices().objectManager();
+        for (ObjectInstance object : objectManager.getActiveObjects()) {
+            if (object instanceof FZPlasmaLauncher launcher && !launcher.isDestroyed()) {
+                return launcher;
+            }
+        }
+        return null;
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         switch (phase) {
             case 0 -> updateLaunch();
@@ -116,13 +146,15 @@ public class FZPlasmaBall extends AbstractObjectInstance implements TouchRespons
             posXFixed += (xVel << 8);
             posX = posXFixed >> 16;
 
-            // ROM: Check if reached target (overshot)
-            // ROM: move.w obX(a1),d0 / sub.w objoff_30(a1),d0 / bcc.s (unsigned >= 0)
+            // ROM: BossPlasma_Drop keeps moving while obX-targetX has no
+            // borrow, and only stops after the left-moving ball overshoots
+            // below targetX. The non-FixBugs build then adds the negative
+            // overshoot delta to obX (_incObj/86 FZ Plasma Ball Launcher.asm:166-177).
             int dist = posX - targetX;
-            if (dist >= 0) {
+            if (dist < 0) {
                 // Reached target
                 xVel = 0;
-                posX = targetX;
+                posX += dist;
                 posXFixed = posX << 16;
                 // ROM: subq.w #1,objoff_32(a1) — decrement launcher's ball counter
             }

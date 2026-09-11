@@ -10,7 +10,7 @@ import java.util.Map;
 public final class Sonic2SoundTestCatalog extends AbstractSoundTestCatalog {
     private static final Sonic2SoundTestCatalog INSTANCE = new Sonic2SoundTestCatalog();
 
-    private Sonic2SoundTestCatalog() {
+    public Sonic2SoundTestCatalog() {
         super(Sonic2Music.titleMap(), Sonic2Sfx.nameMap(),
                 Sonic2Music.CHEMICAL_PLANT.id, Sonic2Sfx.ID_BASE, Sonic2Sfx.ID_MAX, "Sonic 2");
     }

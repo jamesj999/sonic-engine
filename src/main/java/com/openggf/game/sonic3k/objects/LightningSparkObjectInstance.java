@@ -2,6 +2,7 @@ package com.openggf.game.sonic3k.objects;
 
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.GraphicsManager;
+import com.openggf.graphics.PatternAtlasRange;
 import com.openggf.level.Pattern;
 import com.openggf.level.PatternDesc;
 import com.openggf.level.objects.AbstractObjectInstance;
@@ -9,7 +10,15 @@ import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.sprites.animation.SpriteAnimationScript;
 import com.openggf.sprites.animation.SpriteAnimationSet;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
+import com.openggf.game.GameModule;
 import com.openggf.game.PlayableEntity;
+import com.openggf.game.sonic3k.Sonic3kObjectArtKeys;
+import com.openggf.game.sonic3k.Sonic3kObjectArtProvider;
+import com.openggf.level.objects.ObjectServices;
+import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.sprites.art.SpriteArtSet;
 
 import java.util.List;
 
@@ -23,7 +32,7 @@ import java.util.List;
  * than through PlayerSpriteRenderer/DPLC, matching the ROM where spark art is
  * DMA-loaded once at init (not managed by PLCLoad_Shields).
  */
-public class LightningSparkObjectInstance extends AbstractObjectInstance {
+public class LightningSparkObjectInstance extends AbstractObjectInstance implements RewindRecreatable {
 
     /** Gravity per frame in subpixels (sonic3k.asm:34849: addi.w #$18,y_vel(a0)) */
     private static final int GRAVITY = 0x18;
@@ -34,8 +43,8 @@ public class LightningSparkObjectInstance extends AbstractObjectInstance {
     /** Animation script index for sparks */
     private static final int SPARK_ANIM_SCRIPT = 0;
 
-    /** Pattern atlas base ID for spark tiles (in GUI ID range to avoid VDP conflicts). */
-    private static final int SPARK_PATTERN_BASE = 0x20100;
+    /** Pattern atlas base ID for spark tiles, isolated from level object art. */
+    private static final int SPARK_PATTERN_BASE = PatternAtlasRange.TRANSIENT_EFFECTS.base();
 
     /** Shared descriptor for spark tiles: palette 0, no flip, no priority. */
     private static final PatternDesc SPARK_DESC = new PatternDesc(0);
@@ -58,9 +67,13 @@ public class LightningSparkObjectInstance extends AbstractObjectInstance {
 
     private final SubpixelMotion.State motionState = new SubpixelMotion.State(0, 0, 0, 0, 0, 0);
 
+    LightningSparkObjectInstance() {
+        this(0, 0, 0, 0, null, null);
+    }
+
     public LightningSparkObjectInstance(int x, int y, int xVel, int yVel,
             SpriteAnimationSet animSet, Pattern[] sparkTiles) {
-        super(null, "LightningSpark");
+        super(new ObjectSpawn(x, y, 0, 0, 0, false, 0), "LightningSpark");
         this.currentX = x;
         this.currentY = y;
         this.xSub = 0;
@@ -73,6 +86,36 @@ public class LightningSparkObjectInstance extends AbstractObjectInstance {
         this.frameIndex = 0;
         this.currentMappingFrame = 0;
         initAnimation();
+    }
+
+    /**
+     * Rewind recreate factory. The captured dynamic spawn carries the spark's
+     * position; movement/animation scalars are reapplied by the generic field
+     * capturer after recreate, so the constructor velocities are placeholders.
+     * Art (animation set + spark tiles) is re-fetched from the live S3K object-art
+     * provider exactly as {@link LightningShieldObjectInstance#triggerSparks()}
+     * does; the object null-guards missing art, so a structurally-valid instance is
+     * always returned.
+     */
+    public static LightningSparkObjectInstance forRewindRecreate(
+            ObjectSpawn spawn, ObjectServices services) {
+        SpriteAnimationSet animSet = null;
+        Pattern[] sparkTiles = null;
+        GameModule module = (services != null) ? services.gameModule() : null;
+        if (module != null
+                && module.getObjectArtProvider() instanceof Sonic3kObjectArtProvider s3k) {
+            SpriteArtSet sparkArt = s3k.getShieldArtSet(Sonic3kObjectArtKeys.LIGHTNING_SPARK);
+            if (sparkArt != null) {
+                animSet = sparkArt.animationSet();
+                sparkTiles = sparkArt.artTiles();
+            }
+        }
+        return new LightningSparkObjectInstance(spawn.x(), spawn.y(), 0, 0, animSet, sparkTiles);
+    }
+
+    @Override
+    public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return forRewindRecreate(ctx.spawn(), ctx.objectServices());
     }
 
     @Override
@@ -91,7 +134,7 @@ public class LightningSparkObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         life++;
         if (life >= MAX_LIFE) {

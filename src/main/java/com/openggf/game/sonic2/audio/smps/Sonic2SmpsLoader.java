@@ -7,9 +7,10 @@ import com.openggf.game.sonic2.audio.Sonic2Sfx;
 import com.openggf.audio.smps.AbstractSmpsData;
 import com.openggf.audio.smps.AbstractSmpsLoader;
 import com.openggf.audio.smps.DacData;
+import com.openggf.audio.smps.LoadedSmpsMusic;
 import com.openggf.data.Rom;
-import com.openggf.tools.DcmDecoder;
-import com.openggf.tools.SaxmanDecompressor;
+import com.openggf.data.compression.DcmDecoder;
+import com.openggf.data.compression.SaxmanDecompressor;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -19,6 +20,8 @@ import java.util.logging.Logger;
 
 public class Sonic2SmpsLoader extends AbstractSmpsLoader {
     private static final Logger LOGGER = Logger.getLogger(Sonic2SmpsLoader.class.getName());
+    /** Retail fixBugs=0 zWriteToDAC cost per byte/two decoded samples. */
+    private static final int DPCM_BASE_CYCLES = 295;
     private final SaxmanDecompressor decompressor = new SaxmanDecompressor();
     private final DcmDecoder dcmDecoder = new DcmDecoder();
     private final Map<Integer, Integer> musicMap = new HashMap<>();
@@ -32,7 +35,7 @@ public class Sonic2SmpsLoader extends AbstractSmpsLoader {
         // Known Sonic 2 final music offsets (ROM addresses, Saxman compressed)
         // These ROM addresses were discovered empirically and are correct.
         // The IDs here are what the game uses when requesting music.
-        musicMap.put(0x00, 0x0F0002); // Continue
+        musicMap.put(Sonic2Music.CONTINUE.id, 0x0F0002); // Continue
         musicMap.put(Sonic2Music.CASINO_NIGHT_2P.id, 0x0F84F6); // Casino Night 2P
         musicMap.put(Sonic2Music.EMERALD_HILL.id, 0x0F88C4); // Emerald Hill
         musicMap.put(Sonic2Music.METROPOLIS.id, 0x0F8DEE); // Metropolis
@@ -58,10 +61,10 @@ public class Sonic2SmpsLoader extends AbstractSmpsLoader {
         musicMap.put(Sonic2Music.ACT_CLEAR.id, 0x0FD35E); // Stage Clear
         musicMap.put(Sonic2Music.INVINCIBILITY.id, 0x0F8359); // Invincibility
         musicMap.put(Sonic2Music.HIDDEN_PALACE.id, 0x0F803C); // Hidden Palace
-        musicMap.put(Sonic2Music.EXTRA_LIFE.id, 0x0FD48D); // 1-Up
-        musicMap.put(Sonic2Music.GAME_OVER.id, 0x0FD57A); // Game Over
-        musicMap.put(Sonic2Music.GOT_EMERALD.id, 0x0FD6C9); // Got an Emerald
-        musicMap.put(Sonic2Music.CREDITS.id, 0x0FD797); // Credits
+        musicMap.put(Sonic2Music.EXTRA_LIFE.id, UNCOMPRESSED_EXTRA_LIFE_ADDR); // 1-Up
+        musicMap.put(Sonic2Music.GAME_OVER.id, UNCOMPRESSED_GAME_OVER_ADDR); // Game Over
+        musicMap.put(Sonic2Music.GOT_EMERALD.id, UNCOMPRESSED_GOT_EMERALD_ADDR); // Got an Emerald
+        musicMap.put(Sonic2Music.CREDITS.id, UNCOMPRESSED_CREDITS_ADDR); // Credits
         musicMap.put(Sonic2Music.UNDERWATER.id, 0x0F823B); // Underwater Timing
         // SFX Map (Populate with discovered offsets)
         // Potential candidate for SFX: 0xFFEAD (FM=1)
@@ -178,6 +181,12 @@ public class Sonic2SmpsLoader extends AbstractSmpsLoader {
     }
 
     public AbstractSmpsData loadMusic(int musicId) {
+        LoadedSmpsMusic loaded = loadMusicWithReadiness(musicId);
+        return loaded == null ? null : loaded.data();
+    }
+
+    @Override
+    public LoadedSmpsMusic loadMusicWithReadiness(int musicId) {
         int offset = findMusicOffset(musicId);
         if (offset == -1) {
             LOGGER.fine("Music ID " + Integer.toHexString(musicId) + " not in map/flags.");
@@ -186,9 +195,14 @@ public class Sonic2SmpsLoader extends AbstractSmpsLoader {
 
         // The music ID itself contains flags (per Sonic Retro documentation):
         // bit 5 (0x20): Compression - 0=Saxman compressed, 0x20=uncompressed
-        boolean uncompressed = (musicId & 0x20) != 0;
+        boolean uncompressed = (musicId & 0x20) != 0
+                || offset == UNCOMPRESSED_EXTRA_LIFE_ADDR
+                || offset == UNCOMPRESSED_GAME_OVER_ADDR
+                || offset == UNCOMPRESSED_GOT_EMERALD_ADDR
+                || offset == UNCOMPRESSED_CREDITS_ADDR;
 
         AbstractSmpsData data;
+        byte[] compressed = null;
         if (uncompressed) {
             // For uncompressed data, the Z80 address is the low 16 bits of the ROM offset.
             // Per Sonic Retro: Z80 pointers in uncompressed data are bank-relative.
@@ -200,7 +214,8 @@ public class Sonic2SmpsLoader extends AbstractSmpsLoader {
             data = loadSmpsUncompressed(offset, z80Addr);
         } else {
             // Compressed music is decompressed and loaded at Z80 Z80_COMPRESSED_LOAD_ADDR
-            data = loadSmps(offset, Z80_COMPRESSED_LOAD_ADDR);
+            compressed = readCompressedMusic(offset);
+            data = loadSmps(compressed, offset, Z80_COMPRESSED_LOAD_ADDR);
         }
 
         if (data instanceof Sonic2SmpsData) {
@@ -211,17 +226,42 @@ public class Sonic2SmpsLoader extends AbstractSmpsLoader {
             // bit 6 (0x40): disable PAL music speed fix
             data.setPalSpeedupDisabled((musicId & 0x40) != 0);
         }
-        return data;
+        if (data == null) {
+            return null;
+        }
+        return new LoadedSmpsMusic(data, compressed == null
+                ? com.openggf.audio.smps.SmpsLoadReadiness.immediatePlan()
+                : new Sonic2SaxmanLoadReadiness(compressed,
+                        data.getChannels(), data.getPsgChannels(),
+                        (offset & 0x8000) != 0,
+                        data.isPalSpeedupDisabled()));
     }
 
     /**
-     * Returns the ROM offset for a given music ID using the hard map first, then
-     * the flag table.
-     * Exposed for debug tools (sound test).
+     * Returns the ROM offset for a given music ID using the hardcoded
+     * REV01 {@link #musicMap}. Exposed for debug tools (sound test).
+     * <p>
+     * <b>Why ROM-driven resolution is not used here.</b> The S2 driver's
+     * {@code zMasterPlaylist} flag table (and the per-bank pointer tables it
+     * references) lives inside the <em>Saxman-compressed</em> Z80 driver
+     * blob in 68K ROM — the structure only exists, in readable form, after
+     * the driver has been decompressed into Z80 RAM at runtime. Reading
+     * {@code zMasterPlaylist} bytes directly from 68K ROM (the previous
+     * implementation's approach) parses compressed bytes and cannot yield
+     * correct offsets. On top of that, the engine's {@code Sonic2Music} IDs
+     * are systematically shifted relative to the disassembly's
+     * {@code zMasterPlaylist} entry order (e.g. {@code EMERALD_HILL.id == 0x81}
+     * loads the EHZ track, but {@code zMasterPlaylist[0]} (disasm id 0x81) is
+     * {@code Mus_2PResult}), so even a properly Z80-decompressed lookup would
+     * disagree with the engine's intended track for most IDs. Until both
+     * problems are solved, the hardcoded REV01 map is authoritative.
      */
     public int findMusicOffset(int musicId) {
         Integer mapped = musicMap.get(musicId);
-        return mapped != null ? mapped : resolveMusicOffset(musicId);
+        if (mapped != null) {
+            return mapped;
+        }
+        return -1;
     }
 
     @Override
@@ -364,63 +404,6 @@ public class Sonic2SmpsLoader extends AbstractSmpsLoader {
         return offset >= 0 && offset < len;
     }
 
-    /**
-     * Sonic 2 final: music flags list at MUSIC_FLAGS_ADDR, pointer banks at
-     * MUSIC_PTR_BANK0/MUSIC_PTR_BANK1.
-     * Flag bits: 0-4 = pointer index, bit5 = uncompressed (1=uncompressed), bit7 =
-     * bank (0=MUSIC_PTR_BANK0,1=MUSIC_PTR_BANK1).
-     */
-    private int resolveMusicOffset(int musicId) {
-        // Prefer deriving from ROM.
-        int romOffset = resolveMusicOffsetFromRom(musicId);
-        if (romOffset != -1)
-            return romOffset;
-
-        // Fallback to legacy map
-        Integer mapped = musicMap.get(musicId);
-        if (mapped != null)
-            return mapped;
-        return -1;
-    }
-
-    private int resolveMusicOffsetFromRom(int musicId) {
-        // Known music IDs start at MUSIC_FLAGS_ID_BASE; map ID to flag index by
-        // subtracting it.
-        if (musicId < MUSIC_FLAGS_ID_BASE)
-            return -1;
-        int flagIndex = musicId - MUSIC_FLAGS_ID_BASE;
-        int flagsAddr = MUSIC_FLAGS_ADDR + flagIndex;
-        try {
-            int flags = rom.readByte(flagsAddr) & 0xFF;
-            int ptrId = flags & 0x1F;
-            boolean uncompressed = (flags & 0x20) != 0;
-            int bankBase = ((flags & 0x80) != 0) ? MUSIC_PTR_BANK1 : MUSIC_PTR_BANK0;
-            // Pointer-to-pointer table at MUSIC_PTR_TABLE_ADDR (driver relocates this in
-            // RAM); treat as
-            // ROM address here.
-            int ptrToPtrLo = rom.readByte(MUSIC_PTR_TABLE_ADDR) & 0xFF;
-            int ptrToPtrHi = rom.readByte(MUSIC_PTR_TABLE_ADDR + 1) & 0xFF;
-            int ptrTableBase = (ptrToPtrLo << 8) | ptrToPtrHi;
-            if (ptrTableBase == 0)
-                return -1;
-            int ptrTableEntry = ptrTableBase + (ptrId * 2);
-            int lo = rom.readByte(ptrTableEntry) & 0xFF;
-            int hi = rom.readByte(ptrTableEntry + 1) & 0xFF;
-            int ptr = (lo << 8) | hi;
-            int offset = bankBase + ptr;
-            if (ptr == 0)
-                return -1;
-            if (uncompressed) {
-                // We assume compressed; fallback to hard map if needed
-                LOGGER.fine("Music " + Integer.toHexString(musicId) + " flagged uncompressed; using raw offset "
-                        + Integer.toHexString(offset));
-            }
-            return offset;
-        } catch (IOException | RuntimeException e) {
-            return -1;
-        }
-    }
-
     public AbstractSmpsData loadSmps(int offset) {
         // Default fallback: assume ROM mapping or unknown
         return loadSmps(offset, Z80_BANK_BASE | (offset & Z80_BANK_MASK));
@@ -445,19 +428,40 @@ public class Sonic2SmpsLoader extends AbstractSmpsLoader {
                 return null;
             }
 
-            byte[] decompressed = decompressor.decompress(compressed, true);
-            LOGGER.info("Decompressed SMPS at " + Integer.toHexString(offset) + ". Size: " + decompressed.length);
-            return new Sonic2SmpsData(decompressed, z80Addr);
+            return loadSmps(compressed, offset, z80Addr);
         } catch (IOException | RuntimeException e) {
             LOGGER.log(Level.SEVERE, "Failed to load SMPS at " + Integer.toHexString(offset), e);
             return null;
         }
     }
 
+    private byte[] readCompressedMusic(int offset) {
+        try {
+            int size = (rom.readByte(offset) & 0xff)
+                    | ((rom.readByte(offset + 1) & 0xff) << 8);
+            int available = (int) Math.max(0L, rom.getSize() - offset - 2L);
+            return readCompressed(offset, size, available);
+        } catch (IOException failure) {
+            LOGGER.log(Level.SEVERE, "Failed to read compressed music", failure);
+            return null;
+        }
+    }
+
+    private AbstractSmpsData loadSmps(
+            byte[] compressed, int offset, int z80Addr) {
+        if (compressed == null) {
+            return null;
+        }
+        byte[] decompressed = decompressor.decompress(compressed, true);
+        LOGGER.info("Decompressed SMPS at " + Integer.toHexString(offset)
+                + ". Size: " + decompressed.length);
+        return new Sonic2SmpsData(decompressed, z80Addr);
+    }
+
     /**
      * Load uncompressed SMPS data directly from ROM.
      * Used for tracks with bit 5 set in their music ID (0x20 mask).
-     * These include: 1-Up (0xB5), Game Over (0xB8), Got an Emerald (0xBA), Credits
+     * These include: 1-Up (0x98), Game Over (0xB8), Got an Emerald (0xBA), Credits
      * (0xBD).
      */
     private AbstractSmpsData loadSmpsUncompressed(int offset, int z80Addr) {
@@ -490,19 +494,18 @@ public class Sonic2SmpsLoader extends AbstractSmpsLoader {
      */
     private int calculateUncompressedSize(int offset) {
         // Explicit sizes for uncompressed tracks (calculated from Sonic Retro ROM
-        // pointer table)
-        // These are the exact distances between consecutive uncompressed song pointers
+        // pointer table). These are the exact distances between consecutive
+        // uncompressed song pointers; consolidated as named constants in
+        // Sonic2SmpsConstants so musicMap and this switch share one source.
         switch (offset) {
-            case 0x0FD48D: // 1-Up → Game Over (0xFD57A - 0xFD48D)
-                return 0xED; // 237 bytes
-            case 0x0FD57A: // Game Over → Emerald (0xFD6C9 - 0xFD57A)
-                return 0x14F; // 335 bytes
-            case 0x0FD6C9: // Emerald → Credits (0xFD797 - 0xFD6C9)
-                return 0xCE; // 206 bytes
-            case 0x0FD797: // Credits (massive medley song, ~37 voices + 9 tracks)
-                // Estimated actual size: ~5-6KB based on 925 bytes of voices + ~4-5KB of track
-                // data
-                return 0x2000; // 8KB buffer - safe upper bound
+            case UNCOMPRESSED_EXTRA_LIFE_ADDR:
+                return UNCOMPRESSED_EXTRA_LIFE_SIZE;
+            case UNCOMPRESSED_GAME_OVER_ADDR:
+                return UNCOMPRESSED_GAME_OVER_SIZE;
+            case UNCOMPRESSED_GOT_EMERALD_ADDR:
+                return UNCOMPRESSED_GOT_EMERALD_SIZE;
+            case UNCOMPRESSED_CREDITS_ADDR:
+                return UNCOMPRESSED_CREDITS_SIZE;
             default:
                 // Fallback: find next offset or use reasonable max
                 int nextOffset = Integer.MAX_VALUE;
@@ -737,10 +740,10 @@ public class Sonic2SmpsLoader extends AbstractSmpsLoader {
                 mapping.put(noteId, new DacData.DacEntry(sampleId, rate));
             }
 
-            return new DacData(samples, mapping, 288); // S2 baseCycles = 288
+            return new DacData(samples, mapping, DPCM_BASE_CYCLES);
         } catch (IOException | RuntimeException e) {
             LOGGER.log(Level.SEVERE, "Failed to load DAC Data", e);
-            return new DacData(new HashMap<>(), new HashMap<>(), 288);
+            return new DacData(new HashMap<>(), new HashMap<>(), DPCM_BASE_CYCLES);
         }
     }
 }

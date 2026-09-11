@@ -1,12 +1,12 @@
 package com.openggf.game.sonic3k.objects;
 
 import com.openggf.game.PlayableEntity;
-import com.openggf.game.sonic3k.Sonic3kLevelEventManager;
 import com.openggf.game.sonic3k.audio.Sonic3kSfx;
-import com.openggf.game.sonic3k.events.Sonic3kAIZEvents;
+import com.openggf.game.sonic3k.events.S3kAizEventWriteSupport;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnYCoordinateRewindRecreatable;
 
 import java.util.List;
 import java.util.logging.Logger;
@@ -28,7 +28,7 @@ import java.util.logging.Logger;
  * When the ship crosses below $3CDC, spawns {@link AizBossSmallInstance}.
  * Every 16 frames plays {@code cfx_LargeShip} SFX.
  */
-public class AizBattleshipInstance extends AbstractObjectInstance {
+public class AizBattleshipInstance extends AbstractObjectInstance implements SpawnYCoordinateRewindRecreatable {
     private static final Logger LOG = Logger.getLogger(AizBattleshipInstance.class.getName());
 
     /** ROM: Battleship bomb script — {delay, bombX} pairs in secondary camera space. */
@@ -62,7 +62,11 @@ public class AizBattleshipInstance extends AbstractObjectInstance {
 
     // 16:16 fixed-point ship position (integer part = upper 16 bits)
     private int shipXFixed;
-    private final int baseSecondaryY;
+    /** False until the object pass that created the ship has gone by unused. */
+    private boolean creationPassConsumed;
+    // Non-final so the generic rewind field capturer reapplies it after
+    // Phase-2 generic recreate.
+    private int baseSecondaryY;
     private int effectiveSecondaryY;
     private int scriptIndex;
     private int delayTimer;
@@ -83,8 +87,28 @@ public class AizBattleshipInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity player) {
+    public void update(int vIntRunCount, PlayableEntity player) {
         if (isDestroyed() || finished) return;
+
+        if (!creationPassConsumed) {
+            // ROM: AIZ2SE_ShipRefresh sets the secondary camera X and then takes
+            // a slot with plain AllocateObject (sonic3k.asm:104917-104928), NOT
+            // AllocateObjectAfterCurrent -- so the slot is not guaranteed to sit
+            // ahead of the object pass that created it, and for this run it does
+            // not: the recording shows slot 4 still holding Obj_AIZBattleship
+            // (the init) at the end of its creation frame and Obj_AIZBattleshipMain
+            // only on the frame after. The init writes the Main pointer before
+            // falling through, so a pointer still reading init means the slot was
+            // allocated without being executed.
+            //
+            // The ship's first real pass -- init falling through into
+            // Obj_AIZBattleshipMain and its opening `subi.l #$8800,(_unkEE98).w`
+            // (:105261-105286) -- therefore happens one frame after creation.
+            // Advancing on the creation frame left the secondary camera one step
+            // ahead in its fraction for the rest of the act.
+            creationPassConsumed = true;
+            return;
+        }
 
         this.frameCounter++;
 
@@ -136,16 +160,14 @@ public class AizBattleshipInstance extends AbstractObjectInstance {
     }
 
     private void spawnBomb(int screenX, int worldY, int bombScriptX) {
-        var om = services().objectManager();
-        if (om == null) return;
-
         // Spawn with the translated world position for bookkeeping; the bomb itself
         // continues translating from the ship's live secondary-camera coordinates.
         int cameraX = services().camera().getX();
-        AizShipBombInstance bomb = new AizShipBombInstance(
+        // ROM Obj_AIZBattleshipMain creates bombs with AllocateObjectAfterCurrent
+        // (sonic3k.asm:105315), so bomb slots must follow the ship's slot.
+        spawnChild(() -> new AizShipBombInstance(
                 new ObjectSpawn(cameraX + screenX, worldY, 0, 0, 0, false, 0),
-                this, bombScriptX, worldY);
-        om.addDynamicObject(bomb);
+                this, bombScriptX, worldY));
     }
 
     private void updateSecondaryCameraY(int shipX) {
@@ -163,22 +185,11 @@ public class AizBattleshipInstance extends AbstractObjectInstance {
         int shipX = shipXFixed >> 16;
 
         // Signal the event system that the battleship is complete
-        Sonic3kAIZEvents events = getAizEvents();
-        if (events != null) {
-            events.onBattleshipComplete();
-        }
+        S3kAizEventWriteSupport.onBattleshipComplete(services());
 
         LOG.info("AIZ2 battleship: ship exited at shipX=0x" + Integer.toHexString(shipX)
                 + " after " + frameCounter + " frames, " + scriptIndex + " bombs dropped");
         setDestroyed(true);
-    }
-
-    private Sonic3kAIZEvents getAizEvents() {
-        try {
-            return ((Sonic3kLevelEventManager) services().levelEventProvider()).getAizEvents();
-        } catch (Exception e) {
-            return null;
-        }
     }
 
     @Override
@@ -199,6 +210,11 @@ public class AizBattleshipInstance extends AbstractObjectInstance {
     public void appendRenderCommands(List<GLCommand> commands) {
         // The battleship manipulates the background plane in the ROM and does not
         // render as an individual sprite. No rendering needed here.
+    }
+
+    @Override
+    public boolean isPersistent() {
+        return !isDestroyed();
     }
 
     @Override

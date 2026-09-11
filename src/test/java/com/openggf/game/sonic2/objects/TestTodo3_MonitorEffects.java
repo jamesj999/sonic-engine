@@ -1,9 +1,9 @@
 package com.openggf.game.sonic2.objects;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Tests for S2 Monitor object (Obj26/Obj2E) effects.
@@ -26,11 +26,9 @@ public class TestTodo3_MonitorEffects {
                 break;
             }
         }
-        assertTrue("MonitorObjectInstance should contain a MonitorType enum",
-                monitorTypeClass != null);
+        assertTrue(monitorTypeClass != null, "MonitorObjectInstance should contain a MonitorType enum");
         Object[] constants = monitorTypeClass.getEnumConstants();
-        assertEquals("S2 MonitorType should have 11 values (10 types + BROKEN)",
-                11, constants.length);
+        assertEquals(11, constants.length, "S2 MonitorType should have 11 values (10 types + BROKEN)");
     }
 
     /**
@@ -49,10 +47,10 @@ public class TestTodo3_MonitorEffects {
                 break;
             }
         }
-        assertTrue("Sonic1MonitorObjectInstance should contain a MonitorType enum",
-                monitorTypeClass != null);
+        assertTrue(monitorTypeClass != null, "Sonic1MonitorObjectInstance should contain a MonitorType enum");
         Object[] constants = monitorTypeClass.getEnumConstants();
-        assertEquals("S1 MonitorType should have 10 values",
-                10, constants.length);
+        assertEquals(10, constants.length, "S1 MonitorType should have 10 values");
     }
 }
+
+

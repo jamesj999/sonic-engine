@@ -59,4 +59,29 @@ class TestBonusStageShieldRestore {
                 GameLoop.resolveShieldToRestore(none, 1 << GameLoop.STATUS_BUBBLE_SHIELD_BIT));
         assertNull(GameLoop.resolveShieldToRestore(none, 0));
     }
+
+    /**
+     * ROM {@code SpawnLevelMainSprites_SpawnPowerup} restores the saved
+     * elemental shield on the BONUS zone's own level spawn
+     * (docs/skdisasm/sonic3k.asm:8264-8323), so the shield is live for the
+     * duration of the bonus stage -- not only after the return to the level.
+     */
+    @Test
+    void applyBonusStageEntryShieldRestore_givesSavedElementalShieldOnEntry() {
+        TestablePlayableSprite player = new TestablePlayableSprite("sonic", (short) 0, (short) 0);
+
+        GameLoop.applyBonusStageEntryShieldRestore(
+                player, 1 << GameLoop.STATUS_LIGHTNING_SHIELD_BIT);
+
+        assertEquals(ShieldType.LIGHTNING, player.getShieldType());
+    }
+
+    @Test
+    void applyBonusStageEntryShieldRestore_leavesPlayerUnshieldedWhenNothingWasSaved() {
+        TestablePlayableSprite player = new TestablePlayableSprite("sonic", (short) 0, (short) 0);
+
+        GameLoop.applyBonusStageEntryShieldRestore(player, 0);
+
+        assertNull(player.getShieldType());
+    }
 }

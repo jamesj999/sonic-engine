@@ -3,18 +3,20 @@ package com.openggf.game.sonic2;
 import com.openggf.game.sonic2.constants.Sonic2Constants;
 
 import com.openggf.data.Rom;
+import com.openggf.game.GameServices;
+import com.openggf.game.session.ActiveGameplayTeamResolver;
 import com.openggf.graphics.GraphicsManager;
 import com.openggf.level.*;
 import com.openggf.level.resources.LevelResourcePlan;
 import com.openggf.level.resources.LoadOp;
 import com.openggf.level.resources.ResourceLoader;
-import com.openggf.tools.KosinskiReader;
+import com.openggf.data.compression.KosinskiReader;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.rings.RingSpawn;
 import com.openggf.level.rings.RingSpriteSheet;
 
 import com.openggf.data.RomManager;
-import com.openggf.tools.NemesisReader;
+import com.openggf.data.compression.NemesisReader;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -31,6 +33,35 @@ public class Sonic2Level extends AbstractLevel {
     private static final boolean KOS_DEBUG_LOG = false;
 
     private static final Logger LOG = Logger.getLogger(Sonic2Level.class.getName());
+
+    /**
+     * Decompressed size in bytes of the zone's 8x8 tile art -- LoadZoneTiles' {@code d3}
+     * after {@code bsr.w KosDec / move.w a1,d3} (docs/s2disasm/s2.asm:6482-6483), which is
+     * the Chunk_Table write pointer the Kosinski decode leaves behind, i.e. the composed
+     * decompressed byte count. See {@link #getZoneTileArtByteSize()}.
+     */
+    private int zoneTileArtByteSize;
+
+    /**
+     * LoadZoneTiles' decompressed 8x8 art size in bytes (docs/s2disasm/s2.asm:6482).
+     *
+     * <p>LoadZoneTiles uploads this art in {@code $1000}-byte DMA chunks and spends one
+     * {@code bsr.w WaitForVint} per chunk (:6519, inside the {@code dbf d7,-} loop spanning
+     * :6506-6523). The chunk count is extracted as {@code rol.w #4,d7 / andi.w #$F,d7}
+     * (:6485-6486) -- bits 15-12 of the byte size, i.e. {@code size / $1000} -- and
+     * {@code dbf} runs the body {@code d7 + 1} times.
+     *
+     * <p>HTZ and WFZ decode a supplement over the base tileset and take {@code d3} from that
+     * second decode, as the constants {@code ArtTile_ArtKos_NumTiles_HTZ / _WFZ} =
+     * {@code Main + Sup - 1} record (:6488, :6494). This field follows the same rule -- it is
+     * the last decode's end offset, not the composed buffer's extent -- which matters for
+     * HTZ, whose supplement finishes inside the larger EHZ base it overlays. The remaining
+     * one-tile difference against the ROM constants cannot move the {@code size / $1000}
+     * quotient for either zone.
+     */
+    public int getZoneTileArtByteSize() {
+        return zoneTileArtByteSize;
+    }
 
     public Sonic2Level(Rom rom,
             int zoneIndex,
@@ -115,7 +146,7 @@ public class Sonic2Level extends AbstractLevel {
     private void loadPalettes(Rom rom, int characterPaletteAddr, int levelPalettesAddr, int levelPalettesSize)
             throws IOException {
         palettes = new Palette[PALETTE_COUNT];
-        GraphicsManager graphicsMan = GraphicsManager.getInstance();
+        GraphicsManager graphicsMan = GameServices.graphics();
 
         // Load character palette
         byte[] buffer = rom.readBytes(characterPaletteAddr, Palette.PALETTE_SIZE_IN_ROM);
@@ -152,9 +183,8 @@ public class Sonic2Level extends AbstractLevel {
         // Only indices 2-5 differ (Knuckles' reds vs Sonic's blues);
         // indices 0-1 and 6-15 are identical to S2's Pal_SonicTails.
         if (com.openggf.game.CrossGameFeatureProvider.isActive()) {
-            String mainChar = com.openggf.configuration.SonicConfigurationService.getInstance()
-                    .getString(com.openggf.configuration.SonicConfiguration.MAIN_CHARACTER_CODE);
-            Palette hostPal = com.openggf.game.CrossGameFeatureProvider.getInstance()
+            String mainChar = ActiveGameplayTeamResolver.resolveMainCharacterCode(GameServices.configuration());
+            Palette hostPal = GameServices.crossGameFeatures()
                     .loadHostCompatiblePalette(mainChar);
             if (hostPal != null) {
                 palettes[0] = hostPal;
@@ -171,7 +201,7 @@ public class Sonic2Level extends AbstractLevel {
 
     private void loadPatterns(Rom rom, int patternsAddr) throws IOException {
         final int PATTERN_BUFFER_SIZE = 0xFFFF; // 64KB
-        GraphicsManager graphicsMan = GraphicsManager.getInstance();
+        GraphicsManager graphicsMan = GameServices.graphics();
         byte[] result;
         synchronized (rom) {
             FileChannel channel = rom.getFileChannel();
@@ -183,6 +213,8 @@ public class Sonic2Level extends AbstractLevel {
         if (result.length % Pattern.PATTERN_SIZE_IN_ROM != 0) {
             throw new IOException("Inconsistent pattern data");
         }
+        // LoadZoneTiles' move.w a1,d3 (docs/s2disasm/s2.asm:6483).
+        zoneTileArtByteSize = result.length;
 
         patterns = new Pattern[patternCount];
         for (int i = 0; i < patternCount; i++) {
@@ -403,7 +435,7 @@ public class Sonic2Level extends AbstractLevel {
      * sky blue placeholder patterns to avoid garbled rendering.
      */
     private void loadPatternsWithPlan(Rom rom, LevelResourcePlan plan) throws IOException {
-        GraphicsManager graphicsMan = GraphicsManager.getInstance();
+        GraphicsManager graphicsMan = GameServices.graphics();
         ResourceLoader loader = new ResourceLoader(rom);
 
         // Use a large initial buffer - will be trimmed to actual size
@@ -413,6 +445,14 @@ public class Sonic2Level extends AbstractLevel {
         if (result.length % Pattern.PATTERN_SIZE_IN_ROM != 0) {
             throw new IOException("Inconsistent pattern data after overlay composition");
         }
+        // LoadZoneTiles' d3. For an overlay zone the ROM does not keep the base decode's
+        // a1: it runs a second KosDec for the supplement and takes the size from there
+        // (docs/s2disasm/s2.asm:6485-6494 for HTZ, :6491-6497 for WFZ), so the size is the
+        // last decode's end, not the composed buffer's extent -- HTZ's supplement finishes
+        // inside the EHZ base it overlays, and the ROM discards the base tail. Recorded
+        // before the HTZ dynamic-art padding below, which LoadZoneTiles never uploads
+        // (PatchHTZTiles owns those tiles).
+        zoneTileArtByteSize = loader.lastOpEndBytes();
 
         // For HTZ, extend pattern array to include dynamic art tile indices
         // The background map references tiles at $0500-$0520 (1280-1312) for mountains/clouds
@@ -463,7 +503,7 @@ public class Sonic2Level extends AbstractLevel {
      */
     private void fillHtzDynamicArtPatterns(GraphicsManager graphicsMan, int startIndex) {
         try {
-            Rom rom = RomManager.getInstance().getRom();
+            Rom rom = GameServices.rom().getRom();
             if (rom == null) {
                 fillEmptyPatterns(graphicsMan, startIndex);
                 return;

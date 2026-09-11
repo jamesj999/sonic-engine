@@ -3,6 +3,7 @@ package com.openggf.game.sonic2.bumpers;
 import com.openggf.audio.AudioManager;
 import com.openggf.audio.GameSound;
 import com.openggf.level.spawn.AbstractPlacementManager;
+import com.openggf.physics.TrigLookupTable;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
 import java.util.List;
@@ -454,96 +455,69 @@ public class CNZBumperManager {
      * @param surfaceAngle The target surface/bounce angle (0-255)
      */
     private void applyAngleBounce(AbstractPlayableSprite player, int surfaceAngle) {
-        // Step 1: Calculate incoming angle from player velocity
+        // Step 1: Calculate incoming angle from player velocity.
         // ROM: move.w x_vel(a0),d1 / move.w y_vel(a0),d2 / jsr CalcAngle
         int xVel = player.getXSpeed();
         int yVel = player.getYSpeed();
 
-        // Convert velocity to MD angle (0-255)
-        // CalcAngle returns angle where 0=right, 0x40=down, 0x80=left, 0xC0=up
-        int incomingAngle = calcAngleMD(xVel, yVel);
+        int incomingAngle = TrigLookupTable.calcAngle((short) xVel, (short) yVel);
 
-        // Step 2: Calculate delta from surface angle
-        // ROM: sub.w d3,d0  (d0 = incomingAngle - surfaceAngle)
-        int delta = (incomingAngle - surfaceAngle) & 0xFF;
-
-        // Handle signed comparison (convert to signed -128..127 range)
-        int signedDelta = (delta > 127) ? delta - 256 : delta;
-        int absDelta = StrictMath.abs(signedDelta);
-
-        // Step 3: Determine output angle
-        // ROM: cmpi.b #$38,d1 / blo.s loc_17618 / move.w d3,d0
-        int outAngle;
-        if (absDelta < 0x38) {
-            // Reflect: outAngle = -delta + surfaceAngle
-            // ROM: neg.w d0 / add.w d3,d0
-            outAngle = (-signedDelta + surfaceAngle) & 0xFF;
-        } else {
-            // Too steep - force redirect to surface angle
-            outAngle = surfaceAngle & 0xFF;
-        }
+        // Step 2/3: Resolve the outgoing angle with the ROM's word-sized
+        // subtract/absolute-value semantics.
+        int outAngle = resolveAngleBounceOutAngle(incomingAngle, surfaceAngle);
 
         // Step 4: Apply velocity using CalcSine
         // ROM: jsr CalcSine returns sin in d0, cos in d1
         // Then: muls.w #-$A00,d1 / asr.l #8,d1 / move.w d1,x_vel(a0)
         //       muls.w #-$A00,d0 / asr.l #8,d0 / move.w d0,y_vel(a0)
         // So: x_vel = -cos(angle) * $A00 >> 8, y_vel = -sin(angle) * $A00 >> 8
-        double radians = (outAngle / 256.0) * 2.0 * StrictMath.PI;
-
-        // ROM formula: x_vel = -cos * $A00, y_vel = -sin * $A00
-        int newXVel = (int) (-StrictMath.cos(radians) * BOUNCE_VELOCITY);
-        int newYVel = (int) (-StrictMath.sin(radians) * BOUNCE_VELOCITY);
+        int newXVel = (TrigLookupTable.cosHex(outAngle) * -BOUNCE_VELOCITY) >> 8;
+        int newYVel = (TrigLookupTable.sinHex(outAngle) * -BOUNCE_VELOCITY) >> 8;
 
         player.setXSpeed((short) newXVel);
         player.setYSpeed((short) newYVel);
     }
 
-    /**
-     * Calculate Mega Drive-style angle from velocity components.
-     * <p>
-     * Approximates ROM CalcAngle behavior:
-     * <ul>
-     *   <li>0x00 = right (+X)</li>
-     *   <li>0x40 = down (+Y)</li>
-     *   <li>0x80 = left (-X)</li>
-     *   <li>0xC0 = up (-Y)</li>
-     * </ul>
-     *
-     * @param dx X component (positive = right)
-     * @param dy Y component (positive = down)
-     * @return Angle in 0-255 range
-     */
-    private int calcAngleMD(int dx, int dy) {
-        if (dx == 0 && dy == 0) {
-            return 0;
+    static int resolveAngleBounceOutAngle(int incomingAngle, int surfaceAngle) {
+        int deltaWord = toSignedWord((incomingAngle & 0xFF) - (surfaceAngle & 0xFF));
+        int absDeltaWord = StrictMath.abs(deltaWord);
+
+        // ROM: cmpi.b #$38,d1 / blo.s loc_17618. The compare uses the low byte
+        // of the word absolute value as an unsigned byte, not a signed 8-bit delta.
+        if ((absDeltaWord & 0xFF) < 0x38) {
+            return toSignedWord(-deltaWord + (surfaceAngle & 0xFF)) & 0xFF;
         }
 
-        // atan2 returns radians where 0=right, PI/2=up, PI=left, -PI/2=down
-        // MD convention: 0=right, 0x40=down, 0x80=left, 0xC0=up
-        // So we need to negate Y for the MD y-down coordinate system
-        double radians = StrictMath.atan2(dy, dx);
+        return surfaceAngle & 0xFF;
+    }
 
-        // Convert to 0-255 range
-        int angle = (int) ((radians / (2.0 * StrictMath.PI)) * 256.0);
+    private static int toSignedWord(int value) {
+        value &= 0xFFFF;
+        return value >= 0x8000 ? value - 0x10000 : value;
+    }
 
-        // Normalize to 0-255
-        return angle & 0xFF;
+    static int romWindowStartForCamera(int cameraX) {
+        return Placement.romWindowStart(cameraX);
+    }
+
+    static int romWindowEndExclusiveForCamera(int cameraX) {
+        return Placement.romWindowEndExclusive(cameraX);
     }
 
     private static final class Placement extends AbstractPlacementManager<CNZBumperSpawn> {
-        private static final int LOAD_AHEAD = 640;
-        private static final int UNLOAD_BEHIND = 768;
+        private static final int ROM_LEFT_OFFSET = 8;
+        private static final int ROM_WINDOW_WIDTH = 0x150;
 
         private int lastWindowStart = -1;
         private int lastWindowEnd = -1;
 
         private Placement(List<CNZBumperSpawn> bumpers) {
-            super(bumpers, LOAD_AHEAD, UNLOAD_BEHIND);
+            super(bumpers, 0, 0);
         }
 
         private void update(int cameraX) {
-            int windowStart = getWindowStart(cameraX);
-            int windowEnd = getWindowEnd(cameraX);
+            int windowStart = romWindowStart(cameraX);
+            int windowEnd = romWindowEndExclusive(cameraX);
 
             if (windowStart == lastWindowStart && windowEnd == lastWindowEnd) {
                 return;
@@ -555,11 +529,11 @@ public class CNZBumperManager {
             active.clear();
 
             int startIdx = lowerBound(windowStart);
-            int endIdx = upperBound(windowEnd);
+            int endIdx = lowerBound(windowEnd);
 
             for (int i = startIdx; i < endIdx && i < spawns.size(); i++) {
                 CNZBumperSpawn bumper = spawns.get(i);
-                if (bumper.x() >= windowStart && bumper.x() <= windowEnd) {
+                if (bumper.x() >= windowStart && bumper.x() < windowEnd) {
                     active.add(bumper);
                 }
             }
@@ -570,6 +544,14 @@ public class CNZBumperManager {
             lastWindowStart = -1;
             lastWindowEnd = -1;
             update(cameraX);
+        }
+
+        static int romWindowStart(int cameraX) {
+            return cameraX > ROM_LEFT_OFFSET ? cameraX - ROM_LEFT_OFFSET : 1;
+        }
+
+        static int romWindowEndExclusive(int cameraX) {
+            return romWindowStart(cameraX) + ROM_WINDOW_WIDTH;
         }
     }
 }

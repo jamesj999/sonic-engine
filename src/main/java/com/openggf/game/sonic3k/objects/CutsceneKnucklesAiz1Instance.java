@@ -2,17 +2,20 @@ package com.openggf.game.sonic3k.objects;
 
 import com.openggf.data.Rom;
 import com.openggf.game.PlayableEntity;
+import com.openggf.game.rewind.RewindTransient;
 import com.openggf.game.sonic3k.audio.Sonic3kMusic;
 import com.openggf.game.sonic3k.constants.Sonic3kConstants;
 import com.openggf.game.sonic3k.titlecard.Sonic3kTitleCardManager;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.ObjectTerrainUtils;
 import com.openggf.physics.TerrainCheckResult;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
+import com.openggf.sprites.playable.ObjectControlState;
 
 import java.util.List;
 import java.util.logging.Logger;
@@ -36,9 +39,10 @@ import java.util.logging.Logger;
  *   6  (0x06) - Stand: wait 0x7F frames, then flip facing and start pacing
  *   8  (0x08) - Pace: walk left then right, collecting emeralds, then laugh
  *  10  (0x0A) - Laugh: animate laugh for 0x3F frames, then start exit walk
- *  12  (0x0C) - Exit: walk offscreen, unlock controls, spawn title card, delete self
+ *  12  (0x0C) - Exit: walk offscreen, unlock controls, install the title card slot
+ *  14  (engine) - Allocated Obj_TitleCard slot's first dispatch: queue title card art, delete self
  */
-public class CutsceneKnucklesAiz1Instance extends AbstractObjectInstance {
+public class CutsceneKnucklesAiz1Instance extends AbstractObjectInstance implements SpawnRewindRecreatable {
 
     private static final Logger LOG = Logger.getLogger(CutsceneKnucklesAiz1Instance.class.getName());
 
@@ -81,6 +85,12 @@ public class CutsceneKnucklesAiz1Instance extends AbstractObjectInstance {
 
     /** Mapping frame set after landing. */
     private static final int LANDED_MAPPING_FRAME = 0x16;
+
+    /** ObjSlot_CutsceneKnux width_pixels used by Draw_Sprite render-flag culling. */
+    private static final int RENDER_FLAG_WIDTH = 0x1C;
+
+    /** ObjSlot_CutsceneKnux height_pixels used by Draw_Sprite render-flag culling. */
+    private static final int RENDER_FLAG_HEIGHT = 0x18;
 
     // -----------------------------------------------------------------------
     // Mutable state
@@ -125,7 +135,11 @@ public class CutsceneKnucklesAiz1Instance extends AbstractObjectInstance {
     /** Whether Knuckles is visible (render_flags bit 7). */
     private boolean visible;
 
-    /** Shared state object for SubpixelMotion calls. */
+    /** Previous-frame render_flags bit 7 state used by the exit handoff. */
+    private boolean exitRenderFlagOnScreen;
+
+    /** Shared scratch object for SubpixelMotion calls; scalar fields hold rewind state. */
+    @RewindTransient(reason = "scratch SubpixelMotion holder rebuilt from captured scalar position/velocity fields")
     private final SubpixelMotion.State motionState = new SubpixelMotion.State(0, 0, 0, 0, 0, 0);
 
     // -----------------------------------------------------------------------
@@ -163,6 +177,7 @@ public class CutsceneKnucklesAiz1Instance extends AbstractObjectInstance {
         this.paceReturnPhase = false;
         this.triggered = false;
         this.visible = false;
+        this.exitRenderFlagOnScreen = false;
     }
 
     // -----------------------------------------------------------------------
@@ -190,7 +205,7 @@ public class CutsceneKnucklesAiz1Instance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         switch (routine) {
             case 0  -> routine0Init();
@@ -200,6 +215,7 @@ public class CutsceneKnucklesAiz1Instance extends AbstractObjectInstance {
             case 8  -> routine8Pace();
             case 10 -> routine10Laugh();
             case 12 -> routine12Exit();
+            case 14 -> routine14TitleCardInstallDispatch();
             default -> {
                 // Invalid routine - no-op
             }
@@ -209,7 +225,7 @@ public class CutsceneKnucklesAiz1Instance extends AbstractObjectInstance {
     @Override
     public void appendRenderCommands(List<GLCommand> commands) {
         if (!visible) return;
-        PatternSpriteRenderer renderer = AizIntroArtLoader.getKnucklesRenderer();
+        PatternSpriteRenderer renderer = AizIntroArtLoader.getKnucklesRenderer(services());
         if (renderer == null || !renderer.isReady()) return;
         renderer.drawFrameIndex(mappingFrame, currentX, currentY, facingLeft, false);
     }
@@ -407,17 +423,16 @@ public class CutsceneKnucklesAiz1Instance extends AbstractObjectInstance {
 
         // Apply Knuckles palette (Pal_CutsceneKnux → palette line 1).
         // ROM does this in init, but GL may not be ready then; trigger time is equivalent.
-        AizIntroArtLoader.applyKnucklesPalette();
+        AizIntroArtLoader.applyKnucklesPalette(services());
 
         // Load react/fall animation (byte_666AF)
         loadAnimScript(Sonic3kConstants.ANIM_CUTSCENE_KNUX_REACT_ADDR);
 
         routine = 4;
 
-        // Compensate for pendingDynamicAdditions 1-frame spawn delay:
-        // ROM processes Knuckles' first fall movement in the same frame as
-        // trigger detection. Execute first fall frame immediately.
-        routine4Fall();
+        // loc_61E02 ends by jumping to PalLoad_Line1. It does not fall through
+        // to loc_61E24, so the first MoveSprite call belongs to the next object
+        // dispatch (docs/skdisasm/sonic3k.asm:128644-128665).
     }
 
     // -----------------------------------------------------------------------
@@ -482,6 +497,10 @@ public class CutsceneKnucklesAiz1Instance extends AbstractObjectInstance {
      * - Set walk animation (byte_666A9)
      * - x_vel = -0x600 (walk left)
      * - timer = 0x29 (pace frames)
+     *
+     * ROM parity: Obj_Wait dispatches to loc_61E6A, which falls straight into
+     * loc_61E96 on the same frame. The first pace movement/timer tick therefore
+     * happens immediately when the stand timer expires.
      */
     private void routine6Stand() {
         waitTimer--;
@@ -495,6 +514,7 @@ public class CutsceneKnucklesAiz1Instance extends AbstractObjectInstance {
             loadAnimScript(Sonic3kConstants.ANIM_CUTSCENE_KNUX_WALK_ADDR);
 
             routine = 8;
+            routine8Pace();
         }
     }
 
@@ -562,6 +582,7 @@ public class CutsceneKnucklesAiz1Instance extends AbstractObjectInstance {
             // play AIZ1 music after 120 frames. Independent object survives Knuckles' destruction.
             spawnDynamicObject(new SongFadeTransitionInstance(120, Sonic3kMusic.AIZ1.id));
 
+            exitRenderFlagOnScreen = isVisibleForExitRenderFlag();
             routine = 12;
             LOG.fine("Routine 10: laugh complete, transitioning to exit");
         }
@@ -581,30 +602,25 @@ public class CutsceneKnucklesAiz1Instance extends AbstractObjectInstance {
      * - Delete self
      */
     private void routine12Exit() {
+        if (!exitRenderFlagOnScreen) {
+            completeIntroExitHandoff();
+            return;
+        }
+
         tickAnimation();
 
         // MoveX: apply X velocity to position (no gravity, no Y movement).
         motionState.x = currentX; motionState.xSub = xSub; motionState.xVel = xVel;
         SubpixelMotion.moveX(motionState);
         currentX = motionState.x; xSub = motionState.xSub;
-
-        // Check if offscreen (render_flags bit 7 clear).
-        if (!isOnScreen()) {
-            LOG.fine("Routine 12: offscreen, cleaning up");
-
-            // Unlock player controls (ROM: player.object_control = 0)
-            unlockPlayerControls();
-
-            // ROM: Level_started_flag = 0x91 — re-enable camera tracking
-            // ROM does NOT change level boundaries here — intro bounds stay in effect
-            services().camera().setLevelStarted(true);
-            services().camera().updatePosition(true);
-
-            // ROM: AllocateObject + move.l #Obj_TitleCard,(a1)
-            services().titleCardProvider().initializeInLevel(0, 0);
-
-            setDestroyed(true);
-        }
+        exitRenderFlagOnScreen = isVisibleForExitRenderFlag();
+        // ROM loc_61F10 tests the render_flags byte written by the PREVIOUS
+        // frame's Draw_Sprite before Animate_Raw/MoveSprite2 run. Draw_Sprite
+        // then recomputes bit 7 from this post-move position after the routine
+        // returns, so crossing the render boundary only triggers the handoff on
+        // the next object dispatch (docs/skdisasm/sonic3k.asm:128608-128614,
+        // 128731-128749). Preserve that stale-flag cadence here: the next call's
+        // leading check consumes exitRenderFlagOnScreen=false.
     }
 
     // -----------------------------------------------------------------------
@@ -631,12 +647,75 @@ public class CutsceneKnucklesAiz1Instance extends AbstractObjectInstance {
             var sprite = services().camera().getFocusedSprite();
             if (sprite instanceof AbstractPlayableSprite ps) {
                 ps.setControlLocked(false);
-                ps.setObjectControlled(false);
+                ObjectControlState.none().applyTo(ps);
                 ps.setHidden(false);
             }
         } catch (Exception e) {
             LOG.fine(() -> "CutsceneKnucklesAiz1Instance.unlockPlayerControls: " + e.getMessage());
         }
+    }
+
+    private void completeIntroExitHandoff() {
+        LOG.fine("Routine 12: offscreen, cleaning up");
+
+        unlockPlayerControls();
+        // ROM deletes the Knuckles sprite this frame (Go_Delete_Sprite,
+        // sonic3k.asm:128757); only the slot lives on as Obj_TitleCard.
+        visible = false;
+
+        if (services().camera() != null) {
+            // ROM: Level_started_flag = 0x91 — re-enable camera tracking.
+            services().camera().setLevelStarted(true);
+            services().camera().updatePosition(true);
+        }
+
+        if (services().levelGamestate() != null) {
+            // ROM: clr.l (Timer).w during the intro→gameplay handoff.
+            services().levelGamestate().setTimerFrames(0);
+        }
+
+        // ROM loc_61F22 only allocates the Obj_TitleCard slot here
+        // (sonic3k.asm:128743-128750); AllocateObject returns a slot the
+        // current ExecuteObjects pass has already walked, so Obj_TitleCardInit
+        // — which queues the four KosM title-card modules
+        // (sonic3k.asm:62109-62152) — first dispatches on the NEXT frame's
+        // pass. This slot stands in for the allocated Obj_TitleCard slot:
+        // hold one more dispatch (routine 14) to perform that init instead of
+        // queueing the art synchronously here.
+        routine = 14;
+    }
+
+    /**
+     * Models the allocated Obj_TitleCard slot's first dispatch
+     * (Obj_TitleCardInit, sonic3k.asm:62109-62152): queue the four KosM
+     * title-card modules during the next ExecuteObjects pass, then free the
+     * slot.
+     */
+    private void routine14TitleCardInstallDispatch() {
+        var titleCardProvider = services().titleCardProvider();
+        if (titleCardProvider != null) {
+            titleCardProvider.initializeInLevel(0, 0);
+            // Obj_TitleCardWait2 (sonic3k.asm:62274-62309) remains in the
+            // allocated title owner's slot for the poll after its child
+            // objects retire. Keep the slotless owner alive for that same
+            // native dispatch before it reaches LoadEnemyArt.
+            titleCardProvider.requestInLevelExitAdditionalDispatches(1);
+        }
+        setDestroyed(true);
+    }
+
+    private boolean isVisibleForExitRenderFlag() {
+        if (services().camera() == null) {
+            return isOnScreen();
+        }
+        int cameraX = services().camera().getX();
+        int relX = currentX - cameraX;
+        if (relX + RENDER_FLAG_WIDTH < 0 || relX - RENDER_FLAG_WIDTH >= viewportWidth()) {
+            return false;
+        }
+        int cameraY = services().camera().getY();
+        int relY = currentY - cameraY;
+        return relY + RENDER_FLAG_HEIGHT >= 0 && relY - RENDER_FLAG_HEIGHT < viewportHeight();
     }
 
 }

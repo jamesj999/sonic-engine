@@ -9,8 +9,12 @@ import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.DestructionEffects;
 import com.openggf.level.objects.DestructionEffects.DestructionConfig;
 import com.openggf.level.objects.ObjectArtKeys;
+import com.openggf.level.objects.ObjectLifetimeOps;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.ObjectServices;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.ObjectTerrainUtils;
 import com.openggf.physics.TerrainCheckResult;
@@ -57,7 +61,7 @@ import java.util.List;
  * </ul>
  */
 public class Sonic1CaterkillerBadnikInstance extends AbstractBadnikInstance
-        implements CaterkillerParentState {
+        implements CaterkillerParentState, RewindRecreatable {
 
     // From disassembly: obColType = $B (enemy, collision size index $B)
     private static final int COLLISION_SIZE_INDEX = 0x0B;
@@ -85,6 +89,11 @@ public class Sonic1CaterkillerBadnikInstance extends AbstractBadnikInstance
 
     // Number of body segments: moveq #2,d1 → dbf → 3 iterations
     private static final int BODY_SEGMENT_COUNT = 3;
+
+    // Cat_Main sets obActWid = 8 and obRender bit 4 remains clear, so BuildSprites
+    // uses the exact X half-width plus the default assumed 32 px Y band.
+    private static final int RENDER_HALF_WIDTH = 8;
+    private static final int ASSUMED_RENDER_HALF_HEIGHT = 32;
 
     // Floor detection thresholds from loc_16B02:
     // cmpi.w #-8,d1 / blt.s .loc_16B70 / cmpi.w #$C,d1 / bge.s .loc_16B70
@@ -135,11 +144,13 @@ public class Sonic1CaterkillerBadnikInstance extends AbstractBadnikInstance
     private int animAngle;        // obAngle: animation table index
     private int currentDisplayFrame; // Computed mapping frame from last animation update
     private int inertia;          // obInertia: body trailing offset
-    private int xSubpixel;
-    private int ySubpixel;
+    /** Subpixel accumulators (xSub / ySub) for ROM-accurate 16:8 fixed-point integration. */
+    private final SubpixelMotion.State motion = new SubpixelMotion.State(0, 0, 0, 0, 0, 0);
     private int fallVelocity;
     private boolean fragmenting;
     private boolean deleting;
+    private boolean renderOnScreen;
+    private int bodyDeletionEarliestFrame;
 
     // Ring buffer for Y-deltas (objoff_2C through objoff_2C+15)
     private final byte[] ringBuffer = new byte[16];
@@ -164,17 +175,26 @@ public class Sonic1CaterkillerBadnikInstance extends AbstractBadnikInstance
         this.animAngle = 0;
         this.currentDisplayFrame = 0;
         this.inertia = 0;
-        this.xSubpixel = 0;
-        this.ySubpixel = 0;
         this.fallVelocity = 0;
         this.fragmenting = false;
         this.deleting = false;
+        this.renderOnScreen = true;
+        this.bodyDeletionEarliestFrame = -1;
         this.ringBufferWriteIndex = 0;
     }
 
     @Override
-    protected void updateMovement(int frameCounter, PlayableEntity playerEntity) {
+    public Sonic1CaterkillerBadnikInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new Sonic1CaterkillerBadnikInstance(ctx.spawn());
+    }
+
+    @Override
+    protected void updateMovement(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
+        if (deleting) {
+            setDestroyedByOffscreen();
+            return;
+        }
         if (fragmenting) {
             updateFragment();
             return;
@@ -206,6 +226,13 @@ public class Sonic1CaterkillerBadnikInstance extends AbstractBadnikInstance
         if (secondaryState == STATE_MOVE) {
             updateMove();
         }
+
+        // Cat_ChkGone sets routine $A and returns; Cat_Delete frees the slot on
+        // the next object pass (docs/s1disasm/_incObj/78 Badnik - Caterkiller.asm).
+        if (!isInRange()) {
+            deleting = true;
+        }
+
     }
 
     /**
@@ -214,11 +241,13 @@ public class Sonic1CaterkillerBadnikInstance extends AbstractBadnikInstance
      */
     private void initialize() {
         // ObjectFall: apply velocity, then gravity
-        int yPos24 = (currentY << 8) | (ySubpixel & 0xFF);
-        yPos24 += fallVelocity;
-        currentY = yPos24 >> 8;
-        ySubpixel = yPos24 & 0xFF;
-        fallVelocity += GRAVITY;
+        motion.x = currentX;
+        motion.y = currentY;
+        motion.xVel = 0;
+        motion.yVel = fallVelocity;
+        SubpixelMotion.moveSprite(motion, GRAVITY);
+        currentY = motion.y;
+        fallVelocity = motion.yVel;
 
         // ObjFloorDist: check floor from feet
         TerrainCheckResult floorResult = ObjectTerrainUtils.checkFloorDist(currentX, currentY, Y_RADIUS);
@@ -285,20 +314,25 @@ public class Sonic1CaterkillerBadnikInstance extends AbstractBadnikInstance
         for (int i = 0; i < BODY_SEGMENT_COUNT; i++) {
             segX += spacing;
 
-            Sonic1CaterkillerBodyInstance body = new Sonic1CaterkillerBodyInstance(
-                    this, parentState, segX, currentY, facingLeft,
-                    isAnimated[i], i, ringBufIdx);
-            bodySegments.add(body);
+            final int segXFinal = segX;
+            final boolean animated = isAnimated[i];
+            final int segmentIndex = i;
+            final int ringBufIdxFinal = ringBufIdx;
+            final CaterkillerParentState parentStateFinal = parentState;
+            final int prevSlotFinal = prevSlot;
 
-            // Allocate slot after previous segment (FindNextFreeObj parity)
-            if (prevSlot >= 0) {
-                int localSlot = objectManager.allocateSlotAfter(prevSlot);
-                if (localSlot >= 0) {
-                    body.setSlotIndex(localSlot);
-                    prevSlot = localSlot;
-                }
+            Sonic1CaterkillerBodyInstance body = spawnFreeChild(() -> {
+                Sonic1CaterkillerBodyInstance segment = new Sonic1CaterkillerBodyInstance(
+                        this, parentStateFinal, segXFinal, currentY, facingLeft,
+                        animated, segmentIndex, ringBufIdxFinal);
+                // Allocate slot after previous segment (FindNextFreeObj parity)
+                ObjectLifetimeOps.assignFindNextFreeChildSlot(objectManager, segment, prevSlotFinal);
+                return segment;
+            });
+            bodySegments.add(body);
+            if (body.getSlotIndex() >= 0) {
+                prevSlot = body.getSlotIndex();
             }
-            objectManager.addDynamicObject(body);
             parentState = body;
 
             ringBufIdx += 4;
@@ -375,10 +409,10 @@ public class Sonic1CaterkillerBadnikInstance extends AbstractBadnikInstance
         }
 
         int oldXWhole = currentX;
-        int xPos24 = (currentX << 8) | (xSubpixel & 0xFF);
-        xPos24 += effectiveVel;
-        currentX = xPos24 >> 8;
-        xSubpixel = xPos24 & 0xFF;
+        motion.x = currentX;
+        motion.xVel = effectiveVel;
+        SubpixelMotion.moveX(motion);
+        currentX = motion.x;
 
         // swap d3 / cmp.w obX(a0),d3 / beq.s .notmoving
         if (currentX == oldXWhole) {
@@ -432,8 +466,8 @@ public class Sonic1CaterkillerBadnikInstance extends AbstractBadnikInstance
 
         // REV01: negate subpixel
         // neg.w obX+2(a0) / beq.s .loc_1730A / btst #0,obStatus(a0) / beq.s .loc_1730A
-        xSubpixel = (-xSubpixel) & 0xFFFF;
-        if (xSubpixel != 0 && !facingLeft) {
+        motion.xSub = (-motion.xSub) & 0xFFFF;
+        if (motion.xSub != 0 && !facingLeft) {
             // subq.w #1,obX(a0) - adjust when bit 0 = 1 (facing right)
             currentX--;
             ringBufferWriteIndex = (ringBufferWriteIndex + 1) & 0x0F;
@@ -448,7 +482,7 @@ public class Sonic1CaterkillerBadnikInstance extends AbstractBadnikInstance
     }
 
     @Override
-    protected void updateAnimation(int frameCounter) {
+    protected void updateAnimation(int vIntRunCount) {
         if (fragmenting || !initialized) {
             return;
         }
@@ -501,18 +535,15 @@ public class Sonic1CaterkillerBadnikInstance extends AbstractBadnikInstance
      * From loc_16C96 and loc_16CC0.
      */
     private void updateFragment() {
-        // ObjectFall: apply velocity + gravity
-        int yPos24 = (currentY << 8) | (ySubpixel & 0xFF);
-        yPos24 += yVelocity;
-        currentY = yPos24 >> 8;
-        ySubpixel = yPos24 & 0xFF;
-
-        int xPos24 = (currentX << 8) | (xSubpixel & 0xFF);
-        xPos24 += xVelocity;
-        currentX = xPos24 >> 8;
-        xSubpixel = xPos24 & 0xFF;
-
-        yVelocity += GRAVITY;
+        // ObjectFall: apply velocity, then gravity (uses pre-gravity velocity for movement).
+        motion.x = currentX;
+        motion.y = currentY;
+        motion.xVel = xVelocity;
+        motion.yVel = yVelocity;
+        SubpixelMotion.moveSprite(motion, GRAVITY);
+        currentX = motion.x;
+        currentY = motion.y;
+        yVelocity = motion.yVel;
 
         // Floor bounce when falling
         if (yVelocity >= 0) {
@@ -522,6 +553,26 @@ public class Sonic1CaterkillerBadnikInstance extends AbstractBadnikInstance
                 yVelocity = FRAG_Y_VELOCITY;
             }
         }
+
+        // Cat_Fragment .displayOrDelete (docs/s1disasm/_incObj/78 Badnik -
+        // Caterkiller.asm:206-208): tst.b obRender(a0) / bpl.w Cat_Despawn.
+        // An off-screen fragment routes to Cat_Despawn, which clears bit 7 of
+        // the object's v_objstate respawn-table entry (bclr #7,2(a2,d0.w),
+        // Caterkiller.asm:139-148) before DeleteObject — exactly the
+        // RememberState off-screen unload, NOT a permanent kill. Using
+        // setDestroyedByOffscreen() (respawnable, clears the placement counter
+        // bit) instead of setDestroyed(true) lets the layout entry re-create
+        // the Caterkiller when the camera returns. setDestroyed(true) kept the
+        // REV01 bset counter bit latched, so a Caterkiller the player frag-hit
+        // then walked away from never respawned (MZ2 @0x200 caterkiller: the
+        // placement bit-2 collision blocked its f3031 respawn, cascading the
+        // scattered-ring + Basaran slot allocation and dropping the f4610
+        // Basaran bounce).
+        if (!renderOnScreen) {
+            setDestroyedByOffscreen();
+            return;
+        }
+        updateCaterkillerRenderFlag();
     }
 
     @Override
@@ -533,14 +584,20 @@ public class Sonic1CaterkillerBadnikInstance extends AbstractBadnikInstance
     protected void destroyBadnik(PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         deleting = true;
+        ObjectServices objectServices = tryServices();
+        int currentFrame = objectServices != null && objectServices.objectManager() != null
+                // Body segments compare their deletion latch against the VBlank
+                // counter passed into update(...). Using the gameplay frame
+                // counter here causes lag-frame traces to delete the body chain
+                // too early because frameCounter and vblaCounter diverge.
+                ? objectServices.objectManager().getVblaCounter()
+                : 0;
+        bodyDeletionEarliestFrame = currentFrame + 2;
         // ROM parity: explosion inherits our slot (in-place obID change).
-        int mySlot = getSlotIndex();
-        setSlotIndex(-1);
+        int mySlot = ObjectLifetimeOps.detachSlotForTransfer(this);
         setDestroyed(true);
         DestructionEffects.destroyBadnik(currentX, currentY, spawn, mySlot,
                 player, services(), getDestructionConfig());
-        // Normal head destruction does not use fragment mode in S1; body segments delete.
-        markBodySegmentsForDeletion();
     }
 
     /**
@@ -582,10 +639,27 @@ public class Sonic1CaterkillerBadnikInstance extends AbstractBadnikInstance
         bodySegments.clear();
     }
 
+    void adoptBodySegmentForRewind(Sonic1CaterkillerBodyInstance restoredBody) {
+        bodySegments.removeIf(body -> body == null || body.isDestroyed() || !body.isLinkedToHead(this));
+        bodySegments.remove(restoredBody);
+        bodySegments.add(restoredBody);
+
+        // Dynamic body entries are captured/restored in runtime spawn order
+        // (head, segment0, segment1, segment2). Compact scalars are restored
+        // later, so build the structural parent chain from that restore order.
+        CaterkillerParentState parent = this;
+        for (Sonic1CaterkillerBodyInstance body : bodySegments) {
+            body.relinkForRewind(this, parent);
+            parent = body;
+        }
+    }
+
     @Override
     public void onUnload() {
         deleting = true;
-        markBodySegmentsForDeletion();
+        if (bodyDeletionEarliestFrame < 0 && !fragmenting) {
+            markBodySegmentsForDeletion();
+        }
     }
 
     /**
@@ -610,11 +684,25 @@ public class Sonic1CaterkillerBadnikInstance extends AbstractBadnikInstance
             return false;
         }
         if (fragmenting) {
-            // tst.b obRender(a0) / bpl.w Cat_ChkGone
-            // ROM checks both X and Y via obRender on-screen flag.
-            return isOnScreen(160);
+            return renderOnScreen;
         }
         return !isDestroyed() && isOnScreenX(160);
+    }
+
+    @Override
+    public boolean usesCustomOutOfRangeCheck() {
+        return true;
+    }
+
+    @Override
+    public boolean isCustomOutOfRange(int cameraX) {
+        // Caterkiller owns its Cat_Head out_of_range tail because the fragment
+        // entry branch must run before any off-screen delete decision.
+        return false;
+    }
+
+    private void updateCaterkillerRenderFlag() {
+        renderOnScreen = isWithinRenderSpriteBounds(RENDER_HALF_WIDTH, ASSUMED_RENDER_HALF_HEIGHT);
     }
 
     @Override
@@ -674,6 +762,13 @@ public class Sonic1CaterkillerBadnikInstance extends AbstractBadnikInstance
 
     boolean isFragmenting() {
         return fragmenting;
+    }
+
+    boolean shouldDeleteBodySegments(int frameCounter) {
+        if (!deleting && !isDestroyed()) {
+            return false;
+        }
+        return bodyDeletionEarliestFrame < 0 || frameCounter >= bodyDeletionEarliestFrame;
     }
 
     /**

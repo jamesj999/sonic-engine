@@ -230,12 +230,28 @@ public final class Sonic1SpecialStageBlockType {
      * Wall blocks 0x01-0x24 are arranged in 4 groups of 9.
      * @return {group, position} or null if not a wall block
      */
-    public static int[] getWallGroupAndPosition(int blockId) {
-        if (blockId < 0x01 || blockId > 0x24) return null;
+    /** Allocation-free packed wall group/position metadata, or -1 for non-walls. */
+    public static int getWallGroupAndPositionPacked(int blockId) {
+        if (blockId < 0x01 || blockId > 0x24) return -1;
         int index = blockId - 1;
-        int group = index / 9;
-        int pos = index % 9;
-        return new int[]{group, pos};
+        return ((index / 9) << 8) | (index % 9);
+    }
+
+    /**
+     * Legacy compatibility API. Hot render paths should use the packed accessor.
+     */
+    @Deprecated
+    public static int[] getWallGroupAndPosition(int blockId) {
+        int packed = getWallGroupAndPositionPacked(blockId);
+        return packed < 0 ? null : new int[]{wallGroup(packed), wallPosition(packed)};
+    }
+
+    public static int wallGroup(int packed) {
+        return (packed >>> 8) & 0xFF;
+    }
+
+    public static int wallPosition(int packed) {
+        return packed & 0xFF;
     }
 
     /**

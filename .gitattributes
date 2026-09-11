@@ -1,0 +1,11 @@
+.githooks/* text eol=lf
+*.sh text eol=lf
+.github/workflows/*.yml text eol=lf
+.mvn/maven.config text eol=lf
+
+# Preserve archived third-party research snapshots byte-for-byte.
+docs/architecture/research/audio/*.htm -whitespace
+
+# Preserve exact upstream-context bytes in reproducible native patches.
+tools/bizhawk-headless/native/gpgx-audio-observer/*.patch -whitespace
+tools/bizhawk-headless/native/gpgx-audio-lab/*.patch -whitespace

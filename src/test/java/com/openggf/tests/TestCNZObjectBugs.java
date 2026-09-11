@@ -1,11 +1,10 @@
 package com.openggf.tests;
 
-import org.junit.AfterClass;
-import org.junit.Assume;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import com.openggf.camera.Camera;
 import com.openggf.game.GameServices;
 import com.openggf.level.LevelManager;
@@ -13,13 +12,12 @@ import com.openggf.level.objects.ObjectInstance;
 import com.openggf.level.objects.ObjectManager;
 import com.openggf.sprites.playable.Sonic;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
 
 import java.lang.reflect.Field;
 import java.util.Collection;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Headless integration tests for Casino Night Zone (CNZ) object bugs in Sonic 2.
@@ -42,20 +40,17 @@ import static org.junit.Assert.*;
  */
 @RequiresRom(SonicGame.SONIC_2)
 public class TestCNZObjectBugs {
-
-    @ClassRule public static RequiresRomRule romRule = new RequiresRomRule();
-
     private static final int ZONE_CNZ = 3;
     private static final int ACT_1 = 0;
 
     private static SharedLevel sharedLevel;
 
-    @BeforeClass
+    @BeforeAll
     public static void loadLevel() throws Exception {
         sharedLevel = SharedLevel.load(SonicGame.SONIC_2, ZONE_CNZ, ACT_1);
     }
 
-    @AfterClass
+    @AfterAll
     public static void cleanup() {
         if (sharedLevel != null) sharedLevel.dispose();
     }
@@ -73,14 +68,14 @@ public class TestCNZObjectBugs {
     // the actual value may be slightly less. Use a reasonable threshold.
     private static final int BOUNCE_VELOCITY_THRESHOLD = 0x600;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         fixture = HeadlessTestFixture.builder()
                 .withSharedLevel(sharedLevel)
                 .build();
         sprite = (Sonic) fixture.sprite();
 
-        // Reset object spawn windows (was in original @Before)
+        // Reset object spawn windows (was in original @BeforeEach)
         GameServices.level().getObjectManager().reset(fixture.camera().getX());
     }
 
@@ -193,7 +188,7 @@ public class TestCNZObjectBugs {
             bumper = walkAndSearch(OBJ_BUMPER, 0, 8192, 1600);
         }
 
-        Assume.assumeTrue("No bumper (0x44) found in CNZ1; skipping test", bumper != null);
+        Assumptions.assumeTrue(bumper != null, "No bumper (0x44) found in CNZ1; skipping test");
 
         int bumperX = bumper.getSpawn().x();
         int bumperY = bumper.getSpawn().y();
@@ -225,7 +220,7 @@ public class TestCNZObjectBugs {
             }
         }
 
-        assertTrue("Sonic should have bounced off the bumper (YSpeed should become negative)", bounced);
+        assertTrue(bounced, "Sonic should have bounced off the bumper (YSpeed should become negative)");
 
         short xSpeed = sprite.getXSpeed();
         short ySpeed = sprite.getYSpeed();
@@ -233,11 +228,9 @@ public class TestCNZObjectBugs {
         System.out.println("Post-bounce XSpeed=" + xSpeed + ", YSpeed=" + ySpeed);
 
         // For a centered drop, the bounce should be primarily upward
-        assertTrue("YSpeed should be negative (bounced upward), was: " + ySpeed,
-                ySpeed < 0);
-        assertTrue("|XSpeed| should be small relative to |YSpeed| for a centered drop. " +
-                        "XSpeed=" + xSpeed + ", YSpeed=" + ySpeed,
-                Math.abs(xSpeed) < Math.abs(ySpeed));
+        assertTrue(ySpeed < 0, "YSpeed should be negative (bounced upward), was: " + ySpeed);
+        assertTrue(Math.abs(xSpeed) < Math.abs(ySpeed), "|XSpeed| should be small relative to |YSpeed| for a centered drop. " +
+                        "XSpeed=" + xSpeed + ", YSpeed=" + ySpeed);
     }
 
     // ========================================================================
@@ -267,7 +260,7 @@ public class TestCNZObjectBugs {
             bigBlock = walkAndSearch(OBJ_BIG_BLOCK, 0, 8192, 1600);
         }
 
-        Assume.assumeTrue("No BigBlock (0xD4) found in CNZ1; skipping test", bigBlock != null);
+        Assumptions.assumeTrue(bigBlock != null, "No BigBlock (0xD4) found in CNZ1; skipping test");
 
         int spawnX = bigBlock.getSpawn().x();
         int spawnY = bigBlock.getSpawn().y();
@@ -299,10 +292,9 @@ public class TestCNZObjectBugs {
 
         System.out.println("Max excursion from initial Y: " + maxExcursion + " pixels");
 
-        assertTrue("BigBlock Y excursion should be < 128 pixels (reasonable oscillation), " +
+        assertTrue(maxExcursion < 128, "BigBlock Y excursion should be < 128 pixels (reasonable oscillation), " +
                         "but was: " + maxExcursion + " pixels. " +
-                        "This suggests velocityShifted = yVel << 8 is over-scaling movement.",
-                maxExcursion < 128);
+                        "This suggests velocityShifted = yVel << 8 is over-scaling movement.");
     }
 
     // ========================================================================
@@ -343,9 +335,8 @@ public class TestCNZObjectBugs {
         int xDelta = xAfterSettle - xAfterWalk; // positive if moved left (X decreased)
         System.out.println("X after walking left: " + xAfterWalk + ", delta: " + xDelta);
 
-        assertTrue("Sonic should have moved at least 10 pixels to the left (not stuck). " +
-                        "X delta was: " + xDelta + " (settle=" + xAfterSettle + ", final=" + xAfterWalk + ")",
-                xDelta >= 10);
+        assertTrue(xDelta >= 10, "Sonic should have moved at least 10 pixels to the left (not stuck). " +
+                        "X delta was: " + xDelta + " (settle=" + xAfterSettle + ", final=" + xAfterWalk + ")");
     }
 
     // ========================================================================
@@ -412,10 +403,9 @@ public class TestCNZObjectBugs {
         System.out.println("Max consecutive trapped frames (Y in " + trappedYMin + "-" + trappedYMax + "): "
                 + maxConsecutiveTrapped);
 
-        assertTrue("Sonic should not be trapped in bumper loop for > 100 consecutive frames. " +
+        assertTrue(maxConsecutiveTrapped < 100, "Sonic should not be trapped in bumper loop for > 100 consecutive frames. " +
                         "Max consecutive frames in Y range [" + trappedYMin + "," + trappedYMax + "] was: "
-                        + maxConsecutiveTrapped,
-                maxConsecutiveTrapped < 100);
+                        + maxConsecutiveTrapped);
     }
 
     // ========================================================================
@@ -458,7 +448,7 @@ public class TestCNZObjectBugs {
             bonusBlock = walkAndSearch(OBJ_BONUS_BLOCK, 0, 8192, 1600);
         }
 
-        Assume.assumeTrue("No BonusBlock (0xD8) found in CNZ1; skipping test", bonusBlock != null);
+        Assumptions.assumeTrue(bonusBlock != null, "No BonusBlock (0xD8) found in CNZ1; skipping test");
 
         int blockX = bonusBlock.getSpawn().x();
         int blockY = bonusBlock.getSpawn().y();
@@ -496,10 +486,8 @@ public class TestCNZObjectBugs {
                 }
             }
 
-            assertTrue("Sonic should have bounced off Y-bounce BonusBlock (YSpeed should become negative)",
-                    bounced);
-            assertTrue("YSpeed should be strongly negative (pushed up), was: " + sprite.getYSpeed(),
-                    sprite.getYSpeed() <= -BOUNCE_VELOCITY_THRESHOLD);
+            assertTrue(bounced, "Sonic should have bounced off Y-bounce BonusBlock (YSpeed should become negative)");
+            assertTrue(sprite.getYSpeed() <= -BOUNCE_VELOCITY_THRESHOLD, "YSpeed should be strongly negative (pushed up), was: " + sprite.getYSpeed());
 
         } else if (baseAnimFrame == 2) {
             // X-bounce block: approach from the left, expect leftward bounce
@@ -523,10 +511,8 @@ public class TestCNZObjectBugs {
                 }
             }
 
-            assertTrue("Sonic should have bounced off X-bounce BonusBlock (XSpeed should become negative)",
-                    bounced);
-            assertTrue("XSpeed should be strongly negative (pushed left), was: " + sprite.getXSpeed(),
-                    sprite.getXSpeed() <= -BOUNCE_VELOCITY_THRESHOLD);
+            assertTrue(bounced, "Sonic should have bounced off X-bounce BonusBlock (XSpeed should become negative)");
+            assertTrue(sprite.getXSpeed() <= -BOUNCE_VELOCITY_THRESHOLD, "XSpeed should be strongly negative (pushed left), was: " + sprite.getXSpeed());
 
         } else {
             // baseAnimFrame 1: velocity reflection block -- approach from left
@@ -556,8 +542,8 @@ public class TestCNZObjectBugs {
                 }
             }
 
-            assertTrue("Sonic should have bounced off velocity-reflection BonusBlock " +
-                    "(velocity should change significantly)", bounced);
+            assertTrue(bounced, "Sonic should have bounced off velocity-reflection BonusBlock " +
+                    "(velocity should change significantly)");
         }
 
         System.out.println("Post-bounce XSpeed=" + sprite.getXSpeed() + ", YSpeed=" + sprite.getYSpeed());
@@ -596,7 +582,7 @@ public class TestCNZObjectBugs {
             pointPokey = walkAndSearch(OBJ_POINT_POKEY, 0, 8192, 1600);
         }
 
-        Assume.assumeTrue("No PointPokey (0xD6) found in CNZ1; skipping test", pointPokey != null);
+        Assumptions.assumeTrue(pointPokey != null, "No PointPokey (0xD6) found in CNZ1; skipping test");
 
         int cageX = pointPokey.getSpawn().x();
         int cageY = pointPokey.getSpawn().y();
@@ -645,17 +631,14 @@ public class TestCNZObjectBugs {
 
         logState("Final");
 
-        assertFalse("Sonic should NOT die during PointPokey capture. " +
+        assertFalse(sprite.getDead(), "Sonic should NOT die during PointPokey capture. " +
                         "Damage detected at frame " + damageFrame + ". " +
-                        "objectControlled should disable damage collision.",
-                sprite.getDead());
-        assertFalse("Sonic should NOT be hurt during PointPokey capture. " +
+                        "objectControlled should disable damage collision.");
+        assertFalse(sprite.isHurt(), "Sonic should NOT be hurt during PointPokey capture. " +
                         "Damage detected at frame " + damageFrame + ". " +
-                        "objectControlled should disable damage collision.",
-                sprite.isHurt());
-        assertTrue("Sonic should not lose rings during capture. " +
-                        "Ring loss detected at frame " + damageFrame + ".",
-                sprite.getRingCount() >= 10);
+                        "objectControlled should disable damage collision.");
+        assertTrue(sprite.getRingCount() >= 10, "Sonic should not lose rings during capture. " +
+                        "Ring loss detected at frame " + damageFrame + ".");
     }
 
     // ========================================================================
@@ -688,7 +671,7 @@ public class TestCNZObjectBugs {
             }
         }
 
-        Assume.assumeTrue("No PointPokey (0xD6) found in CNZ1; skipping test", pointPokey != null);
+        Assumptions.assumeTrue(pointPokey != null, "No PointPokey (0xD6) found in CNZ1; skipping test");
 
         int cageX = pointPokey.getSpawn().x();
         int cageY = pointPokey.getSpawn().y();
@@ -725,17 +708,18 @@ public class TestCNZObjectBugs {
             }
         }
 
-        Assume.assumeTrue("Sonic should have been captured by the PointPokey", captured);
+        Assumptions.assumeTrue(captured, "Sonic should have been captured by the PointPokey");
 
         // ROM-accurate: air=false during capture (SolidObject clears it at s2.asm:35761)
-        assertFalse("Air flag should be false during capture (ROM: SolidObject clears in_air). ",
-                sprite.getAir());
+        assertFalse(sprite.getAir(), "Air flag should be false during capture (ROM: SolidObject clears in_air). ");
 
         logState("After capture");
 
         // Step through the capture period, tracking camera Y.
         // Grounded scroll at 6px/frame should center camera within ~6 frames.
-        int captureFrames = isSimpleMode ? 120 : 180;
+        // ROM Obj_D6 release: subq.w #1, then bpl to continue (s2.asm:58739-58751);
+        // the simple cage's $78 countdown therefore underflows on frame 121.
+        int captureFrames = isSimpleMode ? 122 : 180;
         int cameraYAtCapture = camera.getY();
         System.out.println("Camera Y at capture: " + cameraYAtCapture);
         System.out.println("Cage Y: " + cageY);
@@ -761,14 +745,12 @@ public class TestCNZObjectBugs {
 
         // For simple cages, eject should have happened
         if (isSimpleMode) {
-            assertTrue("Simple cage should eject after ~120 frames", ejected);
+            assertTrue(ejected, "Simple cage should eject after ~120 frames");
 
             // After eject: verify positive YSpeed (downward) and air=true
             short ySpeedAfterEject = sprite.getYSpeed();
-            assertTrue("After eject, YSpeed should be positive (downward +0x400), was: " + ySpeedAfterEject,
-                    ySpeedAfterEject > 0);
-            assertTrue("After eject, air flag should be true (ROM: s2.asm:58745 bset in_air)",
-                    sprite.getAir());
+            assertTrue(ySpeedAfterEject > 0, "After eject, YSpeed should be positive (downward +0x400), was: " + ySpeedAfterEject);
+            assertTrue(sprite.getAir(), "After eject, air flag should be true (ROM: s2.asm:58745 bset in_air)");
         }
 
         // Step 60 more frames and verify Sonic doesn't die
@@ -781,9 +763,8 @@ public class TestCNZObjectBugs {
         }
 
         logState("Final");
-        assertFalse("Sonic should NOT die after PointPokey eject. " +
-                        "Camera should have centered during capture (grounded scroll 6px/frame).",
-                sprite.getDead());
+        assertFalse(sprite.getDead(), "Sonic should NOT die after PointPokey eject. " +
+                        "Camera should have centered during capture (grounded scroll 6px/frame).");
     }
 
     /**
@@ -839,7 +820,7 @@ public class TestCNZObjectBugs {
      * checks whether the calculation was even triggered.
      */
     @Test
-    public void testPointPokeySlotDisplayOffsetY() {
+    public void testPointPokeySlotDisplayOffsetY() throws Exception {
         System.out.println("=== Bug #15: Slot Display Y Offset ===");
 
         // Search for a linked-mode PointPokey (subtype 0x01) specifically
@@ -863,8 +844,7 @@ public class TestCNZObjectBugs {
             if (linkedPokey != null) break;
         }
 
-        Assume.assumeTrue("No linked-mode PointPokey (0xD6, subtype 0x01) found in CNZ1; skipping test",
-                linkedPokey != null);
+        Assumptions.assumeTrue(linkedPokey != null, "No linked-mode PointPokey (0xD6, subtype 0x01) found in CNZ1; skipping test");
 
         int cageX = linkedPokey.getSpawn().x();
         int cageY = linkedPokey.getSpawn().y();
@@ -885,57 +865,40 @@ public class TestCNZObjectBugs {
             System.out.println("appendRenderCommands exception (expected in headless): " + e.getMessage());
         }
 
-        // Use reflection to read the slotDisplayOffsetY field
-        try {
-            Field offsetYField = linkedPokey.getClass().getDeclaredField("slotDisplayOffsetY");
-            offsetYField.setAccessible(true);
-            int actualOffsetY = (int) offsetYField.get(linkedPokey);
+        // Read the slotDisplayOffsetY field via reflection. A reflection failure
+        // (renamed/removed field) is a real test failure, not something to swallow.
+        Field offsetYField = linkedPokey.getClass().getDeclaredField("slotDisplayOffsetY");
+        offsetYField.setAccessible(true);
+        int actualOffsetY = (int) offsetYField.get(linkedPokey);
 
-            Field calculatedField = linkedPokey.getClass().getDeclaredField("slotDisplayOffsetCalculated");
-            calculatedField.setAccessible(true);
-            boolean wasCalculated = (boolean) calculatedField.get(linkedPokey);
+        Field calculatedField = linkedPokey.getClass().getDeclaredField("slotDisplayOffsetCalculated");
+        calculatedField.setAccessible(true);
+        boolean wasCalculated = (boolean) calculatedField.get(linkedPokey);
 
-            System.out.println("slotDisplayOffsetCalculated: " + wasCalculated);
-            System.out.println("slotDisplayOffsetY: " + actualOffsetY);
+        System.out.println("slotDisplayOffsetCalculated: " + wasCalculated);
+        System.out.println("slotDisplayOffsetY: " + actualOffsetY);
 
-            if (!wasCalculated) {
-                System.out.println("Offset calculation was not triggered; cannot verify bug.");
-                System.out.println("This may happen if appendRenderCommands() exited early.");
-                // Still check the default value is reasonable
-                // DEFAULT_OFFSET_Y is 40 (below cage), which is correct for uncalculated
-                return;
-            }
+        // The offset calculation must have been triggered for this linked-mode cage;
+        // otherwise the bug under test cannot be verified.
+        assertTrue(wasCalculated,
+                "Linked-mode PointPokey slot display offset should have been calculated after appendRenderCommands()");
 
-            // The bug: offset uses -12 instead of -4.
-            // If the offset was calculated from pattern scan, the difference between
-            // buggy (-12) and correct (-4) is exactly 8 pixels.
-            // We can't know the exact expected value without the pattern scan result,
-            // but we can verify the offset is not unreasonably shifted.
-            //
-            // With the -12 bug: slotDisplayOffsetY = patternOffset - 12
-            // Without the bug:  slotDisplayOffsetY = patternOffset - 4
-            //
-            // The default is 40 (below cage). For CNZ1 linked cages, the display is
-            // typically below the cage, so the offset should be positive.
-            // A negative offset (above cage) combined with a large magnitude suggests
-            // the -12 overcorrection.
-            System.out.println("Slot display offset Y = " + actualOffsetY +
-                    " (default would be 40, bug shifts 8px up from correct value)");
+        // Bug #15: the Y offset must use -4 (pattern center -> pattern top edge), NOT -12.
+        // The correct value is the raw pattern-scan offset minus 4. Recompute the raw
+        // pattern offset the same way the object does, then assert the stored field
+        // matches the documented (-4) formula. A -12 regression would be off by 8px.
+        int[] rawOffset = GameServices.level().findPatternOffset(
+                cageX, cageY,
+                com.openggf.game.sonic2.slotmachine.CNZSlotMachineRenderer.SLOT_TILE_MIN,
+                com.openggf.game.sonic2.slotmachine.CNZSlotMachineRenderer.SLOT_TILE_MAX,
+                128);
+        assertNotNull(rawOffset,
+                "Slot display patterns must be found near the cage when the offset was calculated");
 
-            // This assertion documents the bug: the Y offset is 8px more negative than it should be.
-            // After the fix (changing -12 to -4), the offset will be 8 pixels higher (more positive).
-            // We flag this as a known issue by checking if the offset seems excessively corrected.
-            // The exact assertion depends on the pattern scan result for this specific cage.
-            // For now, we verify the calculation ran and log the value for manual inspection.
-            assertNotNull("slotDisplayOffsetY should have been calculated", actualOffsetY);
-
-        } catch (NoSuchFieldException e) {
-            System.out.println("Could not access slotDisplayOffsetY via reflection: " + e.getMessage());
-            System.out.println("The field may have been renamed or removed. " +
-                    "Check PointPokeyObjectInstance.java line 549 for the -12 vs -4 offset.");
-            // Do not fail the test if reflection does not work; this is a best-effort check
-        } catch (IllegalAccessException e) {
-            System.out.println("Reflection access denied for slotDisplayOffsetY: " + e.getMessage());
-        }
+        int expectedOffsetY = rawOffset[1] - 4;
+        assertEquals(expectedOffsetY, actualOffsetY,
+                "slotDisplayOffsetY must use the -4 pattern-center-to-top-edge correction, not -12");
     }
 }
+
+

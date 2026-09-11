@@ -1,0 +1,459 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "policy",
+    "caseId",
+    "baseCommit",
+    "resultTree",
+    "patch",
+    "stages",
+    "tokens",
+    "wallTimeMs",
+    "totalAttemptCount",
+    "beforeFrontier",
+    "afterFrontier",
+    "status",
+    "accepted",
+    "genuine",
+    "reviewerRejected",
+    "romCitations",
+    "verificationResults",
+    "regressions"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "policy": {
+      "enum": [
+        "sol-only",
+        "terra-sol",
+        "luna-terra-sol"
+      ]
+    },
+    "caseId": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "baseCommit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "resultTree": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "patch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^target/trace-model-routing/[^/]+/[^/]+\\.patch$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "stages": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4,
+      "items": {
+        "$ref": "#/$defs/stage"
+      }
+    },
+    "tokens": {
+      "$ref": "#/$defs/usage"
+    },
+    "wallTimeMs": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "totalAttemptCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "beforeFrontier": {
+      "$ref": "#/$defs/nullableFrontier"
+    },
+    "afterFrontier": {
+      "$ref": "#/$defs/nullableFrontier"
+    },
+    "status": {
+      "enum": [
+        "green",
+        "advanced",
+        "advanced-with-regression",
+        "no-change",
+        "rejected-not-genuine",
+        "blocked",
+        "error"
+      ]
+    },
+    "accepted": {"type": "boolean"},
+    "genuine": {"type": "boolean"},
+    "reviewerRejected": {"type": "boolean"},
+    "romCitations": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/romCitation"}
+    },
+    "verificationResults": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/verificationResult"}
+    },
+    "regressions": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/regression"}
+    }
+  },
+  "$defs": {
+    "route": {
+      "type": "string",
+      "pattern": "^gpt-5\\.6-(luna|terra|sol)/(low|medium|high)$"
+    },
+    "frontier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "frame",
+        "field"
+      ],
+      "properties": {
+        "frame": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "field": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "nullableFrontier": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/frontier"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "inputTokens",
+        "cachedInputTokens",
+        "outputTokens",
+        "reasoningTokens"
+      ],
+      "properties": {
+        "inputTokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "cachedInputTokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "outputTokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "reasoningTokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
+    },
+    "romCitation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "lineStart", "lineEnd", "symbol", "claim"],
+      "properties": {
+        "path": {"type": "string", "pattern": "^docs/(s1disasm|s2disasm|skdisasm)/"},
+        "lineStart": {"type": "integer", "minimum": 1},
+        "lineEnd": {"type": "integer", "minimum": 1},
+        "symbol": {"type": "string", "minLength": 1},
+        "claim": {"type": "string", "minLength": 1}
+      }
+    },
+    "verificationResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["testClass", "outcome", "reportKind", "report", "reportSha256"],
+      "properties": {
+        "testClass": {"type": "string", "pattern": "^(?:[A-Za-z_$][A-Za-z0-9_$]*\\.)+[A-Za-z_$][A-Za-z0-9_$]*$"},
+        "outcome": {"enum": ["passed", "failed", "error", "skipped"]},
+        "reportKind": {"enum": ["surefire", "command-log"]},
+        "report": {
+          "type": "string",
+          "pattern": "^/tmp/trace-model-routing-retained-[^/]+/verification-reports/[^/]+\\.(txt|log)$"
+        },
+        "reportSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "regression": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["testClass", "previousOutcome", "currentOutcome", "evidence"],
+      "properties": {
+        "testClass": {"type": "string", "pattern": "^(?:[A-Za-z_$][A-Za-z0-9_$]*\\.)+[A-Za-z_$][A-Za-z0-9_$]*$"},
+        "previousOutcome": {"const": "passed"},
+        "currentOutcome": {"enum": ["failed", "error"]},
+        "firstError": {"$ref": "#/$defs/nullableFrontier"},
+        "evidence": {"type": "string", "minLength": 1}
+      }
+    },
+    "stage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "requestedModel",
+        "requestedEffort",
+        "actualModel",
+        "actualEffort",
+        "complexity",
+        "confidence",
+        "beforeFrame",
+        "afterFrame",
+        "status",
+        "attemptCount",
+        "regressionCount",
+        "sharedSurfaces",
+        "needsEscalation",
+        "escalationReasons",
+        "modelRoute",
+        "usage",
+        "durationMs"
+      ],
+      "properties": {
+        "name": {
+          "enum": [
+            "discovery",
+            "triage",
+            "fix",
+            "verify"
+          ]
+        },
+        "requestedModel": {
+          "enum": [
+            "gpt-5.6-terra",
+            "gpt-5.6-sol",
+            "gpt-5.6-luna"
+          ]
+        },
+        "requestedEffort": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "actualModel": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "gpt-5.6-terra",
+            "gpt-5.6-sol",
+            "gpt-5.6-luna",
+            null
+          ]
+        },
+        "actualEffort": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            null
+          ]
+        },
+        "complexity": {
+          "enum": [
+            "mechanical",
+            "narrow",
+            "shared",
+            "deep"
+          ]
+        },
+        "confidence": {
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ]
+        },
+        "beforeFrame": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "afterFrame": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "status": {
+          "enum": [
+            "completed",
+            "green",
+            "advanced",
+            "advanced-with-regression",
+            "no-change",
+            "rejected-not-genuine",
+            "blocked",
+            "error"
+          ]
+        },
+        "attemptCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "regressionCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sharedSurfaces": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "needsEscalation": {
+          "type": "boolean"
+        },
+        "escalationReasons": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "no-frontier-advance",
+              "multiple-owners",
+              "missing-rom-basis",
+              "low-confidence",
+              "unresolved-ownership",
+              "reasoning-insufficient",
+              "shared-surface-discovered",
+              "cross-game-semantics",
+              "regression",
+              "context-contradiction",
+              "recorder-evidence-required",
+              "causal-thread-lost"
+            ]
+          }
+        },
+        "modelRoute": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/route"
+          }
+        },
+        "usage": {
+          "$ref": "#/$defs/usage"
+        },
+        "durationMs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "actualModel"
+            ],
+            "properties": {
+              "actualModel": {
+                "type": "null"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "actualEffort": {
+                "type": "null"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "actualEffort": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "actualEffort"
+            ],
+            "properties": {
+              "actualEffort": {
+                "type": "null"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "actualModel": {
+                "type": "null"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "actualModel": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

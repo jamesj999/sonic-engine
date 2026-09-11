@@ -190,6 +190,7 @@ public final class Sonic2ObjectRegistryData {
         map.put(0xB8, List.of("WallTurret"));
         map.put(0xB9, List.of("Laser"));
         map.put(0xBA, List.of("WFZWheel"));
+        map.put(0xBB, List.of("WFZUnknown"));
         map.put(0xBC, List.of("WFZShipFire"));
         map.put(0xBD, List.of("SmallMetalPform"));
         map.put(0xBE, List.of("LateralCannon"));

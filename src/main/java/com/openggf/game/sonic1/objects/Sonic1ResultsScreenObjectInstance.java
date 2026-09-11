@@ -1,16 +1,20 @@
 package com.openggf.game.sonic1.objects;
 
 import com.openggf.camera.Camera;
+import com.openggf.game.save.SaveReason;
 import com.openggf.game.sonic1.audio.Sonic1Music;
 import com.openggf.game.PlayableEntity;
 import com.openggf.game.sonic1.audio.Sonic1Sfx;
 import com.openggf.game.sonic1.constants.Sonic1Constants;
+import com.openggf.game.sonic1.resources.Sonic1PlcService;
 import com.openggf.game.sonic1.scroll.Sonic1ZoneConstants;
 import com.openggf.level.objects.AbstractResultsScreen;
+import com.openggf.level.objects.FixedRuntimeObjectInstance;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.Pattern;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpriteSheet;
+import com.openggf.level.objects.ZeroScalarArgsRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -34,8 +38,13 @@ import java.util.logging.Logger;
  *
  * @see AbstractResultsScreen
  */
-public class Sonic1ResultsScreenObjectInstance extends AbstractResultsScreen {
+public class Sonic1ResultsScreenObjectInstance extends AbstractResultsScreen
+        implements FixedRuntimeObjectInstance, ZeroScalarArgsRewindRecreatable {
     private static final Logger LOGGER = Logger.getLogger(Sonic1ResultsScreenObjectInstance.class.getName());
+    /** True once the ROM's routine-0 PLC gate has released this card. */
+    private boolean plcReadinessPassed;
+    /** True once GotThroughAct has submitted {@code plcid_TitleCard}. */
+    private boolean resultsPlcCommitted;
 
     // -----------------------------------------------------------------------
     // Time bonus table (from s1disasm 0D Signpost.asm:TimeBonuses)
@@ -144,9 +153,12 @@ public class Sonic1ResultsScreenObjectInstance extends AbstractResultsScreen {
     private int ringBonus;
 
     // Input data
-    private final int elapsedTimeSeconds;
-    private final int ringCount;
-    private final int actNumber; // 1-indexed for display
+    // Un-final so GenericFieldCapturer reapplies these after a rewind recreate:
+    // they are computed at signpost time, not carried in ObjectSpawn, so the recreate
+    // hook passes placeholder zeros and the captured values are restored.
+    private int elapsedTimeSeconds;
+    private int ringCount;
+    private int actNumber; // 1-indexed for display
 
     // Per-element current X positions (VDP coordinates, updated each frame during slide)
     private final int[] elemCurrentX = new int[ELEMENT_COUNT];
@@ -165,10 +177,17 @@ public class Sonic1ResultsScreenObjectInstance extends AbstractResultsScreen {
     }
 
     public Sonic1ResultsScreenObjectInstance(int elapsedTimeSeconds, int ringCount, int actNumber) {
+        this(elapsedTimeSeconds, ringCount, actNumber, true);
+    }
+
+    private Sonic1ResultsScreenObjectInstance(
+            int elapsedTimeSeconds, int ringCount, int actNumber,
+            boolean resultsPlcCommitted) {
         super("s1_results_screen");
         this.elapsedTimeSeconds = elapsedTimeSeconds;
         this.ringCount = ringCount;
         this.actNumber = actNumber;
+        this.resultsPlcCommitted = resultsPlcCommitted;
 
         calculateBonuses();
 
@@ -177,6 +196,20 @@ public class Sonic1ResultsScreenObjectInstance extends AbstractResultsScreen {
 
         LOGGER.info("S1 Results screen created: act=" + actNumber
                 + ", timeBonus=" + timeBonus + ", ringBonus=" + ringBonus);
+    }
+
+    static Sonic1ResultsScreenObjectInstance awaitingResultsPlc(
+            int elapsedTimeSeconds, int ringCount, int actNumber) {
+        return new Sonic1ResultsScreenObjectInstance(
+                elapsedTimeSeconds, ringCount, actNumber, false);
+    }
+
+    public boolean isResultsPlcCommitted() {
+        return resultsPlcCommitted;
+    }
+
+    public void markResultsPlcCommitted() {
+        resultsPlcCommitted = true;
     }
 
     private void calculateBonuses() {
@@ -200,11 +233,28 @@ public class Sonic1ResultsScreenObjectInstance extends AbstractResultsScreen {
     // -----------------------------------------------------------------------
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
+
+        if (!resultsPlcCommitted) {
+            this.frameCounter = vIntRunCount;
+            return;
+        }
+
+        // ROM Got_ChkPLC is routine 0 only. Once it has released, later card
+        // routines must keep running even when unrelated PLC work is submitted.
+        if (!plcReadinessPassed) {
+            Sonic1PlcService plcService = services().gameService(Sonic1PlcService.class);
+            if (plcService != null && plcService.isBusy()) {
+                this.frameCounter = vIntRunCount;
+                return;
+            }
+            plcReadinessPassed = true;
+        }
+
         // Handle SBZ2 special states outside the base class state machine
         if (state == STATE_SBZ2_SLIDE_OUT || state == STATE_SBZ2_SCROLL) {
-            this.frameCounter = frameCounter;
+            this.frameCounter = vIntRunCount;
             stateTimer++;
             totalFrames++;
             if (state == STATE_SBZ2_SLIDE_OUT) {
@@ -214,7 +264,7 @@ public class Sonic1ResultsScreenObjectInstance extends AbstractResultsScreen {
             }
             return;
         }
-        super.update(frameCounter, player);
+        super.update(vIntRunCount, player);
     }
 
     @Override
@@ -327,7 +377,7 @@ public class Sonic1ResultsScreenObjectInstance extends AbstractResultsScreen {
     @Override
     protected void onExitReady() {
         if (specialStageAfter) {
-            triggerFadeToWhiteForSpecialStage();
+            advanceToSpecialStage();
         } else if (isSBZ2()) {
             // ROM: Got_ChkBonus lines 122-124: addq.b #4,obRoutine skips
             // Got_NextLevel and goes to Got_Wait($C) -> Got_Move2($E) -> loc_C766($10).
@@ -341,47 +391,61 @@ public class Sonic1ResultsScreenObjectInstance extends AbstractResultsScreen {
     }
 
     /**
-     * Fade to white and play the special stage enter SFX before transitioning
-     * to the special stage. ROM-accurate: the screen goes white (like the
-     * normal special stage entry) rather than black.
+     * Hands the act over to the Special Stage. ROM: {@code Got_NextLevel} /
+     * {@code Got_ChkSS} ("_incObj/3A Got Through Card.asm":175-202) reads the
+     * next level out of {@code LevelOrder} into {@code v_zone_act} and, with
+     * {@code f_bigring} set, writes {@code v_gamemode = id_Special} — with no
+     * fade of its own. The 22-frame {@code PaletteWhiteOut} and the
+     * {@code sfx_EnterSS} that accompany it belong to {@code GM_Special}
+     * (sonic.asm:3223-3227), which the special-stage entry owns, so starting a
+     * level-side fade here would run the white-out twice and delay the mode
+     * change by the whole fade.
+     * <p>
+     * {@code Got_Wait} only advances the routine on this frame, so the whole
+     * {@code Got_NextLevel} body — the zone/act advance included — is armed to
+     * land on the next one.
      */
-    private void triggerFadeToWhiteForSpecialStage() {
-        LOGGER.info("S1 Results screen complete, starting fade to white for special stage");
-
-        // Play the special stage enter/exit SFX during the white fade
-        try {
-            services().playSfx(Sonic1Sfx.ENTER_SS.id);
-        } catch (Exception e) {
-            // Don't let audio failure break the transition
-        }
-
-        var fadeManager = services().fadeManager();
-        fadeManager.startFadeToWhite(() -> {
-            setDestroyed(true);
-            if (true) {
-                // Giant Ring collected: advance zone/act first (ROM-accurate: Got_NextLevel),
-                // then enter special stage. On return, the advanced values are used.
-                services().advanceZoneActOnly();
-                services().requestSpecialStageFromCheckpoint();
-            }
-            // Don't start fadeFromWhite here — let the screen stay white
-            // (HOLD_WHITE). enterSpecialStage() will detect HOLD_WHITE and
-            // transition directly, fading from white to reveal the special stage.
-        });
+    private void advanceToSpecialStage() {
+        LOGGER.info("S1 Results screen complete, entering special stage");
+        setDestroyed(true);
+        services().advanceToSpecialStageEntryRoutine();
     }
 
     private void triggerFadeToBlack() {
         LOGGER.info("S1 Results screen complete, starting fade to black");
 
+        // Persist progression before the level transition
+        services().requestSessionSave(SaveReason.PROGRESSION_SAVE);
+
+        // ROM Got_NextLevel writes move.w #1,(f_restart).w from inside
+        // ExecuteObjects (docs/s1disasm/_incObj/3A Got Through Card.asm:207).
+        // Level_MainLoop tests f_restart in the instruction immediately after
+        // jsr (ExecuteObjects).l and branches straight to GM_Level
+        // (docs/s1disasm/sonic.asm:3006-3017, the Revision<>0 / FixBugs = 0
+        // arm this build takes), so that pass never reaches DeformLayers
+        // (:3025) and GM_Level's ClearPLC + PaletteFadeOut (:2711-2712) run
+        // with no further object pass at all. Raising the engine's equivalent
+        // here stops the post-act fade running as ordinary gameplay frames --
+        // without it Sonic keeps animating through the fade and publishes
+        // player DPLC transfers the ROM never performs. Same correction, same
+        // mechanism and same ROM shape as Sonic 2's Level_Inactive_flag
+        // (com.openggf.game.sonic2.objects.ResultsScreenObjectInstance).
+        var levelManager = services().levelManager();
+        if (levelManager != null) {
+            levelManager.setLevelInactiveForTransition(true);
+        }
+
         var fadeManager = services().fadeManager();
-        fadeManager.startFadeToBlack(() -> {
+        var marker = services().nativeFadeLifecycle().beginNativeBlockingFade();
+        fadeManager.startFadeToBlack(marker.wrapCompletion(() -> {
             setDestroyed(true);
             if (true) {
                 services().advanceToNextLevel();
                 // Keep transition atomic: immediately reveal the next scene.
-                fadeManager.startFadeFromBlack(null);
+                var reveal = services().nativeFadeLifecycle().beginNativeBlockingFade();
+                fadeManager.startFadeFromBlack(reveal.wrapCompletion(() -> { }));
             }
-        });
+        }));
     }
 
     // -----------------------------------------------------------------------
@@ -426,7 +490,6 @@ public class Sonic1ResultsScreenObjectInstance extends AbstractResultsScreen {
             // Check if reached or passed target
             if ((direction > 0 && next >= target) || (direction < 0 && next <= target)) {
                 next = target;
-                elemExited[i] = true;
             }
 
             elemCurrentX[i] = next;
@@ -486,6 +549,9 @@ public class Sonic1ResultsScreenObjectInstance extends AbstractResultsScreen {
 
     @Override
     public void appendRenderCommands(List<GLCommand> commands) {
+        if (!plcReadinessPassed) {
+            return;
+        }
         var camera = services().camera();
         if (camera == null) {
             return;
@@ -514,7 +580,9 @@ public class Sonic1ResultsScreenObjectInstance extends AbstractResultsScreen {
         // Convert VDP X coordinates to world coordinates.
         // VDP X has +128 offset; screen X = VDP X - 128; world X = camera.getX() + screenX.
         // Since our elemCurrentX stores VDP coords, world X = camera.getX() + (vdpX - 128).
-        int worldXBase = camera.getX() - 128;
+        // xOffset() shifts the whole content block right for widescreen centering.
+        // xOffset() == 0 at native 320 (byte-identical).
+        int worldXBase = camera.getX() - 128 + xOffset();
 
         // Draw order: oval first (behind), then text elements on top.
         // On the VDP, earlier sprites in the link table render in front of later ones.
@@ -698,7 +766,8 @@ public class Sonic1ResultsScreenObjectInstance extends AbstractResultsScreen {
      */
     private void appendPlaceholderRenderCommands(List<GLCommand> commands, Camera camera) {
         int worldBaseY = camera.getY();
-        int worldXBase = camera.getX() - 128;
+        // xOffset() shifts the whole content block right for widescreen centering; 0 at native 320.
+        int worldXBase = camera.getX() - 128 + xOffset();
 
         // Convert VDP X to screen-relative for placeholder boxes
         // "SONIC HAS" - blue

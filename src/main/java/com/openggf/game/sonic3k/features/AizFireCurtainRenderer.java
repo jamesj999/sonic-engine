@@ -23,13 +23,13 @@ final class AizFireCurtainRenderer {
     private static final int FIRE_TILE_END_BG_Y = 0x310;
     /** Number of BG tile rows in the fire zone. */
     private static final int FIRE_ZONE_ROWS = (FIRE_TILE_END_BG_Y - FIRE_TILE_START_BG_Y) / TILE_SIZE;
+    /** AIZ's ROM fire source occupies one 64-tile (512px) VDP background ring. */
+    private static final int FIRE_SOURCE_TILE_COLS = 64;
     /** Start of the dense (loopable) fire body, well past the top flame-tip fringe. */
     private static final int FIRE_DENSE_START_BG_Y = 0x150;
     /** End of the dense fire body, well before the bottom transition fringe.
      *  Height = 0x250 - 0x150 = 0x100 = 256px, matching the VDP nametable period. */
     private static final int FIRE_DENSE_END_BG_Y = 0x250;
-    /** Screen-width tile columns (320 / 8). */
-    private static final int SCREEN_TILE_COLS = 40;
     private static final java.util.logging.Logger LOG =
             java.util.logging.Logger.getLogger(AizFireCurtainRenderer.class.getName());
 
@@ -67,7 +67,7 @@ final class AizFireCurtainRenderer {
             return;
         }
 
-        GraphicsManager graphicsManager = GraphicsManager.getInstance();
+        GraphicsManager graphicsManager = GameServices.graphics();
         int cameraX = camera.getX();
         int cameraY = camera.getY();
         for (ColumnRenderPlan column : plan.columns()) {
@@ -92,19 +92,14 @@ final class AizFireCurtainRenderer {
                 return buildSampledPlan(state, screenWidth, screenHeight);
             }
             CurtainCompositionPlan bgPlan = buildBackgroundSampledPlan(state, screenWidth, screenHeight);
-            if (bgPlan.columns().isEmpty() && state.fireOverlayTileCount() > 0) {
-                return buildFireOverlayTilePlan(state, screenWidth, screenHeight);
-            }
             return bgPlan;
         }
         // Post-mutation: use cached BG descriptors if available (preserves real
-        // fire tile layout across the mutation).  Falls back to synthetic overlay
-        // tiles if the cache wasn't populated during RISING.
+        // fire tile layout across the mutation). If no cache exists, fail closed
+        // rather than synthesizing descriptors that were not sourced from the ROM
+        // layout.
         if (fireDescriptorsCached) {
             return buildCachedPlan(state, screenWidth, screenHeight);
-        }
-        if (state.fireOverlayTileCount() > 0) {
-            return buildFireOverlayTilePlan(state, screenWidth, screenHeight);
         }
         if (sampler != null) {
             return buildSampledPlan(state, screenWidth, screenHeight);
@@ -175,9 +170,12 @@ final class AizFireCurtainRenderer {
         int tileBase = state.fireOverlayTileBase();
         int tileCount = state.fireOverlayTileCount();
 
-        // Populate cache on first call with valid fire overlay tiles.
-        if (!fireDescriptorsCached && tileCount > 0) {
-            populateFireDescriptorCache(state.sourceWorldX(), tileBase, tileCount);
+        // Populate the cache with valid fire overlay tiles. If the viewport
+        // grows while the rising phase is still active, capture the wider
+        // strip before the BG mutation makes those descriptors unavailable.
+        int requiredTileColumns = requiredTileColumns(screenWidth);
+        if ((!fireDescriptorsCached || cachedTileColumns() < requiredTileColumns) && tileCount > 0) {
+            populateFireDescriptorCache(state.sourceWorldX(), tileBase, tileCount, screenWidth);
         }
 
         for (int columnIndex = 0; columnIndex < COLUMN_COUNT; columnIndex++) {
@@ -226,11 +224,6 @@ final class AizFireCurtainRenderer {
                     }
                     if (patternIndex >= tileBase && patternIndex < tileBase + tileCount) {
                         draws.add(new TileDraw(forceFirePalette(descriptor), patternIndex, drawX, drawY));
-                    } else if (tileCount > 0) {
-                        int fallbackIdx = ((drawX / TILE_SIZE) + (bgRow & 0x7F)) % tileCount;
-                        int fallbackPattern = tileBase + fallbackIdx;
-                        int fallbackDesc = (FIRE_PALETTE_INDEX << 13) | (fallbackPattern & 0x7FF);
-                        draws.add(new TileDraw(fallbackDesc, fallbackPattern, drawX, drawY));
                     }
                 }
             }
@@ -244,15 +237,17 @@ final class AizFireCurtainRenderer {
 
     /**
      * Populates the fire descriptor cache by sampling the entire fire zone
-     * from the BG layout at a fixed X offset.  Called once during RISING
-     * before the mutation overwrites the BG data.
+     * from the BG layout at a fixed X offset. Called during RISING, before the
+     * mutation overwrites the BG data.
      */
-    private void populateFireDescriptorCache(int sourceWorldX, int tileBase, int tileCount) {
-        cachedFireDescriptors = new int[FIRE_ZONE_ROWS][SCREEN_TILE_COLS];
+    private void populateFireDescriptorCache(int sourceWorldX, int tileBase, int tileCount, int screenWidth) {
+        int screenTileColumns = requiredTileColumns(screenWidth);
+        cachedFireDescriptors = new int[FIRE_ZONE_ROWS][screenTileColumns];
         for (int row = 0; row < FIRE_ZONE_ROWS; row++) {
             int bgTileY = FIRE_TILE_START_BG_Y + row * TILE_SIZE;
-            for (int col = 0; col < SCREEN_TILE_COLS; col++) {
-                int worldX = sourceWorldX + col * TILE_SIZE;
+            for (int col = 0; col < screenTileColumns; col++) {
+                int sourceCol = Math.floorMod(col, FIRE_SOURCE_TILE_COLS);
+                int worldX = sourceWorldX + sourceCol * TILE_SIZE;
                 int descriptor = sampleBackgroundStripDescriptor(worldX, bgTileY);
                 int patternIndex = descriptor & 0x7FF;
                 // Leave empty tiles as 0 in the cache — they are transparent
@@ -262,15 +257,11 @@ final class AizFireCurtainRenderer {
                 }
                 if (patternIndex >= tileBase && patternIndex < tileBase + tileCount) {
                     cachedFireDescriptors[row][col] = forceFirePalette(descriptor);
-                } else if (tileCount > 0) {
-                    int fallbackIdx = (col + (row & 0x7F)) % tileCount;
-                    int fallbackPattern = tileBase + fallbackIdx;
-                    cachedFireDescriptors[row][col] = (FIRE_PALETTE_INDEX << 13) | (fallbackPattern & 0x7FF);
                 }
             }
         }
         fireDescriptorsCached = true;
-        LOG.info("Cached fire tile descriptors: " + FIRE_ZONE_ROWS + " rows × " + SCREEN_TILE_COLS + " cols");
+        LOG.info("Cached fire tile descriptors: " + FIRE_ZONE_ROWS + " rows × " + screenTileColumns + " cols");
     }
 
     /**
@@ -284,6 +275,7 @@ final class AizFireCurtainRenderer {
         int bgY = state.sourceWorldY();
         List<ColumnRenderPlan> columns = new ArrayList<>(COLUMN_COUNT);
         int baseTop = clamp(screenHeight - state.coverHeightPx(), 0, screenHeight);
+        int cachedTileColumns = cachedTileColumns();
 
         for (int columnIndex = 0; columnIndex < COLUMN_COUNT; columnIndex++) {
             int columnLeft = (columnIndex * screenWidth) / COLUMN_COUNT;
@@ -324,7 +316,7 @@ final class AizFireCurtainRenderer {
                     }
                     int cacheCol = drawX / TILE_SIZE;
                     if (fireRow < 0 || fireRow >= FIRE_ZONE_ROWS
-                            || cacheCol < 0 || cacheCol >= SCREEN_TILE_COLS) {
+                            || cacheCol < 0 || cacheCol >= cachedTileColumns) {
                         continue;
                     }
                     int descriptor = cachedFireDescriptors[fireRow][cacheCol];
@@ -342,72 +334,18 @@ final class AizFireCurtainRenderer {
         return new CurtainCompositionPlan(screenWidth, screenHeight, columns);
     }
 
-    /**
-     * Builds a fire curtain plan using the fire overlay tiles directly.
-     * Used as a fallback when cached descriptors aren't available.
-     */
-    private CurtainCompositionPlan buildFireOverlayTilePlan(FireCurtainRenderState state,
-                                                             int screenWidth, int screenHeight) {
-        int tileBase = state.fireOverlayTileBase();
-        int tileCount = state.fireOverlayTileCount();
-        if (tileCount <= 0) {
-            return new CurtainCompositionPlan(screenWidth, screenHeight, List.of());
-        }
+    private static int requiredTileColumns(int screenWidth) {
+        return (screenWidth + TILE_SIZE - 1) / TILE_SIZE;
+    }
 
-        int[] columnWaveOffsets = state.columnWaveOffsetsPx();
-        int bgY = state.sourceWorldY();
-        List<ColumnRenderPlan> columns = new ArrayList<>(COLUMN_COUNT);
-        int baseTop = clamp(screenHeight - state.coverHeightPx(), 0, screenHeight);
-
-        for (int columnIndex = 0; columnIndex < COLUMN_COUNT; columnIndex++) {
-            int columnLeft = (columnIndex * screenWidth) / COLUMN_COUNT;
-            int columnRight = ((columnIndex + 1) * screenWidth) / COLUMN_COUNT;
-            int columnWidth = Math.max(1, columnRight - columnLeft);
-            int waveOffset = columnIndex < columnWaveOffsets.length ? columnWaveOffsets[columnIndex] : 0;
-            int clipTop = clamp(baseTop + waveOffset, 0, screenHeight);
-            if (clipTop >= screenHeight) {
-                continue;
-            }
-
-            int columnVScroll = bgY + waveOffset;
-            int bgAtBottom = columnVScroll + screenHeight;
-            int bgAtClipTop = columnVScroll + clipTop;
-            int bgRowBottom = Math.floorDiv(bgAtBottom - 1, TILE_SIZE);
-            int bgRowTop = Math.floorDiv(bgAtClipTop - TILE_SIZE, TILE_SIZE);
-
-            List<TileDraw> draws = new ArrayList<>();
-            int subColumns = Math.max(1, (columnWidth + TILE_SIZE - 1) / TILE_SIZE);
-            for (int bgRow = bgRowBottom; bgRow >= bgRowTop; bgRow--) {
-                int bgTileY = bgRow * TILE_SIZE;
-                int wrappedTileY = wrapFireTileY(bgTileY, state.wrapFireTiles());
-                if (wrappedTileY < 0) {
-                    continue;
-                }
-                int drawY = bgTileY - columnVScroll;
-                if (drawY >= screenHeight || drawY + TILE_SIZE <= clipTop) {
-                    continue;
-                }
-                int wrappedRowIndex = wrappedTileY / TILE_SIZE;
-                for (int subColumn = 0; subColumn < subColumns; subColumn++) {
-                    int drawX = columnLeft + subColumn * TILE_SIZE;
-                    if (drawX >= columnRight) {
-                        continue;
-                    }
-                    int tileIndex = ((drawX / TILE_SIZE) + (wrappedRowIndex & 0x7F)) % tileCount;
-                    int patternIndex = tileBase + tileIndex;
-                    int descriptor = (FIRE_PALETTE_INDEX << 13) | (patternIndex & 0x7FF);
-                    draws.add(new TileDraw(descriptor, patternIndex, drawX, drawY));
-                }
-            }
-            if (!draws.isEmpty()) {
-                columns.add(new ColumnRenderPlan(columnIndex, columnLeft, columnWidth, clipTop, screenHeight, draws));
-            }
-        }
-        return new CurtainCompositionPlan(screenWidth, screenHeight, columns);
+    private int cachedTileColumns() {
+        return cachedFireDescriptors == null || cachedFireDescriptors.length == 0
+                ? 0
+                : cachedFireDescriptors[0].length;
     }
 
     private static int sampleBackgroundStripDescriptor(int sourceX, int sourceY) {
-        LevelManager levelManager = GameServices.level();
+        LevelManager levelManager = GameServices.levelOrNull();
         if (levelManager == null || levelManager.getCurrentLevel() == null) {
             return 0;
         }

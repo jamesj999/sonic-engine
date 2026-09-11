@@ -1,9 +1,11 @@
 package com.openggf.game.sonic3k.objects;
 
 import com.openggf.graphics.GLCommand;
+import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.GravityDebrisChild;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnDefaultArgsRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 
 import java.util.List;
@@ -20,12 +22,20 @@ import java.util.List;
  * velocities from word_2A8B0. Gravity = 0x18 subpixels/frame (same as
  * cork floor fragments).
  */
-public class RockDebrisChild extends GravityDebrisChild {
+public class RockDebrisChild extends GravityDebrisChild implements SpawnDefaultArgsRewindRecreatable {
 
     private static final int GRAVITY = 0x18;
 
-    private final int mappingFrame;
-    private final String artKey;
+    // Non-final: not derivable from the carried ObjectSpawn (only x/y are
+    // carried; velocities/subtype are 0). Rewind recreate passes placeholders
+    // (0, null) and the GenericFieldCapturer reapplies these captured values
+    // after recreateDynamicObject. Mirrors the AizRockFragmentChild sibling.
+    private int mappingFrame;
+    private String artKey;
+
+    RockDebrisChild() {
+        this(new ObjectSpawn(0, 0, 0, 0, 0, false, 0), 0, 0, 0, null);
+    }
 
     public RockDebrisChild(ObjectSpawn spawn, int xVel, int yVel,
                            int mappingFrame, String artKey) {

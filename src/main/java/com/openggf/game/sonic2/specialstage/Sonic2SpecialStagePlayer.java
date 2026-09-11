@@ -3,10 +3,9 @@ package com.openggf.game.sonic2.specialstage;
 import com.openggf.game.GameServices;
 
 import com.openggf.audio.GameSound;
-import com.openggf.timer.Timer;
 import com.openggf.physics.TrigLookupTable;
-import com.openggf.timer.timers.SSInvulnerabilityTimer;
 
+import java.util.Objects;
 import java.util.logging.Logger;
 
 /**
@@ -21,7 +20,7 @@ import java.util.logging.Logger;
  * The player moves around the half-pipe track, and their screen position
  * is calculated by projecting track-space coordinates using SSAnglePos.
  *
- * Based on Obj09 (Sonic) and Obj0A (Tails) from s2disasm.
+ * Based on Obj09 (Sonic) and Obj10 (Tails) from s2disasm.
  */
 public class Sonic2SpecialStagePlayer {
     private static final Logger LOGGER = Logger.getLogger(Sonic2SpecialStagePlayer.class.getName());
@@ -65,6 +64,7 @@ public class Sonic2SpecialStagePlayer {
     private int ssSlideTimer;
     private int ssHurtTimer;
     private int ssDplcTimer;
+    private int rings;
 
     // Flip timer for creating 8-frame running animation from 4 art frames.
     // ss_init_flip_timer is a word (0x400), but when read as byte it gives high byte (0x04).
@@ -78,6 +78,20 @@ public class Sonic2SpecialStagePlayer {
     private int animFrame;
     private int animFrameDuration;
     private int mappingFrame;
+
+    // Obj88 is an independent object in the ROM and therefore owns animation state
+    // separate from the Obj10 body animation.
+    private int tailsTailsAnim;
+    private int tailsTailsPrevAnim;
+    private int tailsTailsAnimFrame;
+    private int tailsTailsFrameDuration;
+    private int tailsTailsMappingFrame;
+
+    private static final int[][] TAILS_TAILS_ANIM_SCRIPTS = {
+            {0, 1, 2, 3, 4, 5, 6},
+            {7, 8, 9, 10, 11, 12, 13},
+            {14, 15, 16, 17, 18, 19, 20}
+    };
 
     private int yRadius = 0x0E;
     private int xRadius = 0x07;
@@ -141,19 +155,94 @@ public class Sonic2SpecialStagePlayer {
     private int ctrlRecordIndex;
     private static final int CTRL_RECORD_SIZE = 16;
 
-    private boolean swapPositionsFlag;
+    private Sonic2SpecialStageManager swapPositionsOwner;
+    private int invulnerabilityCountdown;
     private Sonic2SpecialStagePlayer otherPlayer;
+    private boolean spawned;
 
 
-    public Sonic2SpecialStagePlayer(PlayerType type, boolean isMain) {
+    Sonic2SpecialStagePlayer(PlayerType type, boolean isMain,
+                             Sonic2SpecialStageManager swapPositionsOwner) {
         this.playerType = type;
         this.isMainCharacter = isMain;
+        this.swapPositionsOwner = Objects.requireNonNull(
+                swapPositionsOwner, "swapPositionsOwner");
         this.ctrlRecordBuf = new int[CTRL_RECORD_SIZE];
         reset();
     }
 
     public void reset() {
         routine = RoutineState.INIT;
+        routineSecondary = 0;
+
+        ssXPos = 0;
+        ssXSub = 0;
+        ssYPos = 0;
+        ssYSub = 0;
+        ssZPos = 0;
+
+        xPos = 0;
+        yPos = 0;
+
+        xVel = 0;
+        yVel = 0;
+        inertia = 0;
+
+        angle = 0;
+        ssSlideTimer = 0;
+        ssHurtTimer = 0;
+        ssDplcTimer = 0;
+        rings = 0;
+
+        ssInitFlipTimer = 0;
+        ssFlipTimer = 0;
+        ssLastAngleIndex = 0;
+
+        anim = 0;
+        prevAnim = 0;
+        animFrame = 0;
+        animFrameDuration = 0;
+        mappingFrame = 0;
+        tailsTailsAnim = 0;
+        tailsTailsPrevAnim = -1;
+        tailsTailsAnimFrame = 0;
+        tailsTailsFrameDuration = 0;
+        tailsTailsMappingFrame = 0;
+
+        yRadius = 0;
+        xRadius = 0;
+        priority = 0;
+
+        statusXFlip = false;
+        statusYFlip = false;
+        statusJumping = false;
+        statusSlowing = false;
+
+        renderXFlip = false;
+        renderYFlip = false;
+
+        collisionProperty = 0;
+        invulnerabilityCountdown = 0;
+        spawned = false;
+
+        for (int i = 0; i < CTRL_RECORD_SIZE; i++) {
+            ctrlRecordBuf[i] = 0;
+        }
+        ctrlRecordIndex = 0;
+    }
+
+    /**
+     * Models the player scalar/state subset of the ROM's Obj09/Obj10 routine-0
+     * initialization without running a normal movement frame. Object-slot
+     * presence is owned separately by the special-stage bootstrap sequence.
+     * Dynamic-pattern loads and the ROM-created shadow / Tails-tail sidecars are
+     * separate concerns and are not created by this scalar-state method.
+     *
+     * <p>Obj09: {@code docs/s2disasm/s2.asm:69040-69076}; Obj10:
+     * {@code docs/s2disasm/s2.asm:70319-70372}.</p>
+     */
+    void initializeScalarStateFromRomObjectRoutine() {
+        routine = RoutineState.NORMAL;
         routineSecondary = 0;
 
         ssXPos = 0;
@@ -168,44 +257,39 @@ public class Sonic2SpecialStagePlayer {
         xVel = 0;
         yVel = 0;
         inertia = 0;
-
         angle = INITIAL_ANGLE;
         ssSlideTimer = 0;
         ssHurtTimer = 0;
         ssDplcTimer = 0;
 
         ssInitFlipTimer = 0x400;
-        // Original 68000: ss_init_flip_timer is at offset $32, ss_flip_timer at offset $33
-        // When move.w #$400 writes to offset $32, it puts $04 at $32 and $00 at $33
-        // So ss_flip_timer (offset $33) starts at 0, triggering flip on first frame
-        ssFlipTimer = ssInitFlipTimer & 0xFF;  // = 0 (low byte)
+        // The word write leaves the low byte (ss_flip_timer) zero.
+        ssFlipTimer = ssInitFlipTimer & 0xFF;
         ssLastAngleIndex = 0;
 
         anim = 0;
-        prevAnim = -1;  // Force animation update on first frame
+        prevAnim = -1;
         animFrame = 0;
         animFrameDuration = 0;
         mappingFrame = 0;
+        tailsTailsAnim = 0;
+        tailsTailsPrevAnim = -1;
+        tailsTailsAnimFrame = 0;
+        tailsTailsFrameDuration = 0;
+        tailsTailsMappingFrame = 0;
 
-        priority = 3;
+        yRadius = 0x0E;
+        xRadius = 0x07;
+        priority = playerType == PlayerType.TAILS && !isMainCharacter ? 2 : 3;
 
         statusXFlip = false;
         statusYFlip = false;
         statusJumping = false;
         statusSlowing = false;
-
         renderXFlip = false;
         renderYFlip = false;
-
         collisionProperty = 0;
-        swapPositionsFlag = false;
-
-        for (int i = 0; i < CTRL_RECORD_SIZE; i++) {
-            ctrlRecordBuf[i] = 0;
-        }
-        ctrlRecordIndex = 0;
-
-        routine = RoutineState.NORMAL;
+        invulnerabilityCountdown = 0;
     }
 
     /**
@@ -219,6 +303,10 @@ public class Sonic2SpecialStagePlayer {
 
     public void update(int heldButtons, int pressedButtons) {
         updateControlRecord(heldButtons);
+
+        if (invulnerabilityCountdown > 0) {
+            invulnerabilityCountdown--;
+        }
 
         switch (routine) {
             case NORMAL:
@@ -234,7 +322,90 @@ public class Sonic2SpecialStagePlayer {
                 break;
         }
 
-        // Invulnerability timer is now managed by TimerManager (SSInvulnerabilityTimer)
+        if (playerType == PlayerType.TAILS && routine != RoutineState.INIT) {
+            updateTailsTailsAnimation();
+        }
+
+        consumeDplcLoadGate();
+    }
+
+    /**
+     * Models the LoadSSSonicDynPLC / LoadSSTailsDynPLC prologue
+     * (docs/s2disasm/s2.asm:69193-69200 and 70492-70499), which every Obj09 /
+     * Obj10 routine tail branches to:
+     *
+     * <pre>
+     *   move.b  ss_dplc_timer(a0),d0
+     *   beq.s   +          ; timer idle -> always load
+     *   subq.b  #1,d0
+     *   move.b  d0,ss_dplc_timer(a0)
+     *   andi.b  #1,d0
+     *   beq.s   +
+     *   rts                ; odd result -> no DisplaySprite, no DPLC this pass
+     * </pre>
+     *
+     * <p>So while the post-hurt blink counter runs, the player's mapping-frame
+     * change is not published on the pass it happens; it is published on the
+     * next even pass. Obj88 (tails' tails) reads the same counter out of its
+     * parent without touching it, which is why Tails and his tails always skip
+     * together (s2.asm:70575-70581, {@link #tailsTailsDplcLoadRuns()}).
+     */
+    private void consumeDplcLoadGate() {
+        if (ssDplcTimer == 0) {
+            return;
+        }
+        ssDplcTimer = (ssDplcTimer - 1) & 0xFF;
+    }
+
+    /**
+     * Whether this pass reached the object's own DPLC load. The ROM's skip
+     * predicate is the parity of the post-decrement counter, so the outcome is
+     * derivable from {@code ss_dplc_timer} alone -- no extra engine state.
+     */
+    public boolean dplcLoadRuns() {
+        return ssDplcTimer == 0 || (ssDplcTimer & 1) == 0;
+    }
+
+    /**
+     * Whether Obj88's LoadSSTailsTailsDynPLC reached its DPLC load this pass.
+     * It re-reads the parent's counter after Obj10 already decremented it and
+     * never writes it back (docs/s2disasm/s2.asm:70575-70581).
+     */
+    public boolean tailsTailsDplcLoadRuns() {
+        return dplcLoadRuns();
+    }
+
+    /**
+     * Runs one tails' tails animation tick outside a full player update.
+     * ROM Obj88 is a separate object with no routine gate: its whole body —
+     * including the generic AnimateSprite call on Ani_obj88 — executes on the
+     * same startup RunObjects pass that created it (s2.asm:70394,70549-70563),
+     * unlike Obj09/Obj10 whose init routine returns via LoadSS*DynPLC before
+     * SSPlayer_Animate. That startup tick loads the tails' tails frame
+     * duration, so its first visible advance lands on the same post-fade pass
+     * as the players' (stage-1 fixture row 165), not one pass later.
+     */
+    public void tickTailsTailsStartupAnimation() {
+        updateTailsTailsAnimation();
+    }
+
+    private void updateTailsTailsAnimation() {
+        tailsTailsAnim = anim;
+        if (tailsTailsAnim >= TAILS_TAILS_ANIM_SCRIPTS.length) {
+            return;
+        }
+        if (tailsTailsAnim != tailsTailsPrevAnim) {
+            tailsTailsPrevAnim = tailsTailsAnim;
+            tailsTailsAnimFrame = 0;
+            tailsTailsFrameDuration = 0;
+        }
+        if (--tailsTailsFrameDuration >= 0) {
+            return;
+        }
+        tailsTailsFrameDuration = 3;
+        int[] script = TAILS_TAILS_ANIM_SCRIPTS[tailsTailsAnim];
+        tailsTailsMappingFrame = script[tailsTailsAnimFrame];
+        tailsTailsAnimFrame = (tailsTailsAnimFrame + 1) % script.length;
     }
 
     private void updateControlRecord(int buttons) {
@@ -262,15 +433,47 @@ public class Sonic2SpecialStagePlayer {
     }
 
     private void updateJumping(int heldButtons) {
-        // Original Obj09_MdJump does NOT call SSPlayer_SetAnimation
-        // Animation is set to 3 (ball) when entering jump state
+        // Neither Obj09_MdJump nor Obj10_MdJump calls SSPlayer_SetAnimation;
+        // anim is set to 3 (ball) when entering the jump state.
+        //
+        // The two jump-mode routines do NOT share a call order, and the
+        // difference is load-bearing. Sonic's Obj09_MdJump recomputes the angle
+        // before the landing test (docs/s2disasm/s2.asm:69297-69308):
+        //
+        //   ChgJumpDir, ObjectMoveAndFall, JumpAngle, DoLevelCollision,
+        //   SwapPositions, AnglePos, Animate
+        //
+        // Tails' Obj10_MdJump runs SSPlayer_JumpAngle LAST, after SSAnglePos
+        // (docs/s2disasm/s2.asm:70517-70526):
+        //
+        //   ChgJumpDir, ObjectMoveAndFall, DoLevelCollision, SwapPositions,
+        //   AnglePos, JumpAngle, Animate
+        //
+        // So when Tails lands, SSPlayer_DoLevelCollision's SSObjectMove runs on
+        // the angle left over from the previous pass, not on one recomputed from
+        // this pass' position. Both games' MdAir routines (Obj09_MdAir
+        // s2.asm:69310-69322, Obj10_MdAir s2.asm:70528-70541) do agree on the
+        // Sonic-style order, which is why only the jump mode splits here.
+        //
+        // The predicate is the object identity (Obj09 vs Obj10), not
+        // MainCharacter: in Tails-alone mode Player_mode is non-zero and Obj10
+        // occupies the MainCharacter slot, still running Obj10_MdJump's order
+        // while reading Ctrl_1 (s2.asm:70510-70516). SSPlayerSwapPositions is
+        // the routine that genuinely tests cmpa.l #MainCharacter,a0
+        // (s2.asm:69542).
         ssPlayerChgJumpDir(heldButtons);
         ssObjectMoveAndFall();
-        ssPlayerJumpAngle();
-        ssPlayerDoLevelCollision();
-        ssPlayerSwapPositions();
-        ssAnglePos();
-        // Note: No ssPlayerSetAnimation() here - matches original
+        if (playerType == PlayerType.SONIC) {
+            ssPlayerJumpAngle();
+            ssPlayerDoLevelCollision();
+            ssPlayerSwapPositions();
+            ssAnglePos();
+        } else {
+            ssPlayerDoLevelCollision();
+            ssPlayerSwapPositions();
+            ssAnglePos();
+            ssPlayerJumpAngle();
+        }
         ssPlayerAnimate();
     }
 
@@ -331,17 +534,21 @@ public class Sonic2SpecialStagePlayer {
     }
 
     private void ssPlayerTraction() {
-        if (ssSlideTimer != 0) {
-            return;
+        // SSPlayer_Traction (docs/s2disasm/s2.asm:69725-69747): the
+        // `tst.b ss_slide_timer(a0) / bne.s +` branch target is the
+        // `move.b angle(a0),d0` that begins the fall-off-the-track test, not
+        // the rts. A non-zero slide timer therefore suppresses ONLY the
+        // gravity/traction addition to inertia; the routine=8 (MdAir)
+        // transition below is evaluated on every pass regardless.
+        if (ssSlideTimer == 0) {
+            // Original uses d1 (cosine) from CalcSine, not d0 (sine)
+            // This creates a restoring force: cos(0x40) = 0 at center,
+            // positive on one side, negative on other
+            int cosine = calcCosine(angle);
+
+            int traction = (cosine * TRACTION_FACTOR) >> 8;
+            inertia += traction;
         }
-
-        // Original uses d1 (cosine) from CalcSine, not d0 (sine)
-        // This creates a restoring force: cos(0x40) = 0 at center,
-        // positive on one side, negative on other
-        int cosine = calcCosine(angle);
-
-        int traction = (cosine * TRACTION_FACTOR) >> 8;
-        inertia += traction;
 
         int a = angle & 0xFF;
         if (a >= 0x80) {
@@ -356,9 +563,12 @@ public class Sonic2SpecialStagePlayer {
     }
 
     private void ssObjectMove() {
-        // Add inertia to angle: angle += inertia >> 8
-        // Inertia is signed, so positive = left (increasing angle), negative = right
-        int angleChange = inertia >> 8;
+        // ROM branches on the sign, negates negative inertia, then performs an
+        // unsigned magnitude shift before subtracting it. That truncates both
+        // directions toward zero; Java's signed >> would round a negative
+        // fractional value such as -$60 down to -1 (s2.asm:69718-69735).
+        int angleMagnitude = Math.abs(inertia) >> 8;
+        int angleChange = inertia < 0 ? -angleMagnitude : angleMagnitude;
         angle = (angle + angleChange) & 0xFF;
 
         // Calculate track-space position from angle and depth
@@ -403,7 +613,7 @@ public class Sonic2SpecialStagePlayer {
         // Original: tst.b (SS_2p_Flag).w / bne.s loc_33B9E / tst.w (Player_mode).w / bne.s loc_33BA2
         // Only toggle swap flag in team mode (when otherPlayer exists)
         if (otherPlayer != null) {
-            swapPositionsFlag = !swapPositionsFlag;
+            toggleSwapPositionsFlag();
         }
 
         GameServices.audio().playSfx(GameSound.JUMP);
@@ -551,9 +761,9 @@ public class Sonic2SpecialStagePlayer {
 
         boolean shouldMoveCloser;
         if (isMainCharacter) {
-            shouldMoveCloser = !swapPositionsFlag;
+            shouldMoveCloser = !getSwapPositionsFlag();
         } else {
-            shouldMoveCloser = swapPositionsFlag;
+            shouldMoveCloser = getSwapPositionsFlag();
         }
 
         if (shouldMoveCloser) {
@@ -721,7 +931,7 @@ public class Sonic2SpecialStagePlayer {
 
         collisionProperty = 0;
 
-        // Check invulnerability using Timer framework
+        // Check player-owned post-hit invulnerability.
         if (isInvulnerable()) {
             return;
         }
@@ -729,9 +939,9 @@ public class Sonic2SpecialStagePlayer {
         inertia &= 0xFF;
 
         if (isMainCharacter) {
-            swapPositionsFlag = true;
+            setSwapPositionsFlag(true);
         } else {
-            swapPositionsFlag = false;
+            setSwapPositionsFlag(false);
         }
 
         routineSecondary = 2;
@@ -742,11 +952,13 @@ public class Sonic2SpecialStagePlayer {
         ssHurtTimer = (ssHurtTimer + 8) & 0xFF;
         if (ssHurtTimer == 0) {
             routineSecondary = 0;
-            // Register invulnerability timer (30 frames = 0x1E)
-            // Timer will call clearInvulnerability() when complete
-            String timerCode = getInvulnerabilityTimerCode();
-            GameServices.timers().registerTimer(
-                new SSInvulnerabilityTimer(timerCode, 0x1E, this));
+            invulnerabilityCountdown = 0x1E;
+            // SSHurt_Animation's exit also arms ss_dplc_timer
+            // (docs/s2disasm/s2.asm:69143-69145) -- the ROM's post-hurt blink
+            // counter. LoadSS*DynPLC decrements it once per pass and skips the
+            // whole DisplaySprite + DPLC tail on the odd results, halving the
+            // player's art-transfer rate until it expires.
+            ssDplcTimer = 0x1E;
         }
 
         int displayAngle = (ssHurtTimer + angle - 0x10) & 0xFF;
@@ -786,57 +998,81 @@ public class Sonic2SpecialStagePlayer {
     public int getMappingFrame() { return mappingFrame; }
     public int getAnim() { return anim; }
     public int getAnimFrame() { return animFrame; }
+    public int getTailsTailsMappingFrame() { return tailsTailsMappingFrame; }
+    public boolean shouldRenderTailsTails() {
+        return playerType == PlayerType.TAILS && anim < TAILS_TAILS_ANIM_SCRIPTS.length;
+    }
     public boolean isRenderXFlip() { return renderXFlip; }
     public boolean isRenderYFlip() { return renderYFlip; }
     public boolean isJumping() { return statusJumping; }
     public boolean isHurt() { return routineSecondary == 2; }
+    public int getRings() { return rings; }
+    public int getHurtTimer() { return ssHurtTimer & 0xFF; }
+    public int getSlideTimer() { return ssSlideTimer & 0xFF; }
+    public int getFlipTimer() { return ssFlipTimer & 0xFF; }
+
+    void collectRing() {
+        rings++;
+    }
 
     /**
-     * Checks if player is invulnerable (post-hurt invulnerability period).
-     * Uses the Timer framework - invulnerability is active while the timer exists.
+     * Applies Obj5B's owning-player ring spill: ten rings when a tens or
+     * hundreds digit exists, otherwise all remaining units
+     * ({@code docs/s2disasm/s2.asm:71233-71272}).
      */
+    int loseRingsFromBombHit() {
+        int lost = Math.min(10, rings);
+        rings -= lost;
+        return lost;
+    }
+
     public boolean isInvulnerable() {
-        return GameServices.timers().getTimerForCode(getInvulnerabilityTimerCode()) != null;
+        return invulnerabilityCountdown > 0;
     }
 
-    /**
-     * Gets the remaining invulnerability ticks (for flashing effect).
-     * Returns 0 if not invulnerable.
-     */
     public int getInvulnerabilityTicks() {
-        Timer timer = GameServices.timers().getTimerForCode(getInvulnerabilityTimerCode());
-        return timer != null ? timer.getTicks() : 0;
+        return invulnerabilityCountdown;
     }
 
-    /**
-     * Gets the unique timer code for this player's invulnerability timer.
-     */
-    private String getInvulnerabilityTimerCode() {
-        return "SSInvulnerable-" + playerType.name();
-    }
-
-    /**
-     * Clears the invulnerability state. Called by SSInvulnerabilityTimer when complete.
-     */
     public void clearInvulnerability() {
-        // Timer is automatically removed by TimerManager when perform() returns true
-        // This method exists for any additional cleanup if needed
+        invulnerabilityCountdown = 0;
         LOGGER.fine("Invulnerability ended for " + playerType.name());
     }
 
     public PlayerType getPlayerType() { return playerType; }
     public RoutineState getRoutine() { return routine; }
+    public boolean isSpawned() { return spawned; }
+
+    void setSpawned(boolean spawned) {
+        this.spawned = spawned;
+    }
+
+    boolean isMainCharacter() {
+        return isMainCharacter;
+    }
+
+    Sonic2SpecialStagePlayer getOtherPlayerForRewind() {
+        return otherPlayer;
+    }
 
     public void setOtherPlayer(Sonic2SpecialStagePlayer other) {
         this.otherPlayer = other;
     }
 
     public void setSwapPositionsFlag(boolean flag) {
-        this.swapPositionsFlag = flag;
+        swapPositionsOwner.setSwapPositionsFlag(flag);
     }
 
     public boolean getSwapPositionsFlag() {
-        return swapPositionsFlag;
+        return swapPositionsOwner.getSwapPositionsFlag() != 0;
+    }
+
+    void toggleSwapPositionsFlag() {
+        swapPositionsOwner.toggleSwapPositionsFlag();
+    }
+
+    void setSwapPositionsOwner(Sonic2SpecialStageManager owner) {
+        this.swapPositionsOwner = Objects.requireNonNull(owner, "owner");
     }
 
     public int getControlRecordEntry(int framesAgo) {
@@ -845,5 +1081,106 @@ public class Sonic2SpecialStagePlayer {
         }
         return ctrlRecordBuf[framesAgo];
     }
-}
 
+    Sonic2SpecialStageSnapshot.PlayerSnapshot captureRewindSnapshot() {
+        return new Sonic2SpecialStageSnapshot.PlayerSnapshot(
+                playerType,
+                isMainCharacter,
+                spawned,
+                routine,
+                routineSecondary,
+                ssXPos,
+                ssXSub,
+                ssYPos,
+                ssYSub,
+                ssZPos,
+                xPos,
+                yPos,
+                xVel,
+                yVel,
+                inertia,
+                angle,
+                ssSlideTimer,
+                ssHurtTimer,
+                ssDplcTimer,
+                ssInitFlipTimer,
+                ssFlipTimer,
+                ssLastAngleIndex,
+                anim,
+                prevAnim,
+                animFrame,
+                animFrameDuration,
+                mappingFrame,
+                tailsTailsAnim,
+                tailsTailsPrevAnim,
+                tailsTailsAnimFrame,
+                tailsTailsFrameDuration,
+                tailsTailsMappingFrame,
+                yRadius,
+                xRadius,
+                priority,
+                statusXFlip,
+                statusYFlip,
+                statusJumping,
+                statusSlowing,
+                renderXFlip,
+                renderYFlip,
+                collisionProperty,
+                rings,
+                globalAnimFrameTimer,
+                ctrlRecordBuf,
+                ctrlRecordIndex,
+                invulnerabilityCountdown);
+    }
+
+    void restoreRewindSnapshot(Sonic2SpecialStageSnapshot.PlayerSnapshot snapshot) {
+        if (playerType != snapshot.playerType() || isMainCharacter != snapshot.mainCharacter()) {
+            throw new IllegalStateException("Sonic 2 special-stage player topology changed during rewind restore");
+        }
+        spawned = snapshot.spawned();
+        routine = snapshot.routine();
+        routineSecondary = snapshot.routineSecondary();
+        ssXPos = snapshot.ssXPos();
+        ssXSub = snapshot.ssXSub();
+        ssYPos = snapshot.ssYPos();
+        ssYSub = snapshot.ssYSub();
+        ssZPos = snapshot.ssZPos();
+        xPos = snapshot.xPos();
+        yPos = snapshot.yPos();
+        xVel = snapshot.xVel();
+        yVel = snapshot.yVel();
+        inertia = snapshot.inertia();
+        angle = snapshot.angle();
+        ssSlideTimer = snapshot.ssSlideTimer();
+        ssHurtTimer = snapshot.ssHurtTimer();
+        ssDplcTimer = snapshot.ssDplcTimer();
+        ssInitFlipTimer = snapshot.ssInitFlipTimer();
+        ssFlipTimer = snapshot.ssFlipTimer();
+        ssLastAngleIndex = snapshot.ssLastAngleIndex();
+        anim = snapshot.anim();
+        prevAnim = snapshot.prevAnim();
+        animFrame = snapshot.animFrame();
+        animFrameDuration = snapshot.animFrameDuration();
+        mappingFrame = snapshot.mappingFrame();
+        tailsTailsAnim = snapshot.tailsTailsAnim();
+        tailsTailsPrevAnim = snapshot.tailsTailsPrevAnim();
+        tailsTailsAnimFrame = snapshot.tailsTailsAnimFrame();
+        tailsTailsFrameDuration = snapshot.tailsTailsFrameDuration();
+        tailsTailsMappingFrame = snapshot.tailsTailsMappingFrame();
+        yRadius = snapshot.yRadius();
+        xRadius = snapshot.xRadius();
+        priority = snapshot.priority();
+        statusXFlip = snapshot.statusXFlip();
+        statusYFlip = snapshot.statusYFlip();
+        statusJumping = snapshot.statusJumping();
+        statusSlowing = snapshot.statusSlowing();
+        renderXFlip = snapshot.renderXFlip();
+        renderYFlip = snapshot.renderYFlip();
+        collisionProperty = snapshot.collisionProperty();
+        rings = snapshot.rings();
+        globalAnimFrameTimer = snapshot.globalAnimFrameTimer();
+        ctrlRecordBuf = Sonic2SpecialStageSnapshot.cloneIntArray(snapshot.ctrlRecordBuf());
+        ctrlRecordIndex = snapshot.ctrlRecordIndex();
+        invulnerabilityCountdown = snapshot.invulnerabilityCountdown();
+    }
+}

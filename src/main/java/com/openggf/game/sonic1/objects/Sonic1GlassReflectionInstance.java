@@ -6,7 +6,12 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
+import com.openggf.level.objects.ObjectInstance;
+import com.openggf.level.objects.ObjectManager;
+import com.openggf.level.objects.ObjectServices;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -22,7 +27,8 @@ import java.util.List;
  * Routine 4 (Glass_Reflect012, tall variant):
  *   Copies parent's glass_dist, then applies Glass_Types movement.
  * Routine 8 (Glass_Reflect34, short variant):
- *   Copies parent's glass_dist AND parent's baseY (objoff_30), then applies Glass_Types.
+ *   Copies parent's glass_dist AND parent's LIVE current obY (via parent.getY(), per ROM
+ *   Glass_Reflect34's move.w obY(a1) copy), then applies Glass_Types.
  * <p>
  * The reflection's subtype has bit 3 set (from the addq.b #8 / andi.b #$F in Glass_Main),
  * which modifies the behavior in Glass_Types:
@@ -33,7 +39,7 @@ import java.util.List;
  * <p>
  * Reference: docs/s1disasm/_incObj/30 MZ Large Green Glass Blocks.asm
  */
-public class Sonic1GlassReflectionInstance extends AbstractObjectInstance {
+public class Sonic1GlassReflectionInstance extends AbstractObjectInstance implements RewindRecreatable {
 
     // From Glass_Main: move.b #3,obPriority(a1)
     private static final int PRIORITY = 3;
@@ -47,10 +53,9 @@ public class Sonic1GlassReflectionInstance extends AbstractObjectInstance {
 
     // Shine frame index (frame 1 in mappings)
     private static final int SHINE_FRAME = 1;
-
     private final Sonic1GlassBlockObjectInstance parent;
-    private final int reflectSubtype;
-    private final boolean isTall;
+    private int reflectSubtype;
+    private boolean isTall;
 
     // Dynamic position
     private int x;
@@ -61,6 +66,17 @@ public class Sonic1GlassReflectionInstance extends AbstractObjectInstance {
 
     // glass_dist: synced from parent each frame
     private int glassDist;
+
+    private Sonic1GlassReflectionInstance(ObjectSpawn probeSpawn) {
+        super(probeSpawn, "MzGlassReflectProbe");
+        this.parent = null;
+        this.reflectSubtype = 0;
+        this.isTall = false;
+        this.x = probeSpawn.x();
+        this.baseY = probeSpawn.y();
+        this.glassDist = 0;
+        this.y = baseY;
+    }
 
     Sonic1GlassReflectionInstance(ObjectSpawn parentSpawn,
                                   Sonic1GlassBlockObjectInstance parent,
@@ -80,6 +96,22 @@ public class Sonic1GlassReflectionInstance extends AbstractObjectInstance {
     }
 
     @Override
+    public Sonic1GlassReflectionInstance recreateForRewind(RewindRecreateContext ctx) {
+        if (ctx == null || ctx.spawn() == null) {
+            return null;
+        }
+        ObjectSpawn spawn = ctx.spawn();
+        Sonic1GlassBlockObjectInstance liveParent = findLiveGlassBlockParentForRewind(ctx, spawn);
+        if (liveParent == null) {
+            return null;
+        }
+        int fullSubtype = spawn.subtype() & 0xFF;
+        int reflectedSubtype = (fullSubtype + 8) & 0x0F;
+        boolean tall = fullSubtype < 3;
+        return new Sonic1GlassReflectionInstance(spawn, liveParent, reflectedSubtype, tall);
+    }
+
+    @Override
     public int getX() {
         return x;
     }
@@ -89,10 +121,10 @@ public class Sonic1GlassReflectionInstance extends AbstractObjectInstance {
         return y;
     }
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // Check if parent is destroyed -> self-destruct
-        if (parent.isDestroyed()) {
+        if (parent == null || parent.isDestroyed()) {
             setDestroyed(true);
             return;
         }
@@ -100,10 +132,13 @@ public class Sonic1GlassReflectionInstance extends AbstractObjectInstance {
         // Sync glass_dist from parent
         glassDist = parent.getGlassDist();
 
-        // Short variant (routine 8) also syncs baseY from parent
-        // Glass_Reflect34: move.w obY(a1),objoff_30(a0)
+        // Short variant (routine 8) also syncs baseY from parent's CURRENT obY.
+        // Glass_Reflect34 (sonic.lst BB5E: 3169 000C 0030): move.w obY(a1),objoff_30(a0)
+        // -- source displacement $0C is obY (live position), not objoff_30 ($30,
+        // the static spawn baseline); using getBaseY() here displaced the
+        // reflection by up to glass_dist (0x90/144px) from the parent.
         if (!isTall) {
-            baseY = parent.getBaseY();
+            baseY = parent.getY();
         }
 
         // Apply Glass_Types movement using reflection subtype
@@ -128,7 +163,33 @@ public class Sonic1GlassReflectionInstance extends AbstractObjectInstance {
     @Override
     public boolean isPersistent() {
         // Reflection follows parent; if parent is gone, we go too
-        return !isDestroyed() && !parent.isDestroyed();
+        return !isDestroyed() && parent != null && !parent.isDestroyed();
+    }
+
+    private static Sonic1GlassBlockObjectInstance findLiveGlassBlockParentForRewind(
+            RewindRecreateContext ctx, ObjectSpawn spawn) {
+        ObjectServices services = ctx.objectServices();
+        if (services == null) {
+            return null;
+        }
+        ObjectManager objectManager = services.objectManager();
+        if (objectManager == null) {
+            return null;
+        }
+        Sonic1GlassBlockObjectInstance best = null;
+        long bestDist = Long.MAX_VALUE;
+        for (ObjectInstance inst : objectManager.getActiveObjects()) {
+            if (inst instanceof Sonic1GlassBlockObjectInstance block && !block.isDestroyed()) {
+                long dx = block.getX() - spawn.x();
+                long dy = block.getBaseY() - spawn.y();
+                long dist = dx * dx + dy * dy;
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    best = block;
+                }
+            }
+        }
+        return best;
     }
 
     /**

@@ -1,5 +1,7 @@
 package com.openggf.game;
 
+import com.openggf.game.rules.GameRules;
+
 import com.openggf.game.sonic1.Sonic1GameModule;
 import com.openggf.game.sonic2.Sonic2GameModule;
 import com.openggf.game.sonic3k.Sonic3kGameModule;
@@ -51,9 +53,9 @@ class TestEdgeBalance {
         GameModuleRegistry.setCurrent(module);
         TestablePlayableSprite sprite = new TestablePlayableSprite("test", (short) 100, (short) 100);
 
-        PhysicsFeatureSet fs = sprite.getPhysicsFeatureSet();
+        GameRules fs = sprite.getGameRules();
         assertNotNull(fs, "Feature set should be set");
-        assertEquals(expected, fs.extendedEdgeBalance(), label + " extended edge balance");
+        assertEquals(expected, fs.playerAnimation().extendedEdgeBalance(), label + " extended edge balance");
     }
 
     @Test
@@ -61,11 +63,13 @@ class TestEdgeBalance {
         GameModuleRegistry.setCurrent(new Sonic1GameModule());
         TestablePlayableSprite sprite = new TestablePlayableSprite("test", (short) 100, (short) 100);
 
-        PhysicsFeatureSet fs = sprite.getPhysicsFeatureSet();
-        assertFalse(fs.extendedEdgeBalance(), "S1 balance mode should be simple (not extended)");
+        GameRules fs = sprite.getGameRules();
+        assertFalse(fs.playerAnimation().extendedEdgeBalance(), "S1 balance mode should be simple (not extended)");
 
         assertEquals(0, sprite.getBalanceState(), "Initial balance state should be 0");
         assertFalse(sprite.isBalancing(), "Should not be balancing initially");
     }
 
 }
+
+

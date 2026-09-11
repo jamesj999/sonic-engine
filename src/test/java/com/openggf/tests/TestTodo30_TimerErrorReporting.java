@@ -1,10 +1,10 @@
 package com.openggf.tests;
 
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import com.openggf.game.session.SessionManager;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import com.openggf.game.GameServices;
-import com.openggf.game.RuntimeManager;
 import com.openggf.timer.AbstractTimer;
 import com.openggf.timer.TimerManager;
 
@@ -13,7 +13,7 @@ import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * TODO #30 coverage: Timer error reporting.
@@ -25,17 +25,17 @@ import static org.junit.Assert.*;
 public class TestTodo30_TimerErrorReporting {
     private TimerManager manager;
 
-    @Before
+    @BeforeEach
     public void setUp() {
-        RuntimeManager.createGameplay();
+        TestEnvironment.activeGameplayMode();
         manager = GameServices.timers();
         manager.resetState();
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         manager.resetState();
-        RuntimeManager.destroyCurrent();
+        SessionManager.clear();
     }
 
     /** A timer that always fails (returns false from perform()). */
@@ -72,14 +72,13 @@ public class TestTodo30_TimerErrorReporting {
     public void testFailedTimerIsRemovedAfterPerform() {
         FailingTimer timer = new FailingTimer("FAIL_TEST");
         manager.registerTimer(timer);
-        assertNotNull("Timer should be registered", manager.getTimerForCode("FAIL_TEST"));
+        assertNotNull(manager.getTimerForCode("FAIL_TEST"), "Timer should be registered");
 
         // Update to trigger the timer (1 tick -> expires)
         manager.update();
 
-        assertTrue("perform() should have been called", timer.performCalled);
-        assertNull("Failed timer should still be removed",
-                manager.getTimerForCode("FAIL_TEST"));
+        assertTrue(timer.performCalled, "perform() should have been called");
+        assertNull(manager.getTimerForCode("FAIL_TEST"), "Failed timer should still be removed");
     }
 
     @Test
@@ -88,9 +87,8 @@ public class TestTodo30_TimerErrorReporting {
         manager.registerTimer(timer);
         manager.update();
 
-        assertTrue("perform() should have been called", timer.performCalled);
-        assertNull("Successful timer should be removed",
-                manager.getTimerForCode("SUCCESS_TEST"));
+        assertTrue(timer.performCalled, "perform() should have been called");
+        assertNull(manager.getTimerForCode("SUCCESS_TEST"), "Successful timer should be removed");
     }
 
     @Test
@@ -126,12 +124,9 @@ public class TestTodo30_TimerErrorReporting {
             String logged = logCapture.toString();
             // The implementation logs at WARNING level with:
             // "Timer failed: " + class.getSimpleName() + " code=" + timer.getCode()
-            assertTrue("Log should contain 'failed'",
-                    logged.contains("failed"));
-            assertTrue("Log should contain the timer code",
-                    logged.contains("LOG_TEST_CODE"));
-            assertTrue("Log should contain the timer class",
-                    logged.contains("FailingTimer"));
+            assertTrue(logged.contains("failed"), "Log should contain 'failed'");
+            assertTrue(logged.contains("LOG_TEST_CODE"), "Log should contain the timer code");
+            assertTrue(logged.contains("FailingTimer"), "Log should contain the timer class");
         } finally {
             logger.removeHandler(testHandler);
             logger.setLevel(originalLevel);
@@ -151,9 +146,11 @@ public class TestTodo30_TimerErrorReporting {
 
         manager.update();
 
-        assertTrue("Failing timer perform() called", failing.performCalled);
-        assertTrue("Succeeding timer perform() called", succeeding.performCalled);
-        assertNull("Failing timer removed", manager.getTimerForCode("MULTI_FAIL"));
-        assertNull("Succeeding timer removed", manager.getTimerForCode("MULTI_OK"));
+        assertTrue(failing.performCalled, "Failing timer perform() called");
+        assertTrue(succeeding.performCalled, "Succeeding timer perform() called");
+        assertNull(manager.getTimerForCode("MULTI_FAIL"), "Failing timer removed");
+        assertNull(manager.getTimerForCode("MULTI_OK"), "Succeeding timer removed");
     }
 }
+
+

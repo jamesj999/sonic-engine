@@ -2,7 +2,6 @@ package com.openggf.game.sonic3k;
 
 import com.openggf.audio.GameSound;
 import com.openggf.configuration.SonicConfiguration;
-import com.openggf.configuration.SonicConfigurationService;
 import com.openggf.data.AnimatedPaletteProvider;
 import com.openggf.data.AnimatedPatternProvider;
 import com.openggf.data.Game;
@@ -10,25 +9,38 @@ import com.openggf.data.PlayerSpriteArtProvider;
 import com.openggf.data.Rom;
 import com.openggf.data.RomByteReader;
 import com.openggf.data.SpindashDustArtProvider;
+import com.openggf.data.compression.KosinskiInspectionCache;
 import com.openggf.game.DynamicStartPositionProvider;
+import com.openggf.game.GameServices;
+import com.openggf.game.LevelLoadPaletteOverrideProvider;
+import com.openggf.game.session.SessionManager;
 import com.openggf.sprites.art.SpriteArtSet;
 import com.openggf.game.sonic3k.audio.Sonic3kAudioProfile;
 import com.openggf.game.sonic3k.constants.Sonic3kConstants;
+import com.openggf.game.sonic3k.constants.Sonic3kZoneIds;
+import com.openggf.graphics.GraphicsManager;
 import com.openggf.level.Level;
 import com.openggf.level.Palette;
 import com.openggf.level.animation.AnimatedPaletteManager;
 import com.openggf.level.animation.AnimatedPatternManager;
+import com.openggf.level.resources.DeferredLevelResourceTracker;
+import com.openggf.level.resources.DeferredLevelResourceLoader;
+import com.openggf.level.resources.DeferredLevelResourceManifest;
+import com.openggf.level.resources.PreparableLevelLoader;
+import com.openggf.level.resources.PreparedLevelBuild;
 import com.openggf.level.resources.LevelResourcePlan;
 import com.openggf.level.resources.LoadOp;
-import com.openggf.level.resources.ResourceLoader;
+import com.openggf.game.sonic3k.events.S3kSeamlessMutationExecutor;
 import com.openggf.game.sonic3k.objects.AizIntroTerrainSwap;
+import com.openggf.game.sonic3k.resources.Sonic3kDeferredLevelResourceProfile;
+import com.openggf.game.sonic3k.resources.S3kRuntimeArtCoordinator;
 
+import java.util.concurrent.Callable;
 import java.util.LinkedHashSet;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Logger;
-import com.openggf.game.GameServices;
 
 /**
  * Game implementation for Sonic 3 &amp; Knuckles.
@@ -37,24 +49,55 @@ import com.openggf.game.GameServices;
  * ROM addresses for all level resources, then using LevelResourcePlan to
  * compose them via the standard resource loading pipeline.
  *
- * <p>Phase 1 supports terrain, collision, and basic palettes. No objects,
- * rings, or zone-specific features.
+ * <p>The current module loads level resources, objects, rings, animation and
+ * palette providers, zone features, and bonus-stage coordination through the
+ * shared runtime pipeline.
  */
 public class Sonic3k extends Game implements PlayerSpriteArtProvider, SpindashDustArtProvider,
-        DynamicStartPositionProvider, AnimatedPatternProvider, AnimatedPaletteProvider {
+        DynamicStartPositionProvider, AnimatedPatternProvider, AnimatedPaletteProvider,
+        LevelLoadPaletteOverrideProvider, DeferredLevelResourceLoader, PreparableLevelLoader {
     private static final Logger LOG = Logger.getLogger(Sonic3k.class.getName());
+    private static final int[] ICZ1_LOCK_ON_INTRO_PALETTE_LINE4_COLORS_1_TO_15 = {
+            0x0EEE, 0x0EEC, 0x0EEA, 0x0ECA, 0x0EC8,
+            0x0EA6, 0x0E86, 0x0E64, 0x0E40, 0x0E00,
+            0x0C00, 0x0000, 0x0AEC, 0x0CEA, 0x0E80
+    };
 
     private final Rom rom;
+    private final Sonic3kZoneRegistry fallbackZoneRegistry = new Sonic3kZoneRegistry();
     private Sonic3kPlayerArt playerArt;
     private Sonic3kDustArt dustArt;
     private Sonic3kRingArt ringArt;
     private Sonic3kLevelAnimationManager levelAnimationManager;
+    // ROM AIZ_vine_angle ($FFFFFEBA) is deliberately OUTSIDE the level-init
+    // clear: Level does clearRAM Oscillating_table,(AIZ_vine_angle-Oscillating_table)
+    // (sonic3k.asm:10609) and the special stage repeats the same bounded clear
+    // (sonic3k.asm:10606-10607 region), both stopping one word short of it, so the
+    // word free-runs for the whole session. A Game instance does NOT: LevelManager
+    // rebuilds one on every load (LevelManager.java:459), so this state is injected
+    // by the session-lived Sonic3kGameModule instead of being owned here.
+    private final Sonic3kGlobalAnimationState globalAnimationState;
     private Level levelAnimationLevel;
     private int levelAnimationZone = -1;
 
     public Sonic3k(Rom rom) throws IOException {
+        this(rom, new Sonic3kGlobalAnimationState());
+    }
+
+    /**
+     * Session-scoped construction: the module supplies the
+     * {@code AIZ_vine_angle} carrier so it survives the level loads that
+     * replace this {@code Game}.
+     */
+    Sonic3k(Rom rom, Sonic3kGlobalAnimationState globalAnimationState) throws IOException {
         this.rom = rom;
+        this.globalAnimationState = globalAnimationState;
         ensureAddressTablesReady();
+    }
+
+    /** Package-private view for the module-ownership pin in {@code TestSonic3kVineAngleOwnership}. */
+    Sonic3kGlobalAnimationState globalAnimationState() {
+        return globalAnimationState;
     }
 
     @Override
@@ -101,7 +144,10 @@ public class Sonic3k extends Game implements PlayerSpriteArtProvider, SpindashDu
         int zone = s3kIdx / 2;
         int act = s3kIdx % 2;
 
-        return Sonic3kZoneRegistry.getInstance().getMusicId(zone, act);
+        if (GameServices.hasRuntime()) {
+            return GameServices.module().getZoneRegistry().getMusicId(zone, act);
+        }
+        return fallbackZoneRegistry.getMusicId(zone, act);
     }
 
     @Override
@@ -174,7 +220,8 @@ public class Sonic3k extends Game implements PlayerSpriteArtProvider, SpindashDu
         int actIndex = GameServices.level().getCurrentAct();
         Sonic3kLoadBootstrap bootstrap = Sonic3kBootstrapResolver.resolve(zoneIndex, actIndex);
         levelAnimationManager = new Sonic3kLevelAnimationManager(
-                RomByteReader.fromRom(rom), level, zoneIndex, actIndex, bootstrap.isSkipIntro());
+                RomByteReader.fromRom(rom), level, zoneIndex, actIndex, bootstrap.isSkipIntro(),
+                globalAnimationState);
         levelAnimationLevel = level;
         levelAnimationZone = zoneIndex;
         return levelAnimationManager;
@@ -182,15 +229,202 @@ public class Sonic3k extends Game implements PlayerSpriteArtProvider, SpindashDu
 
     @Override
     public Level loadLevel(int levelIdx) throws IOException {
-        // Convert levelIdx to zone/act
-        int s3kIdx = levelIdx;
-        if (levelIdx >= 0xC0) {
-            s3kIdx = levelIdx - 0xC0;
-        }
+        return loadLevelWithDeferredResources(
+                levelIdx, DeferredLevelResourceTracker.none());
+    }
 
+    /**
+     * Publishes the fresh level terrain KosM streams through the native S3K
+     * runtime queue. The level loader has already decoded the same ROM sources
+     * synchronously; this submission models the ROM's hardware-owned handoff
+     * without making gameplay depend on trace data.
+     */
+    @Override
+    public void queueFreshLevelRuntimeArt(int levelIdx) throws IOException {
+        int s3kIdx = levelIdx >= 0xC0 ? levelIdx - 0xC0 : levelIdx;
         int zone = s3kIdx / 2;
         int act = s3kIdx % 2;
         Sonic3kLoadBootstrap bootstrap = Sonic3kBootstrapResolver.resolve(zone, act);
+        int llbIndex = resolveLevelLoadBlockIndex(zone, act, bootstrap);
+        int llbAddr = Sonic3kConstants.LEVEL_LOAD_BLOCK_ADDR
+                + llbIndex * Sonic3kConstants.LEVEL_LOAD_BLOCK_ENTRY_SIZE;
+
+        int primaryArtAddr = rom.read32BitAddr(llbAddr) & 0x00FFFFFF;
+        int secondaryArtAddr = rom.read32BitAddr(llbAddr + 4) & 0x00FFFFFF;
+        ResolvedGameplayOverlay overlay = resolveGameplayOverlay(
+                zone, act, bootstrap, llbIndex, secondaryArtAddr, -1);
+        secondaryArtAddr = overlay.secondaryArtAddr();
+        S3kRuntimeArtCoordinator coordinator = S3kRuntimeArtCoordinator.current();
+        // LoadLevelLoadBlock queues both parents at the call and only then
+        // blocks at loc_7870 until Kos_modules_left reaches zero
+        // (docs/skdisasm/sonic3k.asm:9727 and 9734 queue the two parents,
+        // 9736-9743 is the wait; Level: calls it at :7761), so the
+        // parents are in the FIFO before anything else can reach it. Nothing
+        // in Level: defers that queueing, and the enemy art that follows comes
+        // later still, from Obj_TitleCardWait2's LoadEnemyArt (:62298). A
+        // deferred publication inverted that order: it released the slots it
+        // had, and the following level frames' object art took all four before
+        // the deferred batch could retry, leaving the terrain art permanently
+        // starved behind a full FIFO.
+        // Reaching LoadLevelLoadBlock means the card's own modules have already
+        // drained (Obj_TitleCardCreate waits on Kos_modules_left, :62169-62171).
+        // A caller that arrives while they are still outstanding is ahead of
+        // that gate, and waits for the queue rather than queueing behind it.
+        if (coordinator.freshLevelArtWaitsForModuleQueue()) {
+            coordinator.deferFreshLevelRuntimeArt(
+                    rom, primaryArtAddr, secondaryArtAddr);
+        } else {
+            coordinator.submitFreshLevelRuntimeArt(
+                    rom, primaryArtAddr, secondaryArtAddr);
+        }
+    }
+
+    @Override
+    public Level loadLevelWithDeferredResources(
+            int levelIdx,
+            DeferredLevelResourceTracker deferredResources)
+            throws IOException {
+        Sonic3kLevel level = buildLevel(levelIdx, deferredResources, true);
+        finishLevelLoad(level, levelIdx);
+        return level;
+    }
+
+    /** Captures live character/bootstrap choices before the ROM worker starts. */
+    @Override
+    public Callable<PreparedLevelBuild> prepareLevelBuildTask(int levelIndex, String mutationKey) {
+        LevelBuildInputs inputs = captureLevelBuildInputs(levelIndex);
+        return () -> {
+            Sonic3kLevel level = buildLevel(
+                    levelIndex, DeferredLevelResourceTracker.none(), false, inputs);
+            S3kSeamlessMutationExecutor.prepareLayoutForMutation(level, mutationKey);
+            int[] zoneAct = zoneAndActOf(levelIndex);
+            warmKosInspections(zoneAct[0], zoneAct[1], inputs.bootstrap());
+            return new PreparedSonic3kLevelBuild(levelIndex, level);
+        };
+    }
+
+    /** Publishes graphics and builds live-service-dependent art on the frame thread. */
+    @Override
+    public Level installPreparedLevel(PreparedLevelBuild build) throws IOException {
+        if (!(build instanceof PreparedSonic3kLevelBuild prepared)) {
+            throw new IllegalArgumentException("not an S3K prepared level build: " + build);
+        }
+        Sonic3kLevel level = prepared.level();
+        level.publishGraphics(GameServices.graphics());
+        int[] zoneAct = zoneAndActOf(prepared.levelIndex());
+        level.attachPreparedLevelArt(Sonic3kObjectArtProvider.buildLevelArtSheets(
+                level, zoneAct[0], zoneAct[1], RomByteReader.fromRom(rom)));
+        finishLevelLoad(level, prepared.levelIndex());
+        return level;
+    }
+
+    private record PreparedSonic3kLevelBuild(int levelIndex, Sonic3kLevel level)
+            implements PreparedLevelBuild {
+    }
+
+    private record LevelBuildInputs(Sonic3kLoadBootstrap.Mode bootstrapMode, String mainCharacter) {
+        Sonic3kLoadBootstrap bootstrap() {
+            // Level construction consumes only the mode, never the mutable start-position array.
+            return new Sonic3kLoadBootstrap(bootstrapMode, null);
+        }
+    }
+
+    private LevelBuildInputs captureLevelBuildInputs(int levelIndex) {
+        int[] zoneAct = zoneAndActOf(levelIndex);
+        return new LevelBuildInputs(
+                Sonic3kBootstrapResolver.resolve(zoneAct[0], zoneAct[1]).mode(),
+                resolveActiveMainCharacterCode());
+    }
+
+    /**
+     * Inspects the target level's LevelLoadBlock Kosinski streams into
+     * {@link KosinskiInspectionCache} so the transition owner's later
+     * {@code Queue_Kos}/{@code Queue_Kos_Module} submissions of the same
+     * streams do not decode them on the submitting frame. Values only; the
+     * submissions themselves still happen where the ROM makes them.
+     */
+    private void warmKosInspections(int zone, int act, Sonic3kLoadBootstrap bootstrap) throws IOException {
+        int llbIndex = resolveLevelLoadBlockIndex(zone, act, bootstrap);
+        int llbAddr = Sonic3kConstants.LEVEL_LOAD_BLOCK_ADDR
+                + llbIndex * Sonic3kConstants.LEVEL_LOAD_BLOCK_ENTRY_SIZE;
+        int primaryArt = rom.read32BitAddr(llbAddr) & 0x00FFFFFF;
+        int secondaryArt = rom.read32BitAddr(llbAddr + 4) & 0x00FFFFFF;
+        int primaryBlocks = rom.read32BitAddr(llbAddr + 8) & 0x00FFFFFF;
+        int secondaryBlocks = rom.read32BitAddr(llbAddr + 12) & 0x00FFFFFF;
+        int primaryChunks = rom.read32BitAddr(llbAddr + 16) & 0x00FFFFFF;
+        int secondaryChunks = rom.read32BitAddr(llbAddr + 20) & 0x00FFFFFF;
+        for (int source : new int[] {primaryBlocks, secondaryBlocks, primaryChunks, secondaryChunks}) {
+            if (source > 0) {
+                KosinskiInspectionCache.inspectStandard(rom, source);
+            }
+        }
+        for (int source : new int[] {primaryArt, secondaryArt}) {
+            if (source > 0) {
+                KosinskiInspectionCache.inspectModuled(rom, source);
+            }
+        }
+    }
+
+    /** Converts a level index (with the optional 0xC0 lock-on offset) to {zone, act}. */
+    private static int[] zoneAndActOf(int levelIdx) {
+        int s3kIdx = levelIdx >= 0xC0 ? levelIdx - 0xC0 : levelIdx;
+        return new int[] {s3kIdx / 2, s3kIdx % 2};
+    }
+
+    /**
+     * Load-time steps that follow level construction on the frame thread:
+     * lock-on palette overrides and the AIZ intro overlay preload.
+     */
+    private void finishLevelLoad(Sonic3kLevel level, int levelIdx) {
+        int[] zoneAct = zoneAndActOf(levelIdx);
+        int zone = zoneAct[0];
+        int act = zoneAct[1];
+        Sonic3kLoadBootstrap bootstrap = Sonic3kBootstrapResolver.resolve(zone, act);
+        applyLockOnStartupPalette(level, zone, act);
+
+        // Pre-decompress AIZ intro overlay data during level load so the
+        // terrain swap at camera X=0x1400 doesn't pay the Kosinski decode cost.
+        // This path also runs in raw level-loading tests without a gameplay
+        // runtime, so keep it ROM-backed rather than resolving ObjectServices.
+        boolean isAizIntro = zone == 0 && act == 0
+                && bootstrap != null
+                && bootstrap.mode() == Sonic3kLoadBootstrap.Mode.INTRO;
+        if (isAizIntro) {
+            AizIntroTerrainSwap.preloadOverlayData(rom);
+        }
+    }
+
+    private synchronized Sonic3kRingArt ringArt() {
+        if (ringArt == null) {
+            ringArt = new Sonic3kRingArt(rom);
+        }
+        return ringArt;
+    }
+
+    /**
+     * ROM-only level construction shared by the synchronous load and the
+     * prepared (off-thread) build. Reads the ROM and immutable configuration
+     * only; {@code publishGraphics} false defers palette/pattern publication
+     * to {@link Sonic3kLevel#publishGraphics}.
+     */
+    private Sonic3kLevel buildLevel(
+            int levelIdx,
+            DeferredLevelResourceTracker deferredResources,
+            boolean publishGraphics)
+            throws IOException {
+        return buildLevel(levelIdx, deferredResources, publishGraphics,
+                captureLevelBuildInputs(levelIdx));
+    }
+
+    private Sonic3kLevel buildLevel(
+            int levelIdx,
+            DeferredLevelResourceTracker deferredResources,
+            boolean publishGraphics,
+            LevelBuildInputs inputs) throws IOException {
+        int[] zoneAct = zoneAndActOf(levelIdx);
+        int zone = zoneAct[0];
+        int act = zoneAct[1];
+        Sonic3kLoadBootstrap bootstrap = inputs.bootstrap();
 
         LOG.info(String.format("Loading S3K level: zone=%d act=%d (levelIdx=0x%X)", zone, act, levelIdx));
 
@@ -220,25 +454,46 @@ public class Sonic3k extends Game implements PlayerSpriteArtProvider, SpindashDu
         int secondaryBlocksAddr = word3 & 0x00FFFFFF;
         int primaryChunksAddr = word4 & 0x00FFFFFF;
         int secondaryChunksAddr = word5 & 0x00FFFFFF;
+        Sonic3kDeferredLevelResourceProfile deferredProfile =
+                Sonic3kDeferredLevelResourceProfile.forLevelLoadBlock(
+                        llbIndex);
+        SecondaryResourceSources deferredSources =
+                deferredProfile != null
+                        ? readSecondaryResourceSources(
+                                deferredProfile
+                                        .deferredSourceLevelLoadBlockIndex())
+                        : null;
+        DeferredLevelResourceManifest expectedDeferredManifest =
+                deferredProfile != null
+                        ? deferredProfile.manifest(
+                                deferredSources.art(),
+                                deferredSources.chunks(),
+                                deferredSources.blocks())
+                        : DeferredLevelResourceManifest.EMPTY;
+        DeferredLevelResourceTracker activeDeferredResources =
+                deferredResources != null
+                        ? deferredResources
+                        : DeferredLevelResourceTracker.none();
+        if (!activeDeferredResources.hasExplicitPolicy()
+                && deferredProfile != null
+                && deferredProfile.initiallyDeferred()) {
+            activeDeferredResources =
+                    expectedDeferredManifest.newTracker();
+        }
+        if (activeDeferredResources.hasExplicitPolicy()
+                && deferredProfile != null) {
+            activeDeferredResources.verifyExactRequest(
+                    expectedDeferredManifest);
+        }
 
-        boolean applyAiz1OverlayBridge = zone == 0
-                && act == 0
-                && bootstrap != null
-                && llbIndex != Sonic3kConstants.LEVEL_LOAD_BLOCK_AIZ1_INTRO_INDEX
-                && bootstrap.isSkipIntro();
-        if (applyAiz1OverlayBridge) {
-            Aiz1GameplayOverlay override = readAiz1GameplayOverlayFromIntroEntry();
-            if (override != null) {
-                // AIZ1 parity bridge:
-                // Skip-intro bootstrap should immediately use AIZ1 "main level" overlays
-                // for 8x8/16x16 terrain resources.
-                secondaryArtAddr = override.secondaryArtAddr();
-                secondaryBlocksAddr = override.secondaryBlocksAddr();
-                LOG.info(String.format("  AIZ1 overlay bridge active: art2=0x%06X blocks2=0x%06X",
-                        secondaryArtAddr, secondaryBlocksAddr));
-            } else {
-                LOG.warning("  AIZ1 overlay bridge requested but intro overlay entry was invalid.");
-            }
+        ResolvedGameplayOverlay overlay = resolveGameplayOverlay(
+                zone, act, bootstrap, llbIndex,
+                secondaryArtAddr, secondaryBlocksAddr);
+        secondaryArtAddr = overlay.secondaryArtAddr();
+        secondaryBlocksAddr = overlay.secondaryBlocksAddr();
+        if (overlay.applied()) {
+            LOG.info(String.format("  AIZ1 overlay bridge active: art2=0x%06X blocks2=0x%06X",
+                    secondaryArtAddr, secondaryBlocksAddr));
         }
 
         LOG.info(String.format("  LLB entry: plc1=0x%02X plc2=0x%02X art1=0x%06X art2=0x%06X " +
@@ -249,34 +504,35 @@ public class Sonic3k extends Game implements PlayerSpriteArtProvider, SpindashDu
 
         // Build resource plan
         LevelResourcePlan.Builder planBuilder = LevelResourcePlan.builder();
-        ResourceLoader resourceLoader = new ResourceLoader(rom);
-
         // Patterns (KosM)
-        // Use decompressed lengths for KosM overlay offsets.
-        // Header-only size reads are not reliable across all module streams.
-        int primaryArtSize = resourceLoader.loadSingle(LoadOp.kosinskiMBase(primaryArtAddr)).length;
-        LOG.info(String.format("  Primary art KosinskiM decompressed size = 0x%04X (%d bytes, %d tiles)",
-                primaryArtSize, primaryArtSize, primaryArtSize / 32));
-
         planBuilder.addPatternOp(LoadOp.kosinskiMBase(primaryArtAddr));
         if (secondaryArtAddr != primaryArtAddr && secondaryArtAddr > 0) {
-            int secondaryArtSize = resourceLoader.loadSingle(LoadOp.kosinskiMBase(secondaryArtAddr)).length;
-            LOG.info(String.format("  Secondary art KosinskiM decompressed size = 0x%04X (%d bytes, %d tiles)",
-                    secondaryArtSize, secondaryArtSize, secondaryArtSize / 32));
-            planBuilder.addPatternOp(LoadOp.kosinskiMOverlay(secondaryArtAddr, primaryArtSize));
+            boolean deferred = deferredProfile != null
+                    && deferredProfile.defersPatterns()
+                    && activeDeferredResources.omitIfRequested(
+                            deferredProfile.patternDescriptor(
+                                    secondaryArtAddr));
+            if (!deferred) {
+                planBuilder.addPatternOp(
+                        LoadOp.kosinskiMAppend(secondaryArtAddr));
+            }
         }
-        addLevelPlcPatternOps(planBuilder, zone, act, bootstrap, plcPrimary, plcSecondary);
+        addLevelPlcPatternOps(planBuilder, zone, act, bootstrap, plcPrimary, plcSecondary, inputs.mainCharacter());
 
         // Blocks (16x16, Kosinski) - "chunks" in engine terminology.
         // ROM LoadLevelLoadBlock2 reuses a1 across both Kos_Decomp calls, so the
         // second stream appends immediately after the first in Block_table.
         planBuilder.addChunkOp(LoadOp.kosinskiBase(primaryBlocksAddr));
         if (secondaryBlocksAddr != primaryBlocksAddr && secondaryBlocksAddr > 0) {
-            int primaryBlocksSize = resourceLoader.loadSingle(LoadOp.kosinskiBase(primaryBlocksAddr)).length;
-            int secondaryBlocksSize = resourceLoader.loadSingle(LoadOp.kosinskiBase(secondaryBlocksAddr)).length;
-            LOG.info(String.format("  16x16 sizes: primary=0x%04X (%d bytes) secondary=0x%04X (%d bytes) append@0x%04X",
-                    primaryBlocksSize, primaryBlocksSize, secondaryBlocksSize, secondaryBlocksSize, primaryBlocksSize));
-            planBuilder.addChunkOp(LoadOp.kosinskiOverlay(secondaryBlocksAddr, primaryBlocksSize));
+            boolean deferred = deferredProfile != null
+                    && deferredProfile.defersChunks()
+                    && activeDeferredResources.omitIfRequested(
+                            deferredProfile.chunkDescriptor(
+                                    secondaryBlocksAddr));
+            if (!deferred) {
+                planBuilder.addChunkOp(
+                        LoadOp.kosinskiAppend(secondaryBlocksAddr));
+            }
         }
 
         // Chunks (128x128, Kosinski) - "blocks" in engine terminology.
@@ -284,12 +540,29 @@ public class Sonic3k extends Game implements PlayerSpriteArtProvider, SpindashDu
         // the secondary stream appends after primary in RAM_start.
         planBuilder.addBlockOp(LoadOp.kosinskiBase(primaryChunksAddr));
         if (secondaryChunksAddr != primaryChunksAddr && secondaryChunksAddr > 0) {
-            int primaryChunksSize = resourceLoader.loadSingle(LoadOp.kosinskiBase(primaryChunksAddr)).length;
-            int secondaryChunksSize = resourceLoader.loadSingle(LoadOp.kosinskiBase(secondaryChunksAddr)).length;
-            LOG.info(String.format("  128x128 sizes: primary=0x%04X (%d bytes) secondary=0x%04X (%d bytes) append@0x%04X",
-                    primaryChunksSize, primaryChunksSize, secondaryChunksSize, secondaryChunksSize, primaryChunksSize));
-            planBuilder.addBlockOp(LoadOp.kosinskiOverlay(secondaryChunksAddr, primaryChunksSize));
+            boolean deferred = deferredProfile != null
+                    && deferredProfile.defersBlocks()
+                    && activeDeferredResources.omitIfRequested(
+                            deferredProfile.blockDescriptor(
+                                    secondaryChunksAddr));
+            if (!deferred) {
+                planBuilder.addBlockOp(
+                        LoadOp.kosinskiAppend(secondaryChunksAddr));
+            }
         }
+        if (deferredProfile != null
+                && deferredProfile.deferredSourceLevelLoadBlockIndex()
+                        != llbIndex) {
+            for (var descriptor
+                    : expectedDeferredManifest.descriptors()) {
+                if (!activeDeferredResources.omitIfRequested(descriptor)) {
+                    throw new IllegalStateException(
+                            "target profile did not request its deferred declaration: "
+                                    + descriptor);
+                }
+            }
+        }
+        activeDeferredResources.verifyFullyConsumed();
 
         // Collision indices (loaded directly, not through resource plan)
         // Returns [primaryAddr, secondaryAddr, interleavedFlag]
@@ -312,14 +585,27 @@ public class Sonic3k extends Game implements PlayerSpriteArtProvider, SpindashDu
             // ROM Get_LevelSizeStart uses AIZ intro LevelSizes profile, then overrides min X to 0
             // for the intro start (x=$40, y=$420).
             boundariesMinXOverride = 0;
+        } else if (zone == Sonic3kZoneIds.ZONE_MHZ && act == 0
+                && !"knuckles".equalsIgnoreCase(inputs.mainCharacter())) {
+            // ROM Get_LevelSizeStart loc_1BF1E (sonic3k.asm:38214-38225): for MHZ1
+            // (Current_zone_and_act==$0700) played as Sonic/Tails (Player_mode<3,
+            // cmpi.w #3/bhs.s skip) with Sonic 3 locked on (SK_alone_flag==0), the
+            // level-load routine overrides Camera_min_X_pos to $C0 and forces the
+            // initial Camera_X_pos to $C0 (d1=$160, then subi.w #$A0 at :38246).
+            // The engine only models the locked-on ROM, so SK_alone_flag is always
+            // 0. Overriding the loaded min-X to $C0 both pins the left boundary and,
+            // via the level-load force-position clamp (Camera.updatePosition(force)
+            // -> clampAxisWithWrap), snaps the initial camera X up from
+            // playerCentreX-$A0 to $C0. The MHZ1 LevelSizes xstart is 0
+            // (sonic3k.asm:38111), so without this the camera starts too far left.
+            boundariesMinXOverride = 0xC0;
         }
 
         // Get palette address
         int levelPaletteAddr = getLevelPaletteAddr(paletteIndex);
 
         // Character palette — Knuckles uses Pal_Knuckles, Sonic/Tails share Pal_SonicTails
-        String mainCharCode = SonicConfigurationService.getInstance()
-                .getString(SonicConfiguration.MAIN_CHARACTER_CODE);
+        String mainCharCode = inputs.mainCharacter();
         int characterPaletteAddr;
         if ("knuckles".equalsIgnoreCase(mainCharCode)) {
             characterPaletteAddr = Sonic3kConstants.KNUCKLES_PALETTE_ADDR;
@@ -335,32 +621,57 @@ public class Sonic3k extends Game implements PlayerSpriteArtProvider, SpindashDu
         var ringPlacement = new Sonic3kRingPlacement(romReader);
         var ringSpawns = ringPlacement.load(zone, act);
 
-        if (ringArt == null) {
-            ringArt = new Sonic3kRingArt(rom);
-        }
-        var ringSpriteSheet = ringArt.load();
+        var ringSpriteSheet = ringArt().load();
 
         LOG.info(String.format("  S3K loaded %d objects, %d rings for zone=%d act=%d",
                 objectSpawns.size(), ringSpawns.size(), zone, act));
 
-        Sonic3kLevel level = new Sonic3kLevel(rom, zone, plan,
+        return new Sonic3kLevel(rom, zone, plan,
                 primaryCollisionAddr, secondaryCollisionAddr, interleavedCollision,
                 layoutAddr, boundariesAddr,
                 characterPaletteAddr, levelPaletteAddr,
                 boundariesMinXOverride,
-                objectSpawns, ringSpawns, ringSpriteSheet);
+                objectSpawns, ringSpawns, ringSpriteSheet,
+                publishGraphics);
+    }
 
-        // Pre-decompress AIZ intro overlay data during level load so the
-        // terrain swap at camera X=0x1400 doesn't cause a frame hitch.
-        boolean isAizIntro = zone == 0 && act == 0
-                && bootstrap != null
-                && bootstrap.mode() == Sonic3kLoadBootstrap.Mode.INTRO;
-        if (isAizIntro) {
-            AizIntroTerrainSwap.preloadOverlayData();
-            AizIntroTerrainSwap.precomputeTransitionTilemaps();
+    @Override
+    public void applyLevelLoadPaletteOverrides(Level level, int zone, int act) {
+        if (level instanceof Sonic3kLevel sonic3kLevel) {
+            applyLockOnStartupPalette(sonic3kLevel, zone, act);
         }
+    }
 
-        return level;
+    private static void applyLockOnStartupPalette(Sonic3kLevel level, int zone, int act) {
+        if (zone == Sonic3kZoneIds.ZONE_ICZ && act == 0) {
+            // Lockon S3/Screen Events.asm ICZ1_SetIntroPal updates line 4 after
+            // Pal_ICZ1 loads; without it the opening mountain BG uses the cave colors.
+            GraphicsManager graphics = GameServices.graphics();
+            S3kPaletteWriteSupport.applyContiguousPatch(
+                    GameServices.paletteOwnershipRegistryOrNull(),
+                    level,
+                    graphics,
+                    S3kPaletteOwners.ICZ_STARTUP_PALETTE,
+                    S3kPaletteOwners.PRIORITY_ZONE_EVENT,
+                    3,
+                    1,
+                    paletteWordsToBytes(ICZ1_LOCK_ON_INTRO_PALETTE_LINE4_COLORS_1_TO_15));
+            S3kPaletteWriteSupport.resolvePendingWritesNow(
+                    GameServices.paletteOwnershipRegistryOrNull(),
+                    level,
+                    graphics);
+        }
+    }
+
+    private static byte[] paletteWordsToBytes(int[] segaWords) {
+        byte[] colorData = new byte[segaWords.length * Palette.BYTES_PER_COLOR];
+        for (int i = 0; i < segaWords.length; i++) {
+            int segaWord = segaWords[i];
+            int offset = i * Palette.BYTES_PER_COLOR;
+            colorData[offset] = (byte) ((segaWord >>> 8) & 0xFF);
+            colorData[offset + 1] = (byte) (segaWord & 0xFF);
+        }
+        return colorData;
     }
 
     @Override
@@ -515,8 +826,7 @@ public class Sonic3k extends Game implements PlayerSpriteArtProvider, SpindashDu
     }
 
     private int getCharacterStartTableAddr() {
-        String mainCharacterCode = SonicConfigurationService.getInstance()
-                .getString(SonicConfiguration.MAIN_CHARACTER_CODE);
+        String mainCharacterCode = resolveActiveMainCharacterCode();
         if ("knuckles".equalsIgnoreCase(mainCharacterCode)) {
             return Sonic3kConstants.KNUX_START_LOCATIONS_ADDR;
         }
@@ -525,23 +835,70 @@ public class Sonic3k extends Game implements PlayerSpriteArtProvider, SpindashDu
 
     private Aiz1GameplayOverlay readAiz1GameplayOverlayFromIntroEntry() throws IOException {
         int introIndex = Sonic3kConstants.LEVEL_LOAD_BLOCK_AIZ1_INTRO_INDEX;
+        SecondaryResourceSources sources =
+                readSecondaryResourceSources(introIndex);
+
         int entryAddr = Sonic3kConstants.LEVEL_LOAD_BLOCK_ADDR
                 + introIndex * Sonic3kConstants.LEVEL_LOAD_BLOCK_ENTRY_SIZE;
-
         if (!isReadable(entryAddr, Sonic3kConstants.LEVEL_LOAD_BLOCK_ENTRY_SIZE)) {
             return null;
         }
-
-        int word1 = rom.read32BitAddr(entryAddr + 4);   // (plc2 << 24) | secondaryArtAddr
-        int word3 = rom.read32BitAddr(entryAddr + 12);  // (palette << 24) | secondaryBlocksAddr
-
-        int secondaryArtAddr = word1 & 0x00FFFFFF;
-        int secondaryBlocksAddr = word3 & 0x00FFFFFF;
-        if (!isReadable(secondaryArtAddr, 2) || !isReadable(secondaryBlocksAddr, 2)) {
+        if (!isReadable(sources.art(), 2)
+                || !isReadable(sources.chunks(), 2)) {
             return null;
         }
 
-        return new Aiz1GameplayOverlay(secondaryArtAddr, secondaryBlocksAddr);
+        return new Aiz1GameplayOverlay(
+                sources.art(), sources.chunks());
+    }
+
+    private ResolvedGameplayOverlay resolveGameplayOverlay(
+            int zone,
+            int act,
+            Sonic3kLoadBootstrap bootstrap,
+            int levelLoadBlockIndex,
+            int secondaryArtAddr,
+            int secondaryBlocksAddr) throws IOException {
+        boolean applyAiz1OverlayBridge = zone == 0
+                && act == 0
+                && bootstrap != null
+                && bootstrap.isSkipIntro()
+                && levelLoadBlockIndex
+                != Sonic3kConstants.LEVEL_LOAD_BLOCK_AIZ1_INTRO_INDEX;
+        if (!applyAiz1OverlayBridge) {
+            return new ResolvedGameplayOverlay(
+                    secondaryArtAddr, secondaryBlocksAddr, false);
+        }
+        Aiz1GameplayOverlay override = readAiz1GameplayOverlayFromIntroEntry();
+        if (override == null) {
+            LOG.warning("AIZ1 overlay bridge requested but intro overlay entry was invalid.");
+            return new ResolvedGameplayOverlay(
+                    secondaryArtAddr, secondaryBlocksAddr, false);
+        }
+        return new ResolvedGameplayOverlay(
+                override.secondaryArtAddr(),
+                secondaryBlocksAddr < 0
+                        ? secondaryBlocksAddr
+                        : override.secondaryBlocksAddr(),
+                true);
+    }
+
+    private SecondaryResourceSources readSecondaryResourceSources(
+            int levelLoadBlockIndex) throws IOException {
+        int entryAddr = Sonic3kConstants.LEVEL_LOAD_BLOCK_ADDR
+                + levelLoadBlockIndex
+                * Sonic3kConstants.LEVEL_LOAD_BLOCK_ENTRY_SIZE;
+        if (!isReadable(
+                entryAddr,
+                Sonic3kConstants.LEVEL_LOAD_BLOCK_ENTRY_SIZE)) {
+            throw new IOException(
+                    "Deferred LevelLoadBlock entry is outside the ROM: "
+                            + levelLoadBlockIndex);
+        }
+        return new SecondaryResourceSources(
+                rom.read32BitAddr(entryAddr + 4) & 0x00FF_FFFF,
+                rom.read32BitAddr(entryAddr + 12) & 0x00FF_FFFF,
+                rom.read32BitAddr(entryAddr + 20) & 0x00FF_FFFF);
     }
 
     /**
@@ -604,6 +961,10 @@ public class Sonic3k extends Game implements PlayerSpriteArtProvider, SpindashDu
 
     static record CollisionAddressInfo(int primaryAddress, int secondaryAddress, boolean interleaved) {}
     private record Aiz1GameplayOverlay(int secondaryArtAddr, int secondaryBlocksAddr) {}
+
+    private record ResolvedGameplayOverlay(
+            int secondaryArtAddr, int secondaryBlocksAddr, boolean applied) {}
+    private record SecondaryResourceSources(int art, int chunks, int blocks) {}
 
     /**
      * Gets the layout data ROM address for a zone/act from the LevelPtrs table.
@@ -679,7 +1040,8 @@ public class Sonic3k extends Game implements PlayerSpriteArtProvider, SpindashDu
                                        int act,
                                        Sonic3kLoadBootstrap bootstrap,
                                        int plcPrimary,
-                                       int plcSecondary) {
+                                       int plcSecondary,
+                                       String mainCharacterCode) {
         boolean aizIntro = zone == 0
                 && act == 0
                 && bootstrap != null
@@ -710,7 +1072,7 @@ public class Sonic3k extends Game implements PlayerSpriteArtProvider, SpindashDu
             plcOrder.add(plcSecondary);
         }
         // ROM startup path always loads active-character PLC after level PLC setup.
-        plcOrder.add(resolveStartupCharacterPlcIndex());
+        plcOrder.add(resolveStartupCharacterPlcIndex(mainCharacterCode));
         // PLC 0x4E (spikes/springs art). In the ROM this is loaded at runtime by
         // specific objects (signpost, boss defeat) via Load_PLC_Raw, but since those
         // aren't implemented yet, load it at startup so spikes/springs render.
@@ -721,9 +1083,7 @@ public class Sonic3k extends Game implements PlayerSpriteArtProvider, SpindashDu
         }
     }
 
-    private int resolveStartupCharacterPlcIndex() {
-        String mainCharacterCode = SonicConfigurationService.getInstance()
-                .getString(SonicConfiguration.MAIN_CHARACTER_CODE);
+    private static int resolveStartupCharacterPlcIndex(String mainCharacterCode) {
         if ("knuckles".equalsIgnoreCase(mainCharacterCode)) {
             return 0x05;
         }
@@ -731,6 +1091,16 @@ public class Sonic3k extends Game implements PlayerSpriteArtProvider, SpindashDu
             return 0x07;
         }
         return 0x01;
+    }
+
+    private String resolveActiveMainCharacterCode() {
+        var worldSession = SessionManager.getCurrentWorldSession();
+        if (worldSession != null
+                && worldSession.getSaveSessionContext() != null
+                && worldSession.getSaveSessionContext().selectedTeam() != null) {
+            return worldSession.getSaveSessionContext().selectedTeam().mainCharacter();
+        }
+        return GameServices.configuration().getString(SonicConfiguration.MAIN_CHARACTER_CODE);
     }
 
     private void appendPlcPatternOps(LevelResourcePlan.Builder planBuilder, int plcIndex) {

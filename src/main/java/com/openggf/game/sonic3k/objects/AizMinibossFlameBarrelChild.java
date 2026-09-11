@@ -4,6 +4,9 @@ import com.openggf.game.PlayableEntity;
 import com.openggf.game.sonic3k.Sonic3kObjectArtKeys;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.ObjectRenderManager;
+import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.boss.AbstractBossChild;
 import com.openggf.level.objects.boss.AbstractBossInstance;
 import com.openggf.level.render.PatternSpriteRenderer;
@@ -18,7 +21,7 @@ import java.util.List;
  * - Cutscene barrel: loc_6872C (ChildObjDat_69072)
  * - Miniboss barrel: loc_68C12 (ChildObjDat_69086)
  */
-public class AizMinibossFlameBarrelChild extends AbstractBossChild {
+public class AizMinibossFlameBarrelChild extends AbstractBossChild implements RewindRecreatable {
     private static final int FLAG_PARENT_BITS = 0x38;
     private static final int PARENT_BIT_BARREL_ACTIVATE = 1 << 1;
 
@@ -49,19 +52,40 @@ public class AizMinibossFlameBarrelChild extends AbstractBossChild {
         IDLE
     }
 
-    private final int barrelIndex;
-    private final boolean cutsceneVariant;
+    // Non-final so the generic rewind field capturer reapplies them after the
+    // recreate hook passes placeholder barrelIndex/false.
+    private int barrelIndex;
+    private boolean cutsceneVariant;
 
     private State state = State.INIT;
     private int timer;
     private int mappingFrame = 3;
     private int cutsceneCounter;
     private int animIndex;
+    /** ROM: $39(a0) on the barrel — per-barrel counter for drop position cycling.
+     *  Incremented by 4 each time a shot enters the top-drop phase (sub_68EE4). */
+    private int positionCounter;
 
     public AizMinibossFlameBarrelChild(AbstractBossInstance parent, int barrelIndex, boolean cutsceneVariant) {
         super(parent, "AIZMinibossBarrel" + barrelIndex, 4, 0x90);
         this.barrelIndex = Math.max(0, Math.min(2, barrelIndex));
         this.cutsceneVariant = cutsceneVariant;
+        syncPositionWithParent();
+        updateDynamicSpawn();
+    }
+
+    private AizMinibossFlameBarrelChild(ObjectSpawn spawn, AbstractBossInstance parent) {
+        this(parent, 0, false);
+    }
+
+    @Override
+    public AizMinibossFlameBarrelChild recreateForRewind(RewindRecreateContext ctx) {
+        AbstractBossInstance boss = AizMinibossRewindLinks.nearestSharedBoss(ctx);
+        if (boss == null) {
+            return null;
+        }
+        int restoredIndex = AizMinibossRewindLinks.nearestBarrelIndex(ctx, boss);
+        return new AizMinibossFlameBarrelChild(boss, restoredIndex, false);
     }
 
     @Override
@@ -80,9 +104,9 @@ public class AizMinibossFlameBarrelChild extends AbstractBossChild {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        if (!shouldUpdate(frameCounter)) {
+        if (!shouldUpdate(vIntRunCount)) {
             return;
         }
 
@@ -143,8 +167,13 @@ public class AizMinibossFlameBarrelChild extends AbstractBossChild {
                 state = State.BETWEEN_SHOTS;
             }
             case FIRING_MINIBOSS -> {
-                // ROM loc_68C64: fire shot and immediately begin close animation
-                spawnShot(AizMinibossBarrelShotChild.Mode.ADVANCED_COLLIDING);
+                // ROM AIZMiniboss_BarrelController_FireFinal (sonic3k.asm:137437-137445):
+                // each existing barrel allocates the flare/FallingShot pair from its
+                // own child slot, then begins the return animation.  The barrel's
+                // subtype, $39 position counter, and parent-facing bit remain the
+                // FallingShot's source state; no center-owned controller exists in
+                // the shipped route.
+                spawnFallingShot();
                 enterClosingAnimation();
             }
             case BETWEEN_SHOTS -> {
@@ -198,16 +227,26 @@ public class AizMinibossFlameBarrelChild extends AbstractBossChild {
     }
 
     private void spawnShot(AizMinibossBarrelShotChild.Mode mode) {
-        var objectManager = services().objectManager();
-        if (objectManager == null) {
+        if (services().objectManager() == null) {
             return;
         }
         // ROM ChildObjDat_6909A / ChildObjDat_690A8 spawn a short muzzle-flare child
         // alongside the main shot object.
-        objectManager.addDynamicObject(
-                new AizMinibossBarrelShotFlareChild(this));
-        objectManager.addDynamicObject(
-                new AizMinibossBarrelShotChild(parent, barrelIndex << 1, currentX, currentY + 4, mode));
+        spawnChild(() -> new AizMinibossBarrelShotFlareChild(this));
+        spawnChild(() -> new AizMinibossBarrelShotChild(parent, this, currentX, currentY + 4, mode));
+    }
+
+    private void spawnFallingShot() {
+        if (services().objectManager() == null) {
+            return;
+        }
+        // ChildObjDat_AIZMiniboss_BarrelShotAndFallingShot: the flare is child
+        // subtype 0 and FallingShot is child subtype $02.  The latter subtype is
+        // deliberately not the barrel's subtype (0/2/4), which SetFallingShotDelay
+        // reads from parent3(a0) in the ROM.
+        spawnChild(() -> new AizMinibossBarrelShotFlareChild(this));
+        spawnChild(() -> new AizMinibossNapalmProjectile(
+                parent, this, currentX, currentY + 4, 2));
     }
 
     private void enterClosingAnimation() {
@@ -216,6 +255,26 @@ public class AizMinibossFlameBarrelChild extends AbstractBossChild {
         mappingFrame = CLOSE_FRAMES[0];
         timer = CLOSE_DURATIONS[0];
         state = State.CLOSING;
+    }
+
+    /** ROM: subtype(a1) — barrel subtype used by shots for position selection. */
+    int getBarrelSubtype() {
+        return barrelIndex * 2;
+    }
+
+    /** ROM render_flags(a1) read by AIZMiniboss_SetShotPosition. */
+    boolean isFacingFlipped() {
+        return parent != null && (parent.getState().renderFlags & 1) != 0;
+    }
+
+    /** ROM: $39(a1) — per-barrel position counter read by shots. */
+    int getPositionCounter() {
+        return positionCounter;
+    }
+
+    /** ROM: addq.b #4,d1 / move.b d1,$39(a1) — shots update the barrel's counter. */
+    void setPositionCounter(int value) {
+        this.positionCounter = value & 0xFF;
     }
 
     private boolean isActivatedByParent() {

@@ -1,5 +1,4 @@
 package com.openggf.game.sonic1.objects.badniks;
-import com.openggf.game.GameServices;
 import com.openggf.game.PlayableEntity;
 
 import com.openggf.level.objects.AbstractBadnikInstance;
@@ -9,6 +8,8 @@ import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.DestructionEffects.DestructionConfig;
 import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
+import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.ObjectTerrainUtils;
 import com.openggf.physics.TerrainCheckResult;
@@ -32,7 +33,7 @@ import java.util.List;
  * <p>
  * Animation selection is based on terrain angle (flat/upslope/downslope) via Crab_SetAni.
  */
-public class Sonic1CrabmeatBadnikInstance extends AbstractBadnikInstance {
+public class Sonic1CrabmeatBadnikInstance extends AbstractBadnikInstance implements SpawnRewindRecreatable {
 
     // From disassembly: obColType = 6 (enemy, collision size index 6)
     // Size 6: width=$14 (20px), height=$14 (20px)
@@ -40,6 +41,11 @@ public class Sonic1CrabmeatBadnikInstance extends AbstractBadnikInstance {
 
     // From disassembly: obYRad = $10
     private static final int Y_RADIUS = 0x10;
+
+    // Crab_Main: obActWid = 42/2. BuildSprites uses the shared 32px
+    // assumed-height band because sprite_customheight_bit is clear.
+    private static final int DISPLAY_HALF_WIDTH = 42 / 2;
+    private static final int ASSUMED_RENDER_HALF_HEIGHT = 32;
 
     // Walking velocity: move.w #$80,obVelX(a0)
     private static final int WALK_VELOCITY = 0x80;
@@ -87,10 +93,13 @@ public class Sonic1CrabmeatBadnikInstance extends AbstractBadnikInstance {
     private int timeDelay;         // crab_timedelay (objoff_30)
     private int crabMode;          // crab_mode (objoff_32)
     private byte terrainAngle;     // obAngle - surface angle for animation selection
-    private int xSubpixel;         // 8-bit fractional X position
-    private int ySubpixel;         // 8-bit fractional Y position (for ObjectFall subpixel)
+    /** Subpixel accumulators (xSub / ySub) for ROM-accurate 16:8 fixed-point integration. */
+    private final SubpixelMotion.State motion = new SubpixelMotion.State(0, 0, 0, 0, 0, 0);
     private int fallVelocity;      // obVelY for ObjectFall during init
     private boolean initialized;
+    // Crab_Main returns without DisplaySprite, so obRender bit 7 is guaranteed
+    // clear when the first Crab_Action frame tests it.
+    private boolean renderFlagClearFromInvisibleInit;
 
     // Animation state
     private int baseAnimIndex;     // Animation index from Crab_SetAni (0-2)
@@ -107,16 +116,15 @@ public class Sonic1CrabmeatBadnikInstance extends AbstractBadnikInstance {
         this.timeDelay = 0;
         this.crabMode = 0;
         this.terrainAngle = 0;
-        this.xSubpixel = 0;
-        this.ySubpixel = 0;
         this.fallVelocity = 0;
         this.initialized = false;
+        this.renderFlagClearFromInvisibleInit = true;
         this.baseAnimIndex = 0;
         this.renderedFrame = 0;
     }
 
     @Override
-    protected void updateMovement(int frameCounter, PlayableEntity playerEntity) {
+    protected void updateMovement(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (!initialized) {
             initialize();
@@ -127,6 +135,7 @@ public class Sonic1CrabmeatBadnikInstance extends AbstractBadnikInstance {
             case STATE_WAIT_FIRE -> updateWaitFire();
             case STATE_WALK -> updateWalk();
         }
+        renderFlagClearFromInvisibleInit = false;
     }
 
     /**
@@ -140,11 +149,13 @@ public class Sonic1CrabmeatBadnikInstance extends AbstractBadnikInstance {
         // ObjectFall: apply CURRENT velocity to position, THEN add gravity for next frame.
         // ROM order: move.w obVelY(a0),d0 / addi.w #$38,obVelY(a0) / ... / add.l d0,d3
         // The velocity applied to position is the value BEFORE gravity is added.
-        int yPos24 = (currentY << 8) | (ySubpixel & 0xFF);
-        yPos24 += fallVelocity;
-        currentY = yPos24 >> 8;
-        ySubpixel = yPos24 & 0xFF;
-        fallVelocity += GRAVITY;
+        motion.x = currentX;
+        motion.y = currentY;
+        motion.xVel = 0;
+        motion.yVel = fallVelocity;
+        SubpixelMotion.moveSprite(motion, GRAVITY);
+        currentY = motion.y;
+        fallVelocity = motion.yVel;
 
         // ObjFloorDist: check floor from feet
         TerrainCheckResult floorResult = ObjectTerrainUtils.checkFloorDist(currentX, currentY, Y_RADIUS);
@@ -175,20 +186,22 @@ public class Sonic1CrabmeatBadnikInstance extends AbstractBadnikInstance {
 
         // Timer expired
         // ROM: tst.b obRender(a0) / bpl.s .movecrab (off-screen → skip toggle, go to walk)
-        if (!isOnScreenX()) {
+        if (renderFlagClearFromInvisibleInit
+                || !isWithinRenderSpriteBounds(DISPLAY_HALF_WIDTH, ASSUMED_RENDER_HALF_HEIGHT)) {
             startWalking();
             return;
         }
 
-        // On-screen: toggle fire mode bit
-        // ROM: bchg #1,crab_mode(a0) / bne.s .fire
+        // On-screen: toggle fire mode bit.
+        // ROM: bchg #1,crab_mode(a0) / bne.s .fire branches on the old bit value.
+        boolean wasFireBitSet = (crabMode & MODE_BIT_FIRE) != 0;
         crabMode ^= MODE_BIT_FIRE;
 
-        if ((crabMode & MODE_BIT_FIRE) != 0) {
-            // Bit was clear, now set: fire
+        if (wasFireBitSet) {
+            // Bit was set, now clear: fire
             fireProjectiles();
         } else {
-            // Bit was set, now clear: start walking
+            // Bit was clear, now set: start walking
             startWalking();
         }
     }
@@ -202,18 +215,16 @@ public class Sonic1CrabmeatBadnikInstance extends AbstractBadnikInstance {
         renderedFrame = 4; // Firing animation (mapping frame 4)
 
         // Left projectile
-        Sonic1CrabmeatProjectileInstance leftBall = new Sonic1CrabmeatProjectileInstance(
+        spawnFreeChild(() -> new Sonic1CrabmeatProjectileInstance(
                 currentX - PROJECTILE_X_OFFSET, currentY,
                 -PROJECTILE_X_VEL, PROJECTILE_Y_VEL,
-                this);
-        services().objectManager().addDynamicObject(leftBall);
+                this));
 
         // Right projectile
-        Sonic1CrabmeatProjectileInstance rightBall = new Sonic1CrabmeatProjectileInstance(
+        spawnFreeChild(() -> new Sonic1CrabmeatProjectileInstance(
                 currentX + PROJECTILE_X_OFFSET, currentY,
                 PROJECTILE_X_VEL, PROJECTILE_Y_VEL,
-                this);
-        services().objectManager().addDynamicObject(rightBall);
+                this));
     }
 
     /**
@@ -251,10 +262,10 @@ public class Sonic1CrabmeatBadnikInstance extends AbstractBadnikInstance {
         }
 
         // SpeedToPos: apply velocity with subpixel precision
-        int xPos24 = (currentX << 8) | (xSubpixel & 0xFF);
-        xPos24 += xVelocity;
-        currentX = xPos24 >> 8;
-        xSubpixel = xPos24 & 0xFF;
+        motion.x = currentX;
+        motion.xVel = xVelocity;
+        SubpixelMotion.moveX(motion);
+        currentX = motion.x;
 
         // Toggle terrain check each frame
         // ROM: bchg #0,crab_mode(a0) / bne.s loc_9654
@@ -365,7 +376,7 @@ public class Sonic1CrabmeatBadnikInstance extends AbstractBadnikInstance {
     }
 
     @Override
-    protected void updateAnimation(int frameCounter) {
+    protected void updateAnimation(int vIntRunCount) {
         // Animation is driven by state in updateMovement, using ROM animation scripts.
         // Walking animations alternate between two frames at speed $0F (15 frames).
         if (secondaryState == STATE_WALK) {
@@ -404,7 +415,11 @@ public class Sonic1CrabmeatBadnikInstance extends AbstractBadnikInstance {
 
     @Override
     public boolean isPersistent() {
-        return !isDestroyed() && isOnScreenX(160);
+        // Crab_Action ends at RememberState, whose out_of_range macro deletes the
+        // object once its chunk-aligned X leaves the [camera-128, camera-128+0x280]
+        // window (docs/s1disasm/_incObj/1F Badnik - Crabmeat.asm:59 ->
+        // _incObj/sub RememberState.asm:9 -> Macros.asm:278-295).
+        return !isDestroyed() && isInRange();
     }
 
     @Override

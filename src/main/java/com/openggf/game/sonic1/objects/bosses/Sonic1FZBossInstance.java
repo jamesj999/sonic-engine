@@ -1,16 +1,21 @@
 package com.openggf.game.sonic1.objects.bosses;
 
 import com.openggf.camera.Camera;
+import com.openggf.game.GameRng;
 import com.openggf.game.PlayableEntity;
 import com.openggf.game.sonic1.constants.Sonic1AnimationIds;
 import com.openggf.game.sonic1.audio.Sonic1Sfx;
 import com.openggf.game.sonic1.constants.Sonic1Constants;
+import com.openggf.game.sonic1.constants.Sonic1ObjectIds;
+import com.openggf.game.sonic1.resources.Sonic1PlcService;
 import com.openggf.level.objects.boss.BossExplosionObjectInstance;
 import com.openggf.game.sonic1.scroll.Sonic1ZoneConstants;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
@@ -47,7 +52,7 @@ import java.util.List;
  * In our engine these are handled as rendering overlays within this class.
  */
 public class Sonic1FZBossInstance extends AbstractBossInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
     private static final SpriteAnimationSet SEGG_ANIMATIONS = Sonic1BossAnimations.getSEggAnimations();
 
     // State machine constants (objoff_34 values in the ROM)
@@ -74,12 +79,23 @@ public class Sonic1FZBossInstance extends AbstractBossInstance
 
     // Solid collision params for combat phase: d1=$2B, d2=$14, d3=$14
     private static final SolidObjectParams COMBAT_SOLID_PARAMS =
-            new SolidObjectParams(0x2B, 0x14, 0x14);
+            SolidObjectParams.of(0x2B, 0x14, 0x14);
 
     // Solid collision params for escape phases: d1=$1B, d2=$70, d3=$71
     private static final SolidObjectParams ESCAPE_SOLID_PARAMS =
-            new SolidObjectParams(0x1B, 0x70, 0x71);
+            SolidObjectParams.of(0x1B, 0x70, 0x71);
     private static final int COMBAT_TOP_LANDING_HALF_WIDTH = 0x20;
+
+    // BossFinal_ObjData2 row 0: the parent slot's width byte, #64/2 = 32. On
+    // REV01 BossFinal_Main stores it into obActWid; REV00 stores obWidth
+    // instead (85,84,86 Boss - FZ Main, Cylinders, and Plasma Balls.asm:56-58,
+    // 96-101). The engine targets REV01, so the byte is live.
+    private static final int COMBAT_ACT_WIDTH = 0x20;
+
+    // BossFinal_Eggman_Fall re-writes it to #96/2 = 48 while Eggman falls, then
+    // back to #64/2 = 32 at the landing snap that advances to Eggman_Run
+    // (:355-371). Same Revision=0 obWidth split as above.
+    private static final int DEFEAT_FALL_ACT_WIDTH = 0x30;
 
     // Damage cooldown (objoff_35 in ROM)
     private int damageCooldown;
@@ -88,6 +104,12 @@ public class Sonic1FZBossInstance extends AbstractBossInstance
     private FZCylinder[] cylinders;
     private FZPlasmaLauncher plasmaLauncher;
     private boolean childComponentsSpawned;
+
+    // Camera X as of the previous frame's scroll. The FZ boss runs in ExecuteObjects
+    // (before DeformLayers/ScrollHoriz), so its wait-exit camera read sees the
+    // previous frame's camera; the engine's live camera.getX() is one frame ahead.
+    // Seeded to 0 so the wait never advances on the spawn frame before a real read.
+    private int previousFrameCamX;
 
     // objoff_30: cylinder activation state (-1 = ready for new pair)
     private int cylinderState;
@@ -116,9 +138,16 @@ public class Sonic1FZBossInstance extends AbstractBossInstance
     private int escapeHitTimer;
     private int escapeCollisionFlags;
     private boolean endingTransitionRequested;
+    private boolean suppressCurrentRollAttack;
+    private boolean suppressedRollLeftInitialMapping;
 
     public Sonic1FZBossInstance(ObjectSpawn spawn) {
         super(spawn, "FZ Boss");
+    }
+
+    @Override
+    public Sonic1FZBossInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new Sonic1FZBossInstance(ctx.spawn());
     }
 
     @Override
@@ -160,28 +189,67 @@ public class Sonic1FZBossInstance extends AbstractBossInstance
     }
 
     private void spawnChildComponents() {
-        var objectManager = services().objectManager();
-        if (objectManager == null) return;
+        if (services().objectManager() == null) return;
 
         // Spawn 4 cylinders with subtypes 0, 2, 4, 6 (ROM: loc_19E3E)
         for (int i = 0; i < 4; i++) {
-            int subtype = i * 2;
-            FZCylinder cylinder = new FZCylinder(this, subtype);
+            final int subtype = i * 2;
+            FZCylinder cylinder = spawnFreeChild(() -> new FZCylinder(this, subtype));
             cylinders[i] = cylinder;
             childComponents.add(cylinder);
-            objectManager.addDynamicObject(cylinder);
         }
 
         // Spawn plasma launcher (ROM: loc_19E20)
-        plasmaLauncher = new FZPlasmaLauncher(this);
+        plasmaLauncher = spawnFreeChild(() -> new FZPlasmaLauncher(this));
         childComponents.add(plasmaLauncher);
-        objectManager.addDynamicObject(plasmaLauncher);
     }
 
     private void ensureChildComponentsSpawned() {
         if (childComponentsSpawned) return;
         if (services().objectManager() == null) return;
         spawnChildComponents();
+        childComponentsSpawned = true;
+    }
+
+    void adoptCylinderForRewind(FZCylinder cylinder) {
+        if (cylinder == null) {
+            return;
+        }
+        if (cylinders == null || cylinders.length != 4) {
+            cylinders = new FZCylinder[4];
+        }
+        int subtype = cylinder.subtypeForRewind();
+        int index = subtype >> 1;
+        if (index >= 0 && index < cylinders.length) {
+            FZCylinder previous = cylinders[index];
+            if (previous != null && previous != cylinder) {
+                childComponents.remove(previous);
+            }
+            cylinders[index] = cylinder;
+        }
+        childComponents.removeIf(child ->
+                child instanceof FZCylinder existing
+                        && existing != cylinder
+                        && existing.subtypeForRewind() == subtype);
+        if (!childComponents.contains(cylinder)) {
+            childComponents.add(cylinder);
+        }
+        childComponentsSpawned = true;
+    }
+
+    void adoptPlasmaLauncherForRewind(FZPlasmaLauncher launcher) {
+        if (launcher == null) {
+            return;
+        }
+        if (plasmaLauncher != null && plasmaLauncher != launcher) {
+            childComponents.remove(plasmaLauncher);
+        }
+        childComponents.removeIf(child ->
+                child instanceof FZPlasmaLauncher && child != launcher);
+        plasmaLauncher = launcher;
+        if (!childComponents.contains(launcher)) {
+            childComponents.add(launcher);
+        }
         childComponentsSpawned = true;
     }
 
@@ -199,6 +267,17 @@ public class Sonic1FZBossInstance extends AbstractBossInstance
     @Override
     protected boolean usesDefeatSequencer() {
         return false; // FZ boss has custom defeat logic in states 6-14
+    }
+
+    @Override
+    public boolean isPersistent() {
+        // ROM DLE_FZ_Boss spawns Obj85 as soon as camera reaches boss_fz_x-$150,
+        // then BossFinal_Main initializes the whole boss group before any standard
+        // out_of_range tail call (_inc/DynamicLevelEvents.asm:770-779,
+        // _incObj/85 Boss - Final.asm:41-79). The parent starts at x=$25B0,
+        // outside the generic S1 window, but its cylinder children must exist
+        // immediately to run SolidObject at x=$24D0/$2550.
+        return true;
     }
 
     @Override
@@ -237,7 +316,7 @@ public class Sonic1FZBossInstance extends AbstractBossInstance
     }
 
     @Override
-    protected void updateBossLogic(int frameCounter, PlayableEntity playerEntity) {
+    protected void updateBossLogic(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // Spawn children after the parent is already inserted in ObjectManager.
         // This preserves parent-before-child collision order for FZ boss solids.
@@ -246,29 +325,77 @@ public class Sonic1FZBossInstance extends AbstractBossInstance
         switch (state.routineSecondary) {
             case STATE_WAIT -> updateWait();
             case STATE_CYLINDER_ATTACK -> updateCylinderAttack(player);
-            case STATE_PLASMA_PHASE -> updatePlasmaPhase(frameCounter);
+            case STATE_PLASMA_PHASE -> updatePlasmaPhase(vIntRunCount);
             case STATE_DEFEAT_FALL -> updateDefeatFall();
             case STATE_RUNNING_ESCAPE -> updateRunningEscape(player);
             case STATE_FINAL_ASCENT -> updateFinalAscent();
             case STATE_SHIP_TRANSFORM -> updateShipTransform();
-            case STATE_FINAL_FLIGHT -> updateFinalFlight(player, frameCounter);
+            case STATE_FINAL_FLIGHT -> updateFinalFlight(player, vIntRunCount);
         }
     }
 
-    // === State 0: WAIT (loc_19E90) ===
-    // Wait for camera to reach boss_fz_x
+    // === State 0: WAIT (loc_19E90 / BossFinal_Eggman_Wait) ===
+    // Wait for camera to reach boss_fz_x. ROM advances out of wait only when the
+    // game-owned PLC FIFO is empty and the camera has reached boss_fz_x.
     private void updateWait() {
-        Camera camera = services().camera();
-        int camX = camera.getX() & 0xFFFF;
+        // ROM BossFinal_Eggman_Wait reads (v_screenposx).w from inside ExecuteObjects,
+        // which runs BEFORE DeformLayers/ScrollHoriz in the level main loop
+        // (docs/s1disasm/sonic.asm Level loop: ExecuteObjects then DeformLayers;
+        // docs/s1disasm/_inc/DeformLayers (REV01).asm:16-18). So the boss sees the
+        // camera as left by the PREVIOUS frame's scroll.
+        //
+        // The FZ boss is a dynamic object executed during object execution
+        // (LevelFrameStep step 2/3), which now runs BEFORE the camera scroll
+        // (step 4a, camera.updatePosition()) — matching ROM ExecuteObjects running
+        // before DeformLayers. So camera.getX() read here is already the
+        // previous-frame post-scroll camera (this frame's scroll has not run yet),
+        // exactly what ROM's ExecuteObjects-time read sees. Read it directly.
+        int camX = services().camera().getX() & 0xFFFF;
 
-        if (camX >= BOSS_FZ_X) {
+        Sonic1PlcService plcService = services().gameService(Sonic1PlcService.class);
+        boolean plcBusy = plcService != null && plcService.isBusy();
+
+        if (!plcBusy && camX >= BOSS_FZ_X) {
             state.routineSecondary = STATE_CYLINDER_ATTACK;
         }
+
+        // ROM: loc_19EA2 — addq.l #1,(v_random).w runs EVERY frame the boss is in
+        // the wait sub-state (the fall-through tail of BossFinal_Eggman_Wait,
+        // reached whether or not the wait advances this frame). This deterministic
+        // per-frame advance of v_random through the boss-intro wait is what places
+        // the seed for the first BossFinal_Eggman_Crush RandomNumber draw
+        // (selectCylinderPair). _incObj/85,84,86 Boss - FZ Main, Cylinders, and
+        // Plasma Balls.asm:131-133. With the previous-frame camera read above, the
+        // wait spans the ROM-correct number of frames, so no separate seed
+        // compensation is needed.
+        GameRng rng = services().rng();
+        rng.setSeed(rng.getSeed() + 1);
     }
 
     // === State 2: CYLINDER_ATTACK (loc_19EA8) ===
     // Select and activate cylinder pairs, handle solid collision and damage
     private void updateCylinderAttack(AbstractPlayableSprite player) {
+        if (player != null
+                && !suppressCurrentRollAttack
+                && player.getPushingAtFrameStart()
+                && player.getMappingFrame() == 0x2E
+                && player.getGSpeed() != 0
+                && (player.getCentreX() & 0xFFFF) < (state.x & 0xFFFF)
+                && Math.abs(player.getCentreX() - state.x) <= COMBAT_SOLID_PARAMS.halfWidth() + 0x10) {
+            suppressCurrentRollAttack = true;
+            suppressedRollLeftInitialMapping = false;
+        }
+        if (player == null || !player.getAir() || !player.getRolling()) {
+            suppressCurrentRollAttack = false;
+            suppressedRollLeftInitialMapping = false;
+        } else if (suppressCurrentRollAttack) {
+            if (player.getMappingFrame() != 0x2E) {
+                suppressedRollLeftInitialMapping = true;
+            } else if (suppressedRollLeftInitialMapping && player.getGSpeed() == 0) {
+                suppressCurrentRollAttack = false;
+                suppressedRollLeftInitialMapping = false;
+            }
+        }
         if (cylinderState < 0) {
             // ROM: clr.w objoff_30 then select new pair
             cylinderState = 0;
@@ -284,15 +411,18 @@ public class Sonic1FZBossInstance extends AbstractBossInstance
                 // ROM: v_bossstatus = 0 cleared on defeat (matches other S1 bosses)
                 services().gameState().setCurrentBossId(0);
                 state.routineSecondary = STATE_DEFEAT_FALL;
-                state.x = BOSS_FZ_X + 0x170;
-                state.y = BOSS_FZ_Y + 0x2C;
-                state.xFixed = state.x << 16;
-                state.yFixed = state.y << 16;
+                // ROM loc_19FBC: move.w #boss_fz_x+$170,obX / move.w #boss_fz_y+$2C,obY
+                // are WORD stores to the high word of the 16.16 long, preserving the
+                // accumulated subpixel low word.
+                clampXPreservingSubpixel(BOSS_FZ_X + 0x170);
+                clampYPreservingSubpixel(BOSS_FZ_Y + 0x2C);
                 state.defeated = true;
                 return;
             }
             // ROM: addq.b #2,objoff_34 — advance to plasma phase
             state.routineSecondary = STATE_PLASMA_PHASE;
+            suppressCurrentRollAttack = false;
+            suppressedRollLeftInitialMapping = false;
             cylinderState = -1;
             activeCylinderCount = 0;
             return;
@@ -372,7 +502,7 @@ public class Sonic1FZBossInstance extends AbstractBossInstance
     }
 
     // === State 4: PLASMA_PHASE (loc_19FE6) ===
-    private void updatePlasmaPhase(int frameCounter) {
+    private void updatePlasmaPhase(int vIntRunCount) {
         if (cylinderState < 0) {
             // ROM: Activate plasma launcher
             cylinderState = 0;
@@ -382,7 +512,7 @@ public class Sonic1FZBossInstance extends AbstractBossInstance
         }
 
         // ROM: play electricity sound every 16 frames
-        if ((frameCounter & 0xF) == 0) {
+        if ((vIntRunCount & 0xF) == 0) {
             services().playSfx(Sonic1Sfx.ELECTRIC.id);
         }
 
@@ -416,8 +546,8 @@ public class Sonic1FZBossInstance extends AbstractBossInstance
 
         // ROM: cmpi.w #boss_fz_y+$8C,obY — check landing
         if (state.y >= BOSS_FZ_Y + 0x8C) {
-            state.y = BOSS_FZ_Y + 0x8C;
-            state.yFixed = state.y << 16;
+            // ROM loc_1A05A: move.w #boss_fz_y+$8C,obY — WORD store preserves subpixel.
+            clampYPreservingSubpixel(BOSS_FZ_Y + 0x8C);
             state.routineSecondary = STATE_RUNNING_ESCAPE;
             // ROM: move.w #$100,obVelX / move.w #-$100,obVelY
             state.xVel = 0x100;
@@ -493,8 +623,8 @@ public class Sonic1FZBossInstance extends AbstractBossInstance
 
         // ROM: cmpi.w #boss_fz_x+$250,obX — transition to final ascent
         if (state.x >= BOSS_FZ_X + 0x250) {
-            state.x = BOSS_FZ_X + 0x250;
-            state.xFixed = state.x << 16;
+            // ROM loc_1A0F2: move.w #boss_fz_x+$250,obX — WORD store preserves subpixel.
+            clampXPreservingSubpixel(BOSS_FZ_X + 0x250);
             state.xVel = 0x240;
             state.yVel = -0x4C0;
             state.routineSecondary = STATE_FINAL_ASCENT;
@@ -524,8 +654,8 @@ public class Sonic1FZBossInstance extends AbstractBossInstance
 
         // ROM: cmpi.w #boss_fz_y+$82,obY — landing check (only if yVel >= 0)
         if (state.yVel >= 0 && state.y >= BOSS_FZ_Y + 0x82) {
-            state.y = BOSS_FZ_Y + 0x82;
-            state.yFixed = state.y << 16;
+            // ROM: move.w #boss_fz_y+$82,obY — WORD store preserves subpixel.
+            clampYPreservingSubpixel(BOSS_FZ_Y + 0x82);
             state.yVel = 0;
         }
 
@@ -576,7 +706,7 @@ public class Sonic1FZBossInstance extends AbstractBossInstance
 
     // === State 14: FINAL_FLIGHT (loc_1A1D4) ===
     // Escape flight with player control lock and ending trigger
-    private void updateFinalFlight(AbstractPlayableSprite player, int frameCounter) {
+    private void updateFinalFlight(AbstractPlayableSprite player, int vIntRunCount) {
         state.renderFlags |= 1; // bset #0,obStatus
 
         // ROM: SpeedToPos
@@ -585,12 +715,19 @@ public class Sonic1FZBossInstance extends AbstractBossInstance
         state.x = state.xFixed >> 16;
         state.y = state.yFixed >> 16;
 
-        // ROM: Handle hittability during escape (objoff_30 timer)
+        // ROM loc_1A1FC: when the $1E post-hit timer expires, `tst.b obStatus / bpl
+        // loc_1A210` re-arms col_48x48|col_boss ONLY when obStatus bit 7 (the boss-
+        // defeated flag set by React_BossHit) is clear; otherwise it falls
+        // (move.w #$60,obVelY) and stays col_none. The escape carries obBossHits=1
+        // (BossFinal_Eggman_Jump loc_1A142), so the single escape roll-bounce takes
+        // obBossHits 1->0 and sets the defeated bit — the boss is never hittable
+        // again. The prior on-screen check wrongly re-armed the hitbox, producing a
+        // second roll-bounce ROM never makes (FZ trace f4182). showDamaged is set in
+        // onPlayerAttack on that escape hit and is the faithful defeated-bit proxy.
         if (escapeHitTimer > 0) {
             escapeHitTimer--;
             if (escapeHitTimer == 0) {
-                // ROM: Check render bit 7 — if off-screen, set yVel to $60
-                if (!isBossOnScreen()) {
+                if (showDamaged) {
                     state.yVel = 0x60;
                 } else {
                     escapeHittable = true;
@@ -607,13 +744,18 @@ public class Sonic1FZBossInstance extends AbstractBossInstance
 
             // ROM: loc_1A216 — lock player controls past threshold
             if (playerX >= BOSS_FZ_END + 0x90) {
+                // ROM: move.b #1,f_lockctrl / move.w #0,v_jpadhold2 / clr.w
+                // (v_player+obInertia). ROM clears ONLY the inertia (ground speed) —
+                // it never clears obVelX, so an airborne rolling Sonic keeps his
+                // x_speed (FZ trace f4200: ROM x_speed stays 0x0255). The prior
+                // setXSpeed(0) zeroed it and diverged.
                 player.setControlLocked(true);
                 player.setGSpeed((short) 0);
 
-                // ROM: If boss Y velocity is negative, hold up
-                if (state.yVel >= 0) {
-                    player.setXSpeed((short) 0);
-                }
+                // ROM: tst.w obVelY(a0) / bpl loc_1A248 — only when the boss is still
+                // rising (velY < 0, i.e. Eggman escaped un-hit) does ROM force btnUp to
+                // make Sonic look up. On a successful-hit run the boss is defeated and
+                // falls (velY=$60), so velY >= 0 here and ROM takes no extra action.
             }
 
             // ROM: Cap player X at boss_fz_end + $E0
@@ -634,7 +776,7 @@ public class Sonic1FZBossInstance extends AbstractBossInstance
 
         // ROM: sub-object routine 6 keeps calling BossDefeated while damaged escape sprite is active.
         if (showDamaged) {
-            triggerBossDefeatedExplosion(frameCounter);
+            triggerBossDefeatedExplosion(vIntRunCount);
         }
 
         updateSeggAnimation();
@@ -736,13 +878,48 @@ public class Sonic1FZBossInstance extends AbstractBossInstance
         // Only process during cylinder attack phase
         if (state.routineSecondary != STATE_CYLINDER_ATTACK) return;
 
-        // ROM: tst.w d4 / bgt.s loc_19F50 — side collision path (d4 > 0)
+        // ROM: tst.w d4 / bgt.s loc_19F50 — side collision path (d4 > 0, i.e.
+        // SolidObject returned d4 == 1 "side collision", sub SolidObject.asm:13).
         if (!contact.touchSide()) return;
+
+        // SolidObject biases the combined-height check by +4, yielding the native
+        // asymmetric window [-extent-4, extent-5]. The shared touchSide flag uses a
+        // symmetric box, so reproduce that gate before applying side-branch state.
+        int verticalExtent = COMBAT_SOLID_PARAMS.airHalfHeight() + player.getYRadius();
+        int relativeY = player.getCentreY() - state.y;
+        if (relativeY < -verticalExtent - 4 || relativeY >= verticalExtent - 4) return;
+
+        // ROM: loc_19F50 — addq.w #7,(v_random).w runs on EVERY side-contact frame,
+        // BEFORE the rolling/bounce check, whether or not the player is rolling
+        // (_incObj/85,84,86 Boss - FZ Main, Cylinders, and Plasma Balls.asm:192-195).
+        // This advances v_random while Sonic pushes against the boss body during the
+        // cylinder-attack phase, so the later BossPlasma_MakeBalls RandomNumber draws
+        // (ball target spread) consume the ROM seed. addq.w targets (v_random).w —
+        // the high word of the 32-bit seed (big-endian) — so it is a 16-bit add to
+        // the high word with no carry into the low word.
+        GameRng rng = services().rng();
+        long seed = rng.getSeed();
+        long highWord = ((seed >>> 16) + 7) & 0xFFFFL;
+        rng.setSeed((seed & 0xFFFFL) | (highWord << 16));
 
         // ROM: cmpi.b #id_Roll,(v_player+obAnim).w
         int animId = player.getAnimationId();
         boolean rollAnimating = animId == Sonic1AnimationIds.ROLL.id() || animId == Sonic1AnimationIds.ROLL2.id();
-        if (!rollAnimating && !player.getRolling()) return;
+        if (!rollAnimating) return;
+        // The ROM can replace obAnim again before BossFinal_Eggman_Crush polls it
+        // when a jump begins from Status_Push beside the boss while the first roll
+        // mapping frame is displayed. Suppress through its first neutral-speed wrap;
+        // an already-established roll merely wrapping to frame 0x2E must remain
+        // able to hit and must not start a new suppression cycle.
+        if (!suppressCurrentRollAttack
+                && player.getPushingAtFrameStart()
+                && player.getMappingFrame() == 0x2E
+                && player.getGSpeed() != 0
+                && (player.getCentreX() & 0xFFFF) < (state.x & 0xFFFF)) {
+            suppressCurrentRollAttack = true;
+            suppressedRollLeftInitialMapping = false;
+        }
+        if (suppressCurrentRollAttack) return;
 
         // ROM: Bounce player back — move.w #$300,d0
         int bounceVel = 0x300;
@@ -790,6 +967,28 @@ public class Sonic1FZBossInstance extends AbstractBossInstance
     }
 
     /**
+     * Clamp the integer Y position while preserving the accumulated 16.16 subpixel
+     * fraction, matching the ROM's {@code move.w #imm,obY(a0)} WORD store (which writes
+     * only the high word of the 16.16 long; the low-word subpixel is untouched).
+     * Zeroing the fraction with {@code y << 16} loses up to ~1px across the slow
+     * (velY=-$18) escape ascent, which shifted the boss 1px high and made the
+     * escape-sprite roll-bounce fire one frame late (FZ trace f4128).
+     */
+    private void clampYPreservingSubpixel(int newY) {
+        state.yFixed = (newY << 16) | (state.yFixed & 0xFFFF);
+        state.y = newY;
+    }
+
+    /**
+     * Clamp the integer X position while preserving the accumulated 16.16 subpixel
+     * fraction, matching the ROM's {@code move.w #imm,obX(a0)} WORD store.
+     */
+    private void clampXPreservingSubpixel(int newX) {
+        state.xFixed = (newX << 16) | (state.xFixed & 0xFFFF);
+        state.x = newX;
+    }
+
+    /**
      * Check if boss is defeated (for cylinder BossDefeated checks).
      */
     public boolean isBossDefeated() {
@@ -824,12 +1023,13 @@ public class Sonic1FZBossInstance extends AbstractBossInstance
         int random = services().rng().nextWord();
         int xOffset = ((random & 0xFF) >> 2) - 0x20;
         int yOffset = (((random >> 8) & 0xFF) >> 2) - 0x20;
-        BossExplosionObjectInstance explosion = new BossExplosionObjectInstance(
-                sourceX + xOffset,
-                sourceY + yOffset,
-                renderManager,
-                Sonic1Sfx.BOSS_EXPLOSION.id);
-        services().objectManager().addDynamicObject(explosion);
+        final int finalSourceX = sourceX + xOffset;
+        final int finalSourceY = sourceY + yOffset;
+        spawnFreeChild(() -> new BossExplosionObjectInstance(
+                finalSourceX,
+                finalSourceY,
+                Sonic1ObjectIds.EXPLOSION,
+                Sonic1Sfx.BOSS_EXPLOSION.id));
     }
 
     private void requestEndingTransition() {
@@ -847,6 +1047,48 @@ public class Sonic1FZBossInstance extends AbstractBossInstance
     }
 
     // === SolidObjectProvider interface ===
+
+    @Override
+    public boolean usesPreUpdatePositionForSolidContact(PlayableEntity player) {
+        // BossFinal_Eggman_Crush calls SolidObject from the boss slot before the
+        // later cylinder slots update the parent's y_pos. During the cylinder
+        // attack, contact therefore observes the boss's frame-start position.
+        return state.routineSecondary == STATE_CYLINDER_ATTACK;
+    }
+
+    /**
+     * Eggman's ROM {@code obActWid}, which the defeat fall re-writes.
+     *
+     * <p>Combat is {@code BossFinal_ObjData2} row 0's {@code #64/2} = 32,
+     * stored by {@code BossFinal_Main} into the parent's own slot via
+     * {@code movea.l a0,a1} (:76-101). {@code BossFinal_Eggman_Fall} then writes
+     * {@code #96/2} = 48 for the fall and {@code #64/2} = 32 again at the
+     * landing snap (:355-371). Both sites sit on a {@code Revision} conditional
+     * rather than a {@code FixBugs} one: {@code Revision = 0} writes
+     * {@code obWidth} instead, which the listing at {@code :776-778} calls the
+     * developers "fumbling obWidth and obActWidth, which wasn't completely fixed
+     * until REV01". The engine targets REV01, so {@code obActWid} is the byte
+     * that is written.
+     *
+     * <p>Only the combat 32 is observable through {@code Sonic_Balance}.
+     * Reaching {@code BossFinal_Eggman_Fall} requires the boss to be defeated,
+     * and {@code Sonic ReactToItem.asm:268} sets {@code obStatus} bit 7 on the
+     * defeated boss — which {@code Sonic_Balance} tests before it ever reads the
+     * width, branching to {@code Sonic_LookUp}
+     * (docs/s1disasm/_incObj/01 Sonic.asm:418-420). The fall value is supplied
+     * anyway because this accessor is also {@code BuildSprites}' horizontal cull
+     * bound (docs/s1disasm/_inc/BuildSprites.asm:49-58), and the cull stays live
+     * after the defeat.
+     *
+     * <p>The phase split reuses {@code routineSecondary}, which the class
+     * already keeps; the solid boxes are authored separately and unchanged.
+     */
+    @Override
+    public int getOnScreenHalfWidth() {
+        return state.routineSecondary == STATE_DEFEAT_FALL
+                ? DEFEAT_FALL_ACT_WIDTH
+                : COMBAT_ACT_WIDTH;
+    }
 
     @Override
     public SolidObjectParams getSolidParams() {
@@ -873,12 +1115,29 @@ public class Sonic1FZBossInstance extends AbstractBossInstance
     }
 
     @Override
+    public boolean usesInclusiveRightEdge() {
+        // The FZ boss combat body uses plain SolidObject (BossFinal_Eggman_Crush ->
+        // loc_19F2E jsr (SolidObject), docs/s1disasm/_incObj/85,84,86 Boss - FZ Main,
+        // Cylinders, and Plasma Balls.asm:177-182). SolidObject's right-edge X gate is
+        // `cmp.w d3,d0 / bhi.w Solid_NoCollision` (docs/s1disasm/_incObj/sub
+        // SolidObject.asm:167-168), where bhi is exclusive-greater — so the exact-edge
+        // case relX == width*2 (d0 == d3) IS a valid contact. The engine's default
+        // exclusive gate (relX >= width*2 -> no contact) rejected the frame Sonic's
+        // rolling jump grazes the boss's right edge (player center == bossX + $2B), so
+        // the +$300 rolling-into-boss bounce fired one frame late (FZ trace f837 -> f838).
+        // Opting into the ROM-faithful inclusive right edge restores the f837 bounce.
+        return true;
+    }
+
+    @Override
     public int getTopLandingHalfWidth(PlayableEntity playerEntity, int collisionHalfWidth) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (state.routineSecondary == STATE_CYLINDER_ATTACK) {
             return COMBAT_TOP_LANDING_HALF_WIDTH;
         }
-        return collisionHalfWidth;
+        // Escape phases follow the full-solid family default: Solid_Landed
+        // re-reads obActWid = d1 - $B (_incObj/sub SolidObject.asm:318-336).
+        return Math.max(0, collisionHalfWidth - 0x0B);
     }
 
     // === Rendering ===
@@ -938,7 +1197,7 @@ public class Sonic1FZBossInstance extends AbstractBossInstance
                 PatternSpriteRenderer damagedRenderer = renderManager.getRenderer(ObjectArtKeys.FZ_DAMAGED);
                 if (damagedRenderer != null && damagedRenderer.isReady()) {
                     boolean flipped = (state.renderFlags & 1) != 0;
-                    damagedRenderer.drawFrameIndex((state.lastUpdatedFrame >> 2) & 1, state.x, state.y, flipped, false);
+                    damagedRenderer.drawFrameIndex((state.lastUpdatedVIntRunCount >> 2) & 1, state.x, state.y, flipped, false);
                 }
             }
         }
@@ -952,6 +1211,11 @@ public class Sonic1FZBossInstance extends AbstractBossInstance
     @Override
     protected int getBossExplosionSfxId() {
         return Sonic1Sfx.BOSS_EXPLOSION.id;
+    }
+
+    @Override
+    protected int getBossExplosionObjectId() {
+        return Sonic1ObjectIds.EXPLOSION;
     }
 
 }

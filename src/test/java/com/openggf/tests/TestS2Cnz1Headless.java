@@ -1,10 +1,9 @@
 package com.openggf.tests;
 
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import com.openggf.camera.Camera;
 import com.openggf.game.GameServices;
 import com.openggf.level.LevelManager;
@@ -12,15 +11,14 @@ import com.openggf.level.objects.ObjectInstance;
 import com.openggf.game.GroundMode;
 import com.openggf.sprites.playable.Sonic;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Grouped headless tests for Sonic 2 CNZ Act 1.
  *
- * Level data is loaded once via {@link SharedLevel#load} in {@code @BeforeClass};
+ * Level data is loaded once via {@link SharedLevel#load} in {@code @BeforeAll};
  * sprite, camera, and game state are reset per test via {@link HeadlessTestFixture}.
  *
  * Merged from:
@@ -32,20 +30,17 @@ import static org.junit.Assert.*;
  */
 @RequiresRom(SonicGame.SONIC_2)
 public class TestS2Cnz1Headless {
-
-    @ClassRule public static RequiresRomRule romRule = new RequiresRomRule();
-
     private static final int ZONE_CNZ = 3;
     private static final int ACT_1 = 0;
 
     private static SharedLevel sharedLevel;
 
-    @BeforeClass
+    @BeforeAll
     public static void loadLevel() throws Exception {
         sharedLevel = SharedLevel.load(SonicGame.SONIC_2, ZONE_CNZ, ACT_1);
     }
 
-    @AfterClass
+    @AfterAll
     public static void cleanup() {
         if (sharedLevel != null) sharedLevel.dispose();
     }
@@ -53,7 +48,7 @@ public class TestS2Cnz1Headless {
     private HeadlessTestFixture fixture;
     private Sonic sprite;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         fixture = HeadlessTestFixture.builder()
                 .withSharedLevel(sharedLevel)
@@ -312,25 +307,16 @@ public class TestS2Cnz1Headless {
         System.out.println();
 
         // Assertions
-        assertTrue(
-                "Should enter ceiling state during test sequence. " +
+        assertTrue(enteredCeilingState, "Should enter ceiling state during test sequence. " +
                         "Spring launches: " + springLaunchCount + ", min Y reached: " + minYReached + ". " +
-                        "If this fails, the two-spring chain may not be working correctly.",
-                enteredCeilingState
-        );
+                        "If this fails, the two-spring chain may not be working correctly.");
 
-        assertFalse(
-                "Should NOT be in ceiling state at Y < " + CEILING_Y_THRESHOLD + ". " +
-                        "This indicates Sonic is stuck in ceiling state and moving to impossible positions.",
-                ceilingAtImpossibleY
-        );
+        assertFalse(ceilingAtImpossibleY, "Should NOT be in ceiling state at Y < " + CEILING_Y_THRESHOLD + ". " +
+                        "This indicates Sonic is stuck in ceiling state and moving to impossible positions.");
 
-        assertTrue(
-                "Ceiling state should not exceed " + MAX_CEILING_FRAMES + " frames (3 seconds). " +
+        assertTrue(ceilingFrameCount <= MAX_CEILING_FRAMES, "Ceiling state should not exceed " + MAX_CEILING_FRAMES + " frames (3 seconds). " +
                         "Sonic should either slow down and drop off, or roll off the end of the ceiling. " +
-                        "This is the ceiling state exit bug.",
-                ceilingFrameCount <= MAX_CEILING_FRAMES
-        );
+                        "This is the ceiling state exit bug.");
     }
 
     // ========== From TestCNZFlipperLaunch ==========
@@ -397,12 +383,9 @@ public class TestS2Cnz1Headless {
         System.out.println("Final minimum Y: " + minY);
         System.out.println("Target was: < " + FLIPPER_TARGET_Y);
 
-        assertTrue(
-                "Flipper should launch Sonic to Y < " + FLIPPER_TARGET_Y +
+        assertTrue(minY < FLIPPER_TARGET_Y, "Flipper should launch Sonic to Y < " + FLIPPER_TARGET_Y +
                 ", but minimum Y reached was " + minY +
-                ". This indicates the flipper launch is not working correctly.",
-                minY < FLIPPER_TARGET_Y
-        );
+                ". This indicates the flipper launch is not working correctly.");
     }
 
     // ========== From TestCNZForcedSpinTunnel ==========
@@ -472,11 +455,10 @@ public class TestS2Cnz1Headless {
         System.out.println("Final maximum X: " + maxX);
         System.out.println("Target was: > " + TUNNEL_TARGET_X);
 
-        assertTrue(
-                "Sonic should pass through the forced spin tunnel to X > " + TUNNEL_TARGET_X +
+        assertTrue(maxX > TUNNEL_TARGET_X, "Sonic should pass through the forced spin tunnel to X > " + TUNNEL_TARGET_X +
                 ", but maximum X reached was " + maxX +
-                ". This indicates Sonic bounced off the tunnel entrance instead of entering.",
-                maxX > TUNNEL_TARGET_X
-        );
+                ". This indicates Sonic bounced off the tunnel entrance instead of entering.");
     }
 }
+
+

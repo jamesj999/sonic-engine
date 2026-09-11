@@ -1,10 +1,11 @@
 package com.openggf.game.sonic2;
 
+import com.openggf.game.OscillationManager;
 import com.openggf.game.PlayerCharacter;
 import com.openggf.game.sonic2.scroll.Sonic2ZoneConstants;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Tests for {@link Sonic2WaterDataProvider}.
@@ -129,4 +130,72 @@ public class TestSonic2WaterDataProvider {
         assertEquals(1, provider.getWaterSpeed(ZONE_ARZ, 0));
         assertEquals(1, provider.getWaterSpeed(ZONE_CPZ, 1));
     }
+
+    // =========================================================================
+    // getGameplayWaterLevelOffset() tests
+    // =========================================================================
+
+    @Test
+    public void testCpz2GameplayOffsetTracksRawRomOscillationAfterStepping() {
+        // ROM MoveWater writes Water_Level_1 = Water_Level_2 +
+        // ((Oscillating_Data).w >> 1), then Sonic_Water compares against
+        // Water_Level_1. Refs: docs/s2disasm/s2.asm:5273-5282 and
+        // docs/s2disasm/s2.asm:36375-36380.
+        OscillationManager.reset();
+        for (int frame = 1; frame <= 50; frame++) {
+            OscillationManager.update(frame);
+        }
+        int byte0 = OscillationManager.getByte(0);
+        assertNotEquals(0, byte0, "Oscillator 0 should have advanced after 50 update() calls");
+        assertEquals(byte0 >> 1, provider.getGameplayWaterLevelOffset(ZONE_CPZ, 1));
+    }
+
+    @Test
+    public void testArzGameplayOffsetIsZero() {
+        // ROM MoveWater skips the oscillator for ARZ before writing Water_Level_1.
+        // Refs: docs/s2disasm/s2.asm:5275-5282.
+        OscillationManager.reset();
+        assertEquals(0, provider.getGameplayWaterLevelOffset(ZONE_ARZ, 0));
+    }
+
+    // =========================================================================
+    // getVisualWaterLevelOffset() tests
+    // =========================================================================
+
+    @Test
+    public void testCpz2VisualOffsetAtResetIsMinusEight() {
+        // CPZ centres the bob around 0 by subtracting half the limit (8) from
+        // oscillator 0's high byte. After reset, oscillator 0's value word is
+        // 0x0080 -> high byte 0x00 -> expected offset = 0 - 8 = -8.
+        OscillationManager.reset();
+        assertEquals(-8, provider.getVisualWaterLevelOffset(ZONE_CPZ, 1));
+    }
+
+    @Test
+    public void testCpz2VisualOffsetTracksOscillatorAfterStepping() {
+        // After stepping the oscillator several frames, getByte(0) must move
+        // off zero and the provider must return getByte(0) - 8.
+        OscillationManager.reset();
+        for (int frame = 1; frame <= 50; frame++) {
+            OscillationManager.update(frame);
+        }
+        int byte0 = OscillationManager.getByte(0);
+        assertNotEquals(0, byte0, "Oscillator 0 should have advanced after 50 update() calls");
+        assertEquals(byte0 - 8, provider.getVisualWaterLevelOffset(ZONE_CPZ, 1));
+    }
+
+    @Test
+    public void testArzVisualOffsetIsZero() {
+        // S2 ARZ has a static water surface (no oscillation offset applied).
+        OscillationManager.reset();
+        assertEquals(0, provider.getVisualWaterLevelOffset(ZONE_ARZ, 0));
+    }
+
+    @Test
+    public void testEhzVisualOffsetIsZero() {
+        // Non-water zones report no oscillation offset.
+        OscillationManager.reset();
+        assertEquals(0, provider.getVisualWaterLevelOffset(ZONE_EHZ, 0));
+    }
 }
+

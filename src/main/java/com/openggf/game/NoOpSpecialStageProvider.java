@@ -12,6 +12,11 @@ public final class NoOpSpecialStageProvider implements SpecialStageProvider {
     private NoOpSpecialStageProvider() {}
 
     @Override
+    public SpecialStageDebugCapabilities debugCapabilities() {
+        return SpecialStageDebugCapabilities.NONE;
+    }
+
+    @Override
     public boolean hasSpecialStages() {
         return false;
     }
@@ -104,11 +109,6 @@ public final class NoOpSpecialStageProvider implements SpecialStageProvider {
     @Override
     public void renderLagCompensationOverlay(int viewportWidth, int viewportHeight) {
         // No-op
-    }
-
-    @Override
-    public double getLagCompensation() {
-        return 0.0;
     }
 
     @Override

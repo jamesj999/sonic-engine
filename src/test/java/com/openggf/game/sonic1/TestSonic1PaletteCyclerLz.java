@@ -1,5 +1,7 @@
 package com.openggf.game.sonic1;
 
+import com.openggf.data.RomByteReader;
+import com.openggf.game.sonic1.constants.Sonic1Constants;
 import com.openggf.level.Block;
 import com.openggf.level.Chunk;
 import com.openggf.level.Level;
@@ -9,18 +11,18 @@ import com.openggf.level.Pattern;
 import com.openggf.level.SolidTile;
 import com.openggf.level.rings.RingSpawn;
 import com.openggf.level.rings.RingSpriteSheet;
+import com.openggf.game.session.SessionManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.tests.TestEnvironment;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
 import java.util.List;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 @RequiresRom(SonicGame.SONIC_1)
 public class TestSonic1PaletteCyclerLz {
@@ -42,62 +44,76 @@ public class TestSonic1PaletteCyclerLz {
             0x04, 0x64, 0x00, 0x20, 0x08, (byte) 0xa8,
             0x00, 0x20, 0x08, (byte) 0xa8, 0x04, 0x64
     };
+    private Sonic1ConveyorState conveyorState;
 
-    @Rule
-    public final RequiresRomRule romRule = new RequiresRomRule();
-
-    @Before
+    @BeforeEach
     public void resetConveyorState() {
-        Sonic1ConveyorState.getInstance().resetState();
+        conveyorState = new Sonic1ConveyorState();
+        conveyorState.resetState();
     }
 
     @Test
     public void firstUpdateAppliesLzWaterfallAndConveyorToNormalPalettes() {
-        TestLevel level = new TestLevel();
-        Sonic1PaletteCycler cycler = new Sonic1PaletteCycler(level, 0x01);
+        TestEnvironment.activeGameplayMode();
+        try {
+            TestLevel level = new TestLevel();
+            Sonic1PaletteCycler cycler = new Sonic1PaletteCycler(level, 0x01, conveyorState, testCycleData());
 
-        cycler.update();
+            cycler.update();
 
-        assertColorMatches(PAL_LZ_CYC1, 0, level.getPalette(2), 11);
-        assertColorMatches(PAL_LZ_CYC1, 2, level.getPalette(2), 12);
-        assertColorMatches(PAL_LZ_CYC1, 4, level.getPalette(2), 13);
-        assertColorMatches(PAL_LZ_CYC1, 6, level.getPalette(2), 14);
+            assertColorMatches(PAL_LZ_CYC1, 0, level.getPalette(2), 11);
+            assertColorMatches(PAL_LZ_CYC1, 2, level.getPalette(2), 12);
+            assertColorMatches(PAL_LZ_CYC1, 4, level.getPalette(2), 13);
+            assertColorMatches(PAL_LZ_CYC1, 6, level.getPalette(2), 14);
 
-        assertColorMatches(PAL_LZ_CYC2, 6, level.getPalette(3), 11);
-        assertColorMatches(PAL_LZ_CYC2, 8, level.getPalette(3), 12);
-        assertColorMatches(PAL_LZ_CYC2, 10, level.getPalette(3), 13);
+            assertColorMatches(PAL_LZ_CYC2, 6, level.getPalette(3), 11);
+            assertColorMatches(PAL_LZ_CYC2, 8, level.getPalette(3), 12);
+            assertColorMatches(PAL_LZ_CYC2, 10, level.getPalette(3), 13);
+        } finally {
+            SessionManager.clear();
+        }
     }
 
     @Test
     public void firstUpdateAppliesUnderwaterWaterfallAndConveyorPalettes() throws Exception {
-        TestLevel level = new TestLevel();
-        Sonic1PaletteCycler cycler = new Sonic1PaletteCycler(level, 0x01);
+        TestEnvironment.activeGameplayMode();
+        try {
+            TestLevel level = new TestLevel();
+            Sonic1PaletteCycler cycler = new Sonic1PaletteCycler(level, 0x01, conveyorState, testCycleData());
 
-        cycler.update();
+            cycler.update();
 
-        Palette[] underwater = extractUnderwaterPalettes(cycler, 0);
+            Palette[] underwater = extractUnderwaterPalettes(cycler, 0);
 
-        assertColorMatches(PAL_LZ_CYC1, 0, underwater[2], 11);
-        assertColorMatches(PAL_LZ_CYC1, 2, underwater[2], 12);
-        assertColorMatches(PAL_LZ_CYC1, 4, underwater[2], 13);
-        assertColorMatches(PAL_LZ_CYC1, 6, underwater[2], 14);
+            assertColorMatches(PAL_LZ_CYC1, 0, underwater[2], 11);
+            assertColorMatches(PAL_LZ_CYC1, 2, underwater[2], 12);
+            assertColorMatches(PAL_LZ_CYC1, 4, underwater[2], 13);
+            assertColorMatches(PAL_LZ_CYC1, 6, underwater[2], 14);
 
-        assertColorMatches(PAL_LZ_CYC3, 6, underwater[3], 11);
-        assertColorMatches(PAL_LZ_CYC3, 8, underwater[3], 12);
-        assertColorMatches(PAL_LZ_CYC3, 10, underwater[3], 13);
+            assertColorMatches(PAL_LZ_CYC3, 6, underwater[3], 11);
+            assertColorMatches(PAL_LZ_CYC3, 8, underwater[3], 12);
+            assertColorMatches(PAL_LZ_CYC3, 10, underwater[3], 13);
+        } finally {
+            SessionManager.clear();
+        }
     }
 
     @Test
     public void reversedConveyorUsesOppositeFrameOrder() {
-        TestLevel level = new TestLevel();
-        Sonic1ConveyorState.getInstance().setReversed(true);
-        Sonic1PaletteCycler cycler = new Sonic1PaletteCycler(level, 0x01);
+        TestEnvironment.activeGameplayMode();
+        try {
+            TestLevel level = new TestLevel();
+            conveyorState.setReversed(true);
+            Sonic1PaletteCycler cycler = new Sonic1PaletteCycler(level, 0x01, conveyorState, testCycleData());
 
-        cycler.update();
+            cycler.update();
 
-        assertColorMatches(PAL_LZ_CYC2, 12, level.getPalette(3), 11);
-        assertColorMatches(PAL_LZ_CYC2, 14, level.getPalette(3), 12);
-        assertColorMatches(PAL_LZ_CYC2, 16, level.getPalette(3), 13);
+            assertColorMatches(PAL_LZ_CYC2, 12, level.getPalette(3), 11);
+            assertColorMatches(PAL_LZ_CYC2, 14, level.getPalette(3), 12);
+            assertColorMatches(PAL_LZ_CYC2, 16, level.getPalette(3), 13);
+        } finally {
+            SessionManager.clear();
+        }
     }
 
     private static void assertColorMatches(byte[] data, int offset, Palette palette, int colorIndex) {
@@ -108,6 +124,18 @@ public class TestSonic1PaletteCyclerLz {
         assertEquals(expected.r, actual.r);
         assertEquals(expected.g, actual.g);
         assertEquals(expected.b, actual.b);
+    }
+
+    private static Sonic1PaletteCycler.CycleData testCycleData() {
+        byte[] rom = new byte[Sonic1Constants.PAL_SBZ_CYCLE10_ADDR + 12];
+        copy(rom, Sonic1Constants.PAL_LZ_CYCLE1_ADDR, PAL_LZ_CYC1);
+        copy(rom, Sonic1Constants.PAL_LZ_CYCLE2_ADDR, PAL_LZ_CYC2);
+        copy(rom, Sonic1Constants.PAL_LZ_CYCLE3_ADDR, PAL_LZ_CYC3);
+        return Sonic1PaletteCycler.loadCycleData(new RomByteReader(rom));
+    }
+
+    private static void copy(byte[] target, int offset, byte[] source) {
+        System.arraycopy(source, 0, target, offset, source.length);
     }
 
     @SuppressWarnings("unchecked")
@@ -217,3 +245,5 @@ public class TestSonic1PaletteCyclerLz {
         }
     }
 }
+
+

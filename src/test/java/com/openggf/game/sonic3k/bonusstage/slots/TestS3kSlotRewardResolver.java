@@ -40,3 +40,5 @@ class TestS3kSlotRewardResolver {
         assertEquals(-1, S3kSlotRewardResolver.pickFixedRow(0x7F));
     }
 }
+
+

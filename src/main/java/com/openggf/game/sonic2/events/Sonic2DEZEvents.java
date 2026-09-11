@@ -1,6 +1,7 @@
 package com.openggf.game.sonic2.events;
 
 import com.openggf.game.sonic2.constants.Sonic2ObjectIds;
+import com.openggf.game.sonic2.constants.Sonic2Constants;
 import com.openggf.game.sonic2.objects.bosses.Sonic2MechaSonicInstance;
 import com.openggf.level.LevelManager;
 import com.openggf.level.objects.ObjectSpawn;
@@ -36,6 +37,7 @@ public class Sonic2DEZEvents extends Sonic2ZoneEvents {
 
     @Override
     public void update(int act, int frameCounter) {
+        retryPendingPlc();
         // DEZ has only one act in the ROM (act index 0)
         switch (eventRoutine) {
             case 0 -> {
@@ -47,7 +49,7 @@ public class Sonic2DEZEvents extends Sonic2ZoneEvents {
                     // Spawn Silver Sonic (ObjAF) at ($348, $A0) subtype $48
                     spawnSilverSonic();
                     // ROM: moveq #PLCID_FieryExplosion,d0 / jmpto JmpTo2_LoadPLC
-                    // PLC load handled by art provider system
+                    requestSonic2Plc(Sonic2Constants.PLC_FIERY_EXPLOSION);
                 }
             }
             case 2 -> {
@@ -62,7 +64,7 @@ public class Sonic2DEZEvents extends Sonic2ZoneEvents {
                 if (camera().getX() >= 0x300) {
                     eventRoutine += 2;
                     // ROM: moveq #PLCID_DezBoss,d0 / jmpto JmpTo2_LoadPLC
-                    // PLC load handled by art provider system
+                    requestSonic2Plc(Sonic2Constants.PLC_DEZ_BOSS);
                 }
             }
             case 6 -> {

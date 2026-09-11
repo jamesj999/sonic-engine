@@ -8,6 +8,8 @@ import com.openggf.game.PlayableEntity;
 import com.openggf.level.objects.DestructionEffects.DestructionConfig;
 import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
+import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -35,7 +37,7 @@ import java.util.List;
  *   <li>2 (still): frame 0 at speed 7 - used when below threshold and descending</li>
  * </ul>
  */
-public class Sonic1ChopperBadnikInstance extends AbstractBadnikInstance {
+public class Sonic1ChopperBadnikInstance extends AbstractBadnikInstance implements SpawnRewindRecreatable {
 
     // From disassembly: obColType = $9 (enemy, collision size index $9)
     private static final int COLLISION_SIZE_INDEX = 0x09;
@@ -59,9 +61,10 @@ public class Sonic1ChopperBadnikInstance extends AbstractBadnikInstance {
     private static final int ANIM_SPEED_FAST = 3 + 1;   // 4 ticks per frame
     private static final int ANIM_SPEED_STILL = 7 + 1;  // 8 ticks per frame
 
-    private final int origY;          // chop_origY (objoff_30): saved spawn Y position
+    private int origY;                // chop_origY (objoff_30): saved spawn Y position
     private int yVelocity;            // obVelY: current vertical velocity (subpixels)
-    private int ySubpixel;            // Fractional Y for SpeedToPos precision
+    /** Subpixel accumulators (xSub / ySub) for ROM-accurate 16:8 fixed-point integration. */
+    private final SubpixelMotion.State motion = new SubpixelMotion.State(0, 0, 0, 0, 0, 0);
     private int currentAnim;          // Current animation index (0=slow, 1=fast, 2=still)
     private int animTickCounter;      // Ticks within current animation frame
 
@@ -75,29 +78,30 @@ public class Sonic1ChopperBadnikInstance extends AbstractBadnikInstance {
 
         // Chop_Main: move.w #-$700,obVelY(a0)
         this.yVelocity = INITIAL_Y_VELOCITY;
-        this.ySubpixel = 0;
         this.currentAnim = ANIM_FAST;
         this.animTickCounter = 0;
     }
 
     @Override
-    protected void updateMovement(int frameCounter, PlayableEntity playerEntity) {
+    protected void updateMovement(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        // Chop_ChgSpeed: SpeedToPos - apply velocity to Y position
-        int yPos24 = (currentY << 8) | (ySubpixel & 0xFF);
-        yPos24 += yVelocity;
-        currentY = yPos24 >> 8;
-        ySubpixel = yPos24 & 0xFF;
-
-        // addi.w #$18,obVelY(a0) - apply gravity
+        // Chop_ChgSpeed: SpeedToPos - apply velocity to Y position, then add gravity
+        // (matches ROM order: move with current velocity, then add gravity for next frame).
+        motion.x = currentX;
+        motion.y = currentY;
+        motion.xVel = 0;
+        motion.yVel = yVelocity;
+        SubpixelMotion.speedToPosY(motion);
+        currentY = motion.y;
         yVelocity += GRAVITY;
 
         // cmp.w obY(a0),d0 / bhs.s .chganimation
         // Has Chopper fallen back to or below its original position?
         if (currentY >= origY) {
-            // move.w d0,obY(a0) - snap to origin
+            // move.w d0,obY(a0) - snap only the high position word to origin.
+            // SpeedToPos uses obY as a 32-bit value; the ROM write leaves the
+            // low word intact for the next leap.
             currentY = origY;
-            ySubpixel = 0;
             // move.w #-$700,obVelY(a0) - reset velocity for next jump
             yVelocity = INITIAL_Y_VELOCITY;
         }
@@ -141,7 +145,7 @@ public class Sonic1ChopperBadnikInstance extends AbstractBadnikInstance {
     }
 
     @Override
-    protected void updateAnimation(int frameCounter) {
+    protected void updateAnimation(int vIntRunCount) {
         animTickCounter++;
     }
 
@@ -183,8 +187,11 @@ public class Sonic1ChopperBadnikInstance extends AbstractBadnikInstance {
 
     @Override
     public boolean isPersistent() {
-        // RememberState: persists while on screen
-        return !isDestroyed() && isOnScreenX(160);
+        // Chop_Main ends at RememberState, whose out_of_range macro deletes the
+        // object once its chunk-aligned X leaves the [camera-128, camera-128+0x280]
+        // window (docs/s1disasm/_incObj/2B Badnik - Chopper.asm:11 ->
+        // _incObj/sub RememberState.asm:9 -> Macros.asm:278-295).
+        return !isDestroyed() && isInRange();
     }
 
     @Override

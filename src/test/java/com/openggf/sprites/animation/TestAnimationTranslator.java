@@ -54,7 +54,76 @@ class TestAnimationTranslator {
 
         assertFalse(translated.isAnglePreAdjust());
         assertFalse(translated.isCompactSuperRunSlope());
+        assertFalse(translated.isWalkRunPublishesFrameBeforeTimerAdvance());
         assertEquals(0x600, translated.getRunSpeedThreshold());
+    }
+
+    @Test
+    void translatedProfilePreservesWalkRunPublicationOrder() {
+        DonorCapabilities donor = buildS1Donor();
+        ScriptedVelocityAnimationProfile donorProfile = buildS1Profile()
+                .setWalkRunPublishesFrameBeforeTimerAdvance(true);
+        SpriteAnimationSet donorSet = buildAnimSet(0, 1, 2, 3, 4, 5, 6, 7, 8,
+                0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x17, 0x18, 0x1A);
+
+        ScriptedVelocityAnimationProfile translated =
+                AnimationTranslator.translate(donor, donorProfile, donorSet);
+
+        assertTrue(translated.isWalkRunPublishesFrameBeforeTimerAdvance());
+    }
+
+    @Test
+    void translatedProfilePreservesWalkRunTierData() {
+        DonorCapabilities donor = buildS1Donor();
+        ScriptedVelocityAnimationProfile donorProfile = buildS1Profile()
+                .setHighSpeedWalkRunAnimId(0x1F)
+                .setHighSpeedWalkRunThreshold(0x700)
+                .setWalkSlopeFrameStride(4)
+                .setRunSlopeFrameStride(3)
+                .setHighSpeedSlopeFrameStride(3)
+                .setDoubleWalkRunAnimationSpeedWhenSliding(true);
+        SpriteAnimationSet donorSet = buildAnimSet(0, 1, 2, 3, 4, 5, 6, 7, 8,
+                0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x17, 0x18, 0x1A, 0x1F);
+
+        ScriptedVelocityAnimationProfile translated =
+                AnimationTranslator.translate(donor, donorProfile, donorSet);
+
+        assertEquals(0x1F, translated.getHighSpeedWalkRunAnimId());
+        assertEquals(0x700, translated.getHighSpeedWalkRunThreshold());
+        assertEquals(4, translated.getWalkSlopeFrameStride());
+        assertEquals(3, translated.getRunSlopeFrameStride());
+        assertEquals(3, translated.getHighSpeedSlopeFrameStride());
+        assertTrue(translated.isDoubleWalkRunAnimationSpeedWhenSliding());
+    }
+
+    @Test
+    void translatedProfileDisablesMissingPrivateHighSpeedScript() {
+        DonorCapabilities donor = buildS1Donor();
+        ScriptedVelocityAnimationProfile donorProfile = buildS1Profile()
+                .setHighSpeedWalkRunAnimId(0x1F)
+                .setHighSpeedWalkRunThreshold(0x700);
+        SpriteAnimationSet donorSet = buildAnimSet(0, 1, 2, 3, 4, 5, 6, 7, 8,
+                0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x17, 0x18, 0x1A);
+
+        ScriptedVelocityAnimationProfile translated =
+                AnimationTranslator.translate(donor, donorProfile, donorSet);
+
+        assertEquals(-1, translated.getHighSpeedWalkRunAnimId());
+    }
+
+    @Test
+    void translatedProfilePreservesRawWalkIdForRunFrames() {
+        DonorCapabilities donor = buildS1Donor();
+        ScriptedVelocityAnimationProfile donorProfile = buildS1Profile()
+                .setRunFramesUseWalkAnimationId(true);
+        SpriteAnimationSet donorSet = buildAnimSet(0, 1, 2, 3, 4, 5, 6, 7, 8,
+                0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x17, 0x18, 0x1A);
+
+        ScriptedVelocityAnimationProfile translated =
+                AnimationTranslator.translate(donor, donorProfile, donorSet);
+
+        assertTrue(translated.isRunFramesUseWalkAnimationId(),
+                "donor translation must retain the ROM raw-Walk/rendered-Run split");
     }
 
     @Test

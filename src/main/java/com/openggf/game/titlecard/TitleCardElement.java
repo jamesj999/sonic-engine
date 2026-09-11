@@ -1,5 +1,7 @@
 package com.openggf.game.titlecard;
 
+import java.util.Objects;
+
 /**
  * Represents an individual animated element of the title card.
  * Each element slides from a start position to a target position, then back out.
@@ -14,6 +16,17 @@ package com.openggf.game.titlecard;
  * </ul>
  */
 public class TitleCardElement {
+
+    /** Immutable animation state used by title-card rewind owners. */
+    public record Snapshot(
+            int currentX,
+            int currentY,
+            int delayCounter,
+            boolean active,
+            boolean atTarget,
+            boolean exited,
+            int edgeMargin) {
+    }
 
     /** Slide speed during entry: 16 pixels per frame */
     public static final int SLIDE_SPEED_IN = 16;
@@ -45,6 +58,19 @@ public class TitleCardElement {
     private boolean active;           // Has started animating
     private boolean atTarget;         // Has reached target position
     private boolean exited;           // Has exited screen
+
+    /**
+     * Extra off-screen travel applied to the entry/exit endpoint so the element
+     * clears the real viewport on wider-than-320 displays.
+     *
+     * <p>The authored {@link #startX} positions only clear the native 320-wide
+     * frame.  When the composition is centred (rendered at {@code currentX +
+     * xOffset}), an element parked just past the 320 edge is shifted back inside
+     * a wider viewport.  Extending the start/exit endpoint outward by
+     * {@code viewportWidth - 320} pushes it past the actual viewport edge again.
+     * Zero at native 320 — byte-identical.
+     */
+    private int edgeMargin = 0;
 
     /**
      * Creates a new title card element with horizontal animation only.
@@ -112,7 +138,7 @@ public class TitleCardElement {
      * Resets the element to its initial state.
      */
     public void reset() {
-        this.currentX = startX;
+        this.currentX = effectiveStartX();
         this.currentY = startY;
         this.delayCounter = delayFrames;
         this.active = false;
@@ -176,15 +202,48 @@ public class TitleCardElement {
                 exited = true;
             }
         } else {
-            // Horizontal animation - use configured exit speed
-            int direction = Integer.compare(startX, currentX);
+            // Horizontal animation - use configured exit speed.
+            // Exit toward the (viewport-extended) start position so the element
+            // clears the real viewport edge on wider-than-320 displays.
+            int exitTarget = effectiveStartX();
+            int direction = Integer.compare(exitTarget, currentX);
             currentX += direction * exitSpeed;
             // Check if reached or passed exit position
-            if ((direction > 0 && currentX >= startX) ||
-                (direction < 0 && currentX <= startX)) {
-                currentX = startX;
+            if (direction == 0 ||
+                (direction > 0 && currentX >= exitTarget) ||
+                (direction < 0 && currentX <= exitTarget)) {
+                currentX = exitTarget;
                 exited = true;
             }
+        }
+    }
+
+    /**
+     * The off-screen entry/exit X position, extended outward by {@link #edgeMargin}
+     * so the element clears a wider-than-320 viewport.  Returns the authored
+     * {@link #startX} unchanged at native width (edgeMargin == 0) and for
+     * vertically-animating elements.
+     */
+    private int effectiveStartX() {
+        if (animatesVertically || edgeMargin == 0) {
+            return startX;
+        }
+        // Direction pointing from the on-screen target toward the off-screen start.
+        int outward = Integer.signum(startX - targetX);
+        return startX + outward * edgeMargin;
+    }
+
+    /**
+     * Sets the extra off-screen travel applied to this element's entry/exit
+     * endpoint, used to clear a wider-than-320 viewport.  Pass
+     * {@code viewportWidth - 320} (0 at native).  When the element has not yet
+     * started animating, its resting position is updated immediately so it
+     * begins its slide-in from the extended off-screen position.
+     */
+    public void setEdgeMargin(int margin) {
+        this.edgeMargin = Math.max(0, margin);
+        if (!active && !animatesVertically) {
+            this.currentX = effectiveStartX();
         }
     }
 
@@ -242,6 +301,24 @@ public class TitleCardElement {
             // Off-screen if right edge is left of screen, or left edge is right of screen
             return currentX >= SCREEN_WIDTH || (currentX + widthPixels <= 0);
         }
+    }
+
+    /** Captures the mutable animation state without exposing the live element. */
+    public Snapshot capture() {
+        return new Snapshot(currentX, currentY, delayCounter, active, atTarget,
+                exited, edgeMargin);
+    }
+
+    /** Restores a previously captured animation state. */
+    public void restore(Snapshot snapshot) {
+        Objects.requireNonNull(snapshot, "snapshot");
+        currentX = snapshot.currentX();
+        currentY = snapshot.currentY();
+        delayCounter = snapshot.delayCounter();
+        active = snapshot.active();
+        atTarget = snapshot.atTarget();
+        exited = snapshot.exited();
+        edgeMargin = Math.max(0, snapshot.edgeMargin());
     }
 
     // Screen dimensions for off-screen calculations

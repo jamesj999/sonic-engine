@@ -1,14 +1,17 @@
 package com.openggf.game.sonic2;
 
+import com.openggf.game.session.SessionManager;
+import com.openggf.tests.TestEnvironment;
+
 import com.openggf.camera.Camera;
 import com.openggf.game.GameServices;
-import com.openggf.game.RuntimeManager;
+import com.openggf.game.sonic2.constants.Sonic2Constants;
 import com.openggf.game.sonic2.events.Sonic2WFZEvents;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Spec tests for Wing Fortress Zone (WFZ) level events.
@@ -41,18 +44,18 @@ public class TestTodo12_WFZEventSpecs {
     private Sonic2WFZEvents events;
     private Camera cam;
 
-    @Before
+    @BeforeEach
     public void setUp() {
-        RuntimeManager.createGameplay();
+        TestEnvironment.activeGameplayMode();
         GameServices.camera().resetState();
         cam = GameServices.camera();
         events = new Sonic2WFZEvents();
         events.init(0);
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
-        RuntimeManager.destroyCurrent();
+        SessionManager.clear();
     }
 
     /**
@@ -75,12 +78,11 @@ public class TestTodo12_WFZEventSpecs {
         cam.setY((short) 0x200);
         events.update(0, 0);
         // Routine 0 immediately advances to routine 2
-        assertEquals("Routine 0 should advance to routine 2 immediately",
-                2, events.getEventRoutine());
+        assertEquals(2, events.getEventRoutine(), "Routine 0 should advance to routine 2 immediately");
         // BG offsets should be cleared
-        assertEquals("BG X offset should be 0 after init", 0, events.getBgXOffset());
-        assertEquals("BG Y offset should be 0 after init", 0, events.getBgYOffset());
-        assertEquals("BG Y speed should be 0 after init", 0, events.getBgYSpeed());
+        assertEquals(0, events.getBgXOffset(), "BG X offset should be 0 after init");
+        assertEquals(0, events.getBgYOffset(), "BG Y offset should be 0 after init");
+        assertEquals(0, events.getBgYSpeed(), "BG Y speed should be 0 after init");
     }
 
     /**
@@ -104,8 +106,7 @@ public class TestTodo12_WFZEventSpecs {
         cam.setX((short) 0x2000);
         cam.setY((short) 0x580);
         events.update(0, 1);
-        assertEquals("Should stay at routine 2 when X < $2BC0",
-                2, events.getEventRoutine());
+        assertEquals(2, events.getEventRoutine(), "Should stay at routine 2 when X < $2BC0");
     }
 
     @Test
@@ -114,8 +115,7 @@ public class TestTodo12_WFZEventSpecs {
         cam.setX((short) 0x2BC0);
         cam.setY((short) 0x500);
         events.update(0, 1);
-        assertEquals("Should stay at routine 2 when Y < $580",
-                2, events.getEventRoutine());
+        assertEquals(2, events.getEventRoutine(), "Should stay at routine 2 when Y < $580");
     }
 
     @Test
@@ -124,8 +124,7 @@ public class TestTodo12_WFZEventSpecs {
         cam.setX((short) 0x2BC0);
         cam.setY((short) 0x580);
         events.update(0, 1);
-        assertEquals("Should advance to routine 4 when X >= $2BC0 and Y >= $580",
-                4, events.getEventRoutine());
+        assertEquals(4, events.getEventRoutine(), "Should advance to routine 4 when X >= $2BC0 and Y >= $580");
     }
 
     /**
@@ -146,11 +145,9 @@ public class TestTodo12_WFZEventSpecs {
         events.setEventRoutine(4);
         assertEquals(0, events.getBgXOffset());
         events.update(0, 0);
-        assertEquals("BG X offset should increment by 2 each frame",
-                2, events.getBgXOffset());
+        assertEquals(2, events.getBgXOffset(), "BG X offset should increment by 2 each frame");
         events.update(0, 1);
-        assertEquals("BG X offset should be 4 after 2 frames",
-                4, events.getBgXOffset());
+        assertEquals(4, events.getBgXOffset(), "BG X offset should be 4 after 2 frames");
     }
 
     @Test
@@ -160,12 +157,10 @@ public class TestTodo12_WFZEventSpecs {
         for (int i = 0; i < 1024; i++) {
             events.update(0, i);
         }
-        assertEquals("BG X offset should cap at $800",
-                0x800, events.getBgXOffset());
+        assertEquals(0x800, events.getBgXOffset(), "BG X offset should cap at $800");
         // Run one more frame -- should not exceed
         events.update(0, 1024);
-        assertEquals("BG X offset should not exceed $800",
-                0x800, events.getBgXOffset());
+        assertEquals(0x800, events.getBgXOffset(), "BG X offset should not exceed $800");
     }
 
     @Test
@@ -177,10 +172,8 @@ public class TestTodo12_WFZEventSpecs {
             events.update(0, i);
         }
         // BG X offset = 767 * 2 = 1534 = 0x5FE (< 0x600)
-        assertTrue("BG X offset should be below $600",
-                events.getBgXOffset() < 0x600);
-        assertEquals("BG Y speed should still be 0 before $600 threshold",
-                0, events.getBgYSpeed());
+        assertTrue(events.getBgXOffset() < 0x600, "BG X offset should be below $600");
+        assertEquals(0, events.getBgYSpeed(), "BG Y speed should still be 0 before $600 threshold");
     }
 
     @Test
@@ -192,9 +185,8 @@ public class TestTodo12_WFZEventSpecs {
             events.update(0, i);
         }
         // BG X offset = 768 * 2 = 0x600
-        assertEquals("BG X offset should be $600", 0x600, events.getBgXOffset());
-        assertEquals("BG Y speed should be 4 after first acceleration frame",
-                4, events.getBgYSpeed());
+        assertEquals(0x600, events.getBgXOffset(), "BG X offset should be $600");
+        assertEquals(4, events.getBgYSpeed(), "BG Y speed should be 4 after first acceleration frame");
     }
 
     @Test
@@ -207,13 +199,11 @@ public class TestTodo12_WFZEventSpecs {
         for (int i = 0; i < 1300; i++) {
             events.update(0, i);
         }
-        assertTrue("BG Y speed should be capped at or near $840",
-                events.getBgYSpeed() >= 0x840);
+        assertTrue(events.getBgYSpeed() >= 0x840, "BG Y speed should be capped at or near $840");
         // Run more frames to verify cap holds
         int speedBefore = events.getBgYSpeed();
         events.update(0, 1300);
-        assertEquals("BG Y speed should not exceed $840",
-                speedBefore, events.getBgYSpeed());
+        assertEquals(speedBefore, events.getBgYSpeed(), "BG Y speed should not exceed $840");
     }
 
     /**
@@ -235,12 +225,11 @@ public class TestTodo12_WFZEventSpecs {
             events.update(0, i);
         }
         int offsetAfterR4 = events.getBgXOffset();
-        assertTrue("Should have positive BG X offset from R4", offsetAfterR4 > 0);
+        assertTrue(offsetAfterR4 > 0, "Should have positive BG X offset from R4");
 
         events.setEventRoutine(6);
         events.update(0, 10);
-        assertEquals("BG X offset should decrement by 2 in routine 6",
-                offsetAfterR4 - 2, events.getBgXOffset());
+        assertEquals(offsetAfterR4 - 2, events.getBgXOffset(), "BG X offset should decrement by 2 in routine 6");
     }
 
     /**
@@ -257,8 +246,7 @@ public class TestTodo12_WFZEventSpecs {
         cam.setY((short) 0x400);
         short minXBefore = cam.getMinX();
         events.update(0, 1);
-        assertEquals("MinX should not change when camera X < $2880",
-                minXBefore, cam.getMinX());
+        assertEquals(minXBefore, cam.getMinX(), "MinX should not change when camera X < $2880");
     }
 
     @Test
@@ -268,8 +256,7 @@ public class TestTodo12_WFZEventSpecs {
         cam.setY((short) 0x300);
         short minXBefore = cam.getMinX();
         events.update(0, 1);
-        assertEquals("MinX should not change when camera Y < $400",
-                minXBefore, cam.getMinX());
+        assertEquals(minXBefore, cam.getMinX(), "MinX should not change when camera Y < $400");
     }
 
     @Test
@@ -278,8 +265,11 @@ public class TestTodo12_WFZEventSpecs {
         cam.setX((short) 0x2880);
         cam.setY((short) 0x400);
         events.update(0, 1);
-        assertEquals("MinX should be locked at $2880 when both thresholds met",
-                (short) 0x2880, cam.getMinX());
+        assertEquals((short) 0x2880, cam.getMinX(), "MinX should be locked at $2880 when both thresholds met");
+        assertEquals(2, events.getWfzSubRoutine(), "Secondary routine should advance to S2 after boss PLC trigger");
+        assertEquals(Sonic2Constants.PLC_WFZ_BOSS, events.getLastRequestedPlcIdForTest(),
+                "WFZ boss PLC should be requested at the boss arena threshold");
+        assertEquals(1, events.getPlcRequestCountForTest(), "Only the boss PLC should have been requested");
     }
 
     /**
@@ -297,15 +287,19 @@ public class TestTodo12_WFZEventSpecs {
         cam.setX((short) 0x2880);
         cam.setY((short) 0x400);
         events.update(0, 1);
-        assertEquals("MinX should be $2880 after secondary R0 trigger",
-                (short) 0x2880, cam.getMinX());
+        assertEquals((short) 0x2880, cam.getMinX(), "MinX should be $2880 after secondary R0 trigger");
 
         // Now secondary routine is 2, trigger at Y >= $500
         // (secondary routine 2 -> 4, locks controls)
         cam.setY((short) 0x500);
         events.update(0, 2);
-        // After this, secondary routine should be 4 (no-op)
-        // No additional camera changes expected from secondary
+        assertEquals(4, events.getWfzSubRoutine(), "Secondary routine should advance to no-op S4");
+        assertEquals(Sonic2Constants.PLC_TORNADO, events.getLastRequestedPlcIdForTest(),
+                "Tornado PLC should be requested when control lock triggers");
+        assertEquals(2, events.getPlcRequestCountForTest(), "Boss and Tornado PLCs should each be requested once");
+
+        events.update(0, 3);
+        assertEquals(2, events.getPlcRequestCountForTest(), "S4 no-op should not request additional PLCs");
     }
 
     /**
@@ -326,11 +320,11 @@ public class TestTodo12_WFZEventSpecs {
         cam.setY((short) 0x400);
         events.update(0, 0);
         // Primary: routine 0 -> 2 (BG initialized, offsets zeroed)
-        assertEquals("Primary should advance to routine 2", 2, events.getEventRoutine());
-        assertEquals("BG offsets should be initialized", 0, events.getBgXOffset());
+        assertEquals(2, events.getEventRoutine(), "Primary should advance to routine 2");
+        assertEquals(0, events.getBgXOffset(), "BG offsets should be initialized");
         // Secondary: camera X >= $2880 and Y >= $400 -> lock minX
-        assertEquals("Secondary should lock minX at $2880",
-                (short) 0x2880, cam.getMinX());
+        assertEquals((short) 0x2880, cam.getMinX(), "Secondary should lock minX at $2880");
+        assertEquals(Sonic2Constants.PLC_WFZ_BOSS, events.getLastRequestedPlcIdForTest());
     }
 
     /**
@@ -349,7 +343,8 @@ public class TestTodo12_WFZEventSpecs {
         for (int i = 0; i < 840; i++) {
             events.update(0, i);
         }
-        assertTrue("BG Y offset should be positive once speed reaches 0x100 (integer part > 0)",
-                events.getBgYOffset() > 0);
+        assertTrue(events.getBgYOffset() > 0, "BG Y offset should be positive once speed reaches 0x100 (integer part > 0)");
     }
 }
+
+

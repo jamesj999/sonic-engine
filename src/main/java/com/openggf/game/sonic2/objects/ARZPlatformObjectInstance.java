@@ -9,8 +9,15 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.GraphicsManager;
 import com.openggf.level.PatternDesc;
 import com.openggf.level.objects.AbstractObjectInstance;
+import com.openggf.level.objects.ObjectConstructionContext;
+import com.openggf.level.objects.ObjectLifetimeOps;
+import com.openggf.level.objects.ObjectManager;
+import com.openggf.level.objects.ObjectPlayerParticipationPolicy;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.PerObjectRewindSnapshot;
 import com.openggf.level.objects.PlatformBobHelper;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
@@ -29,7 +36,7 @@ import java.util.logging.Logger;
  * Implements movement behaviors and rendering from the disassembly.
  */
 public class ARZPlatformObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
     private static final Logger LOGGER = Logger.getLogger(ARZPlatformObjectInstance.class.getName());
 
     private static final int[] WIDTH_PIXELS = {
@@ -73,6 +80,12 @@ public class ARZPlatformObjectInstance extends AbstractObjectInstance
     }
 
     @Override
+    public ARZPlatformObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return ObjectConstructionContext.construct(ctx.objectServices(),
+                () -> new ARZPlatformObjectInstance(ctx.spawn(), getName()));
+    }
+
+    @Override
     public int getX() {
         return x;
     }
@@ -82,11 +95,11 @@ public class ARZPlatformObjectInstance extends AbstractObjectInstance
         return y;
     }
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         x = baseX;
 
-        boolean standing = isPlayerRiding();
+        boolean standing = hasAnyPlayerStandingLatch(playerEntity);
         if (routine == 2 || routine == 8) {
             bobHelper.update(standing);
         }
@@ -155,9 +168,19 @@ public class ARZPlatformObjectInstance extends AbstractObjectInstance
             int halfWidth = widthPixels + SOLID_EXTRA_WIDTH;
             int airHalfHeight = Math.max(1, yRadius);
             int groundHalfHeight = Math.max(1, yRadius + 1);
-            return new SolidObjectParams(halfWidth, airHalfHeight, groundHalfHeight);
+            return SolidObjectParams.of(halfWidth, airHalfHeight, groundHalfHeight);
         }
-        return new SolidObjectParams(widthPixels, HALF_HEIGHT, HALF_HEIGHT);
+        return SolidObjectParams.of(widthPixels, HALF_HEIGHT, HALF_HEIGHT);
+    }
+
+    @Override
+    public int getOutOfRangeReferenceX() {
+        return baseX;
+    }
+
+    @Override
+    public int getBalanceWidthPixels() {
+        return widthPixels;
     }
 
     @Override
@@ -175,6 +198,14 @@ public class ARZPlatformObjectInstance extends AbstractObjectInstance
     public boolean isSolidFor(PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         return !isDestroyed();
+    }
+
+    @Override
+    public boolean clearsStandingBitOnContinuedRideExit(PlayableEntity player) {
+        // Obj18 reads status(a0)&standing_mask before Obj18_Move/Obj18_Nudge,
+        // then PlatformObject clears status(a0)'s player bit on air/walk-off
+        // exits (docs/s2disasm/s2.asm:23219-23242,35737-35755).
+        return true;
     }
 
     private void init() {
@@ -274,6 +305,34 @@ public class ARZPlatformObjectInstance extends AbstractObjectInstance
         }
     }
 
+    private boolean hasAnyPlayerStandingLatch(PlayableEntity player) {
+        ObjectManager om = services().objectManager();
+        if (om == null) {
+            return isPlayerRiding();
+        }
+        if (player != null && isRomVisibleStandingLatch(om, player)) {
+            return true;
+        }
+        for (PlayableEntity participant : services().playerQuery()
+                .playersFor(ObjectPlayerParticipationPolicy.ALL_ENGINE_PLAYERS)) {
+            if (participant != null && isRomVisibleStandingLatch(om, participant)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isRomVisibleStandingLatch(ObjectManager om, PlayableEntity player) {
+        if (!om.hasObjectStandingBit(player, this)) {
+            return false;
+        }
+        // Obj18 reads status(a0)&standing_mask before PlatformObject, but
+        // PlatformObject keeps that bit paired with either an active on-object
+        // state or the one-frame airborne stale-rider clear path
+        // (docs/s2disasm/s2.asm:23219-23242, 35742-35755, 35990-36029).
+        return player.isOnObject() || player.getAir();
+    }
+
     private void handleFallTrigger(boolean standing) {
         if (timer == 0) {
             if (standing) {
@@ -304,7 +363,7 @@ public class ARZPlatformObjectInstance extends AbstractObjectInstance
 
         int cameraMaxY = services().camera().getMaxY();
         if ((baseYFixed >> 8) > cameraMaxY + OFFSCREEN_Y_MARGIN) {
-            setDestroyed(true);
+            ObjectLifetimeOps.destroyRespawnableOffscreen(this);
         }
     }
 
@@ -344,7 +403,18 @@ public class ARZPlatformObjectInstance extends AbstractObjectInstance
     }
 
     private boolean isAquaticRuin() {
-        return services().currentLevel() != null && services().currentLevel().getZoneIndex() == Sonic2Constants.ZONE_AQUATIC_RUIN;
+        return services().currentLevel() != null
+                && isAquaticRuinZone(services().currentLevel().getZoneIndex());
+    }
+
+    /**
+     * Tests whether {@code zoneIndex} (as returned by {@link com.openggf.level.Level#getZoneIndex()},
+     * which is the ROM zone ID) is Aquatic Ruin Zone. ARZ is the only zone that uses the Obj18B
+     * mapping table ({@code Obj18_MapUnc_1084E}) and the 0x28 solid {@code y_radius} in the ROM
+     * ({@code s2.asm} {@code Obj18_Init}, {@code cmpi.b #aquatic_ruin_zone,(Current_Zone).w}).
+     */
+    static boolean isAquaticRuinZone(int zoneIndex) {
+        return zoneIndex == Sonic2Constants.ZONE_ARZ;
     }
 
     private List<SpriteMappingFrame> resolveMappings() {
@@ -369,6 +439,41 @@ public class ARZPlatformObjectInstance extends AbstractObjectInstance
         ctx.drawLine(right, top, right, bottom, 0.35f, 0.7f, 1.0f);
         ctx.drawLine(right, bottom, left, bottom, 0.35f, 0.7f, 1.0f);
         ctx.drawLine(left, bottom, left, top, 0.35f, 0.7f, 1.0f);
+    }
+
+    @Override
+    public PerObjectRewindSnapshot captureRewindState() {
+        return super.captureRewindState().withObjectSubclassExtra(
+                new PerObjectRewindSnapshot.ArzPlatformRewindExtra(
+                        x, y,
+                        baseX, baseY, baseYFixed,
+                        widthPixels, mappingFrame,
+                        subtype, routine,
+                        bobHelper.getAngle(),
+                        angle, timer, yVel, yRadius));
+    }
+
+    @Override
+    public void restoreRewindState(PerObjectRewindSnapshot snapshot) {
+        super.restoreRewindState(snapshot);
+        if (!(snapshot.objectSubclassExtra()
+                instanceof PerObjectRewindSnapshot.ArzPlatformRewindExtra extra)) {
+            return;
+        }
+        this.x = extra.x();
+        this.y = extra.y();
+        this.baseX = extra.baseX();
+        this.baseY = extra.baseY();
+        this.baseYFixed = extra.baseYFixed();
+        this.widthPixels = extra.widthPixels();
+        this.mappingFrame = extra.mappingFrame();
+        this.subtype = extra.subtype();
+        this.routine = extra.routine();
+        this.bobHelper.restoreAngle(extra.bobAngle());
+        this.angle = extra.angle();
+        this.timer = extra.timer();
+        this.yVel = extra.yVel();
+        this.yRadius = extra.yRadius();
     }
 
 }

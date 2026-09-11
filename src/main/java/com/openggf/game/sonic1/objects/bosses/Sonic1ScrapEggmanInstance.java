@@ -1,13 +1,18 @@
 package com.openggf.game.sonic1.objects.bosses;
 
 import com.openggf.game.sonic1.constants.Sonic1Constants;
+import com.openggf.game.sonic1.constants.Sonic1ObjectIds;
 import com.openggf.game.PlayableEntity;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
+import com.openggf.level.objects.ObjectConstructionContext;
 import com.openggf.level.objects.ObjectInstance;
+import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
@@ -29,7 +34,8 @@ import java.util.List;
  * <p>
  * ROM reference: s1disasm, Obj82 (ScrapStomp / SEgg)
  */
-public class Sonic1ScrapEggmanInstance extends AbstractObjectInstance implements TouchResponseProvider {
+public class Sonic1ScrapEggmanInstance extends AbstractObjectInstance
+        implements TouchResponseProvider, RewindRecreatable {
 
     // ---- Position constants from disassembly ----
     private static final int BOSS_SBZ2_X = Sonic1Constants.BOSS_SBZ2_X;
@@ -132,6 +138,10 @@ public class Sonic1ScrapEggmanInstance extends AbstractObjectInstance implements
     private ScrapEggmanButton button;
 
     public Sonic1ScrapEggmanInstance(ObjectSpawn spawn) {
+        this(spawn, spawn.objectId() == Sonic1ObjectIds.SCRAP_EGGMAN);
+    }
+
+    private Sonic1ScrapEggmanInstance(ObjectSpawn spawn, boolean spawnButton) {
         super(spawn, "ScrapEggman");
         // Initialise Eggman position
         this.currentX = EGGMAN_INIT_X;
@@ -148,6 +158,10 @@ public class Sonic1ScrapEggmanInstance extends AbstractObjectInstance implements
         // Start with stand animation
         setAnimation(0);
 
+        if (!spawnButton) {
+            return;
+        }
+
         // Spawn the button child
         ObjectSpawn buttonSpawn = new ObjectSpawn(
                 BUTTON_X, BUTTON_Y,
@@ -156,6 +170,14 @@ public class Sonic1ScrapEggmanInstance extends AbstractObjectInstance implements
 
         // Add button as dynamic object
         spawnDynamicObject(button);
+    }
+
+    @Override
+    public Sonic1ScrapEggmanInstance recreateForRewind(RewindRecreateContext ctx) {
+        Sonic1ScrapEggmanInstance restored = ObjectConstructionContext.construct(ctx.objectServices(),
+                () -> new Sonic1ScrapEggmanInstance(ctx.spawn(), false));
+        restored.adoptLiveButtonForRewind(ctx);
+        return restored;
     }
 
     @Override
@@ -174,7 +196,7 @@ public class Sonic1ScrapEggmanInstance extends AbstractObjectInstance implements
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) {
             return;
@@ -425,17 +447,16 @@ public class Sonic1ScrapEggmanInstance extends AbstractObjectInstance implements
      *   <li>Phase 2: Displays pressed state.</li>
      * </ul>
      */
-    public static class ScrapEggmanButton extends AbstractObjectInstance {
+    public static class ScrapEggmanButton extends AbstractObjectInstance implements RewindRecreatable {
 
         private static final int BUTTON_PHASE_WAITING = 0;
         private static final int BUTTON_PHASE_PRESSED = 2;
-
-        private final Sonic1ScrapEggmanInstance parent;
+        private Sonic1ScrapEggmanInstance parent;
         private int buttonPhase;
         private int buttonFrame; // 0 = unpressed, 1 = pressed
 
-        private final int buttonX;
-        private final int buttonY;
+        private int buttonX;
+        private int buttonY;
 
         public ScrapEggmanButton(ObjectSpawn spawn, Sonic1ScrapEggmanInstance parent) {
             super(spawn, "ScrapEggmanButton");
@@ -444,6 +465,20 @@ public class Sonic1ScrapEggmanInstance extends AbstractObjectInstance implements
             this.buttonFrame = 0;
             this.buttonX = spawn.x();
             this.buttonY = spawn.y();
+        }
+
+        private ScrapEggmanButton(ObjectSpawn spawn, boolean rewindProbe) {
+            this(spawn, (Sonic1ScrapEggmanInstance) null);
+        }
+
+        @Override
+        public ScrapEggmanButton recreateForRewind(RewindRecreateContext ctx) {
+            ScrapEggmanButton restoredButton = new ScrapEggmanButton(ctx.spawn(), (Sonic1ScrapEggmanInstance) null);
+            Sonic1ScrapEggmanInstance restoredParent = nearestLiveParentForRewind(ctx);
+            if (restoredParent != null) {
+                restoredParent.button = restoredButton;
+            }
+            return restoredButton;
         }
 
         @Override
@@ -462,7 +497,7 @@ public class Sonic1ScrapEggmanInstance extends AbstractObjectInstance implements
         }
 
         @Override
-        public void update(int frameCounter, PlayableEntity playerEntity) {
+        public void update(int vIntRunCount, PlayableEntity playerEntity) {
             AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
             if (isDestroyed()) {
                 return;
@@ -499,5 +534,55 @@ public class Sonic1ScrapEggmanInstance extends AbstractObjectInstance implements
 
             renderer.drawFrameIndex(buttonFrame, buttonX, buttonY, false, false);
         }
+    }
+
+    private void adoptLiveButtonForRewind(RewindRecreateContext ctx) {
+        ObjectManager objectManager = objectManagerForRewind(ctx);
+        if (objectManager == null) {
+            return;
+        }
+        ScrapEggmanButton best = null;
+        int bestDistance = Integer.MAX_VALUE;
+        for (ObjectInstance object : objectManager.getActiveObjects()) {
+            if (object instanceof ScrapEggmanButton candidate && !candidate.isDestroyed()) {
+                int distance = Math.abs(candidate.getX() - BUTTON_X);
+                if (distance < bestDistance) {
+                    best = candidate;
+                    bestDistance = distance;
+                }
+            }
+        }
+        if (best != null) {
+            best.parent = this;
+            this.button = best;
+        }
+    }
+
+    private static Sonic1ScrapEggmanInstance nearestLiveParentForRewind(RewindRecreateContext ctx) {
+        ObjectManager objectManager = objectManagerForRewind(ctx);
+        if (objectManager == null) {
+            return null;
+        }
+
+        Sonic1ScrapEggmanInstance best = null;
+        int bestDistance = Integer.MAX_VALUE;
+        for (ObjectInstance object : objectManager.getActiveObjects()) {
+            if (object instanceof Sonic1ScrapEggmanInstance parent && !parent.isDestroyed()) {
+                int distance = Math.abs(parent.getX() - ctx.spawn().x());
+                if (distance < bestDistance) {
+                    best = parent;
+                    bestDistance = distance;
+                }
+            }
+        }
+        return best;
+    }
+
+    private static ObjectManager objectManagerForRewind(RewindRecreateContext ctx) {
+        ObjectManager objectManager = ctx.objectManager();
+        if (objectManager == null && ctx.objectServices() != null) {
+            objectManager = ctx.objectServices().objectManager();
+        }
+        return objectManager;
     }
 }

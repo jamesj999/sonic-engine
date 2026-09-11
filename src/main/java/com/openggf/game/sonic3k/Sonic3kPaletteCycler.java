@@ -2,21 +2,24 @@ package com.openggf.game.sonic3k;
 
 import com.openggf.camera.Camera;
 import com.openggf.data.RomByteReader;
-import com.openggf.game.GameModuleRegistry;
+import com.openggf.game.GameServices;
+import com.openggf.game.palette.PaletteOwnershipRegistry;
+import com.openggf.game.palette.PaletteWrite;
 import com.openggf.game.sonic3k.constants.Sonic3kConstants;
 import com.openggf.game.sonic3k.bonusstage.slots.S3kSlotBonusStageRuntime;
+import com.openggf.game.sonic3k.runtime.S3kRuntimeStates;
 import com.openggf.graphics.GraphicsManager;
 import com.openggf.level.Level;
 import com.openggf.level.Palette;
+import com.openggf.level.WaterSystem;
 import com.openggf.level.animation.AnimatedPaletteManager;
-import com.openggf.tools.KosinskiReader;
+import com.openggf.data.compression.KosinskiReader;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.channels.Channels;
 import java.util.ArrayList;
 import java.util.List;
-import com.openggf.game.GameServices;
 
 /**
  * Applies Sonic 3&amp;K palette cycling for supported zones.
@@ -28,32 +31,73 @@ import com.openggf.game.GameServices;
  */
 class Sonic3kPaletteCycler implements AnimatedPaletteManager {
     private final Level level;
-    private final GraphicsManager graphicsManager = GraphicsManager.getInstance();
+    private final int zoneIndex;
+    private final int actIndex;
+    private final PaletteOwnershipRegistry paletteRegistry;
+    private final boolean localPaletteRegistry;
+    private final Palette[] explicitUnderwaterPalettes;
     private final List<PaletteCycle> cycles;
+    private Palette[] cachedLevelPalettes;
 
     static int resolveSlotsModeForTest(S3kSlotBonusStageRuntime runtime) {
         return runtime != null ? runtime.paletteCycleMode() : 0;
     }
 
-    static int resolveSlotsModeFromRegistryForTest() {
-        return resolveSlotsModeFromRegistry();
+    static int resolveSlotsModeFromSessionForTest() {
+        return resolveSlotsModeFromSession();
     }
 
     Sonic3kPaletteCycler(RomByteReader reader, Level level, int zoneIndex, int actIndex) {
+        this(reader, level, zoneIndex, actIndex, null, null);
+    }
+
+    Sonic3kPaletteCycler(RomByteReader reader, Level level, int zoneIndex, int actIndex,
+                         PaletteOwnershipRegistry paletteRegistry,
+                         Palette[] explicitUnderwaterPalettes) {
         this.level = level;
+        this.zoneIndex = zoneIndex;
+        this.actIndex = actIndex;
+        this.paletteRegistry = paletteRegistry != null ? paletteRegistry : new PaletteOwnershipRegistry();
+        this.localPaletteRegistry = paletteRegistry == null;
+        this.explicitUnderwaterPalettes = explicitUnderwaterPalettes;
         this.cycles = loadCycles(reader, zoneIndex, actIndex);
     }
 
     @Override
     public void update() {
-        if (cycles == null || cycles.isEmpty()) {
-            return;
+        if (localPaletteRegistry) {
+            paletteRegistry.beginFrame();
         }
-        // ROM: AnimatePalettes dispatches to AnPal_* every frame unconditionally,
-        // regardless of fire transition state.  Never suspend palette cycling.
-        for (PaletteCycle cycle : cycles) {
-            cycle.tick(level, graphicsManager);
+        if (cycles != null && !cycles.isEmpty()) {
+            // ROM: AnimatePalettes dispatches to AnPal_* every frame unconditionally,
+            // regardless of fire transition state. Never suspend palette cycling.
+            for (PaletteCycle cycle : cycles) {
+                cycle.tick(level, paletteRegistry);
+            }
         }
+        paletteRegistry.resolveInto(levelPalettes(), resolveUnderwaterPalettes(),
+                GameServices.graphics(), level.getPalette(0));
+    }
+
+    private Palette[] levelPalettes() {
+        if (cachedLevelPalettes == null || cachedLevelPalettes.length != level.getPaletteCount()) {
+            cachedLevelPalettes = new Palette[level.getPaletteCount()];
+        }
+        for (int i = 0; i < cachedLevelPalettes.length; i++) {
+            cachedLevelPalettes[i] = level.getPalette(i);
+        }
+        return cachedLevelPalettes;
+    }
+
+    private Palette[] resolveUnderwaterPalettes() {
+        if (explicitUnderwaterPalettes != null) {
+            return explicitUnderwaterPalettes;
+        }
+        WaterSystem water = GameServices.waterOrNull();
+        if (water != null) {
+            return water.getUnderwaterPalette(zoneIndex, actIndex);
+        }
+        return null;
     }
 
     private List<PaletteCycle> loadCycles(RomByteReader reader, int zoneIndex, int actIndex) {
@@ -93,15 +137,18 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
                 loadLrzCycles(reader, list, actIndex);
                 break;
 
-            case 0x0E: // BPZ (competition) — AnPal_BPZ balloons + background
+            // Competition-zone ids follow the ROM's OffsAnPal table, which is
+            // 48 entries indexed zone*2 + act (skdisasm/sonic3k.asm:3110-3165):
+            // BPZ occupies entries 30/31, CGZ 34/35 and EMZ 36/37.
+            case 0x0F: // BPZ (competition) — AnPal_BPZ balloons + background
                 loadBpzCycles(reader, list);
                 break;
 
-            case 0x10: // CGZ (competition) — AnPal_CGZ light animation
+            case 0x11: // CGZ (competition) — AnPal_CGZ light animation
                 loadCgzCycles(reader, list);
                 break;
 
-            case 0x11: // EMZ (competition) — AnPal_EMZ emerald glow + background
+            case 0x12: // EMZ (competition) — AnPal_EMZ emerald glow + background
                 loadEmzCycles(reader, list);
                 break;
 
@@ -161,14 +208,18 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
     }
 
     private void loadCnzCycles(RomByteReader reader, List<PaletteCycle> list) {
-        byte[] bumperData   = safeSlice(reader, Sonic3kConstants.ANPAL_CNZ_1_ADDR, Sonic3kConstants.ANPAL_CNZ_1_SIZE);
-        byte[] bgData       = safeSlice(reader, Sonic3kConstants.ANPAL_CNZ_3_ADDR, Sonic3kConstants.ANPAL_CNZ_3_SIZE);
+        byte[] bumperData = safeSlice(reader, Sonic3kConstants.ANPAL_CNZ_1_ADDR, Sonic3kConstants.ANPAL_CNZ_1_SIZE);
+        byte[] bumperWaterData = safeSlice(reader, Sonic3kConstants.ANPAL_CNZ_2_ADDR, Sonic3kConstants.ANPAL_CNZ_2_SIZE);
+        byte[] bgData = safeSlice(reader, Sonic3kConstants.ANPAL_CNZ_3_ADDR, Sonic3kConstants.ANPAL_CNZ_3_SIZE);
+        byte[] bgWaterData = safeSlice(reader, Sonic3kConstants.ANPAL_CNZ_4_ADDR, Sonic3kConstants.ANPAL_CNZ_4_SIZE);
         byte[] tertiaryData = safeSlice(reader, Sonic3kConstants.ANPAL_CNZ_5_ADDR, Sonic3kConstants.ANPAL_CNZ_5_SIZE);
 
         if (bumperData.length >= Sonic3kConstants.ANPAL_CNZ_1_SIZE
+                && bumperWaterData.length >= Sonic3kConstants.ANPAL_CNZ_2_SIZE
                 && bgData.length >= Sonic3kConstants.ANPAL_CNZ_3_SIZE
+                && bgWaterData.length >= Sonic3kConstants.ANPAL_CNZ_4_SIZE
                 && tertiaryData.length >= Sonic3kConstants.ANPAL_CNZ_5_SIZE) {
-            list.add(new CnzCycle(bumperData, bgData, tertiaryData));
+            list.add(new CnzCycle(bumperData, bumperWaterData, bgData, bgWaterData, tertiaryData));
         }
     }
 
@@ -280,6 +331,71 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
         return reader.slice(addr, len);
     }
 
+    private static byte[] slice(byte[] data, int offset, int length) {
+        byte[] out = new byte[length];
+        System.arraycopy(data, offset, out, 0, length);
+        return out;
+    }
+
+    private static int segaWord(byte[] data, int offset) {
+        return ((data[offset] & 0xFF) << 8) | (data[offset + 1] & 0xFF);
+    }
+
+    private static void cacheFallbackPaletteTexture(PaletteOwnershipRegistry registry,
+                                                    GraphicsManager graphics,
+                                                    Level level,
+                                                    int paletteIndex) {
+        if (registry == null && graphics != null && graphics.isGlInitialized()) {
+            graphics.cachePaletteTexture(level.getPalette(paletteIndex), paletteIndex);
+        }
+    }
+
+    /**
+     * Captures per-cycle mutable state (timers, counters, dirty flags, gate flags)
+     * across all currently-loaded cycles. The returned bytes are intended to be
+     * embedded in the level-animation manager's snapshot.
+     */
+    byte[] captureCyclerState() {
+        if (cycles == null || cycles.isEmpty()) {
+            return new byte[0];
+        }
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        try (java.io.DataOutputStream dout = new java.io.DataOutputStream(out)) {
+            dout.writeInt(cycles.size());
+            for (PaletteCycle cycle : cycles) {
+                byte[] state = com.openggf.game.rewind.schema.PaletteCycleStateCodec.capture(cycle);
+                dout.writeInt(state.length);
+                dout.write(state);
+            }
+        } catch (java.io.IOException e) {
+            return new byte[0];
+        }
+        return out.toByteArray();
+    }
+
+    /** Inverse of {@link #captureCyclerState()}. Tolerant of null/empty/mismatched input. */
+    void restoreCyclerState(byte[] data) {
+        if (data == null || data.length < 4 || cycles == null || cycles.isEmpty()) {
+            return;
+        }
+        try (java.io.DataInputStream din = new java.io.DataInputStream(new java.io.ByteArrayInputStream(data))) {
+            int count = din.readInt();
+            if (count != cycles.size()) {
+                return; // shape mismatch — refuse to corrupt state
+            }
+            for (PaletteCycle cycle : cycles) {
+                int size = din.readInt();
+                if (size < 0 || size > data.length) {
+                    return;
+                }
+                byte[] state = din.readNBytes(size);
+                com.openggf.game.rewind.schema.PaletteCycleStateCodec.restore(cycle, state);
+            }
+        } catch (java.io.IOException ignored) {
+            // tolerate truncation / corruption
+        }
+    }
+
     private byte[] loadKosinskiBytes(RomByteReader reader, int addr, int compressedSize,
                                      int minimumDecompressedSize) {
         if (addr < 0 || addr + compressedSize > reader.size()) {
@@ -296,7 +412,7 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
 
     // ========== Base class ==========
     private static abstract class PaletteCycle {
-        abstract void tick(Level level, GraphicsManager gm);
+        abstract void tick(Level level, PaletteOwnershipRegistry registry);
     }
 
     // ========== AIZ1 Unified Cycle ==========
@@ -342,7 +458,8 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
         }
 
         @Override
-        void tick(Level level, GraphicsManager gm) {
+        void tick(Level level, PaletteOwnershipRegistry registry) {
+            GraphicsManager gm = GameServices.graphics();
             // ROM: AIZ1_Resize routine 0 (line 38873-38877) clears the flag once
             // when Camera X >= 0x1000. It never re-sets it.
             if (introFlag && (GameServices.camera().getX() & 0xFFFF) >= 0x1000) {
@@ -353,27 +470,24 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
                 timer--;
             } else {
                 if (introFlag) {
-                    tickIntro(level);
+                    tickIntro(level, registry, gm);
                 } else {
-                    tickGameplay(level);
+                    tickGameplay(level, registry, gm);
                 }
             }
 
-            if (gm.isGlInitialized()) {
-                if (dirty2) {
-                    gm.cachePaletteTexture(level.getPalette(2), 2);
-                    dirty2 = false;
-                }
-                if (dirty3) {
-                    gm.cachePaletteTexture(level.getPalette(3), 3);
-                    dirty3 = false;
-                }
+            if (dirty2) {
+                cacheFallbackPaletteTexture(registry, gm, level, 2);
+                dirty2 = false;
+            }
+            if (dirty3) {
+                cacheFallbackPaletteTexture(registry, gm, level, 3);
+                dirty3 = false;
             }
         }
 
-        private void tickIntro(Level level) {
+        private void tickIntro(Level level, PaletteOwnershipRegistry registry, GraphicsManager gm) {
             timer = 9;
-            Palette pal3 = level.getPalette(3);
 
             // PalAIZ1_3 → palette 3, colors 2-5
             int d0 = counter0;
@@ -381,10 +495,15 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
             if (counter0 >= 0x50) {
                 counter0 = 0;
             }
-            pal3.getColor(2).fromSegaFormat(introData1, d0);
-            pal3.getColor(3).fromSegaFormat(introData1, d0 + 2);
-            pal3.getColor(4).fromSegaFormat(introData1, d0 + 4);
-            pal3.getColor(5).fromSegaFormat(introData1, d0 + 6);
+            S3kPaletteWriteSupport.applyContiguousPatch(
+                    registry,
+                    level,
+                    gm,
+                    S3kPaletteOwners.AIZ1_ANPAL,
+                    S3kPaletteOwners.PRIORITY_ZONE_CYCLE,
+                    3,
+                    2,
+                    slice(introData1, d0, 8));
 
             // PalAIZ1_4 → palette 3, colors 13-15
             int d1 = counter2;
@@ -392,14 +511,20 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
             if (counter2 >= 0x3C) {
                 counter2 = 0;
             }
-            pal3.getColor(13).fromSegaFormat(introData2, d1);
-            pal3.getColor(14).fromSegaFormat(introData2, d1 + 2);
-            pal3.getColor(15).fromSegaFormat(introData2, d1 + 4);
+            S3kPaletteWriteSupport.applyContiguousPatch(
+                    registry,
+                    level,
+                    gm,
+                    S3kPaletteOwners.AIZ1_ANPAL,
+                    S3kPaletteOwners.PRIORITY_ZONE_CYCLE,
+                    3,
+                    13,
+                    slice(introData2, d1, 6));
 
             dirty3 = true;
         }
 
-        private void tickGameplay(Level level) {
+        private void tickGameplay(Level level, PaletteOwnershipRegistry registry, GraphicsManager gm) {
             timer = 7;
 
             // PalAIZ1_1 → palette 2, colors 11-14
@@ -407,11 +532,15 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
             // through 0,8,16,24 for waterfallData indexing.
             int d0 = counter0 & 0x18;
             counter0 = (counter0 + 8) & 0xFF;
-            Palette pal2 = level.getPalette(2);
-            pal2.getColor(11).fromSegaFormat(waterfallData, d0);
-            pal2.getColor(12).fromSegaFormat(waterfallData, d0 + 2);
-            pal2.getColor(13).fromSegaFormat(waterfallData, d0 + 4);
-            pal2.getColor(14).fromSegaFormat(waterfallData, d0 + 6);
+            S3kPaletteWriteSupport.applyContiguousPatch(
+                    registry,
+                    level,
+                    gm,
+                    S3kPaletteOwners.AIZ1_ANPAL,
+                    S3kPaletteOwners.PRIORITY_ZONE_CYCLE,
+                    2,
+                    11,
+                    slice(waterfallData, d0, 8));
             dirty2 = true;
 
             // PalAIZ1_2 → palette 3, colors 12-14
@@ -429,10 +558,15 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
                 if (counter2 >= 0x30) {
                     counter2 = 0;
                 }
-                Palette pal3 = level.getPalette(3);
-                pal3.getColor(12).fromSegaFormat(secondaryData, d1);
-                pal3.getColor(13).fromSegaFormat(secondaryData, d1 + 2);
-                pal3.getColor(14).fromSegaFormat(secondaryData, d1 + 4);
+                S3kPaletteWriteSupport.applyContiguousPatch(
+                        registry,
+                        level,
+                        gm,
+                        S3kPaletteOwners.AIZ1_ANPAL,
+                        S3kPaletteOwners.PRIORITY_ZONE_CYCLE,
+                        3,
+                        12,
+                        slice(secondaryData, d1, 6));
                 dirty3 = true;
             }
         }
@@ -461,7 +595,8 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
         }
 
         @Override
-        void tick(Level level, GraphicsManager gm) {
+        void tick(Level level, PaletteOwnershipRegistry registry) {
+            GraphicsManager gm = GameServices.graphics();
             if (timer > 0) {
                 timer--;
             } else {
@@ -471,11 +606,15 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
                 // Cycle A: water → palette 3, colors 12-15
                 int d0 = counter0 & 0x18;
                 counter0 += 8;
-                Palette pal3 = level.getPalette(3);
-                pal3.getColor(12).fromSegaFormat(waterData, d0);
-                pal3.getColor(13).fromSegaFormat(waterData, d0 + 2);
-                pal3.getColor(14).fromSegaFormat(waterData, d0 + 4);
-                pal3.getColor(15).fromSegaFormat(waterData, d0 + 6);
+                S3kPaletteWriteSupport.applyContiguousPatch(
+                        registry,
+                        level,
+                        gm,
+                        S3kPaletteOwners.AIZ2_WATER_CYCLE,
+                        S3kPaletteOwners.PRIORITY_ZONE_CYCLE,
+                        3,
+                        12,
+                        slice(waterData, d0, 8));
                 dirty3 = true;
 
                 // Cycle B: trickle → pal 2 colors 4,8 + pal 3 color 11
@@ -485,29 +624,46 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
                     counter2 = 0;
                 }
                 byte[] trickleData = (cameraX >= 0x3800) ? tricklePostData : tricklePreData;
-                Palette pal2 = level.getPalette(2);
-                pal2.getColor(4).fromSegaFormat(trickleData, d1);
-                pal2.getColor(8).fromSegaFormat(trickleData, d1 + 2);
-                pal3.getColor(11).fromSegaFormat(trickleData, d1 + 4);
+                S3kPaletteWriteSupport.applyColors(
+                        registry,
+                        level,
+                        gm,
+                        S3kPaletteOwners.AIZ2_WATER_CYCLE,
+                        S3kPaletteOwners.PRIORITY_ZONE_CYCLE,
+                        2,
+                        new int[] {4, 8},
+                        new int[] {segaWord(trickleData, d1), segaWord(trickleData, d1 + 2)});
+                S3kPaletteWriteSupport.applyColors(
+                        registry,
+                        level,
+                        gm,
+                        S3kPaletteOwners.AIZ2_WATER_CYCLE,
+                        S3kPaletteOwners.PRIORITY_ZONE_CYCLE,
+                        3,
+                        new int[] {11},
+                        new int[] {segaWord(trickleData, d1 + 4)});
 
                 // Pal 2 color 14: fixed $0A0E when camera >= 0x1C0, else animated from data
-                if (cameraX >= 0x1C0) {
-                    pal2.getColor(14).fromSegaFormat(new byte[]{0x0A, 0x0E}, 0);
-                } else {
-                    pal2.getColor(14).fromSegaFormat(trickleData, d1 + 4);
-                }
+                int pal2Color14 = cameraX >= 0x1C0 ? 0x0A0E : segaWord(trickleData, d1 + 4);
+                S3kPaletteWriteSupport.applyColors(
+                        registry,
+                        level,
+                        gm,
+                        S3kPaletteOwners.AIZ2_WATER_CYCLE,
+                        S3kPaletteOwners.PRIORITY_ZONE_CYCLE,
+                        2,
+                        new int[] {14},
+                        new int[] {pal2Color14});
                 dirty2 = true;
             }
 
-            if (gm.isGlInitialized()) {
-                if (dirty2) {
-                    gm.cachePaletteTexture(level.getPalette(2), 2);
-                    dirty2 = false;
-                }
-                if (dirty3) {
-                    gm.cachePaletteTexture(level.getPalette(3), 3);
-                    dirty3 = false;
-                }
+            if (dirty2) {
+                cacheFallbackPaletteTexture(registry, gm, level, 2);
+                dirty2 = false;
+            }
+            if (dirty3) {
+                cacheFallbackPaletteTexture(registry, gm, level, 3);
+                dirty3 = false;
             }
         }
     }
@@ -529,7 +685,8 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
         }
 
         @Override
-        void tick(Level level, GraphicsManager gm) {
+        void tick(Level level, PaletteOwnershipRegistry registry) {
+            GraphicsManager gm = GameServices.graphics();
             if (timer > 0) {
                 timer--;
             } else {
@@ -543,13 +700,20 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
                 }
 
                 byte[] torchData = (cameraX >= 0x3800) ? torchPostData : torchPreData;
-                Palette pal3 = level.getPalette(3);
-                pal3.getColor(1).fromSegaFormat(torchData, d0);
+                S3kPaletteWriteSupport.applyContiguousPatch(
+                        registry,
+                        level,
+                        gm,
+                        S3kPaletteOwners.AIZ2_TORCH_CYCLE,
+                        S3kPaletteOwners.PRIORITY_ZONE_CYCLE,
+                        3,
+                        1,
+                        slice(torchData, d0, 2));
                 dirty = true;
             }
 
-            if (dirty && gm.isGlInitialized()) {
-                gm.cachePaletteTexture(level.getPalette(3), 3);
+            if (dirty) {
+                cacheFallbackPaletteTexture(registry, gm, level, 3);
                 dirty = false;
             }
         }
@@ -559,8 +723,10 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
     // ROM: AnPal_HCZ1 (sonic3k.asm line 3287), timer period 7
     // AnPal_PalHCZ1 → palette 2 colors 3-6 (Normal_palette_line_3+$06/$0A)
     //   counter0 & 0x18 for data index, counter0 += 8, wraps at 0x20 (cycles 0,8,16,24)
-    // Also writes to Water_palette_line_3+$06/$0A (underwater palette sync).
-    //   TODO: sync to underwater palette
+    // ROM also writes the SAME table to Water_palette_line_3+$06/$0A. Because the
+    // normal and water sources are identical (unlike CNZ's separate water tables),
+    // the cycle uses PaletteWrite.mirrorToUnderwater() to sync both surfaces.
+    // (Covered by TestS3kPaletteOwnershipRegistryIntegration#hczCycleMirrorsWaterColorsIntoUnderwaterPalette.)
     // HCZ1_Resize secondary behavior: checks camera position each tick and writes 3 colors
     //   to palette[3] colors 8-10 (Normal_palette_line_4+$10) for cave entry/exit lighting.
     private static class HczCycle extends PaletteCycle {
@@ -569,35 +735,22 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
         // Water cycle state
         private int timer;
         private int counter0;
-        private boolean dirty2;
 
         // Cave lighting state (HCZ1_Resize secondary behavior)
         // Routine 0 = watch for cave entry, routine 2 = watch for exit, routine 4 = idle
         private int resizeRoutine;
-        private boolean dirty3;
 
         HczCycle(byte[] waterData) {
             this.waterData = waterData;
         }
 
         @Override
-        void tick(Level level, GraphicsManager gm) {
-            tickWaterCycle(level);
-            tickCaveLighting(level);
-
-            if (gm.isGlInitialized()) {
-                if (dirty2) {
-                    gm.cachePaletteTexture(level.getPalette(2), 2);
-                    dirty2 = false;
-                }
-                if (dirty3) {
-                    gm.cachePaletteTexture(level.getPalette(3), 3);
-                    dirty3 = false;
-                }
-            }
+        void tick(Level level, PaletteOwnershipRegistry registry) {
+            tickWaterCycle(level, registry);
+            tickCaveLighting(level, registry);
         }
 
-        private void tickWaterCycle(Level level) {
+        private void tickWaterCycle(Level level, PaletteOwnershipRegistry registry) {
             if (timer > 0) {
                 timer--;
                 return;
@@ -611,16 +764,20 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
                 counter0 = 0;
             }
 
-            Palette pal2 = level.getPalette(2);
-            pal2.getColor(3).fromSegaFormat(waterData, d0);
-            pal2.getColor(4).fromSegaFormat(waterData, d0 + 2);
-            pal2.getColor(5).fromSegaFormat(waterData, d0 + 4);
-            pal2.getColor(6).fromSegaFormat(waterData, d0 + 6);
-            // TODO: sync to underwater palette (Water_palette_line_3+$06/$0A)
-            dirty2 = true;
+            registry.submit(PaletteWrite.normal(
+                    S3kPaletteOwners.HCZ_WATER_CYCLE,
+                    S3kPaletteOwners.PRIORITY_ZONE_CYCLE,
+                    2,
+                    3,
+                    new byte[] {
+                            waterData[d0], waterData[d0 + 1],
+                            waterData[d0 + 2], waterData[d0 + 3],
+                            waterData[d0 + 4], waterData[d0 + 5],
+                            waterData[d0 + 6], waterData[d0 + 7]
+                    }).mirrorToUnderwater());
         }
 
-        private void tickCaveLighting(Level level) {
+        private void tickCaveLighting(Level level, PaletteOwnershipRegistry registry) {
             // HCZ1_Resize secondary behavior: per-frame camera-dependent palette mutation.
             // Palette[3] colors 8-10 = Normal_palette_line_4+$10 (3 words = 3 colors)
             Camera cam = GameServices.camera();
@@ -630,11 +787,12 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
             if (resizeRoutine == 0) {
                 // Watch for cave entry: cameraX < $360 AND cameraY >= $3E0
                 if (cameraX < 0x360 && cameraY >= 0x3E0) {
-                    Palette pal3 = level.getPalette(3);
-                    pal3.getColor(8).fromSegaFormat(new byte[]{0x06, (byte) 0x80}, 0);
-                    pal3.getColor(9).fromSegaFormat(new byte[]{0x02, 0x40}, 0);
-                    pal3.getColor(10).fromSegaFormat(new byte[]{0x02, 0x20}, 0);
-                    dirty3 = true;
+                    registry.submit(PaletteWrite.normal(
+                            S3kPaletteOwners.HCZ_CAVE_LIGHTING,
+                            S3kPaletteOwners.PRIORITY_ZONE_CYCLE,
+                            3,
+                            8,
+                            new byte[] { 0x06, (byte) 0x80, 0x02, 0x40, 0x02, 0x20 }));
                     resizeRoutine = 2;
                 }
             } else if (resizeRoutine == 2) {
@@ -643,11 +801,12 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
                     // Back to cave entry watch
                     resizeRoutine = 0;
                 } else if (cameraX >= 0x900 && cameraY >= 0x500) {
-                    Palette pal3 = level.getPalette(3);
-                    pal3.getColor(8).fromSegaFormat(new byte[]{0x0C, (byte) 0xEE}, 0);
-                    pal3.getColor(9).fromSegaFormat(new byte[]{0x0A, (byte) 0xCE}, 0);
-                    pal3.getColor(10).fromSegaFormat(new byte[]{0x00, (byte) 0x8A}, 0);
-                    dirty3 = true;
+                    registry.submit(PaletteWrite.normal(
+                            S3kPaletteOwners.HCZ_CAVE_LIGHTING,
+                            S3kPaletteOwners.PRIORITY_ZONE_CYCLE,
+                            3,
+                            8,
+                            new byte[] { 0x0C, (byte) 0xEE, 0x0A, (byte) 0xCE, 0x00, (byte) 0x8A }));
                     resizeRoutine = 4;
                 }
             }
@@ -661,21 +820,22 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
     // Channel 1 - Bumpers/teacups (gated by Palette_cycle_counter1, period 3):
     //   AnPal_PalCNZ_1 → Normal_palette_line_4+$12 → palette[3] colors 9-11
     //   counter0 step +6, wrap at 0x60 (16 frames)
-    //   Note: water table (AnPal_PalCNZ_2) is used for Water_palette_line_4 in ROM;
-    //   we use Normal table only. TODO: sync to underwater palette when implemented.
+    //   AnPal_PalCNZ_2 → Water_palette_line_4+$12 → underwater palette[3] colors 9-11
     //
     // Channel 2 - Background (runs every frame, NOT gated by channel 1 timer):
     //   AnPal_PalCNZ_3 → Normal_palette_line_3+$12 → palette[2] colors 9-11
     //   counter2 (Palette_cycle_counters+$02) step +6, wrap at 0xB4 (30 frames)
-    //   Note: water table (AnPal_PalCNZ_4) omitted. TODO: sync to underwater palette.
+    //   AnPal_PalCNZ_4 → Water_palette_line_3+$12 → underwater palette[2] colors 9-11
     //
     // Channel 3 - Tertiary (gated by Palette_cycle_counters+$08, period 2):
     //   AnPal_PalCNZ_5 → Normal_palette_line_3+$0E → palette[2] colors 7-8
     //   counter4 (Palette_cycle_counters+$04) step +4, wrap at 0x40 (16 frames)
     private static class CnzCycle extends PaletteCycle {
-        private final byte[] bumperData;    // AnPal_PalCNZ_1: 96 bytes (16 frames × 6 bytes)
-        private final byte[] bgData;        // AnPal_PalCNZ_3: 180 bytes (30 frames × 6 bytes)
-        private final byte[] tertiaryData;  // AnPal_PalCNZ_5: 64 bytes (16 frames × 4 bytes)
+        // Immutable ROM-derived resources, like the other cycles' final data tables.
+        // Rewind captures only the mutable timer/counter fields below.
+        private final List<PaletteWrite> bumperPatches;
+        private final List<PaletteWrite> backgroundPatches;
+        private final List<PaletteWrite> tertiaryPatches;
 
         // Channel 1 timer (Palette_cycle_counter1): period 3 → fires every 4 frames
         private int timer1;
@@ -688,74 +848,78 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
         // Channel 3 counter (Palette_cycle_counters+$04): step +4, wrap 0x40
         private int counter4;
 
-        private boolean dirty2;
-        private boolean dirty3;
-
-        CnzCycle(byte[] bumperData, byte[] bgData, byte[] tertiaryData) {
-            this.bumperData = bumperData;
-            this.bgData = bgData;
-            this.tertiaryData = tertiaryData;
+        CnzCycle(byte[] bumperData, byte[] bumperWaterData,
+                 byte[] bgData, byte[] bgWaterData, byte[] tertiaryData) {
+            bumperPatches = pairedPatches(3, 9, bumperData, bumperWaterData, 6);
+            backgroundPatches = pairedPatches(2, 9, bgData, bgWaterData, 6);
+            tertiaryPatches = pairedPatches(2, 7, tertiaryData, tertiaryData, 4);
         }
 
         @Override
-        void tick(Level level, GraphicsManager gm) {
+        void tick(Level level, PaletteOwnershipRegistry registry) {
             // Channel 1 (bumpers) — gated by timer1
             if (timer1 > 0) {
                 timer1--;
             } else {
                 timer1 = 3;
-                Palette pal3 = level.getPalette(3);
                 int d0 = counter0;
                 counter0 += 6;
                 if (counter0 >= 0x60) {
                     counter0 = 0;
                 }
-                pal3.getColor(9).fromSegaFormat(bumperData, d0);
-                pal3.getColor(10).fromSegaFormat(bumperData, d0 + 2);
-                pal3.getColor(11).fromSegaFormat(bumperData, d0 + 4);
-                dirty3 = true;
+                submitPairedPatch(registry, bumperPatches, d0 / 6);
             }
 
             // Channel 2 (background) — always runs every frame
-            {
-                Palette pal2 = level.getPalette(2);
-                int d0 = counter2;
-                counter2 += 6;
-                if (counter2 >= 0xB4) {
-                    counter2 = 0;
-                }
-                pal2.getColor(9).fromSegaFormat(bgData, d0);
-                pal2.getColor(10).fromSegaFormat(bgData, d0 + 2);
-                pal2.getColor(11).fromSegaFormat(bgData, d0 + 4);
-                dirty2 = true;
+            int d0 = counter2;
+            counter2 += 6;
+            if (counter2 >= 0xB4) {
+                counter2 = 0;
             }
+            submitPairedPatch(registry, backgroundPatches, d0 / 6);
 
             // Channel 3 (tertiary) — gated by timer3
             if (timer3 > 0) {
                 timer3--;
             } else {
                 timer3 = 2;
-                Palette pal2 = level.getPalette(2);
-                int d0 = counter4;
+                int d1 = counter4;
                 counter4 += 4;
                 if (counter4 >= 0x40) {
                     counter4 = 0;
                 }
-                pal2.getColor(7).fromSegaFormat(tertiaryData, d0);
-                pal2.getColor(8).fromSegaFormat(tertiaryData, d0 + 2);
-                dirty2 = true;
+                submitPairedPatch(registry, tertiaryPatches, d1 / 4);
             }
+        }
 
-            if (gm.isGlInitialized()) {
-                if (dirty2) {
-                    gm.cachePaletteTexture(level.getPalette(2), 2);
-                    dirty2 = false;
-                }
-                if (dirty3) {
-                    gm.cachePaletteTexture(level.getPalette(3), 3);
-                    dirty3 = false;
-                }
+        /**
+         * Submits paired CNZ normal/water palette patches to the ownership registry.
+         *
+         * <p>The write uses {@link S3kPaletteOwners#PRIORITY_ZONE_EVENT} so it
+         * sits above baseline zone cycling and below object-driven overrides,
+         * matching the Task 5 ownership contract for CNZ.
+         */
+        private static void submitPairedPatch(PaletteOwnershipRegistry registry,
+                                              List<PaletteWrite> patches, int frame) {
+            registry.submit(patches.get(frame * 2));
+            registry.submit(patches.get(frame * 2 + 1));
+        }
+
+        private static List<PaletteWrite> pairedPatches(int paletteIndex, int startColor,
+                                                       byte[] normalSource, byte[] waterSource,
+                                                       int byteCount) {
+            List<PaletteWrite> patches = new ArrayList<>();
+            for (int offset = 0; offset < normalSource.length; offset += byteCount) {
+                patches.add(PaletteWrite.normal(
+                        S3kPaletteOwners.CNZ_ANPAL,
+                        S3kPaletteOwners.PRIORITY_ZONE_EVENT,
+                        paletteIndex, startColor, slice(normalSource, offset, byteCount)));
+                patches.add(PaletteWrite.underwater(
+                        S3kPaletteOwners.CNZ_ANPAL,
+                        S3kPaletteOwners.PRIORITY_ZONE_EVENT,
+                        paletteIndex, startColor, slice(waterSource, offset, byteCount)));
             }
+            return List.copyOf(patches);
         }
     }
 
@@ -767,11 +931,9 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
     //
     // Channel 2 — conditional (timer1 period 9; gated by Events_bg+$16 != 0):
     //   counter2 +4, wrap 0x48 → Normal_palette_line_4+$1C = palette[3] colors 14-15
-    //   For now: always enabled (TODO: gate by Events_bg+$16 flag)
     //
     // Channel 3 — conditional (timer2 period 7; same gate as channel 2):
     //   counter4 +4, wrap 0x18 → Normal_palette_line_4+$18 = palette[3] colors 12-13
-    //   For now: always enabled (TODO: gate by Events_bg+$16 flag)
     //
     // Channel 4 — always runs on timer2 (shares channel 3 timer):
     //   counter6 +4, wrap 0x40 → Normal_palette_line_3+$18 = palette[2] colors 12-13
@@ -805,7 +967,9 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
         }
 
         @Override
-        void tick(Level level, GraphicsManager gm) {
+        void tick(Level level, PaletteOwnershipRegistry registry) {
+            GraphicsManager gm = GameServices.graphics();
+            boolean line4CyclesEnabled = isIndoorPaletteCyclingActive();
             // Channel 1 (and 4): timer1
             if (timer1 > 0) {
                 timer1--;
@@ -817,9 +981,15 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
                 if (counter0 >= 0x40) {
                     counter0 = 0;
                 }
-                Palette pal2 = level.getPalette(2);
-                pal2.getColor(14).fromSegaFormat(data1, d0);
-                pal2.getColor(15).fromSegaFormat(data1, d0 + 2);
+                S3kPaletteWriteSupport.applyContiguousPatch(
+                        registry,
+                        level,
+                        gm,
+                        S3kPaletteOwners.ICZ_ZONE_CYCLE,
+                        S3kPaletteOwners.PRIORITY_ZONE_CYCLE,
+                        2,
+                        14,
+                        slice(data1, d0, 4));
                 dirty2 = true;
             }
 
@@ -828,16 +998,23 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
                 timer2--;
             } else {
                 timer2 = 9;
-                // TODO: gate by Events_bg+$16 flag
                 int d0 = counter2;
                 counter2 += 4;
                 if (counter2 >= 0x48) {
                     counter2 = 0;
                 }
-                Palette pal3 = level.getPalette(3);
-                pal3.getColor(14).fromSegaFormat(data2, d0);
-                pal3.getColor(15).fromSegaFormat(data2, d0 + 2);
-                dirty3 = true;
+                if (line4CyclesEnabled) {
+                    S3kPaletteWriteSupport.applyContiguousPatch(
+                            registry,
+                            level,
+                            gm,
+                            S3kPaletteOwners.ICZ_ZONE_CYCLE,
+                            S3kPaletteOwners.PRIORITY_ZONE_CYCLE,
+                            3,
+                            14,
+                            slice(data2, d0, 4));
+                    dirty3 = true;
+                }
             }
 
             // Channel 3+4: shared timer
@@ -846,16 +1023,23 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
             } else {
                 timer3 = 7;
                 // Channel 3: palette[3] colors 12-13 (Normal_palette_line_4+$18)
-                // TODO: gate by Events_bg+$16 flag
                 int d0 = counter4;
                 counter4 += 4;
                 if (counter4 >= 0x18) {
                     counter4 = 0;
                 }
-                Palette pal3 = level.getPalette(3);
-                pal3.getColor(12).fromSegaFormat(data3, d0);
-                pal3.getColor(13).fromSegaFormat(data3, d0 + 2);
-                dirty3 = true;
+                if (line4CyclesEnabled) {
+                    S3kPaletteWriteSupport.applyContiguousPatch(
+                            registry,
+                            level,
+                            gm,
+                            S3kPaletteOwners.ICZ_ZONE_CYCLE,
+                            S3kPaletteOwners.PRIORITY_ZONE_CYCLE,
+                            3,
+                            12,
+                            slice(data3, d0, 4));
+                    dirty3 = true;
+                }
 
                 // Channel 4: palette[2] colors 12-13 (Normal_palette_line_3+$18) — always runs
                 int d1 = counter6;
@@ -863,22 +1047,37 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
                 if (counter6 >= 0x40) {
                     counter6 = 0;
                 }
-                Palette pal2 = level.getPalette(2);
-                pal2.getColor(12).fromSegaFormat(data4, d1);
-                pal2.getColor(13).fromSegaFormat(data4, d1 + 2);
+                S3kPaletteWriteSupport.applyContiguousPatch(
+                        registry,
+                        level,
+                        gm,
+                        S3kPaletteOwners.ICZ_ZONE_CYCLE,
+                        S3kPaletteOwners.PRIORITY_ZONE_CYCLE,
+                        2,
+                        12,
+                        slice(data4, d1, 4));
                 dirty2 = true;
             }
 
-            if (gm.isGlInitialized()) {
-                if (dirty2) {
-                    gm.cachePaletteTexture(level.getPalette(2), 2);
-                    dirty2 = false;
-                }
-                if (dirty3) {
-                    gm.cachePaletteTexture(level.getPalette(3), 3);
-                    dirty3 = false;
-                }
+            if (dirty2) {
+                cacheFallbackPaletteTexture(registry, gm, level, 2);
+                dirty2 = false;
             }
+            if (dirty3) {
+                cacheFallbackPaletteTexture(registry, gm, level, 3);
+                dirty3 = false;
+            }
+        }
+
+        private boolean isIndoorPaletteCyclingActive() {
+            try {
+                return S3kRuntimeStates.currentIcz(GameServices.zoneRuntimeRegistry())
+                        .map(state -> state.isIndoorPaletteCyclingActive())
+                        .orElse(false);
+            } catch (IllegalStateException ignored) {
+                // Direct palette-cycler tests may run without a gameplay session.
+            }
+            return false;
         }
     }
 
@@ -899,7 +1098,8 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
         }
 
         @Override
-        void tick(Level level, GraphicsManager gm) {
+        void tick(Level level, PaletteOwnershipRegistry registry) {
+            GraphicsManager gm = GameServices.graphics();
             if (timer > 0) {
                 timer--;
             } else {
@@ -909,15 +1109,20 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
                 if (counter0 >= 0x12) {
                     counter0 = 0;
                 }
-                Palette pal2 = level.getPalette(2);
-                pal2.getColor(8).fromSegaFormat(tableData, d0);
-                pal2.getColor(9).fromSegaFormat(tableData, d0 + 2);
-                pal2.getColor(10).fromSegaFormat(tableData, d0 + 4);
+                S3kPaletteWriteSupport.applyContiguousPatch(
+                        registry,
+                        level,
+                        gm,
+                        S3kPaletteOwners.LBZ_ZONE_CYCLE,
+                        S3kPaletteOwners.PRIORITY_ZONE_CYCLE,
+                        2,
+                        8,
+                        slice(tableData, d0, 6));
                 dirty = true;
             }
 
-            if (dirty && gm.isGlInitialized()) {
-                gm.cachePaletteTexture(level.getPalette(2), 2);
+            if (dirty) {
+                cacheFallbackPaletteTexture(registry, gm, level, 2);
                 dirty = false;
             }
         }
@@ -959,7 +1164,8 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
         }
 
         @Override
-        void tick(Level level, GraphicsManager gm) {
+        void tick(Level level, PaletteOwnershipRegistry registry) {
+            GraphicsManager gm = GameServices.graphics();
             // Shared timer (channels A+B): period 16
             if (timerAB > 0) {
                 timerAB--;
@@ -972,11 +1178,15 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
                 if (counterA >= 0x80) {
                     counterA = 0;
                 }
-                Palette pal2 = level.getPalette(2);
-                pal2.getColor(1).fromSegaFormat(sharedData1, d0);
-                pal2.getColor(2).fromSegaFormat(sharedData1, d0 + 2);
-                pal2.getColor(3).fromSegaFormat(sharedData1, d0 + 4);
-                pal2.getColor(4).fromSegaFormat(sharedData1, d0 + 6);
+                S3kPaletteWriteSupport.applyContiguousPatch(
+                        registry,
+                        level,
+                        gm,
+                        S3kPaletteOwners.LRZ_ZONE_CYCLE,
+                        S3kPaletteOwners.PRIORITY_ZONE_CYCLE,
+                        2,
+                        1,
+                        slice(sharedData1, d0, 8));
                 dirty2 = true;
 
                 // Channel B: AnPal_PalLRZ12_2 → palette 3 colors 1-2
@@ -985,9 +1195,15 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
                 if (counterB >= 0x1C) {
                     counterB = 0;
                 }
-                Palette pal3 = level.getPalette(3);
-                pal3.getColor(1).fromSegaFormat(sharedData2, d1);
-                pal3.getColor(2).fromSegaFormat(sharedData2, d1 + 2);
+                S3kPaletteWriteSupport.applyContiguousPatch(
+                        registry,
+                        level,
+                        gm,
+                        S3kPaletteOwners.LRZ_ZONE_CYCLE,
+                        S3kPaletteOwners.PRIORITY_ZONE_CYCLE,
+                        3,
+                        1,
+                        slice(sharedData2, d1, 4));
                 dirty3 = true;
             }
 
@@ -1003,20 +1219,25 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
                 if (counterC >= 0x22) {
                     counterC = 0;
                 }
-                Palette pal2 = level.getPalette(2);
-                pal2.getColor(11).fromSegaFormat(lrz1Data3, d0);
+                S3kPaletteWriteSupport.applyContiguousPatch(
+                        registry,
+                        level,
+                        gm,
+                        S3kPaletteOwners.LRZ_ZONE_CYCLE,
+                        S3kPaletteOwners.PRIORITY_ZONE_CYCLE,
+                        2,
+                        11,
+                        slice(lrz1Data3, d0, 2));
                 dirty2 = true;
             }
 
-            if (gm.isGlInitialized()) {
-                if (dirty2) {
-                    gm.cachePaletteTexture(level.getPalette(2), 2);
-                    dirty2 = false;
-                }
-                if (dirty3) {
-                    gm.cachePaletteTexture(level.getPalette(3), 3);
-                    dirty3 = false;
-                }
+            if (dirty2) {
+                cacheFallbackPaletteTexture(registry, gm, level, 2);
+                dirty2 = false;
+            }
+            if (dirty3) {
+                cacheFallbackPaletteTexture(registry, gm, level, 3);
+                dirty3 = false;
             }
         }
     }
@@ -1058,7 +1279,8 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
         }
 
         @Override
-        void tick(Level level, GraphicsManager gm) {
+        void tick(Level level, PaletteOwnershipRegistry registry) {
+            GraphicsManager gm = GameServices.graphics();
             // Shared timer (channels A+B): period 16
             if (timerAB > 0) {
                 timerAB--;
@@ -1071,11 +1293,15 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
                 if (counterA >= 0x80) {
                     counterA = 0;
                 }
-                Palette pal2 = level.getPalette(2);
-                pal2.getColor(1).fromSegaFormat(sharedData1, d0);
-                pal2.getColor(2).fromSegaFormat(sharedData1, d0 + 2);
-                pal2.getColor(3).fromSegaFormat(sharedData1, d0 + 4);
-                pal2.getColor(4).fromSegaFormat(sharedData1, d0 + 6);
+                S3kPaletteWriteSupport.applyContiguousPatch(
+                        registry,
+                        level,
+                        gm,
+                        S3kPaletteOwners.LRZ_ZONE_CYCLE,
+                        S3kPaletteOwners.PRIORITY_ZONE_CYCLE,
+                        2,
+                        1,
+                        slice(sharedData1, d0, 8));
                 dirty2 = true;
 
                 // Channel B: AnPal_PalLRZ12_2 → palette 3 colors 1-2
@@ -1084,9 +1310,15 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
                 if (counterB >= 0x1C) {
                     counterB = 0;
                 }
-                Palette pal3 = level.getPalette(3);
-                pal3.getColor(1).fromSegaFormat(sharedData2, d1);
-                pal3.getColor(2).fromSegaFormat(sharedData2, d1 + 2);
+                S3kPaletteWriteSupport.applyContiguousPatch(
+                        registry,
+                        level,
+                        gm,
+                        S3kPaletteOwners.LRZ_ZONE_CYCLE,
+                        S3kPaletteOwners.PRIORITY_ZONE_CYCLE,
+                        3,
+                        1,
+                        slice(sharedData2, d1, 4));
                 dirty3 = true;
             }
 
@@ -1104,24 +1336,36 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
                 if (counterD >= 0x100) {
                     counterD = 0;
                 }
-                Palette pal3 = level.getPalette(3);
-                pal3.getColor(11).fromSegaFormat(lrz2Data3, d0);
-                pal3.getColor(12).fromSegaFormat(lrz2Data3, d0 + 2);
+                byte[] duplicateColors = slice(lrz2Data3, d0, 4);
+                S3kPaletteWriteSupport.applyContiguousPatch(
+                        registry,
+                        level,
+                        gm,
+                        S3kPaletteOwners.LRZ_ZONE_CYCLE,
+                        S3kPaletteOwners.PRIORITY_ZONE_CYCLE,
+                        3,
+                        11,
+                        duplicateColors);
                 // ROM bug: same data again (d0, not d0+4) for colors 13+14
-                pal3.getColor(13).fromSegaFormat(lrz2Data3, d0);
-                pal3.getColor(14).fromSegaFormat(lrz2Data3, d0 + 2);
+                S3kPaletteWriteSupport.applyContiguousPatch(
+                        registry,
+                        level,
+                        gm,
+                        S3kPaletteOwners.LRZ_ZONE_CYCLE,
+                        S3kPaletteOwners.PRIORITY_ZONE_CYCLE,
+                        3,
+                        13,
+                        duplicateColors);
                 dirty3 = true;
             }
 
-            if (gm.isGlInitialized()) {
-                if (dirty2) {
-                    gm.cachePaletteTexture(level.getPalette(2), 2);
-                    dirty2 = false;
-                }
-                if (dirty3) {
-                    gm.cachePaletteTexture(level.getPalette(3), 3);
-                    dirty3 = false;
-                }
+            if (dirty2) {
+                cacheFallbackPaletteTexture(registry, gm, level, 2);
+                dirty2 = false;
+            }
+            if (dirty3) {
+                cacheFallbackPaletteTexture(registry, gm, level, 3);
+                dirty3 = false;
             }
         }
     }
@@ -1158,7 +1402,8 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
         }
 
         @Override
-        void tick(Level level, GraphicsManager gm) {
+        void tick(Level level, PaletteOwnershipRegistry registry) {
+            GraphicsManager gm = GameServices.graphics();
             // Channel 1: Balloons → palette 2, colors 13-15
             if (timer1 > 0) {
                 timer1--;
@@ -1169,10 +1414,15 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
                 if (counter0 >= 0x12) {
                     counter0 = 0;
                 }
-                Palette pal2 = level.getPalette(2);
-                pal2.getColor(13).fromSegaFormat(balloonsData, d0);
-                pal2.getColor(14).fromSegaFormat(balloonsData, d0 + 2);
-                pal2.getColor(15).fromSegaFormat(balloonsData, d0 + 4);
+                S3kPaletteWriteSupport.applyContiguousPatch(
+                        registry,
+                        level,
+                        gm,
+                        S3kPaletteOwners.BPZ_ZONE_CYCLE,
+                        S3kPaletteOwners.PRIORITY_ZONE_CYCLE,
+                        2,
+                        13,
+                        slice(balloonsData, d0, 6));
                 dirty2 = true;
             }
 
@@ -1186,22 +1436,25 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
                 if (counter2 >= 0x7E) {
                     counter2 = 0;
                 }
-                Palette pal3 = level.getPalette(3);
-                pal3.getColor(2).fromSegaFormat(bgData, d0);
-                pal3.getColor(3).fromSegaFormat(bgData, d0 + 2);
-                pal3.getColor(4).fromSegaFormat(bgData, d0 + 4);
+                S3kPaletteWriteSupport.applyContiguousPatch(
+                        registry,
+                        level,
+                        gm,
+                        S3kPaletteOwners.BPZ_ZONE_CYCLE,
+                        S3kPaletteOwners.PRIORITY_ZONE_CYCLE,
+                        3,
+                        2,
+                        slice(bgData, d0, 6));
                 dirty3 = true;
             }
 
-            if (gm.isGlInitialized()) {
-                if (dirty2) {
-                    gm.cachePaletteTexture(level.getPalette(2), 2);
-                    dirty2 = false;
-                }
-                if (dirty3) {
-                    gm.cachePaletteTexture(level.getPalette(3), 3);
-                    dirty3 = false;
-                }
+            if (dirty2) {
+                cacheFallbackPaletteTexture(registry, gm, level, 2);
+                dirty2 = false;
+            }
+            if (dirty3) {
+                cacheFallbackPaletteTexture(registry, gm, level, 3);
+                dirty3 = false;
             }
         }
     }
@@ -1221,7 +1474,8 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
         }
 
         @Override
-        void tick(Level level, GraphicsManager gm) {
+        void tick(Level level, PaletteOwnershipRegistry registry) {
+            GraphicsManager gm = GameServices.graphics();
             if (timer > 0) {
                 timer--;
             } else {
@@ -1231,16 +1485,20 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
                 if (counter0 >= 0x50) {
                     counter0 = 0;
                 }
-                Palette pal2 = level.getPalette(2);
-                pal2.getColor(2).fromSegaFormat(cgzData, d0);
-                pal2.getColor(3).fromSegaFormat(cgzData, d0 + 2);
-                pal2.getColor(4).fromSegaFormat(cgzData, d0 + 4);
-                pal2.getColor(5).fromSegaFormat(cgzData, d0 + 6);
+                S3kPaletteWriteSupport.applyContiguousPatch(
+                        registry,
+                        level,
+                        gm,
+                        S3kPaletteOwners.CGZ_ZONE_CYCLE,
+                        S3kPaletteOwners.PRIORITY_ZONE_CYCLE,
+                        2,
+                        2,
+                        slice(cgzData, d0, 8));
                 dirty = true;
             }
 
-            if (dirty && gm.isGlInitialized()) {
-                gm.cachePaletteTexture(level.getPalette(2), 2);
+            if (dirty) {
+                cacheFallbackPaletteTexture(registry, gm, level, 2);
                 dirty = false;
             }
         }
@@ -1273,7 +1531,8 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
         }
 
         @Override
-        void tick(Level level, GraphicsManager gm) {
+        void tick(Level level, PaletteOwnershipRegistry registry) {
+            GraphicsManager gm = GameServices.graphics();
             // Channel 1: emerald glow → palette 2 color 14
             if (glowTimer > 0) {
                 glowTimer--;
@@ -1285,7 +1544,15 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
                     glowCounter = 0;
                 }
                 // ROM: move.w 4(a0,d0.w) — skip 4 bytes from table base
-                level.getPalette(2).getColor(14).fromSegaFormat(glowData, 4 + d0);
+                S3kPaletteWriteSupport.applyContiguousPatch(
+                        registry,
+                        level,
+                        gm,
+                        S3kPaletteOwners.EMZ_ZONE_CYCLE,
+                        S3kPaletteOwners.PRIORITY_ZONE_CYCLE,
+                        2,
+                        14,
+                        slice(glowData, 4 + d0, 2));
                 dirty2 = true;
             }
 
@@ -1300,21 +1567,25 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
                     bgCounter = 0;
                 }
                 // ROM: move.l (a0,d0.w) — write 2 colors at once
-                Palette pal3 = level.getPalette(3);
-                pal3.getColor(9).fromSegaFormat(bgData, d0);
-                pal3.getColor(10).fromSegaFormat(bgData, d0 + 2);
+                S3kPaletteWriteSupport.applyContiguousPatch(
+                        registry,
+                        level,
+                        gm,
+                        S3kPaletteOwners.EMZ_ZONE_CYCLE,
+                        S3kPaletteOwners.PRIORITY_ZONE_CYCLE,
+                        3,
+                        9,
+                        slice(bgData, d0, 4));
                 dirty3 = true;
             }
 
-            if (gm.isGlInitialized()) {
-                if (dirty2) {
-                    gm.cachePaletteTexture(level.getPalette(2), 2);
-                    dirty2 = false;
-                }
-                if (dirty3) {
-                    gm.cachePaletteTexture(level.getPalette(3), 3);
-                    dirty3 = false;
-                }
+            if (dirty2) {
+                cacheFallbackPaletteTexture(registry, gm, level, 2);
+                dirty2 = false;
+            }
+            if (dirty3) {
+                cacheFallbackPaletteTexture(registry, gm, level, 3);
+                dirty3 = false;
             }
         }
     }
@@ -1340,70 +1611,113 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
         }
 
         @Override
-        void tick(Level level, GraphicsManager gm) {
+        void tick(Level level, PaletteOwnershipRegistry registry) {
+            GraphicsManager gm = GameServices.graphics();
             int mode = resolveMode();
             if (mode < 0) {
                 return;
             }
             if (mode == 0) {
-                tickIdle(level);
+                tickIdle(level, registry, gm);
             } else {
-                tickCapture(level);
+                tickCapture(level, registry, gm);
             }
 
-            if (gm.isGlInitialized()) {
-                if (dirty2) {
-                    gm.cachePaletteTexture(level.getPalette(2), 2);
-                    dirty2 = false;
-                }
-                if (dirty3) {
-                    gm.cachePaletteTexture(level.getPalette(3), 3);
-                    dirty3 = false;
-                }
+            if (dirty2) {
+                cacheFallbackPaletteTexture(registry, gm, level, 2);
+                dirty2 = false;
+            }
+            if (dirty3) {
+                cacheFallbackPaletteTexture(registry, gm, level, 3);
+                dirty3 = false;
             }
         }
 
         private int resolveMode() {
-            return resolveSlotsModeFromRegistry();
+            return resolveSlotsModeFromSession();
         }
 
-        private void tickIdle(Level level) {
+        private void tickIdle(Level level, PaletteOwnershipRegistry registry, GraphicsManager gm) {
             if (idleTimer > 0) {
                 idleTimer--;
                 return;
             }
             idleTimer = 3;
 
-            Palette pal2 = level.getPalette(2);
-            Palette pal3 = level.getPalette(3);
-            applyFourColors(pal2, 10, idleData, idleOffset);
+            S3kPaletteWriteSupport.applyContiguousPatch(
+                    registry,
+                    level,
+                    gm,
+                    S3kPaletteOwners.SLOTS_ZONE_CYCLE,
+                    S3kPaletteOwners.PRIORITY_ZONE_CYCLE,
+                    2,
+                    10,
+                    slice(idleData, idleOffset, 8));
             idleOffset += 8;
             if (idleOffset >= 0x40) {
                 idleOffset = 0;
             }
-            pal2.getColor(14).fromSegaFormat(FIXED_IDLE_COLOR, 0);
+            S3kPaletteWriteSupport.applyContiguousPatch(
+                    registry,
+                    level,
+                    gm,
+                    S3kPaletteOwners.SLOTS_ZONE_CYCLE,
+                    S3kPaletteOwners.PRIORITY_ZONE_CYCLE,
+                    2,
+                    14,
+                    FIXED_IDLE_COLOR);
             // ROM AnPal_Slots mirrors only the shared accent into line 4.
-            pal3.getColor(14).fromSegaFormat(FIXED_IDLE_COLOR, 0);
+            S3kPaletteWriteSupport.applyContiguousPatch(
+                    registry,
+                    level,
+                    gm,
+                    S3kPaletteOwners.SLOTS_ZONE_CYCLE,
+                    S3kPaletteOwners.PRIORITY_ZONE_CYCLE,
+                    3,
+                    14,
+                    FIXED_IDLE_COLOR);
             dirty2 = true;
             dirty3 = true;
         }
 
-        private void tickCapture(Level level) {
+        private void tickCapture(Level level, PaletteOwnershipRegistry registry, GraphicsManager gm) {
             if (captureTimer > 0) {
                 captureTimer--;
                 return;
             }
             captureTimer = 0;
 
-            Palette pal2 = level.getPalette(2);
-            Palette pal3 = level.getPalette(3);
-            applyFourColors(pal2, 10, captureData, captureOffset);
+            S3kPaletteWriteSupport.applyContiguousPatch(
+                    registry,
+                    level,
+                    gm,
+                    S3kPaletteOwners.SLOTS_ZONE_CYCLE,
+                    S3kPaletteOwners.PRIORITY_ZONE_CYCLE,
+                    2,
+                    10,
+                    slice(captureData, captureOffset, 8));
             captureOffset += 8;
             if (captureOffset >= 0x78) {
                 captureOffset = 0;
             }
-            pal2.getColor(14).fromSegaFormat(accentData, accentOffset);
-            pal3.getColor(14).fromSegaFormat(accentData, accentOffset);
+            S3kPaletteWriteSupport.applyContiguousPatch(
+                    registry,
+                    level,
+                    gm,
+                    S3kPaletteOwners.SLOTS_ZONE_CYCLE,
+                    S3kPaletteOwners.PRIORITY_ZONE_CYCLE,
+                    2,
+                    14,
+                    slice(accentData, accentOffset, 2));
+            S3kPaletteWriteSupport.applyContiguousPatch(
+                    registry,
+                    level,
+                    gm,
+                    S3kPaletteOwners.SLOTS_ZONE_CYCLE,
+                    S3kPaletteOwners.PRIORITY_ZONE_CYCLE,
+                    3,
+                    14,
+                    slice(accentData, accentOffset, 2));
             accentOffset += 2;
             if (accentOffset >= 0x0C) {
                 accentOffset = 0;
@@ -1411,18 +1725,10 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
             dirty2 = true;
             dirty3 = true;
         }
-
-        private void applyFourColors(Palette palette, int startColor, byte[] data, int offset) {
-            palette.getColor(startColor).fromSegaFormat(data, offset);
-            palette.getColor(startColor + 1).fromSegaFormat(data, offset + 2);
-            palette.getColor(startColor + 2).fromSegaFormat(data, offset + 4);
-            palette.getColor(startColor + 3).fromSegaFormat(data, offset + 6);
-        }
     }
 
-    private static int resolveSlotsModeFromRegistry() {
-        if (GameModuleRegistry.getCurrent() != null
-                && GameModuleRegistry.getCurrent().getBonusStageProvider() instanceof Sonic3kBonusStageCoordinator coordinator
+    private static int resolveSlotsModeFromSession() {
+        if (GameServices.module().getBonusStageProvider() instanceof Sonic3kBonusStageCoordinator coordinator
                 && coordinator.activeSlotRuntime() != null) {
             return resolveSlotsModeForTest(coordinator.activeSlotRuntime());
         }
@@ -1449,14 +1755,20 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
         }
 
         @Override
-        void tick(Level level, GraphicsManager gm) {
+        void tick(Level level, PaletteOwnershipRegistry registry) {
+            GraphicsManager gm = GameServices.graphics();
             if (line4Timer > 0) {
                 line4Timer--;
             } else {
-                Palette pal3 = level.getPalette(3);
-                for (int i = 0; i < 7; i++) {
-                    pal3.getColor(8 + i).fromSegaFormat(tableData, line4Offset + (i * 2));
-                }
+                S3kPaletteWriteSupport.applyContiguousPatch(
+                        registry,
+                        level,
+                        gm,
+                        S3kPaletteOwners.PACHINKO_ZONE_CYCLE,
+                        S3kPaletteOwners.PRIORITY_ZONE_CYCLE,
+                        3,
+                        8,
+                        slice(tableData, line4Offset, 14));
                 line4Offset += 0x0E;
                 if (line4Offset >= 0x0FC) {
                     line4Offset = 0;
@@ -1468,11 +1780,22 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
                 line3Timer--;
             } else {
                 line3Timer = 3;
-                Palette pal2 = level.getPalette(2);
                 int baseOffset = 0x0FC + line3Offset;
+                int[] colorIndices = new int[LINE3_OFFSETS.length];
+                int[] segaWords = new int[LINE3_OFFSETS.length];
                 for (int i = 0; i < LINE3_OFFSETS.length; i++) {
-                    pal2.getColor(1 + i).fromSegaFormat(tableData, baseOffset + LINE3_OFFSETS[i]);
+                    colorIndices[i] = 1 + i;
+                    segaWords[i] = segaWord(tableData, baseOffset + LINE3_OFFSETS[i]);
                 }
+                S3kPaletteWriteSupport.applyColors(
+                        registry,
+                        level,
+                        gm,
+                        S3kPaletteOwners.PACHINKO_ZONE_CYCLE,
+                        S3kPaletteOwners.PRIORITY_ZONE_CYCLE,
+                        2,
+                        colorIndices,
+                        segaWords);
                 line3Offset += 0x0A;
                 if (line3Offset >= 0x3E8) {
                     line3Offset = 0;
@@ -1480,17 +1803,14 @@ class Sonic3kPaletteCycler implements AnimatedPaletteManager {
                 dirty2 = true;
             }
 
-            if (gm.isGlInitialized()) {
-                if (dirty2) {
-                    gm.cachePaletteTexture(level.getPalette(2), 2);
-                    dirty2 = false;
-                }
-                if (dirty3) {
-                    gm.cachePaletteTexture(level.getPalette(3), 3);
-                    dirty3 = false;
-                }
+            if (dirty2) {
+                cacheFallbackPaletteTexture(registry, gm, level, 2);
+                dirty2 = false;
+            }
+            if (dirty3) {
+                cacheFallbackPaletteTexture(registry, gm, level, 3);
+                dirty3 = false;
             }
         }
     }
 }
-

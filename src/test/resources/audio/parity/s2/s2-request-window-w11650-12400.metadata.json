@@ -1,0 +1,115 @@
+{
+  "schema": "openggf.s2-request-oracle-audio-raw-fixture.v1",
+  "payload": "s2-request-window-w11650-12400.raw-v2.jsonl.gz",
+  "payload_schema": "openggf.s2-oracle-audio-raw.v2",
+  "source_schema": "openggf.s2-complete-run-audio-raw.v4",
+  "request_transfer_schema": "openggf.s2-preconsumption-request-transfer.v2",
+  "game": "s2",
+  "rom": {
+    "name": "Sonic 2 World REV01",
+    "sha1": "8bca5dcef1af3e00098666fd892dc1c2a76333f9",
+    "crc32": "7b905383"
+  },
+  "movie": {
+    "name": "sonic-2-sonic-tails-complete-emeralds.bk2",
+    "path": "src/test/resources/traces/s2/runs/s2-sonic-tails-complete-emeralds/sonic-2-sonic-tails-complete-emeralds.bk2",
+    "sha256": "e850798f882b8c580aad148bc97cb50f260cae1d336dd649fe2f4dfae6796aa5",
+    "rows": 259590
+  },
+  "window": {
+    "first_row": 11650,
+    "exclusive_end": 12400,
+    "rows": 750,
+    "source_first_row": 11650,
+    "source_exclusive_end": 12400,
+    "request_transfers": 29,
+    "request_pc": {
+      "sfx": "0x10d6",
+      "music": "0x10c0"
+    },
+    "request_opcode": {
+      "sfx": "13801009",
+      "music": "13400008"
+    },
+    "notes": "The next contiguous 750 rows, carrying published coverage of the complete run to row 12400 without a break. Recaptured for the two-site observer: every transfer now carries an explicit site, and the music site observes the store at loc_10C0 (docs/s2disasm/s2.asm:1302-1304), which move.b D0,$09(A1,D1.w) at 0x10D6 never reaches. The capture is bounded to this window, so source_first_row and source_exclusive_end are the window's own bounds.",
+    "request_transfers_by_site": {
+      "sfx": 27,
+      "music": 2
+    }
+  },
+  "digests": {
+    "payload_gz_sha256": "b4fb1dbafe14a3eb5407c1421105c5e81df56be605b16c010f56dc7a0a63f6f9",
+    "payload_raw_sha256": "c9d645289eb55a5ce0f92766e0ca0a8b0d0f1ccf722546c421f8cfb39f88f8be",
+    "payload_raw_bytes": 92769345,
+    "payload_raw_lines": 753
+  },
+  "capture": {
+    "duplicate_capture_gate": "not applicable to this recapture: the payload is comparison-only reference data, republished from a single deterministic bounded capture whose attestation and capability digests are pinned here and in S2PublishedRequestWindows.",
+    "source_raw_sha256": "b1a7792ad4ddf5e6dddd954a09896dc86b4a29d909b705842a87b03aa1a5c598",
+    "capture_paths": [
+      "<agent-scratch>/regen-w3/s2-request-window.oracle-raw-v2.jsonl"
+    ],
+    "capture_paths_note": "Two distinct absent external paths under a session scratch root, outside the repository; recorded for provenance, not as a re-runnable location.",
+    "candidate_core_sha256": "04555797c284358fe96dd018feed82aa9d6d4eaddc3cce8e1282a2f4fd636ffa",
+    "observer_identity_sha256": "95188e3c2cbb433188bce06e995d497afd290246ee6123da6f0060a5463893e7",
+    "service_manifest_sha256": "ef8f8103c38d70e41cb09cb29751f56815a0401709dc509071aa514d614813a0",
+    "extractor_capability_sha256": "375b972f811dff8edb610dab45ab1e7caee5967eb80f83cc8880b9bf10b8f554",
+    "extractor_attestation_sha256": "efcd1771b9604af72ebd5d99915e0cf24b77ab3efbcdf343faa9bdbd1a23858b",
+    "producer_diff_note": "The producer is TraceChaser bugfix/ai-s2-request-window-producer at 7ebed3b5182cbb8f0f33384f09f0f79c75fac1a9, where the bounded window is a command taking the recording, its SHA-256 and the movie-row interval as arguments, and the request marker is part of the shipped observer patch rather than an unmerged candidate. This capture predates that command and was taken with the ABI-4 candidate observer core, but the chain is no longer unreproducible: recapturing rows 10900 to 11650 with the command, driven by a core built from the observer patch at that commit, reproduces the published raw digest 1182a93833c4663d5a71883bd72b6c4edb50f70ab3cd9a122b3f6d0c9dca962e and, after extraction, the published payload digest b24c6f9144d8f4fe85316cf7d2a22020b916ec208280ac8001ab18876d3d9137.",
+    "control_reproduction": "Rebuilding the apparatus and recapturing the original 10150-10900 window reproduced the published source raw-v3 digest dd8b427d4a9a407102be83442d04dd21ddebebe6c3c7f72a3e453b479f870f05 and, after extraction, the published payload digest a7d56fe71674d9f4a9307e6fb6078f7832409bb310916e808faf28b1e9426c2c with the published capability and attestation digests, so these windows come from a producer proven byte-identical to the one that made the first fixture.",
+    "extractor_capability": {
+      "schema": "openggf.s2-request-aware-raw-v3-capability.v1",
+      "production_bound": false,
+      "producer": "s2-complete-audio-request-candidate",
+      "rom_sha1": "8bca5dcef1af3e00098666fd892dc1c2a76333f9",
+      "bk2_sha256": "e850798f882b8c580aad148bc97cb50f260cae1d336dd649fe2f4dfae6796aa5",
+      "service_manifest_sha256": "ef8f8103c38d70e41cb09cb29751f56815a0401709dc509071aa514d614813a0",
+      "candidate_manifest_sha256": "858ee7905edd1d31ebf0aa0a71213382354ec735267dad556831ac5dac0b5e52",
+      "candidate_patch_sha256": "2e1d1e59175f7e544558088bae48c4f45ee78401dbf808a494182c2575767a0b",
+      "candidate_recipe_sha256": "50efba4fdcf4d3787ceb42192e15b16e614823b117feeb8c30590f1db0c855a6",
+      "candidate_profile_sha256": "2589688946774b5a8977d16b969ec72e510eca4069bf3e8a61c3fde66d2a0212",
+      "harness_executable_sha256": "ff32ccd094c9b848da3c0b8ad7ff2ac1c451154be2b6fbceae3200b4fcb7f00e",
+      "first_row": 11650,
+      "exclusive_end": 12400,
+      "window_first_row": 11650,
+      "window_exclusive_end": 12400,
+      "base_event_count": 397446,
+      "all_event_count": 397473,
+      "marker_event_count": 27,
+      "request_count": 29,
+      "base_event_sha256": "22e3c77e9caaad164c4002179ff3bea4cf8f7bc8480a8276f21d10f90eff68a1",
+      "all_event_sha256": "32705286d033db9e9f5c329da19902a107985d265aa4d58a766b5567b193dcbf",
+      "marker_event_sha256": "a6d9e76fad67b039a4f2069d80c0ef9d95c55f82988bb02cd645c0694c80a730",
+      "request_sha256": "4c4d37c02c9daea79a735e6fad17b89cac0208fc007f6edbcb22dd2f06f2c1e4",
+      "max_request_occupancy": 1,
+      "override_resume_count": 0,
+      "override_resume_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "pcm_count": 0,
+      "pcm_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "cutoff_frontier_sha256": "d314bf04d6559f9c4288dc16fdc938b30c18a64cbf2e7a22b53b0d806aa833fc",
+      "terminal_state_sha256": "6f1ea8e732b5d02a74f434e4b5d3dd497744d23da264a2d95e1cc03c48f97604",
+      "digest_domains": {
+        "raw_sha256": "raw-file-bytes-v1",
+        "event_and_request_sha256": "compact-json-lf-v1",
+        "override_resume_sha256": "compact-json-lf-v1",
+        "pcm_sha256": "compact-json-lf-v1",
+        "cutoff_frontier_sha256": "compact-json-lf-v1",
+        "terminal_state_sha256": "decoded-z80-state-bytes-v1"
+      }
+    },
+    "tracechaser_commit": "4fb6d0802cc6ad27f07dd845a1b98ea84d2c7b0e",
+    "tracechaser_branch": "bugfix/ai-s2-request-window-producer",
+    "source_attestation": {
+      "schema": "openggf.s2-request-aware-raw-v3-attestation.v1",
+      "authority_id": "s2-request-candidate-unbound",
+      "raw_sha256": "8a9d8fa0db6f25cb0a40a6a998280ac8ac8df05a4c8f3cee23364c90b5df192f",
+      "raw_byte_count": 92785393,
+      "status_count": 1,
+      "fault_count": 0,
+      "overflow_count": 0
+    }
+  },
+  "production_bound": false,
+  "production_bound_meaning": "The payload's own metadata line carries production_bound:false and that value is preserved verbatim. This fixture is a committed comparison reference and binds nothing to a production producer. Nothing here hydrates engine state: it is comparison-only, MEASUREMENT_ONLY at the gate.",
+  "notes": "Published 2026-09-04 alongside the original 10150-10900 window as part of widening the S2 driver-oracle coverage. Gate: TestS2WidenedRequestOracle, which reads this payload and compares it against the engine's own request projection driven from the committed recording."
+}

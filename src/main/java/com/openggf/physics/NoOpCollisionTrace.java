@@ -18,6 +18,9 @@ public final class NoOpCollisionTrace implements CollisionTrace {
     @Override public void onSolidContactsStart(int playerX, int playerY) {}
     @Override public void onSolidCandidate(String objectType, int objectX, int objectY, boolean contacted) {}
     @Override public void onSolidResolved(SolidContact contact, boolean standing, boolean pushing) {}
+    @Override public void onSolidCheckpointStart(String objectType, int objectX, int objectY) {}
+    @Override public void onSolidCheckpointResult(String objectType, String playerLabel, String kind,
+            boolean standingNow, boolean standingLastFrame) {}
     @Override public void onSolidContactsComplete(boolean ridingObject, int adjustedX, int adjustedY) {}
     @Override public void onPostAdjustment(String adjustmentType, int beforeValue, int afterValue) {}
     @Override public List<CollisionEvent> getEvents() { return Collections.emptyList(); }

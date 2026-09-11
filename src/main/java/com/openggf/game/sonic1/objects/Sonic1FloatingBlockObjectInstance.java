@@ -3,8 +3,11 @@ import com.openggf.game.PlayableEntity;
 
 import com.openggf.debug.DebugRenderContext;
 import com.openggf.game.sonic1.Sonic1SwitchManager;
+import com.openggf.game.sonic1.Sonic1FloatingBlockState;
+import com.openggf.game.sonic1.Sonic1ZoneFeatureProvider;
 import com.openggf.game.sonic1.constants.Sonic1Constants;
 import com.openggf.game.OscillationManager;
+import com.openggf.game.ZoneFeatureProvider;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
@@ -14,6 +17,8 @@ import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
+import com.openggf.level.objects.SolidRoutineProfile;
+import com.openggf.level.objects.SpawnRomZoneRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -64,7 +69,7 @@ import java.util.List;
  * Reference: docs/s1disasm/_incObj/56 Floating Blocks and Doors.asm
  */
 public class Sonic1FloatingBlockObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, SpawnRomZoneRewindRecreatable {
 
     // ---- FBlock_Var table: {halfWidth, halfHeight} indexed by (subtype >> 4) & 7 ----
     // From disassembly: dc.b $10,$10 / $20,$20 / $10,$20 / $20,$1A / $10,$27 / $10,$10 / 8,$20 / $40,$10
@@ -137,13 +142,13 @@ public class Sonic1FloatingBlockObjectInstance extends AbstractObjectInstance
     private int y;
 
     // Saved base positions (fb_origX = objoff_34, fb_origY = objoff_30)
-    private final int origX;
-    private final int origY;
+    private int origX;
+    private int origY;
 
     // Visual properties
-    private final int halfWidth;   // obActWid
-    private final int halfHeight;  // obHeight
-    private final int mappingFrame; // obFrame
+    private int halfWidth;   // obActWid
+    private int halfHeight;  // obHeight
+    private int mappingFrame; // obFrame
 
     // fb_height (objoff_3A): total movement distance remaining
     private int fbHeight;
@@ -161,13 +166,16 @@ public class Sonic1FloatingBlockObjectInstance extends AbstractObjectInstance
     private int statusDirection;
 
     // Whether the object is in LZ (uses door art)
-    private final boolean isLZ;
+    private boolean isLZ;
 
     // Art key for rendering
     private final String artKey;
 
     // Zone index
-    private final int zoneIndex;
+    private int zoneIndex;
+
+    private final boolean syz3TunnelRealBlock;
+    private final boolean syz3TunnelProxyBlock;
 
     public Sonic1FloatingBlockObjectInstance(ObjectSpawn spawn, int zoneIndex) {
         super(spawn, "FloatingBlock");
@@ -175,6 +183,8 @@ public class Sonic1FloatingBlockObjectInstance extends AbstractObjectInstance
         this.isLZ = (zoneIndex == Sonic1Constants.ZONE_LZ);
 
         int fullSubtype = spawn.subtype() & 0xFF;
+        this.syz3TunnelRealBlock = fullSubtype == 0x37 && spawn.x() == 0x1BB8;
+        this.syz3TunnelProxyBlock = fullSubtype == 0x37 && spawn.x() == 0x1F38;
 
         // FBlock_Var lookup: lsr.w #3,d0 / andi.w #$E,d0 -> index = (subtype >> 4) & 7
         int varIndex = (fullSubtype >> 4) & 0x07;
@@ -248,7 +258,20 @@ public class Sonic1FloatingBlockObjectInstance extends AbstractObjectInstance
         return y;
     }
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
+        Sonic1FloatingBlockState blockState = services().gameService(Sonic1FloatingBlockState.class);
+        if (syz3TunnelRealBlock && blockState != null && blockState.isTunnelBlockAtDestination()) {
+            setDestroyed(true);
+            return;
+        }
+        if (syz3TunnelProxyBlock) {
+            if (blockState == null || !blockState.isTunnelBlockAtDestination()) {
+                setDestroyed(true);
+                return;
+            }
+            // REV01 clears obSubtype so the destination proxy is stationary.
+            moveType = 0;
+        }
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         applyMovement();
         updateDynamicSpawn(x, y);
@@ -268,7 +291,31 @@ public class Sonic1FloatingBlockObjectInstance extends AbstractObjectInstance
         // moveq #0,d2 / move.b obHeight(a0),d2 -> d2 = halfHeight
         // move.w d2,d3 / addq.w #1,d3 -> d3 = halfHeight + 1
         // bsr.w SolidObject
-        return new SolidObjectParams(halfWidth + 0x0B, halfHeight, halfHeight + 1);
+        return SolidObjectParams.of(halfWidth + 0x0B, halfHeight, halfHeight + 1);
+    }
+
+    @Override
+    public SolidRoutineProfile getSolidRoutineProfile() {
+        // FBlock_Solid calls S1 SolidObject, whose initial horizontal bounds
+        // use `bhi`; equality at the right face remains a side collision.
+        return SolidRoutineProfile.fullSolid(usesStickyContactBuffer(), true, false);
+    }
+
+    @Override
+    public boolean usesInstanceSolidStateLatchKey() {
+        // SolidObject stores its standing/pushing bits in the live Obj56 SST.
+        // updateDynamicSpawn() rebuilds the engine placement as an oscillating
+        // block moves, so that transient spawn cannot own persistent status.
+        return true;
+    }
+
+    @Override
+    public int getBalanceWidthPixels() {
+        // Sonic_Move reads the stood-on object's obActWid for edge balancing.
+        // FBlock_Main loads that byte directly from FBlock_Var, while
+        // FBlock_Solid adds $B only to the d1 passed to SolidObject. Keep that
+        // collision padding out of the player's balance window.
+        return halfWidth;
     }
 
     @Override
@@ -297,7 +344,7 @@ public class Sonic1FloatingBlockObjectInstance extends AbstractObjectInstance
     @Override
     public boolean isPersistent() {
         // out_of_range.w DeleteObject,fb_origX(a0)
-        return !isDestroyed() && isInRange(origX);
+        return !isDestroyed() && isInRangeAt(origX);
     }
 
     @Override
@@ -387,6 +434,12 @@ public class Sonic1FloatingBlockObjectInstance extends AbstractObjectInstance
             Sonic1SwitchManager switches = services().gameService(Sonic1SwitchManager.class);
             // ROM: btst #0,(f_switch+fb_type)
             if ((switches.getRaw(fbType) & 0x01) != 0) {
+                // ROM (lines 239-243): once the switch is pressed, the LZ1
+                // switch-3 door unconditionally re-enables the water current
+                // this same frame, overriding the disable above.
+                if (isLz1WaterTunnelDoor()) {
+                    setWindTunnelDisabled(false);
+                }
                 // Switch pressed - begin activation
                 activated = true;
             }
@@ -471,6 +524,10 @@ public class Sonic1FloatingBlockObjectInstance extends AbstractObjectInstance
         fbHeight++;
         // cmpi.w #$380,fb_height(a0)
         if (fbHeight >= TYPE07_MAX_DISTANCE) {
+            Sonic1FloatingBlockState blockState = services().gameService(Sonic1FloatingBlockState.class);
+            if (syz3TunnelRealBlock && blockState != null) {
+                blockState.markTunnelBlockAtDestination();
+            }
             // clr.b obSubtype(a0) -> stationary
             moveType = 0x00;
             activated = false;
@@ -639,15 +696,51 @@ public class Sonic1FloatingBlockObjectInstance extends AbstractObjectInstance
     }
 
     /**
-     * Handle LZ1 water tunnel allow flag logic.
-     * In LZ act 1, switch 3 controls whether the water tunnel is allowed.
-     * When the player is to the left of this door, the tunnel is allowed;
-     * when the switch activates, the tunnel is disallowed.
+     * Handle LZ1 water tunnel allow flag logic (ROM: f_wtunnelallow).
+     * <p>
+     * ROM: "56 SYZ, SLZ Floating Blocks and LZ Doors.asm" type05, lines 219-232.
+     * Only the LZ1 (zone LZ, act 1) door with {@code fb_type == 3} gates the
+     * tunnel: every frame before the door is triggered, the flag is cleared
+     * (tunnel allowed), then re-disabled if Sonic hasn't yet passed the door's
+     * X position. Without this gate the water current pushes Sonic into the
+     * still-closed door with no way out.
      */
     private void handleLz1WaterTunnel() {
-        // cmpi.w #(id_LZ<<8)+0,(v_zone).w — only in LZ act 1
-        // We skip this as the engine doesn't implement water tunnels yet.
-        // The flag f_wtunnelallow is LZ-specific and not critical for object behavior.
+        // cmpi.w #(id_LZ<<8)+0,(v_zone_act).w — only in LZ act 1, fb_type==3
+        if (!isLz1WaterTunnelDoor()) {
+            return;
+        }
+
+        // clr.b (f_wtunnelallow).w — enable by default
+        setWindTunnelDisabled(false);
+
+        AbstractPlayableSprite player = services().camera() != null
+                ? services().camera().getFocusedSprite() : null;
+        if (player == null) {
+            return;
+        }
+
+        // move.w (v_player+obX).w,d0 / cmp.w obX(a0),d0 / bhs.s .aaa
+        // If player X >= door X (passed the door), leave the tunnel enabled.
+        if (player.getCentreX() < x) {
+            // move.b #1,(f_wtunnelallow).w — disable until Sonic passes the door
+            setWindTunnelDisabled(true);
+        }
+    }
+
+    /**
+     * Whether this door is the specific LZ1 (act 1) switch-3 door that gates
+     * the water tunnel's {@code f_wtunnelallow} flag.
+     */
+    private boolean isLz1WaterTunnelDoor() {
+        return isLZ && fbType == 3 && services().currentAct() == 0;
+    }
+
+    private void setWindTunnelDisabled(boolean disabled) {
+        ZoneFeatureProvider provider = services().zoneFeatureProvider();
+        if (provider instanceof Sonic1ZoneFeatureProvider sonic1) {
+            sonic1.setWindTunnelDisabled(disabled);
+        }
     }
 
     /**
@@ -665,17 +758,4 @@ public class Sonic1FloatingBlockObjectInstance extends AbstractObjectInstance
         };
     }
 
-    /**
-     * Check if the object is within out-of-range distance from camera.
-     */
-    private boolean isInRange(int objectX) {
-        var camera = services().camera();
-        if (camera == null) {
-            return true;
-        }
-        int objRounded = objectX & 0xFF80;
-        int camRounded = (camera.getX() - 128) & 0xFF80;
-        int distance = (objRounded - camRounded) & 0xFFFF;
-        return distance <= (128 + 320 + 192);
-    }
 }

@@ -1,14 +1,18 @@
 package com.openggf.game.sonic1.objects;
 import com.openggf.game.PlayableEntity;
+import com.openggf.game.solid.SolidCheckpointBatch;
 
 import com.openggf.game.OscillationManager;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
+import com.openggf.level.objects.ObjectLifetimeOps;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.SlopedSolidProvider;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.objects.SolidContact;
+import com.openggf.level.objects.SolidExecutionMode;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
@@ -52,7 +56,7 @@ import java.util.List;
  * Reference: docs/s1disasm/_incObj/2F MZ Large Grassy Platforms.asm
  */
 public class Sonic1LargeGrassyPlatformObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, SlopedSolidProvider {
+        implements SolidObjectProvider, SolidObjectListener, SlopedSolidProvider, SpawnRewindRecreatable {
 
     // From disassembly: move.b #5,obPriority(a0)
     private static final int PRIORITY = 5;
@@ -135,23 +139,23 @@ public class Sonic1LargeGrassyPlatformObjectInstance extends AbstractObjectInsta
     private int y;
 
     // Saved base positions (lgrass_origX = objoff_2A, lgrass_origY = objoff_2C)
-    private final int baseX;
-    private final int baseY;
+    private int baseX;
+    private int baseY;
 
     // Visual frame (0=wide, 1=sloped, 2=narrow)
-    private final int mappingFrame;
+    private int mappingFrame;
 
     // Platform half-width ($40 or $20)
-    private final int platformWidth;
+    private int platformWidth;
 
     // Collision slope data for this variant
     private final byte[] slopeData;
 
     // Movement type (low 3 bits of subtype after masking)
-    private final int moveType;
+    private int moveType;
 
     // Bit 3 of original subtype: inverts oscillation direction
-    private final boolean invertOscillation;
+    private boolean invertOscillation;
 
     // Type 5 state: sinking angle (objoff_34)
     private int sinkAngle;
@@ -216,14 +220,22 @@ public class Sonic1LargeGrassyPlatformObjectInstance extends AbstractObjectInsta
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        playerStanding = isPlayerRiding();
-
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         // LGrass_Types: dispatch movement
         applyMovement();
 
         updateDynamicSpawn(x, y);
+
+        // Manual checkpoints replace the legacy post-pass callback, so the
+        // current frame's movement uses the previously latched standing state
+        // and the new standing state is captured for the next frame.
+        SolidCheckpointBatch batch = checkpointAll();
+        playerStanding = hasStandingContact(batch);
+    }
+
+    @Override
+    public SolidExecutionMode solidExecutionMode() {
+        return SolidExecutionMode.MANUAL_CHECKPOINT;
     }
 
     @Override
@@ -250,7 +262,15 @@ public class Sonic1LargeGrassyPlatformObjectInstance extends AbstractObjectInsta
         // that the engine's resolveSlopedContact (which uses groundHalfHeight) creates the
         // correct vertical acceptance window for side collision detection.
         int slopeCatchRange = (mappingFrame == 2) ? 0x30 : 0x20;
-        return new SolidObjectParams(platformWidth + 0x0B, slopeCatchRange, slopeCatchRange);
+        return SolidObjectParams.of(platformWidth + 0x0B, slopeCatchRange, slopeCatchRange);
+    }
+
+    @Override
+    public int getBalanceWidthPixels() {
+        // LGrass_Main publishes the table's platform width as obActWid. The
+        // extra $B is added only to SolidObject_Heightmap's collision input;
+        // Sonic_Move reads the unpadded SST byte for its edge window.
+        return platformWidth;
     }
 
     @Override
@@ -274,6 +294,33 @@ public class Sonic1LargeGrassyPlatformObjectInstance extends AbstractObjectInsta
     }
 
     @Override
+    public boolean addsSlopeCatchRangeToVerticalOverlap() {
+        // S1 SolidObject2F:
+        //   move.b obHeight(a1),d3
+        //   add.w d3,d2
+        //   ...
+        //   add.w d2,d3
+        // The platform's catch range ($20/$30) participates in the side/top-bottom
+        // classification, which is required for edge side contact at the MZ1 trace's
+        // first large-grassy-platform encounter.
+        return true;
+    }
+
+    @Override
+    public boolean usesInclusiveRightEdge() {
+        // SolidObject_Heightmap rejects with `bhi`, so relX == width*2 is inside.
+        // docs/s1disasm/_incObj/sub SolidObject.asm:123-131
+        return true;
+    }
+
+    @Override
+    public boolean usesInstanceSolidStateLatchKey() {
+        // The oscillating platform rebuilds dynamicSpawn as y_pos changes, but
+        // the native push bit remains in this same Obj2F SST status byte.
+        return true;
+    }
+
+    @Override
     public int getSlopeBaseline() {
         // SolidObject2F uses relative slope samples:
         //   slopeOffset = slopeSample - slopeData[0]
@@ -285,8 +332,7 @@ public class Sonic1LargeGrassyPlatformObjectInstance extends AbstractObjectInsta
 
     @Override
     public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        // Standing state is managed via isPlayerRiding() check in update()
+        // Standing state is driven via manual checkpoints in update().
     }
 
     @Override
@@ -332,7 +378,7 @@ public class Sonic1LargeGrassyPlatformObjectInstance extends AbstractObjectInsta
         if (fireSpawned && !isOnScreenX(platformWidth)) {
             cleanupFlames();
         }
-        return isOnScreenX(baseX, 320);
+        return isInRangeAt(baseX);
     }
 
     // --- Movement ---
@@ -453,23 +499,21 @@ public class Sonic1LargeGrassyPlatformObjectInstance extends AbstractObjectInsta
         }
 
         // Fire base Y = lgrass_origY + 8 - 3 = baseY + 5
-        int fireBaseY = baseY + 5;
+        final int fireBaseY = baseY + 5;
         // Fire starts at left edge: obX - $40
-        int fireStartX = x - 0x40;
+        final int fireStartX = x - 0x40;
+        final int fSinkOffset = sinkOffset;
+        final int parentSlot = getSlotIndex();
 
-        walkerFire = new Sonic1GrassFireObjectInstance(
-                fireStartX, fireBaseY, sinkOffset, slopeData, this, true);
-        // ROM: FindNextFreeObj allocates a slot AFTER the platform's slot.
-        // This ensures the fire runs its first update in the same frame
-        // (its slot hasn't been processed yet in the ExecuteObjects loop).
-        int parentSlot = getSlotIndex();
-        if (parentSlot >= 0) {
-            int fireSlot = services().objectManager().allocateSlotAfter(parentSlot);
-            if (fireSlot >= 0) {
-                walkerFire.setSlotIndex(fireSlot);
-            }
-        }
-        services().objectManager().addDynamicObject(walkerFire);
+        walkerFire = spawnFreeChild(() -> {
+            Sonic1GrassFireObjectInstance fire = new Sonic1GrassFireObjectInstance(
+                    fireStartX, fireBaseY, fSinkOffset, slopeData, this, true);
+            // ROM: FindNextFreeObj allocates a slot AFTER the platform's slot.
+            // This ensures the fire runs its first update in the same frame
+            // (its slot hasn't been processed yet in the ExecuteObjects loop).
+            ObjectLifetimeOps.assignFindNextFreeChildSlot(services().objectManager(), fire, parentSlot);
+            return fire;
+        });
 
         // Register walker itself in children list for sink offset updates
         fireChildren.add(walkerFire);
@@ -504,20 +548,6 @@ public class Sonic1LargeGrassyPlatformObjectInstance extends AbstractObjectInsta
     }
 
     // --- Helpers ---
-
-    /**
-     * Check if the object is within out-of-range distance from camera using spawn X.
-     */
-    private boolean isOnScreenX(int objectX, int range) {
-        var camera = services().camera();
-        if (camera == null) {
-            return true;
-        }
-        int objRounded = objectX & 0xFF80;
-        int camRounded = (camera.getX() - 128) & 0xFF80;
-        int distance = (objRounded - camRounded) & 0xFFFF;
-        return distance <= (128 + 320 + 192);
-    }
 
     /**
      * LGrass_DelFlames: Clean up flame children when platform goes offscreen.

@@ -53,7 +53,11 @@ public final class FboHelper {
         glBindFramebuffer(GL_FRAMEBUFFER, fboId);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                 GL_TEXTURE_2D, textureId, 0);
-        checkStatus("color-only");
+        if (!checkStatus("color-only")) {
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            destroy(new FboHandle(fboId, textureId, 0));
+            return null;
+        }
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
         return new FboHandle(fboId, textureId, 0);
@@ -135,10 +139,12 @@ public final class FboHelper {
         return textureId;
     }
 
-    private static void checkStatus(String label) {
+    private static boolean checkStatus(String label) {
         int status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
         if (status != GL_FRAMEBUFFER_COMPLETE) {
             LOG.severe("FBO creation failed (" + label + ") with status: " + status);
+            return false;
         }
+        return true;
     }
 }

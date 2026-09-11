@@ -49,13 +49,18 @@ public class AniPlcScriptState {
         this.frameIndex = 0;
     }
 
-    public void tick(Level level, GraphicsManager graphicsManager) {
+    /**
+     * Advances this script and reports whether it copied a new animation frame.
+     * Callers use the result to refresh object-art atlases that reference the
+     * same level-pattern objects as the AniPLC destination.
+     */
+    public boolean tick(Level level, GraphicsManager graphicsManager) {
         if (frameTileIds.length == 0 || artPatterns.length == 0) {
-            return;
+            return false;
         }
         if (timer > 0) {
             timer = (timer - 1) & 0xFF;
-            return;
+            return false;
         }
 
         int currentFrame = frameIndex;
@@ -73,10 +78,19 @@ public class AniPlcScriptState {
 
         int tileId = frameTileIds[currentFrame];
         applyFrame(level, graphicsManager, tileId);
+        return true;
     }
 
     public int requiredPatternCount() {
         return destTileIndex + Math.max(tilesPerFrame, 1);
+    }
+
+    public int destinationTileIndex() {
+        return destTileIndex;
+    }
+
+    public int tilesPerFrame() {
+        return tilesPerFrame;
     }
 
     public void prime(Level level, GraphicsManager graphicsManager) {
@@ -84,6 +98,18 @@ public class AniPlcScriptState {
             return;
         }
         applyFrame(level, graphicsManager, frameTileIds[0]);
+    }
+
+    /** Returns the current countdown timer (rewind-restore access). */
+    public int getTimer() { return timer; }
+
+    /** Returns the current frame index (rewind-restore access). */
+    public int getFrameIndex() { return frameIndex; }
+
+    /** Restores playback counters from a snapshot (rewind-restore path). */
+    public void restoreCounters(int timer, int frameIndex) {
+        this.timer = timer;
+        this.frameIndex = frameIndex;
     }
 
     public void applyFrame(Level level, GraphicsManager graphicsManager, int tileId) {

@@ -1,8 +1,8 @@
 package com.openggf.tests;
 
-import org.junit.Test;
-import com.openggf.tools.SaxmanDecompressor;
-import static org.junit.Assert.*;
+import org.junit.jupiter.api.Test;
+import com.openggf.data.compression.SaxmanDecompressor;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class TestSaxmanDecompressor {
 
@@ -21,9 +21,11 @@ public class TestSaxmanDecompressor {
         SaxmanDecompressor decompressor = new SaxmanDecompressor();
         byte[] output = decompressor.decompress(compressed);
 
-        assertEquals("Should produce 18 bytes", 18, output.length);
+        assertEquals(18, output.length, "Should produce 18 bytes");
         for (byte b : output) {
-            assertEquals("Should be zero", 0, b);
+            assertEquals(0, b, "Should be zero");
         }
     }
 }
+
+

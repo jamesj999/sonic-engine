@@ -10,8 +10,11 @@ import com.openggf.graphics.RenderPriority;
 import com.openggf.level.LevelManager;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
+import com.openggf.level.objects.ObjectLifetimeOps;
+import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.objects.TouchResponseAttackable;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.objects.TouchResponseResult;
@@ -61,7 +64,7 @@ import java.util.List;
  * </ul>
  */
 public class Sonic1BombBadnikInstance extends AbstractObjectInstance
-        implements TouchResponseProvider, TouchResponseAttackable {
+        implements TouchResponseProvider, TouchResponseAttackable, SpawnRewindRecreatable {
 
     // --- Collision ---
     // From disassembly: move.b #$9A,obColType(a0)
@@ -146,7 +149,7 @@ public class Sonic1BombBadnikInstance extends AbstractObjectInstance
 
     public Sonic1BombBadnikInstance(ObjectSpawn spawn) {
         super(spawn, "Bomb");
-        
+
         this.currentX = spawn.x();
         this.currentY = spawn.y();
         this.xVelocity = 0;
@@ -179,25 +182,25 @@ public class Sonic1BombBadnikInstance extends AbstractObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (destroyed) {
             return;
         }
-        updateMovement(frameCounter, player);
-        updateAnimation(frameCounter);
+        updateMovement(vIntRunCount, player);
+        updateAnimation(vIntRunCount);
     }
 
     /**
      * Bom_Action: Main update dispatches to state-specific handler, then
      * AnimateSprite + RememberState.
      */
-    private void updateMovement(int frameCounter, PlayableEntity playerEntity) {
+    private void updateMovement(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         switch (state) {
-            case STATE_WALK -> updateWalk(frameCounter, player);
-            case STATE_WAIT -> updateWait(frameCounter, player);
-            case STATE_EXPLODE -> updateExplode(frameCounter);
+            case STATE_WALK -> updateWalk(vIntRunCount, player);
+            case STATE_WAIT -> updateWait(vIntRunCount, player);
+            case STATE_EXPLODE -> updateExplode(vIntRunCount);
         }
     }
 
@@ -218,13 +221,23 @@ public class Sonic1BombBadnikInstance extends AbstractObjectInstance
      *     neg.w   obVelX(a0)
      * </pre>
      */
-    private void updateWalk(int frameCounter, AbstractPlayableSprite player) {
+    private void updateWalk(int vIntRunCount, AbstractPlayableSprite player) {
         checkSonic(player);
+
+        // ROM Bom_Action_Waiting decrements bom_time on the SAME frame, AFTER
+        // Bom_CheckStartFuse returns (subq.w #1,bom_time(a0); docs/s1disasm/
+        // _incObj/5F Badnik - Walking Bomb.asm:56-66). When the fuse just
+        // started, bom_time was set to 143 and is immediately decremented to
+        // 142; the bpl then returns (142 >= 0) without running the
+        // advance-to-walking branch. Performing this tick before the
+        // state-change early-return reproduces ROM's same-frame decrement so
+        // the fuse expires at T+143, not T+144 (SBZ2 f1595: four bombs exploded
+        // into id_Explosion one frame late, drifting OST free-slot cadence).
+        timer--;
         if (state != STATE_WALK) {
-            return; // chksonic may have transitioned to explode
+            return; // chksonic transitioned to explode; bpl returns this frame
         }
 
-        timer--;
         if (timer < 0) {
             // Timer expired: start walking
             state = STATE_WAIT;
@@ -260,13 +273,21 @@ public class Sonic1BombBadnikInstance extends AbstractObjectInstance
      *     move.b  #0,obAnim(a0)
      * </pre>
      */
-    private void updateWait(int frameCounter, AbstractPlayableSprite player) {
+    private void updateWait(int vIntRunCount, AbstractPlayableSprite player) {
         checkSonic(player);
+
+        // ROM Bom_Action_Walking likewise decrements bom_time on the SAME frame
+        // after Bom_CheckStartFuse (subq.w #1,bom_time(a0); docs/s1disasm/
+        // _incObj/5F Badnik - Walking Bomb.asm:69-79). When the fuse just
+        // started, bom_time (143 -> 142) does not go minus, so bmi is not taken
+        // and the routine falls through to SpeedToPos with obVelX already
+        // cleared (a no-op). Decrement before the state-change early-return to
+        // match ROM's fuse start tick (see updateWalk).
+        timer--;
         if (state != STATE_WAIT) {
-            return; // chksonic may have transitioned to explode
+            return; // chksonic transitioned to explode; bmi not taken this frame
         }
 
-        timer--;
         if (timer < 0) {
             // Timer expired: stop walking, return to stand state
             state = STATE_WALK;
@@ -289,21 +310,28 @@ public class Sonic1BombBadnikInstance extends AbstractObjectInstance
      *     move.b  #0,obRoutine(a0)
      * </pre>
      */
-    private void updateExplode(int frameCounter) {
+    private void updateExplode(int vIntRunCount) {
         timer--;
         if (timer < 0) {
-            // Timer expired: change to explosion (object $3F = ExplosionBomb)
-            // In ROM this replaces the object in-place. In our engine, we spawn
-            // a bomb explosion and destroy self.
-            spawnBombExplosion();
+            // Timer expired: change the bomb into an explosion (object $3F).
+            // ROM Bom_Action_WaitAndExplode does this IN PLACE via
+            // _move.b #id_Explosion,obID(a0) (docs/s1disasm/_incObj/5F Badnik -
+            // Walking Bomb.asm:93-94), keeping the bomb's SST slot. Detach the
+            // slot so removing the bomb does not free it, then place the
+            // explosion at that same slot (mirrors the badnik-kill in-place
+            // obID change, DestructionEffects/AbstractBadnikInstance.destroyBadnik).
+            // Spawning the explosion at the lowest free slot instead shifted OST
+            // occupancy and cascaded later FindFreeObj allocations (SBZ2 f1596).
+            int mySlot = ObjectLifetimeOps.detachSlotForTransfer(this);
+            spawnBombExplosion(mySlot);
             destroyed = true;
             setDestroyed(true);
             var objectManager = services().objectManager();
             if (objectManager != null) {
                 if (spawn.respawnTracked()) {
-                    objectManager.markRemembered(spawn);
+                    ObjectLifetimeOps.markSpawnRemembered(objectManager, spawn);
                 } else {
-                    objectManager.removeFromActiveSpawns(spawn);
+                    ObjectLifetimeOps.removeSpawnFromActive(objectManager, spawn);
                 }
             }
         }
@@ -393,18 +421,25 @@ public class Sonic1BombBadnikInstance extends AbstractObjectInstance
         }
 
         // btst #1,obStatus(a0) / beq.s .normal / neg.w obVelY(a1)
-        int fuseYSpeed = ceilingBomb ? -FUSE_Y_SPEED : FUSE_Y_SPEED;
-        Sonic1BombFuseInstance fuse = new Sonic1BombFuseInstance(
-                currentX, currentY, facingLeft, ceilingBomb, FUSE_TIME, fuseYSpeed, this);
-        // ROM: FindNextFreeObj allocates slot after bomb
-        int mySlot = getSlotIndex();
-        if (mySlot >= 0) {
-            int childSlot = objectManager.allocateSlotAfter(mySlot);
-            if (childSlot >= 0) {
-                fuse.setSlotIndex(childSlot);
-            }
+        final int fuseYSpeed = ceilingBomb ? -FUSE_Y_SPEED : FUSE_Y_SPEED;
+        // ROM: FindNextFreeObj allocates the slot AFTER the bomb. When object RAM
+        // is full past the bomb, ROM's `bsr.w FindNextFreeObj / bne.s .return`
+        // (Walking Bomb.asm:111-112) leaves the body activated to explode but
+        // does NOT create the fuse. Allocate up front so a failure skips the
+        // fuse rather than letting spawnFreeChild fall back to a lowest-free
+        // FindFreeObj slot (which would fabricate a fuse the ROM never made and
+        // drift OST cadence).
+        final int mySlot = getSlotIndex();
+        final int fuseSlot = ObjectLifetimeOps.reserveFindNextFreeChildSlot(objectManager, mySlot);
+        if (fuseSlot < 0) {
+            return; // bne.s .return: object RAM full after bomb, no fuse spawned
         }
-        objectManager.addDynamicObject(fuse);
+        spawnFreeChild(() -> {
+            Sonic1BombFuseInstance fuse = new Sonic1BombFuseInstance(
+                    currentX, currentY, facingLeft, ceilingBomb, FUSE_TIME, fuseYSpeed, this);
+            fuse.setSlotIndex(fuseSlot);
+            return fuse;
+        });
     }
 
     /**
@@ -412,17 +447,20 @@ public class Sonic1BombBadnikInstance extends AbstractObjectInstance
      * From ExBom_Main: uses Map_ExplodeBomb, ArtTile_Explosion, plays sfx_Bomb (0xC4).
      * The explosion reuses the standard ExItem_Animate with 5 frames at 7 ticks each.
      */
-    private void spawnBombExplosion() {
+    private void spawnBombExplosion(int transferredSlot) {
         var objectManager = services().objectManager();
         if (objectManager == null) {
             return;
         }
 
-        // Spawn explosion with bomb sound effect
+        // Place the explosion into the bomb's just-vacated slot (in-place obID
+        // change parity). Constructed directly (no spawnFreeChild) like the
+        // shared badnik-kill path in DestructionEffects, which also uses
+        // addReplacementAtTransferredSlot; ExplosionObjectInstance's constructor
+        // does not require the spawn ConstructionContext.
         ExplosionObjectInstance explosion = new ExplosionObjectInstance(
-                0x3F, currentX, currentY,
-                services().renderManager());
-        objectManager.addDynamicObject(explosion);
+                0x3F, currentX, currentY, services().renderManager());
+        ObjectLifetimeOps.addReplacementAtTransferredSlot(objectManager, explosion, transferredSlot);
 
         // sfx_Bomb = $C4 = BOSS_EXPLOSION
         services().playSfx(Sonic1Sfx.BOSS_EXPLOSION.id);
@@ -451,17 +489,62 @@ public class Sonic1BombBadnikInstance extends AbstractObjectInstance
      *     bset    #7,obRender(a1)
      * </pre>
      */
-    void spawnShrapnel(int fuseX, int fuseY) {
-        var objectManager = services().objectManager();
+    void spawnShrapnel(int fuseX, int fuseY, int fuseSlot) {
+        final ObjectManager objectManager = services().objectManager();
         if (objectManager == null) {
             return;
         }
 
         for (int i = 0; i < SHRAPNEL_VELOCITIES.length; i++) {
-            Sonic1BombShrapnelInstance shrapnel = new Sonic1BombShrapnelInstance(
-                    fuseX, fuseY,
-                    SHRAPNEL_VELOCITIES[i][0], SHRAPNEL_VELOCITIES[i][1]);
-            objectManager.addDynamicObject(shrapnel);
+            final int vx = SHRAPNEL_VELOCITIES[i][0];
+            final int vy = SHRAPNEL_VELOCITIES[i][1];
+            // ROM: the first shrapnel reuses the fuse slot and runs Bom_Shrapnel
+            // (SpeedToPos) on the expiry frame, so it moves immediately. Pieces
+            // 1-3 are FindNextFreeObj-allocated with obRoutine cleared, so they
+            // run Bom_Main (no move) on their creation frame and first move the
+            // following frame (docs/s1disasm/_incObj/5F Badnik - Walking
+            // Bomb.asm:181-220, 30-33). Defer pieces 1-3's first move to match.
+            final boolean deferFirstMove = i != 0;
+            final boolean firstPiece = i == 0;
+            // Slot allocation (Walking Bomb.asm:181-203): the loop keeps a0 = the
+            // fuse, so the first shrapnel reuses the fuse's slot (movea.l a0,a1)
+            // and pieces 1-3 each take FindNextFreeObj's first empty slot AFTER
+            // the fuse (already-allocated pieces are skipped, so the slots climb).
+            // Using lowest-free FindFreeObj instead put the shrapnel below the
+            // high-slot fuse, drifting OST occupancy and cascading later
+            // FindFreeObj allocations (SBZ2 f1596 -> the f2306 conveyor slot).
+            //
+            // ROM .loopShrapnel runs `bsr.w FindNextFreeObj / bne.s .nextShrapnel`
+            // (docs/s1disasm/_incObj/sub FindFreeObj.asm:32-50, Walking Bomb.asm:
+            // 191-192): when no slot is free AFTER the fuse (object RAM full past
+            // the parent), the shrapnel is NOT created — the dbf just moves on.
+            // Allocate the slot up front so a FindNextFreeObj failure SKIPS the
+            // piece, instead of letting spawnFreeChild fall back to a lowest-free
+            // FindFreeObj slot. The fallback fabricated shrapnel the ROM never
+            // made (SBZ2 f1596: when four fuses expired the same frame but only
+            // six high slots were free, ROM made shrapnel for the first two
+            // fuses and skipped the rest; the engine packed the overflow into low
+            // free slots, drifting OST cadence into the f6839 bomb-slot error).
+            final int assignedSlot;
+            if (firstPiece) {
+                assignedSlot = fuseSlot;            // movea.l a0,a1: reuse fuse slot
+            } else if (fuseSlot >= 0) {
+                assignedSlot = ObjectLifetimeOps.reserveFindNextFreeChildSlot(
+                        objectManager, fuseSlot); // FindNextFreeObj
+                if (assignedSlot < 0) {
+                    continue;                        // bne.s .nextShrapnel: skip this piece
+                }
+            } else {
+                assignedSlot = -1;
+            }
+            spawnFreeChild(() -> {
+                Sonic1BombShrapnelInstance shrapnel = new Sonic1BombShrapnelInstance(
+                        fuseX, fuseY, vx, vy, deferFirstMove);
+                if (assignedSlot >= 0) {
+                    shrapnel.setSlotIndex(assignedSlot);
+                }
+                return shrapnel;
+            });
         }
     }
 
@@ -472,7 +555,7 @@ public class Sonic1BombBadnikInstance extends AbstractObjectInstance
         }
     }
 
-    private void updateAnimation(int frameCounter) {
+    private void updateAnimation(int vIntRunCount) {
         animTickCounter++;
     }
 
@@ -544,8 +627,16 @@ public class Sonic1BombBadnikInstance extends AbstractObjectInstance
 
     @Override
     public boolean isPersistent() {
-        // RememberState: persists while on screen
-        return !destroyed && isOnScreenX(160);
+        // Bom_Action ends in bra.w RememberState (docs/s1disasm/_incObj/5F Badnik -
+        // Walking Bomb.asm:49), whose off-screen test is the out_of_range macro
+        // (Macros.asm:273-289): chunk-align obX and (v_screenposx-128) and delete
+        // when the unsigned distance exceeds 640. Use isInRange() (the exact macro)
+        // for the body, matching the fuse (which also ends in RememberState). The
+        // approximate symmetric isOnScreenX(160) kept the walking body alive up to
+        // 160px past the right edge that the ROM had already deleted at the 640px
+        // window edge (BizHawk s1-complete-run: the SBZ2 x=0x12C0/0x12F0 bodies
+        // delete at trace f2931 when chunk-aligned obX - screen exceeds 640).
+        return !destroyed && isInRange();
     }
 
     @Override

@@ -4,6 +4,7 @@ import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.rings.RingSpawn;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
 /**
@@ -69,7 +70,7 @@ public class Sonic1RingPlacement {
     public Result extract(List<ObjectSpawn> allObjects) {
         List<RingSpawn> rings = new ArrayList<>();
         List<ObjectSpawn> remaining = new ArrayList<>();
-        java.util.Map<ObjectSpawn, List<RingSpawn>> mapping = new java.util.IdentityHashMap<>();
+        java.util.Map<ObjectSpawn, List<RingSpawn>> mapping = new HashMap<>();
 
         for (ObjectSpawn spawn : allObjects) {
             if (spawn.objectId() == RING_OBJECT_ID) {

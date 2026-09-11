@@ -8,8 +8,9 @@ import com.openggf.game.CanonicalAnimation;
  *
  * <p>IDs 0x00-0x1E largely follow the S2 table layout, but several entries
  * were repurposed (0x13 = Victory, 0x1A/0x1B = hurt variants, 0x19 = drown).
- * S3K adds 0x1F (Super transformation), 0x20 (Tails flight), and
- * 0x21-0x23 (Knuckles glide states).
+ * S3K adds 0x1F (Super transformation), Tails' flight/swim scripts at
+ * 0x20-0x28, and Knuckles glide states that alias 0x21-0x23. Sonic's MGZ2
+ * carried pose also writes native animation 0x22.
  */
 public enum Sonic3kAnimationIds implements AnimationId {
     WALK(0x00),
@@ -41,8 +42,18 @@ public enum Sonic3kAnimationIds implements AnimationId {
     BALANCE3(0x1D),      // Balancing on edge, facing away
     BALANCE4(0x1E),      // Balancing on edge, facing away, more precarious
     SUPER_TRANSFORM(0x1F), // Super transformation (s3.asm:21148)
-    FLY(0x20),           // Tails helicopter flight (s3.asm:23944, sonic3k.asm:26664)
+    FLY(0x20),           // Legacy CPU recovery flight meaning
+    TAILS_FLY(0x20),
+    TAILS_FLY_ASCEND(0x21),
+    TAILS_FLY_CARRY(0x22),
+    TAILS_FLY_CARRY_ASCEND(0x23),
+    TAILS_FLY_TIRED(0x24),
+    TAILS_SWIM(0x25),
+    TAILS_SWIM_ASCEND(0x26),
+    TAILS_SWIM_CARRY(0x27),
+    TAILS_SWIM_TIRED(0x28),
     GLIDE_DROP(0x21),    // Knuckles falling after glide (sonic3k.asm:20930)
+    TAILS_CARRIED(0x22), // Sonic carried by Tails during MGZ2 boss transition (sonic3k.asm:27387)
     GLIDE_LAND(0x22),    // Knuckles glide landing (sonic3k.asm:30987)
     GLIDE_SLIDE(0x23);   // Knuckles glide slide on ground (sonic3k.asm:30940)
 
@@ -93,7 +104,17 @@ public enum Sonic3kAnimationIds implements AnimationId {
             case BALANCE4        -> CanonicalAnimation.BALANCE4;
             case SUPER_TRANSFORM -> CanonicalAnimation.SUPER_TRANSFORM;
             case FLY             -> CanonicalAnimation.FLY;
+            case TAILS_FLY       -> CanonicalAnimation.TAILS_FLY;
+            case TAILS_FLY_ASCEND -> CanonicalAnimation.TAILS_FLY_ASCEND;
+            case TAILS_FLY_CARRY -> CanonicalAnimation.TAILS_FLY_CARRY;
+            case TAILS_FLY_CARRY_ASCEND -> CanonicalAnimation.TAILS_FLY_CARRY_ASCEND;
+            case TAILS_FLY_TIRED -> CanonicalAnimation.TAILS_FLY_TIRED;
+            case TAILS_SWIM      -> CanonicalAnimation.TAILS_SWIM;
+            case TAILS_SWIM_ASCEND -> CanonicalAnimation.TAILS_SWIM_ASCEND;
+            case TAILS_SWIM_CARRY -> CanonicalAnimation.TAILS_SWIM_CARRY;
+            case TAILS_SWIM_TIRED -> CanonicalAnimation.TAILS_SWIM_TIRED;
             case GLIDE_DROP      -> CanonicalAnimation.GLIDE_DROP;
+            case TAILS_CARRIED   -> CanonicalAnimation.TAILS_CARRIED;
             case GLIDE_LAND      -> CanonicalAnimation.GLIDE_LAND;
             case GLIDE_SLIDE     -> CanonicalAnimation.GLIDE_SLIDE;
         };

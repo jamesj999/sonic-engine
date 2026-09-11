@@ -49,6 +49,10 @@ public class SwScrlEnd extends SwScrlGhz {
         cloudLayer1Counter = 0;
         cloudLayer2Counter = 0;
         cloudLayer3Counter = 0;
+        // Re-arm the frame-anchored cloud baseline (see SwScrlGhz) so a reused
+        // instance re-derives the auto-scroll clouds from the frame counter
+        // rather than carrying a stale anchor across re-inits.
+        cloudBaseFrameSet = false;
         lastCameraX = cameraX;
         initialized = true;
         LOG.info("SwScrlEnd.init: cameraX=" + cameraX +

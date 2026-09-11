@@ -1,15 +1,18 @@
 package com.openggf.graphics;
 
+import com.openggf.tests.TestEnvironment;
+import com.openggf.game.session.EngineServices;
 import com.openggf.game.GameServices;
+import com.openggf.game.session.EngineContext;
 import com.openggf.game.GameModuleRegistry;
-import com.openggf.game.RuntimeManager;
-import com.openggf.physics.Direction;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import com.openggf.game.session.SessionManager;
+import com.openggf.game.sonic2.Sonic2GameModule;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import com.openggf.game.sonic2.scroll.Sonic2ZoneConstants;
-import com.openggf.game.sonic3k.objects.AizPlaneIntroInstance;
 import com.openggf.level.LevelManager;
+import com.openggf.physics.Direction;
 import com.openggf.physics.Sensor;
 import com.openggf.sprites.Sprite;
 import com.openggf.sprites.managers.SpriteManager;
@@ -19,24 +22,25 @@ import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TestSpriteManagerRender {
 
-    @Before
+    @BeforeEach
     public void setUp() {
-        RuntimeManager.destroyCurrent();
+        EngineServices.configure(EngineContext.fromLegacySingletonsForBootstrap());
+        SessionManager.clear();
         GameModuleRegistry.reset();
-        AizPlaneIntroInstance.resetIntroPhaseState();
-        RuntimeManager.createGameplay();
+        GameModuleRegistry.setCurrent(new Sonic2GameModule());
+        TestEnvironment.activeGameplayMode();
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
-        AizPlaneIntroInstance.resetIntroPhaseState();
-        RuntimeManager.destroyCurrent();
+        SessionManager.clear();
+        GameModuleRegistry.reset();
     }
 
     @Test
@@ -81,7 +85,7 @@ public class TestSpriteManagerRender {
         List<String> drawOrder = new ArrayList<>();
         SpriteManager spriteManager = GameServices.sprites();
 
-        // Add main first, then sidekick — same bucket and priority
+        // Add main first, then sidekick â€” same bucket and priority
         TestPlayableSprite main = new TestPlayableSprite("main", drawOrder);
         main.setPriorityBucket(2);
         main.setHighPriority(false);
@@ -102,6 +106,39 @@ public class TestSpriteManagerRender {
         } finally {
             spriteManager.removeSprite(main.getCode());
             spriteManager.removeSprite(sidekick.getCode());
+        }
+    }
+
+    @Test
+    public void testMultipleSidekicksKeepChainRenderOrderBeforeMainPlayer() {
+        List<String> drawOrder = new ArrayList<>();
+        SpriteManager spriteManager = GameServices.sprites();
+
+        TestPlayableSprite main = new TestPlayableSprite("main", drawOrder);
+        main.setPriorityBucket(2);
+        main.setHighPriority(false);
+
+        TestPlayableSprite firstSidekick = new TestPlayableSprite("sidekick0", drawOrder);
+        firstSidekick.setCpuControlled(true);
+        firstSidekick.setPriorityBucket(2);
+        firstSidekick.setHighPriority(false);
+
+        TestPlayableSprite secondSidekick = new TestPlayableSprite("sidekick1", drawOrder);
+        secondSidekick.setCpuControlled(true);
+        secondSidekick.setPriorityBucket(2);
+        secondSidekick.setHighPriority(false);
+
+        spriteManager.addSprite(main);
+        spriteManager.addSprite(firstSidekick);
+        spriteManager.addSprite(secondSidekick);
+
+        try {
+            spriteManager.drawLowPriority();
+            assertEquals(List.of("sidekick0", "sidekick1", "main"), drawOrder);
+        } finally {
+            spriteManager.removeSprite(main.getCode());
+            spriteManager.removeSprite(firstSidekick.getCode());
+            spriteManager.removeSprite(secondSidekick.getCode());
         }
     }
 
@@ -141,9 +178,9 @@ public class TestSpriteManagerRender {
                                              List<String> drawOrder, int zone) throws Exception {
         drawOrder.clear();
         setCurrentZone(levelManager, zone);
-        assertTrue("Zone should suppress CPU sidekick gameplay instance", spriteManager.getSidekicks().isEmpty());
+        assertTrue(spriteManager.getSidekicks().isEmpty(), "Zone should suppress CPU sidekick gameplay instance");
         spriteManager.draw();
-        assertEquals("Suppressed zone should render only the main character sprite", List.of("main"), drawOrder);
+        assertEquals(List.of("main"), drawOrder, "Suppressed zone should render only the main character sprite");
     }
 
     private static void setCurrentZone(LevelManager levelManager, int zone) throws Exception {

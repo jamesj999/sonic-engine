@@ -15,7 +15,7 @@ uniform sampler2D IndexedColorTexture;
 uniform sampler2D TilePriorityTexture;  // FBO texture with high-priority tile info
 uniform float PaletteLine;
 uniform float TotalPaletteLines;
-uniform int SpriteHighPriority;         // 1 = sprite appears above all tiles, 0 = behind high-priority tiles
+uniform int TileOcclusionPaletteMask;   // bit N = priority tiles using palette line N occlude this sprite
 uniform vec2 ScreenSize;                // Viewport dimensions for screen coord lookup
 uniform vec2 ViewportOffset;            // Viewport offset in window coords (for letterboxing)
 // Underwater palette uniforms
@@ -24,6 +24,8 @@ uniform float WaterlineScreenY;         // Screen Y where water starts (negative
 uniform float WindowHeight;             // Physical window height in pixels
 uniform float ScreenHeight;             // Logical screen height (e.g., 224)
 uniform int WaterEnabled;               // 1 = zone has water, 0 = no water
+uniform int GhostMode;
+uniform float GhostAlpha;
 
 in vec2 v_texCoord;
 in float v_paletteLine;
@@ -48,11 +50,12 @@ void main()
     // Subtract ViewportOffset to get viewport-local coordinates, then normalize.
     // No Y-flip needed: OpenGL texture V coordinates already match the FBO orientation
     vec2 screenCoord = (gl_FragCoord.xy - ViewportOffset) / ScreenSize;
-    float tilePriority = texture(TilePriorityTexture, screenCoord).r;
+    vec4 tilePriority = texture(TilePriorityTexture, screenCoord);
 
     // Low-priority sprite behind high-priority tile: discard
     // tilePriority > 0.5 means there's a high-priority tile pixel at this location
-    if (SpriteHighPriority == 0 && tilePriority > 0.5) {
+    int tilePaletteLine = int(round(tilePriority.g * 3.0));
+    if (tilePriority.r > 0.5 && (TileOcclusionPaletteMask & (1 << tilePaletteLine)) != 0) {
         discard;
     }
 
@@ -74,7 +77,9 @@ void main()
             indexedColor = texture(UnderwaterPalette, vec2(paletteX, paletteY));
         } else {
             // Waterline on screen - check per-pixel
-            float normalizedY = 1.0 - (gl_FragCoord.y / WindowHeight);
+            // gl_FragCoord is in window coordinates, so remove the viewport's
+            // letterbox offset before converting to a logical game scanline.
+            float normalizedY = 1.0 - ((gl_FragCoord.y - ViewportOffset.y) / WindowHeight);
             float pixelYFromTop = normalizedY * ScreenHeight;
             if (pixelYFromTop >= WaterlineScreenY) {
                 indexedColor = texture(UnderwaterPalette, vec2(paletteX, paletteY));
@@ -87,5 +92,10 @@ void main()
         indexedColor = texture(Palette, vec2(paletteX, paletteY));
     }
 
-    FragColor = indexedColor; // Output the final color
+    if (GhostMode == 1) {
+        float gray = dot(indexedColor.rgb, vec3(0.299, 0.587, 0.114));
+        FragColor = vec4(vec3(gray), indexedColor.a * clamp(GhostAlpha, 0.0, 1.0));
+    } else {
+        FragColor = indexedColor; // Output the final color
+    }
 }

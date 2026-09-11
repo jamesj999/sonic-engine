@@ -1,6 +1,9 @@
 package com.openggf.game.sonic2.events;
 
-import java.util.logging.Logger;
+import com.openggf.game.sonic2.constants.Sonic2Constants;
+import com.openggf.sprites.playable.AbstractPlayableSprite;
+
+import java.nio.ByteBuffer;
 
 /**
  * Wing Fortress Zone events.
@@ -24,7 +27,7 @@ import java.util.logging.Logger;
  *   S4: No-op
  */
 public class Sonic2WFZEvents extends Sonic2ZoneEvents {
-    private static final Logger LOGGER = Logger.getLogger(Sonic2WFZEvents.class.getName());
+    public static final int SNAPSHOT_BYTES = Integer.BYTES * 8;
 
     // =========================================================================
     // Primary routine trigger thresholds
@@ -110,6 +113,9 @@ public class Sonic2WFZEvents extends Sonic2ZoneEvents {
     /** WFZ_LevEvent_Subrout: secondary routine counter */
     private int wfzSubRoutine;
 
+    private int lastRequestedPlcId = -1;
+    private int plcRequestCount;
+
     public Sonic2WFZEvents() {
     }
 
@@ -124,6 +130,8 @@ public class Sonic2WFZEvents extends Sonic2ZoneEvents {
         bgXPosDiff = 0;
         bgYPosDiff = 0;
         wfzSubRoutine = 0;
+        lastRequestedPlcId = -1;
+        plcRequestCount = 0;
     }
 
     /**
@@ -153,9 +161,69 @@ public class Sonic2WFZEvents extends Sonic2ZoneEvents {
         return bgYOffset;
     }
 
+    /** Returns Camera_BG_X_pos. */
+    public int getBgXPos() {
+        return bgXPos;
+    }
+
+    /** Returns Camera_BG_Y_pos. */
+    public int getBgYPos() {
+        return bgYPos;
+    }
+
     /** Returns WFZ_BG_Y_Speed (0.8 fixed point). */
     public int getBgYSpeed() {
         return bgYSpeed;
+    }
+
+    public int getWfzSubRoutine() {
+        return wfzSubRoutine;
+    }
+
+    public void setWfzSubRoutine(int wfzSubRoutine) {
+        this.wfzSubRoutine = wfzSubRoutine;
+    }
+
+    public int getLastRequestedPlcIdForTest() {
+        return lastRequestedPlcId;
+    }
+
+    public int getPlcRequestCountForTest() {
+        return plcRequestCount;
+    }
+
+    public void setBgXOffsetForTest(int bgXOffset) {
+        this.bgXOffset = bgXOffset;
+    }
+
+    public void setBgYOffsetForTest(int bgYOffset) {
+        this.bgYOffset = bgYOffset;
+    }
+
+    public void setBgYSpeedForTest(int bgYSpeed) {
+        this.bgYSpeed = bgYSpeed;
+    }
+
+    public void captureSnapshot(ByteBuffer buf) {
+        buf.putInt(bgXOffset);
+        buf.putInt(bgYOffset);
+        buf.putInt(bgYSpeed);
+        buf.putInt(bgXPos);
+        buf.putInt(bgYPos);
+        buf.putInt(bgXPosDiff);
+        buf.putInt(bgYPosDiff);
+        buf.putInt(wfzSubRoutine);
+    }
+
+    public void restoreSnapshot(ByteBuffer buf) {
+        bgXOffset = buf.getInt();
+        bgYOffset = buf.getInt();
+        bgYSpeed = buf.getInt();
+        bgXPos = buf.getInt();
+        bgYPos = buf.getInt();
+        bgXPosDiff = buf.getInt();
+        bgYPosDiff = buf.getInt();
+        wfzSubRoutine = buf.getInt();
     }
 
     // =========================================================================
@@ -201,7 +269,7 @@ public class Sonic2WFZEvents extends Sonic2ZoneEvents {
      * Primary R2: Sync BG diffs until platform ride trigger.
      * ROM: LevEvents_WFZ_Routine2 (s2.asm)
      *
-     * Copies camera diffs to BG diffs each frame. When camera reaches
+     * Chases the offset-adjusted camera position each frame. When camera reaches
      * ($2BC0, $580), advances to platform ride routine and zeros BG Y speed.
      */
     private void primaryRoutine2_syncUntilTrigger() {
@@ -292,8 +360,8 @@ public class Sonic2WFZEvents extends Sonic2ZoneEvents {
 
     /**
      * Common tail shared by primary routines 2, 4, and 6.
-     * Copies camera position diffs to BG position diffs, then
-     * tracks BG position for ScrollBG.
+     * Computes the offset-adjusted camera delta, caps it to ScrollBG's
+     * 16-pixel reload limit, and advances the tracked BG position.
      *
      * ROM equivalent of:
      *   move.w (Camera_X_pos_diff).w,(Camera_BG_X_pos_diff).w
@@ -306,10 +374,16 @@ public class Sonic2WFZEvents extends Sonic2ZoneEvents {
      * state variables it will read.
      */
     private void syncBgDiffs() {
-        bgXPosDiff = camera().getX() - bgXPos;
-        bgYPosDiff = camera().getY() - bgYPos;
-        bgXPos = camera().getX();
-        bgYPos = camera().getY();
+        int dx = clamp16(camera().getX() - bgXPos - bgXOffset);
+        int dy = clamp16(camera().getY() - bgYPos - bgYOffset);
+        bgXPosDiff = dx;
+        bgYPosDiff = dy;
+        bgXPos += dx;
+        bgYPos += dy;
+    }
+
+    private static int clamp16(int value) {
+        return value > 16 ? 16 : (value < -16 ? -16 : value);
     }
 
     // =========================================================================
@@ -330,6 +404,12 @@ public class Sonic2WFZEvents extends Sonic2ZoneEvents {
         }
     }
 
+    public void updatePrePhysicsControlLock() {
+        if (wfzSubRoutine == 2) {
+            secondaryRoutine2_controlLock();
+        }
+    }
+
     /**
      * Secondary S0: Boss PLC trigger.
      * ROM: LevEvents_WFZ_Routine5 (s2.asm)
@@ -347,11 +427,13 @@ public class Sonic2WFZEvents extends Sonic2ZoneEvents {
             return;
         }
 
+        // ROM: moveq #PLCID_WfzBoss,d0 / jsrto JmpTo2_LoadPLC
+        if (!requestPlc(Sonic2Constants.PLC_WFZ_BOSS)) {
+            return;
+        }
+
         // ROM: addq.w #2,(WFZ_LevEvent_Subrout).w
         wfzSubRoutine += 2;
-
-        // ROM: moveq #PLCID_WfzBoss,d0 / jsrto JmpTo2_LoadPLC
-        LOGGER.fine("WFZ boss PLC (PLCID_WfzBoss) not yet loaded");
 
         // ROM: move.w #$2880,(Camera_Min_X_pos).w
         camera().setMinX((short) BOSS_PLC_TRIGGER_X);
@@ -369,10 +451,32 @@ public class Sonic2WFZEvents extends Sonic2ZoneEvents {
             return;
         }
 
+        // ROM: st.b (Control_Locked).w + moveq #PLCID_Tornado,d0 / jsrto JmpTo2_LoadPLC
+        if (!requestPlc(Sonic2Constants.PLC_TORNADO)) {
+            return;
+        }
+        lockPlayerInputWithCurrentLogicalState();
+
         // ROM: addq.w #2,(WFZ_LevEvent_Subrout).w
         wfzSubRoutine += 2;
+    }
 
-        // ROM: st.b (Control_Locked).w + moveq #PLCID_Tornado,d0 / jsrto JmpTo2_LoadPLC
-        LOGGER.fine("WFZ control lock + Tornado PLC not yet implemented");
+    private void lockPlayerInputWithCurrentLogicalState() {
+        AbstractPlayableSprite player = camera().getFocusedSprite();
+        if (player == null) {
+            return;
+        }
+        int mask = player.getLogicalInputState();
+        player.setControlLocked(true);
+        player.setForcedInputMask(mask);
+    }
+
+    private boolean requestPlc(int plcId) {
+        if (!requestSonic2Plc(plcId)) {
+            return false;
+        }
+        lastRequestedPlcId = plcId;
+        plcRequestCount++;
+        return true;
     }
 }

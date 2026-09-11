@@ -66,14 +66,18 @@ public class Pattern {
         Arrays.fill(pixels, (byte) 0);
     }
 
+    public void copyInto(byte[] dst, int offset) {
+        System.arraycopy(pixels, 0, dst, offset, PATTERN_SIZE_IN_MEM);
+    }
+
+    public void copyRowInto(int row, byte[] dst, int offset) {
+        System.arraycopy(pixels, row * PATTERN_WIDTH, dst, offset, PATTERN_WIDTH);
+    }
+
     public void copyFrom(Pattern other) {
         if (other == null) {
             return;
         }
-        for (int y = 0; y < PATTERN_HEIGHT; y++) {
-            for (int x = 0; x < PATTERN_WIDTH; x++) {
-                setPixel(x, y, other.getPixel(x, y));
-            }
-        }
+        System.arraycopy(other.pixels, 0, pixels, 0, PATTERN_SIZE_IN_MEM);
     }
 }

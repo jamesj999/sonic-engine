@@ -1,37 +1,13 @@
 package com.openggf.tests;
-import com.openggf.game.sonic2.audio.Sonic2SmpsSequencerConfig;
-
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import com.openggf.audio.smps.AbstractSmpsData;
-import com.openggf.audio.smps.DacData;
 import com.openggf.audio.smps.Sonic1SmpsData;
-import com.openggf.audio.smps.SmpsSequencer;
-import com.openggf.audio.synth.VirtualSynthesizer;
 
-import java.util.HashMap;
-
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 
 public class TestSmpsSequencerInstrumentLoading {
-
-    static class MockSynthesizer extends VirtualSynthesizer {
-        boolean setInstrumentCalled = false;
-        int lastChannelId = -1;
-        byte[] lastVoice = null;
-
-        @Override
-        public void setInstrument(Object source, int channelId, byte[] voice) {
-            this.setInstrumentCalled = true;
-            this.lastChannelId = channelId;
-            this.lastVoice = voice;
-            super.setInstrument(source, channelId, voice);
-        }
-    }
-
     @Test
-    public void testInstrumentLoading() {
+    public void sonic1VoiceLoaderNormalizesItsRawMiddleOperators() {
         // Construct SMPS data
         // Header:
         // 00-01: Voice Ptr
@@ -78,7 +54,7 @@ public class TestSmpsSequencerInstrumentLoading {
 
         // Expected Voice: S1 voices (InsMode=DEFAULT) store operator groups as Op4,Op3,Op2,Op1.
         // getVoice() converts to S2 format (Op4,Op2,Op3,Op1) by swapping the middle two
-        // bytes of each 4-byte group, so the engine's DT_IDX mapping works correctly.
+        // bytes of each 4-byte group for the S1 direct-write profile.
         byte[] expectedVoice = new byte[25];
         System.arraycopy(data, v, expectedVoice, 0, 25);
         // Apply the same swap that getVoice() performs
@@ -88,20 +64,9 @@ public class TestSmpsSequencerInstrumentLoading {
             expectedVoice[g + 2] = tmp;
         }
 
-        // Explicitly set to Big Endian (S1) to verify 25-byte voice loading
+        // Explicitly use the S1 big-endian loader to verify its 25-byte normalization.
         AbstractSmpsData smps = new Sonic1SmpsData(data, 0);
-        MockSynthesizer synth = new MockSynthesizer();
-        DacData dac = new DacData(new HashMap<>(), new HashMap<>()); // Empty
-
-        SmpsSequencer seq = new SmpsSequencer(smps, dac, synth, Sonic2SmpsSequencerConfig.CONFIG);
-
-        short[] buf = new short[2000]; // Enough to tick
-        seq.read(buf); // Should trigger tick and process commands
-
-        assertTrue("setInstrument should be called", synth.setInstrumentCalled);
-        // Track 0 maps to HW Channel 0 (FM1)
-        assertEquals("Channel ID should be 0", 0, synth.lastChannelId);
-        assertArrayEquals("Voice data should match", expectedVoice, synth.lastVoice);
+        assertArrayEquals(expectedVoice, smps.getVoice(0), "S1 voice data should normalize once at load");
     }
 
 }

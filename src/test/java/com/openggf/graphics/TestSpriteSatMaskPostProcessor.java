@@ -6,8 +6,52 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 class TestSpriteSatMaskPostProcessor {
+
+    @Test
+    void publicMaskedPassReturnsFreshRetainableResult() {
+        SpriteSatEntry marker = SpriteSatEntry.of(108, 24, 2, 2, 0x7C0, 0,
+                false, false, false, false);
+        SpriteSatEntry companion = SpriteSatEntry.of(100, 24, 2, 2, 0x25F, 0,
+                false, false, false, false);
+        SpriteSatEntry visible = SpriteSatEntry.of(100, 16, 4, 4, 0x200, 0,
+                false, false, false, false);
+
+        List<SpriteSatEntry> first = SpriteSatMaskPostProcessor.process(
+                List.of(marker, companion, visible), true);
+        List<SpriteSatEntry> retained = List.copyOf(first);
+        SpriteSatEntry otherVisible = SpriteSatEntry.of(200, 16, 1, 1, 0x300, 0,
+                false, false, false, false);
+        List<SpriteSatEntry> second = SpriteSatMaskPostProcessor.process(
+                List.of(marker, companion, otherVisible), true);
+
+        assertFalse(first == second, "public results may be retained across later calls");
+        assertEquals(retained, first);
+        assertEquals(1, second.size());
+    }
+
+    @Test
+    void reusableMaskedPassReusesEphemeralStorageAndNextCallInvalidatesContent() {
+        SpriteSatEntry marker = SpriteSatEntry.of(108, 24, 2, 2, 0x7C0, 0,
+                false, false, false, false);
+        SpriteSatEntry companion = SpriteSatEntry.of(100, 24, 2, 2, 0x25F, 0,
+                false, false, false, false);
+        SpriteSatEntry firstVisible = SpriteSatEntry.of(100, 16, 4, 4, 0x200, 0,
+                false, false, false, false);
+        SpriteSatEntry secondVisible = SpriteSatEntry.of(200, 16, 1, 1, 0x300, 0,
+                false, false, false, false);
+
+        List<SpriteSatEntry> first = SpriteSatMaskPostProcessor.processReusable(
+                List.of(marker, companion, firstVisible), true);
+        List<SpriteSatEntry> second = SpriteSatMaskPostProcessor.processReusable(
+                List.of(marker, companion, secondVisible), true);
+
+        assertSame(first, second);
+        assertEquals(1, first.size());
+        assertEquals(0x300, first.get(0).firstPatternIndex());
+    }
 
     @Test
     void maskPair_convertsToMaskBand_andClipsLaterPiece() {

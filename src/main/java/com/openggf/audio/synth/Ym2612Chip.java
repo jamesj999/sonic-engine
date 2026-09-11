@@ -1,747 +1,274 @@
 package com.openggf.audio.synth;
 
 import com.openggf.audio.smps.DacData;
+import com.openggf.audio.synth.nuked.NukedOpn2;
+import com.openggf.audio.synth.nuked.NukedOpn2State;
 
-import java.util.logging.Logger;
+import java.util.Arrays;
+import java.util.Objects;
 
 /**
- * YM2612 Emulator
- * <p>
- * Ported from SMPSPlay's libvgm/GPGX YM2612 core (ym2612.c).
+ * YM2612 FM synthesiser: a facade over the Nuked-OPN2 port
+ * ({@link NukedOpn2}, LGPL-2.1-or-later); no other emulator source consulted.
+ *
+ * <p>The chip model itself lives in {@code com.openggf.audio.synth.nuked} and
+ * is clocked one internal cycle at a time. Everything in this class is engine
+ * glue written from the port contract
+ * ({@code docs/architecture/designs/2026-08-29-nuked-opn2-port-contract.md}):
+ * the register-write queue and its bus pacing, the per-frame pin sum and the
+ * output scale, the internal-rate to host-rate resampler, the SMPS voice
+ * unpack, the Z80-driver DAC streaming, the output-stage mutes, and the
+ * rewind snapshot. None of it is chip behaviour, and the pinned upstream
+ * revision ships no equivalent ({@code OPN2_GenerateResampled},
+ * {@code OPN2_WriteBuffered}, a write queue and a ladder switch do not exist
+ * there).
+ *
+ * <h2>Clocking and output</h2>
+ * One internal cycle is six master clocks; the 24-cycle slot sweep is one
+ * output frame, so the native frame rate is {@code 7670453 / 144 = 53267.03}
+ * Hz ({@link #getInternalRate()}). {@code OPN2_Clock} leaves the
+ * time-multiplexed MOL/MOR pin values on every cycle
+ * ({@code chOutput}, {@code ym3438.c:947}); the analogue output of the real
+ * part is the RC-averaged pin, so the frame sample is the sum of the 24 pin
+ * values of the frame. In that sum a channel at full scale contributes
+ * {@code 3 * 256 = 768} in both output stages (the YM2612 stage places one
+ * amplified pin cycle plus three sign cycles per channel, the YM3438 stage
+ * three plain pin cycles); the sum is shifted left by {@link #OUTPUT_SHIFT}
+ * so one full-scale channel sits at 6144, the largest power-of-two scaling
+ * that keeps six full-scale channels inside 16 bits after the mixer's
+ * {@code MASTER_GAIN_SHIFT}. The previous core's nominal per-channel scale
+ * was 8191; the mixer's {@code VirtualSynthesizer.PSG_PREAMP_PERCENT} carries
+ * the FM:PSG balance (see
+ * {@code docs/architecture/validation/2026-08-29-audio-mix-calibration.md}).
+ * In YM2612 mode a silent channel still contributes {@code +3} per cycle
+ * ({@code sign} cycles of {@code chOutput}), so a silenced chip rests at
+ * {@code 72 << OUTPUT_SHIFT = 576} per side at chip scale; that is the model's
+ * own resting level and is not adjusted here.
+ *
+ * <h2>Register writes</h2>
+ * {@link #write(int, int, int)} resolves the port, masks the register and
+ * value to eight bits, reports the resolved write to the
+ * {@link ChipWriteObserver} and queues it. Queued writes are applied, in
+ * order, before the next rendered sample (and before a status read or a
+ * forced channel silence, so ordering with those is preserved), each with
+ * the bus pacing of a driver that honours the chip's busy flag: the address
+ * strobe is consumed on the clock after it is presented ({@code doIo},
+ * {@code ym3438.c:224}) and does not raise busy, so the data strobe follows
+ * one clock later; the data strobe raises busy ({@code write_busy},
+ * {@code doIo}) for the 32-cycle window of {@code write_busy_cnt}, which a
+ * status read sees from the second clock after the strobe, so the next
+ * strobe is presented on the first clock at which a status poll returns
+ * not-busy ({@code DATA_SETTLE_CYCLES}). Every data strobe, the DAC's
+ * {@code 0x2A} stream included, holds the bus for that window; nothing keys
+ * on the register. This is what makes writes never drop: a {@code 0x28}
+ * latch ({@code mode_kon_channel}) is consumed only when the sequencer reaches
+ * its channel, up to 23 cycles later, and the next {@code 0x28} data strobe
+ * overwrites it, so a shorter hold loses key-ons that the ROM drivers, which
+ * wait on busy, never lose on hardware. The cycles spent draining writes are
+ * real chip time and their frames go to the resampler like any other, so the
+ * following render simply needs fewer new frames; pitch and tempo are
+ * unaffected.
+ *
+ * <h2>DAC</h2>
+ * {@link #playDac(int)} streams a {@link DacData} sample as {@code 0x2A}
+ * writes at the cadence of the ROM's Z80 playback loop (see
+ * {@link #dacPeriod(int, int)}). When {@link #setDacInterpolate(boolean)} is
+ * on, the staircase between two PCM samples is additionally refined by a
+ * linearly interpolated {@code 0x2A} write once per output frame; this is a
+ * presentation option with no hardware counterpart, and it never alters the
+ * sample cadence (see {@link #serviceDac(int)}). Each real sample write is
+ * reported to the observer exactly as a sequencer write is, because the ROM's
+ * playback loop sends every decoded sample byte over the same address/data
+ * pair (Sound/Z80 Sound Driver.asm:4299-4351); the synthetic interpolated
+ * write has no ROM counterpart and is never reported. Exhausting a sample
+ * raises a sample-end edge for the session to consume
+ * ({@link #consumeDacSampleEnded()}), the point at which the ROM clears
+ * {@code zDACIndex} and re-enters {@code zPlayDigitalAudio}, whose entry
+ * disables the DAC (:4352-4355, :4256-4260). {@code 0x2B} (DAC enable) is
+ * left to the sequencer, the session's physical policy and the core.
+ *
+ * <h2>Snapshot</h2>
+ * {@link #captureSnapshot()} is pure and {@link #restoreSnapshot(Snapshot)}
+ * is total: the record carries the complete {@link NukedOpn2State}, the
+ * pending write queue, the DAC streaming state, the output-stage state and the
+ * resampler tail, so restoring into any chip and clocking on is bit-identical
+ * to never having stopped.
  */
-public class Ym2612Chip {
-    private static final Logger LOG = Logger.getLogger(Ym2612Chip.class.getName());
-    private static final double CLOCK = 7670453.0;
+public class Ym2612Chip implements FmChip {
+
+    private static final double MASTER_CLOCK_HZ = 7670453.0;
+    /** Six master clocks per internal cycle, 24 cycles per frame. */
+    private static final int MASTER_CLOCKS_PER_FRAME = 6 * NukedOpn2.CYCLES_PER_FRAME;
+    private static final double INTERNAL_RATE = MASTER_CLOCK_HZ / MASTER_CLOCKS_PER_FRAME;
     private static final double DEFAULT_OUTPUT_RATE = 44100.0;
-    // GPGX: Internal rate is CLOCK/144 (~53267 Hz)
-    private static final double INTERNAL_RATE = CLOCK / 144.0; // 53267.034...
-    // Resampling ratio for converting internal to output rate
-    private static final double DEFAULT_RESAMPLE_RATIO = INTERNAL_RATE / DEFAULT_OUTPUT_RATE; // ~1.208
 
-    // Constants from ym2612.c
-    private static final int SIN_HBITS = 10;
-    private static final int SIN_LBITS = 16; // 26 - SIN_HBITS
-    // Genesis-Plus-GX SIN_BITS for feedback calculation
-    private static final int SIN_BITS = 10;
-    private static final int ENV_BITS = 10;
-    private static final int ENV_HBITS = 10;
-    // Legacy envelope counter fractional bits (kept for compatibility)
-    private static final int ENV_LBITS = 16;
-    // GPGX: 128-step inverted triangle LFO instead of 1024-step sine
-    private static final int LFO_HBITS = 7; // 128 = 2^7
-
-    private static final int SIN_LEN = 1 << SIN_HBITS; // 1024
-    private static final int ENV_LEN = 1 << ENV_HBITS; // 1024
-    private static final int LFO_LEN = 1 << LFO_HBITS; // 128 (GPGX-style)
-
-    private static final int TL_RES_LEN = 256;
-    private static final int TL_TAB_LEN = 13 * 2 * TL_RES_LEN;
-
-    private static final int SIN_MASK = SIN_LEN - 1;
-    private static final int LFO_MASK = LFO_LEN - 1;
-
-    // Phase generator detune overflow (GPGX: ym2612.c:166-169)
-    // Implements frequency phase overflow verified by Nemesis on real hardware
-    private static final int DT_BITS = 17;
-    private static final int DT_LEN = 1 << DT_BITS;
-    private static final int DT_MASK = DT_LEN - 1;
-
-    // envelope step in dB (GPGX: 128.0 / ENV_LEN)
-    private static final double ENV_STEP = 128.0 / (1 << ENV_BITS);
-
-    private static final int ENV_ATTACK = 0;
-    private static final int ENV_DECAY = ENV_LEN << ENV_LBITS;
-    private static final int ENV_END = (ENV_LEN * 2) << ENV_LBITS;
-    private static final int MAX_ATT_INDEX = ENV_LEN - 1;
-    private static final int SSG_THRESHOLD = 0x200;
-
-    // Output bits logic
-    private static final int OUT_BITS = 14;
-    private static final int OUT_SHIFT = 0;
-    // GPGX-style output clipping: ±8191 (asymmetric: +8191 / -8192)
-    // Max pre-clip output is ~16383; peaks above 8191 will clip.
-    private static final int LIMIT_CH_OUT_POS = 8191;
-    private static final int LIMIT_CH_OUT_NEG = -8192;
-
-    // GPGX ENV_QUIET threshold: when envelope exceeds this, operator output is
-    // forced to 0.
-    // This causes feedback buffer to naturally decay when notes fade out.
-    private static final int ENV_QUIET = TL_TAB_LEN >> 3;
-
-    // Rate constants
-    private static final int AR_RATE = 399128;
-    private static final int DR_RATE = 5514396;
-
-    // LFO constants
-
-    // Tables
-    private static final int[] SIN_TAB = new int[SIN_LEN]; // indices into TL_TAB (includes sign bit)
-    private static final int[] TL_TAB = new int[TL_TAB_LEN]; // signed 14-bit output values
-    private static final int[] ENV_TAB = new int[2 * ENV_LEN + 8];
-    private static final int[] AR_TAB = new int[128];
-    private static final int[] DR_TAB = new int[128];
-    private static final int[] SL_TAB = new int[16];
-    private static final int[][] DT_TAB = new int[8][32];
-
-    // GPGX: number of samples per LFO step (at internal rate)
-    private static final int[] LFO_SAMPLES_PER_STEP = { 108, 77, 71, 67, 62, 44, 8, 5 };
-
-    // Static index arrays for setInstrument() - avoids per-call allocation
-    // Reorder SMPS voice (Op1, Op3, Op2, Op4) into YM operator order (Op1, Op2, Op3, Op4)
-    private static final int[] DT_IDX = { 1, 3, 2, 4 };
-    private static final int[] TL_IDX = { 21, 23, 22, 24 };
-    private static final int[] RS_AR_IDX = { 5, 7, 6, 8 };
-    private static final int[] AM_D1R_IDX = { 9, 11, 10, 12 };
-    private static final int[] D2R_IDX = { 13, 15, 14, 16 };
-    private static final int[] D1L_RR_IDX = { 17, 19, 18, 20 };
-
-    // Register slot to operator index mapping for writeSlot()
-    private static final int[] REG_TO_OP = { 0, 2, 1, 3 };
-
-    // GPGX EG (Envelope Generator) tables for 3-sample stepping
-    // EG_INC: Envelope increment table - 19 rows of 8 values each
-    // Indexed by eg_rate_select[rate] + ((egCnt >> eg_rate_shift[rate]) & 7)
-    // Copied directly from GPGX ym2612.c
-    private static final int[] EG_INC = {
-            // Row 0: rates 00..11 with (rate&3)==0 - increment by 0 or 1
-            0, 1, 0, 1, 0, 1, 0, 1,
-            // Row 1: rates 00..11 with (rate&3)==1
-            0, 1, 0, 1, 1, 1, 0, 1,
-            // Row 2: rates 00..11 with (rate&3)==2
-            0, 1, 1, 1, 0, 1, 1, 1,
-            // Row 3: rates 00..11 with (rate&3)==3
-            0, 1, 1, 1, 1, 1, 1, 1,
-            // Row 4: rate 12 with (rate&3)==0 - increment by 1
-            1, 1, 1, 1, 1, 1, 1, 1,
-            // Row 5: rate 12 with (rate&3)==1
-            1, 1, 1, 2, 1, 1, 1, 2,
-            // Row 6: rate 12 with (rate&3)==2
-            1, 2, 1, 2, 1, 2, 1, 2,
-            // Row 7: rate 12 with (rate&3)==3
-            1, 2, 2, 2, 1, 2, 2, 2,
-            // Row 8: rate 13 with (rate&3)==0 - increment by 2
-            2, 2, 2, 2, 2, 2, 2, 2,
-            // Row 9: rate 13 with (rate&3)==1
-            2, 2, 2, 4, 2, 2, 2, 4,
-            // Row 10: rate 13 with (rate&3)==2
-            2, 4, 2, 4, 2, 4, 2, 4,
-            // Row 11: rate 13 with (rate&3)==3
-            2, 4, 4, 4, 2, 4, 4, 4,
-            // Row 12: rate 14 with (rate&3)==0 - increment by 4
-            4, 4, 4, 4, 4, 4, 4, 4,
-            // Row 13: rate 14 with (rate&3)==1
-            4, 4, 4, 8, 4, 4, 4, 8,
-            // Row 14: rate 14 with (rate&3)==2
-            4, 8, 4, 8, 4, 8, 4, 8,
-            // Row 15: rate 14 with (rate&3)==3
-            4, 8, 8, 8, 4, 8, 8, 8,
-            // Row 16: rate 15 (all) - increment by 8
-            8, 8, 8, 8, 8, 8, 8, 8,
-            // Row 17: rate 15 for attack (16x increment) - NOT USED in our implementation
-            16, 16, 16, 16, 16, 16, 16, 16,
-            // Row 18: infinity/zero increment (dummy rates 0-1)
-            0, 0, 0, 0, 0, 0, 0, 0
-    };
-
-    // GPGX EG rate tables (32 dummy + 64 rates + 32 dummy), copied from ym2612.c
-    private static final int[] EG_RATE_SELECT = {
-            144, 144, 144, 144, 144, 144, 144, 144,
-            144, 144, 144, 144, 144, 144, 144, 144,
-            144, 144, 144, 144, 144, 144, 144, 144,
-            144, 144, 144, 144, 144, 144, 144, 144,
-            144, 144, 16, 24, 0, 8, 16, 24,
-            0, 8, 16, 24, 0, 8, 16, 24,
-            0, 8, 16, 24, 0, 8, 16, 24,
-            0, 8, 16, 24, 0, 8, 16, 24,
-            0, 8, 16, 24, 0, 8, 16, 24,
-            0, 8, 16, 24, 0, 8, 16, 24,
-            32, 40, 48, 56, 64, 72, 80, 88,
-            96, 104, 112, 120, 128, 128, 128, 128,
-            128, 128, 128, 128, 128, 128, 128, 128,
-            128, 128, 128, 128, 128, 128, 128, 128,
-            128, 128, 128, 128, 128, 128, 128, 128,
-            128, 128, 128, 128, 128, 128, 128, 128
-    };
-    private static final int[] EG_RATE_SHIFT = {
-            11, 11, 11, 11, 11, 11, 11, 11,
-            11, 11, 11, 11, 11, 11, 11, 11,
-            11, 11, 11, 11, 11, 11, 11, 11,
-            11, 11, 11, 11, 11, 11, 11, 11,
-            11, 11, 11, 11, 10, 10, 10, 10,
-            9, 9, 9, 9, 8, 8, 8, 8,
-            7, 7, 7, 7, 6, 6, 6, 6,
-            5, 5, 5, 5, 4, 4, 4, 4,
-            3, 3, 3, 3, 2, 2, 2, 2,
-            1, 1, 1, 1, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0
-    };
-
-    // Reference tables from ym2612.c
-    private static final int[] DT_DEF_TAB = {
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2,
-            2, 3, 3, 3, 4, 4, 4, 5, 5, 6, 6, 7, 8, 8, 8, 8,
-            1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5,
-            5, 6, 6, 7, 8, 8, 9, 10, 11, 12, 13, 14, 16, 16, 16, 16,
-            2, 2, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 6, 6, 7,
-            8, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 20, 22, 22, 22, 22
-    };
-
-    private static final int[] FKEY_TAB = {
-            0, 0, 0, 0,
-            0, 0, 0, 1,
-            2, 3, 3, 3,
-            3, 3, 3, 3
-    };
-
-    private static final int[] LFO_AMS_DEPTH_SHIFT = { 8, 3, 1, 0 };
-
-    private static final int[][] LFO_PM_OUTPUT = {
-            { 0, 0, 0, 0, 0, 0, 0, 0 },
-            { 0, 0, 0, 0, 0, 0, 0, 0 },
-            { 0, 0, 0, 0, 0, 0, 0, 0 },
-            { 0, 0, 0, 0, 0, 0, 0, 0 },
-            { 0, 0, 0, 0, 0, 0, 0, 0 },
-            { 0, 0, 0, 0, 0, 0, 0, 0 },
-            { 0, 0, 0, 0, 0, 0, 0, 0 },
-            { 0, 0, 0, 0, 1, 1, 1, 1 },
-
-            { 0, 0, 0, 0, 0, 0, 0, 0 },
-            { 0, 0, 0, 0, 0, 0, 0, 0 },
-            { 0, 0, 0, 0, 0, 0, 0, 0 },
-            { 0, 0, 0, 0, 0, 0, 0, 0 },
-            { 0, 0, 0, 0, 0, 0, 0, 0 },
-            { 0, 0, 0, 0, 0, 0, 0, 0 },
-            { 0, 0, 0, 0, 1, 1, 1, 1 },
-            { 0, 0, 1, 1, 2, 2, 2, 3 },
-
-            { 0, 0, 0, 0, 0, 0, 0, 0 },
-            { 0, 0, 0, 0, 0, 0, 0, 0 },
-            { 0, 0, 0, 0, 0, 0, 0, 0 },
-            { 0, 0, 0, 0, 0, 0, 0, 0 },
-            { 0, 0, 0, 0, 0, 0, 0, 1 },
-            { 0, 0, 0, 0, 1, 1, 1, 1 },
-            { 0, 0, 1, 1, 2, 2, 2, 3 },
-            { 0, 0, 2, 3, 4, 4, 5, 6 },
-
-            { 0, 0, 0, 0, 0, 0, 0, 0 },
-            { 0, 0, 0, 0, 0, 0, 0, 0 },
-            { 0, 0, 0, 0, 0, 0, 1, 1 },
-            { 0, 0, 0, 0, 1, 1, 1, 1 },
-            { 0, 0, 0, 1, 1, 1, 1, 2 },
-            { 0, 0, 1, 1, 2, 2, 2, 3 },
-            { 0, 0, 2, 3, 4, 4, 5, 6 },
-            { 0, 0, 4, 6, 8, 8, 10, 12 },
-
-            { 0, 0, 0, 0, 0, 0, 0, 0 },
-            { 0, 0, 0, 0, 1, 1, 1, 1 },
-            { 0, 0, 0, 1, 1, 1, 2, 2 },
-            { 0, 0, 1, 1, 2, 2, 3, 3 },
-            { 0, 0, 1, 2, 2, 2, 3, 4 },
-            { 0, 0, 2, 3, 4, 4, 5, 6 },
-            { 0, 0, 4, 6, 8, 8, 10, 12 },
-            { 0, 0, 8, 12, 16, 16, 20, 24 },
-
-            { 0, 0, 0, 0, 0, 0, 0, 0 },
-            { 0, 0, 0, 0, 2, 2, 2, 2 },
-            { 0, 0, 0, 2, 2, 2, 4, 4 },
-            { 0, 0, 2, 2, 4, 4, 6, 6 },
-            { 0, 0, 2, 4, 4, 4, 6, 8 },
-            { 0, 0, 4, 6, 8, 8, 10, 12 },
-            { 0, 0, 8, 12, 16, 16, 20, 24 },
-            { 0, 0, 16, 24, 32, 32, 40, 48 },
-
-            { 0, 0, 0, 0, 0, 0, 0, 0 },
-            { 0, 0, 0, 0, 4, 4, 4, 4 },
-            { 0, 0, 0, 4, 4, 4, 8, 8 },
-            { 0, 0, 4, 4, 8, 8, 12, 12 },
-            { 0, 0, 4, 8, 8, 8, 12, 16 },
-            { 0, 0, 8, 12, 16, 16, 20, 24 },
-            { 0, 0, 16, 24, 32, 32, 40, 48 },
-            { 0, 0, 32, 48, 64, 64, 80, 96 },
-    };
-
-    private static final int[] LFO_PM_TABLE = new int[128 * 8 * 32];
-
-    private static final int YM2612_DISCRETE = 0;
-    private static final int YM2612_INTEGRATED = 1;
-    private static final int YM2612_ENHANCED = 2;
-
-    private static final int EG_RATE_ZERO = 18 * 8;
-
-    // GPGX: When running at internal rate, frequency multiplier is 1.0
-    private static final double YM2612_FREQUENCY = 1.0;
-    // Operator slot order matches ym2612.c (S0,S1,S2,S3) mapping to ops[0,2,1,3]
-    private static final int[] OP_TO_SLOT = { 0, 2, 1, 3 };
-    // Inverse mapping: slot -> op index (S0,S1,S2,S3 -> ops[0,2,1,3])
-    private static final int[] SLOT_TO_OP = { 0, 2, 1, 3 };
-    // CH3 special mode: A8/A9/AA (and AC/AD/AE) map to ops in hardware order.
-    // A8/AC -> SLOT3 (op index 1), A9/AD -> SLOT1 (op index 0), AA/AE -> SLOT2 (op index 2).
-    private static final int[] CH3_SPECIAL_OP_MAP = { 1, 0, 2 };
-
-    // Debug tracing: set to true to log key on/off envelope state.
-    private static final boolean TRACE_KEY_EVENTS = false;
-    private static final int TRACE_CHANNEL = 4; // -1 = all channels, otherwise 0..5
-    private static final int TRACE_EVENT_LIMIT = 64;
-    // Instrument write tracing removed; use external tools for debugging.
-
-    static {
-        // TL_TAB generation (GPGX linear power table)
-        for (int x = 0; x < TL_RES_LEN; x++) {
-            double m = (1 << 16) / StrictMath.pow(2.0, (x + 1) * (ENV_STEP / 4.0) / 8.0);
-            m = StrictMath.floor(m);
-            int n = (int) m;
-            n >>= 4;
-            if ((n & 1) != 0)
-                n = (n >> 1) + 1;
-            else
-                n >>= 1;
-            n <<= 2;
-
-            TL_TAB[x * 2] = n;
-            TL_TAB[x * 2 + 1] = -n;
-
-            for (int i = 1; i < 13; i++) {
-                int idx = x * 2 + i * 2 * TL_RES_LEN;
-                TL_TAB[idx] = TL_TAB[x * 2] >> i;
-                TL_TAB[idx + 1] = -TL_TAB[idx];
-            }
-        }
-
-        // SIN_TAB generation (GPGX logarithmic sine table)
-        for (int i = 0; i < SIN_LEN; i++) {
-            double m = StrictMath.sin(((i * 2) + 1) * StrictMath.PI / SIN_LEN);
-            double o = 8.0 * StrictMath.log(1.0 / StrictMath.abs(m)) / StrictMath.log(2.0);
-            o = o / (ENV_STEP / 4.0);
-            int n = (int) (2.0 * o);
-            if ((n & 1) != 0)
-                n = (n >> 1) + 1;
-            else
-                n >>= 1;
-            SIN_TAB[i] = n * 2 + (m >= 0.0 ? 0 : 1);
-        }
-
-        // Envelope Table
-        for (int i = 0; i < ENV_LEN; i++) {
-            // Attack curve (x^8)
-            double x = StrictMath.pow(((double) (ENV_LEN - 1 - i) / ENV_LEN), 8.0);
-            x *= ENV_LEN;
-            ENV_TAB[i] = (int) x;
-
-            // Decay curve (x^1)
-            x = StrictMath.pow(((double) i / ENV_LEN), 1.0);
-            x *= ENV_LEN;
-            ENV_TAB[ENV_LEN + i] = (int) x;
-        }
-        ENV_TAB[ENV_END >> ENV_LBITS] = ENV_LEN - 1;
-
-        // Sustain Level Table
-        for (int i = 0; i < 15; i++) {
-            double x = i * 3.0;
-            x /= ENV_STEP;
-            int j = (int) x;
-            j <<= ENV_LBITS;
-            SL_TAB[i] = j + ENV_DECAY;
-        }
-        int j = ENV_LEN - 1;
-        j <<= ENV_LBITS;
-        SL_TAB[15] = j + ENV_DECAY;
-
-        // AR/DR Tables
-        for (int i = 0; i < 60; i++) {
-            double x = YM2612_FREQUENCY;
-            x *= 1.0 + ((i & 3) * 0.25);
-            x *= (double) (1 << (i >> 2));
-            x *= (double) (ENV_LEN << ENV_LBITS);
-            AR_TAB[i + 4] = (int) (x / AR_RATE);
-            DR_TAB[i + 4] = (int) (x / DR_RATE);
-        }
-        for (int i = 64; i < 128; i++) {
-            AR_TAB[i] = AR_TAB[63];
-            DR_TAB[i] = DR_TAB[63];
-        }
-        for (int i = 0; i < 4; i++) {
-            AR_TAB[i] = 0;
-            DR_TAB[i] = 0;
-        }
-
-        // Detune Table - GPGX-style: use raw values without scaling
-        // These values are added directly to the 17-bit fc before the DT_MASK is
-        // applied
-        for (int i = 0; i < 4; i++) {
-            for (int k = 0; k < 32; k++) {
-                DT_TAB[i][k] = DT_DEF_TAB[(i << 5) + k];
-                DT_TAB[i + 4][k] = -DT_TAB[i][k];
-            }
-        }
-
-        // LFO PM table generation (GPGX)
-        for (int depth = 0; depth < 8; depth++) {
-            for (int fnum = 0; fnum < 128; fnum++) {
-                for (int step = 0; step < 8; step++) {
-                    int value = 0;
-                    for (int bit = 0; bit < 7; bit++) {
-                        if ((fnum & (1 << bit)) != 0) {
-                            value += LFO_PM_OUTPUT[bit * 8 + depth][step];
-                        }
-                    }
-                    int base = (fnum * 32 * 8) + (depth * 32);
-                    LFO_PM_TABLE[base + step] = value;
-                    LFO_PM_TABLE[base + (step ^ 7) + 8] = value;
-                    LFO_PM_TABLE[base + step + 16] = -value;
-                    LFO_PM_TABLE[base + (step ^ 7) + 24] = -value;
-                }
-            }
-        }
-
-    }
-
-    private DacData dacData;
-    private int currentDacSampleId = -1;
-    private byte[] currentDacSampleData;
-    private int dacLatchedValue;
-    private double dacPos;
-    private double dacStep = 1.0;
-    private boolean dacEnabled;
-    private boolean dacHasLatched;
-    // DAC timing from s2.sounddriver.asm:314,727-728:
-    // "295 cycles for two samples. dpcmLoopCounter should use 295 divided by 2."
-    // Base overhead = 295 cycles per 2 samples, djnz loops add 13*2=26 cycles per
-    // rateByte
-    private static final double DAC_BASE_CYCLES = 295.0;
-    private static final double DAC_LOOP_CYCLES = 26.0;
-    private static final double DAC_LOOP_SAMPLES = 2.0;
-    private static final double Z80_CLOCK = 3579545.0;
-    private static final double DAC_GAIN = 64.0;
-    private boolean dacInterpolate = true;
-    private boolean dacHighpassEnabled = false;
-    private int dac_highpass;
-    private static final int HIGHPASS_FRACT = 15;
-    private static final int HIGHPASS_SHIFT = 9;
-
-    // Resampling state (internal 53kHz -> output rate)
-    private double resampleAccum = 0.0;
-    private int lastLeft = 0, lastRight = 0;
-    private int prevLeft = 0, prevRight = 0;
-    private final int[] channelOut = new int[6];
-
-    // Band-limited resampler (replaces simple linear interpolation)
-    private BlipResampler blipResampler = new BlipResampler(INTERNAL_RATE, DEFAULT_OUTPUT_RATE);
-    private boolean useBlipResampler = true;  // Band-limited resampling via BlipResampler (GPGX-quality output)
-    private double outputRate = DEFAULT_OUTPUT_RATE;
-    private double resampleRatio = DEFAULT_RESAMPLE_RATIO;
-    private double inverseResampleRatio = 1.0 / DEFAULT_RESAMPLE_RATIO;
-
-    // SSG-EG active operator count - skip updateSsgEg() when 0
-    private int ssgEgActiveCount = 0;
-
-    private int status;
-    private int mode;
-    private int csmKeyFlag;
-    private int addressLatch;
-    private int chipType = YM2612_DISCRETE;
-    private double busyCycles;
-    private final int[][] opMask = new int[8][4];
-    private static final int FM_STATUS_BUSY_BIT_MASK = 0x80;
-    private static final int FM_STATUS_TIMERA_BIT_MASK = 0x01;
-    private static final int FM_STATUS_TIMERB_BIT_MASK = 0x02;
-    private static final int BUSY_CYCLES_DATA = 47;
-    private static final double YM_CYCLES_PER_SAMPLE = (CLOCK / 6.0) / INTERNAL_RATE;
-
-    private int timerACount;
-    private int timerBCount;
-    private int timerALoad;
-    private int timerBLoad;
-    private int timerAPeriod;
-    private int timerBPeriod;
-
-    private int lfoCnt;
-    private int lfoTimer;
-    private int lfoTimerOverflow;
-    private int lfoAm = 126;
-    private int lfoPm;
-
-    // GPGX EG counter: 12-bit, cycles 1-4095, skips 0
-    // EG only advances every 3 samples (frequency = chipclock/144/3)
-    private int egCnt = 1;
-    private int egTimer = 0; // Counts 0, 1, 2, then triggers egCnt increment
-
-    private boolean channel3SpecialMode;
-
-    private enum EnvState {
-        ATTACK, DECAY1, DECAY2, RELEASE, IDLE
-    }
-
-    private static class Operator {
-        int dt1;
-        int mul; // GPGX: 1 for reg=0, or reg*2 for reg=1-15
-        int tl;
-        int tll;
-        int rs, ar;
-        int am, d1r;
-        int d2r;
-        int d1l, rr;
-        int ssgEg;
-        int ssgn;
-        int ksr;
-
-        int fCnt;
-        int fInc;
-        int eCnt;
-        int eInc;
-        int eCmp;
-
-        // GPGX EG rate cache - precomputed shift/select for each envelope phase
-        int egShAr, egSelAr; // Attack rate shift/select
-        int egShD1r, egSelD1r; // Decay1 rate shift/select
-        int egShD2r, egSelD2r; // Decay2/Sustain rate shift/select
-        int egShRr, egSelRr; // Release rate shift/select
-        int volume; // GPGX-style volume (0 = max, 1023 = silent)
-        int volOut; // GPGX-style cached vol_out = volume + tll
-        int slReg; // Raw 4-bit sustain level register value (0-15)
-        EnvState curEnv = EnvState.RELEASE;
-
-        int eIncA, eIncD, eIncS, eIncR;
-        boolean ssgEnabled;
-
-        int chgEnM = 0;
-        int amMask;
-
-        // GPGX-style key flag: tracks whether key is currently pressed,
-        // separate from envelope state. This fixes edge cases where
-        // envelope state alone doesn't properly gate key-on/key-off.
-        boolean key = false;
-    }
-
-    private static class Channel {
-        int fNum;
-        int block;
-        int kCode;
-
-        final int[] slotFnum = new int[4];
-        final int[] slotBlock = new int[4];
-        final int[] slotKCode = new int[4];
-        int fc; // GPGX: base frequency = (fNum << block) >> 1
-        final int[] slotFc = new int[4]; // CH3 special mode per-slot fc
-        int blockFnum; // GPGX: (block << 11) | fNum for LFO PM
-        final int[] slotBlockFnum = new int[4]; // CH3 special mode
-
-        int feedback;
-        int algo;
-        int ams, pms;
-        int pan;
-        int leftMask = 0;
-        int rightMask = 0;
-
-        final int[] opOut = new int[4];
-        int memValue;
-        int out;
-
-        final Operator[] ops = new Operator[4];
-
-        Channel() {
-            for (int i = 0; i < 4; i++) {
-                ops[i] = new Operator();
-                ops[i].eCnt = ENV_END;
-                ops[i].curEnv = EnvState.RELEASE;
-            }
-        }
-    }
-
-    private final Channel[] channels = new Channel[6];
+    /**
+     * Left shift applied to the 24-cycle pin sum (per-channel full scale 768,
+     * {@code chOutput}, {@code ym3438.c:947}) to reach the engine's nominal
+     * per-channel scale; see the class Javadoc.
+     */
+    private static final int OUTPUT_SHIFT = 3;
+
+    /**
+     * The pin value {@code chOutput} ({@code ym3438.c:947}) produces on every
+     * cycle of a silent channel's four-cycle window in YM2612 mode: the
+     * {@code sign} of a non-negative output is 1, amplified by 3. A muted
+     * channel is replaced by this so it keeps the resting level of a silent
+     * one instead of contributing nothing.
+     */
+    private static final int YM2612_SILENT_PIN_VALUE = 3;
+
+    /**
+     * Channel whose output occupies each four-cycle pin window, indexed by
+     * {@code cycles >> 2} before the clock: {@code chOutput} takes
+     * {@code channel = cycles % 6}, plus one for the first twelve cycles
+     * ({@code ym3438.c:947}).
+     */
+    private static final int[] PIN_WINDOW_CHANNEL = {1, 5, 3, 0, 4, 2};
+
+    /**
+     * Clocks that must run after an address strobe before the next strobe:
+     * the one on which {@code doIo} consumes it ({@code ym3438.c:224}). An
+     * address write does not raise busy in {@code ym3438.c} ({@code write_busy}
+     * follows {@code write_d_en} only) and whether it does on silicon is open
+     * (behaviour-vectors doc, open question 1), so the hold is the smallest
+     * one under which the address is latched before the data strobe arrives.
+     */
+    private static final int ADDRESS_SETTLE_CYCLES = 1;
+    /**
+     * Clocks from a data strobe until a status poll first reads not-busy: the
+     * strobe is consumed on the first clock ({@code doIo} raises
+     * {@code write_busy}), the status byte reflects it from the second
+     * ({@code busy = write_busy}), and {@code write_busy_cnt} then holds busy
+     * for 32 cycles (behaviour-vectors doc REG-06 and "Address latch
+     * behaviour", 32 internal cycles ≈ 1.33 samples; asserted by
+     * {@code TestYm2612HardwareBehaviour.reg06BusyFlagLastsThirtyTwoInternalCycles}).
+     * A busy-polling driver presents its next strobe no earlier than this.
+     */
+    private static final int DATA_SETTLE_CYCLES = 2 + 32;
+
+    /** {@code EG_NUM_RELEASE} ({@code ym3438.c:41}). */
+    private static final int EG_STATE_RELEASE = 3;
+    /** Envelope level of a fully released operator ({@code OPN2_Reset}, {@code ym3438.c:1186}). */
+    private static final int EG_LEVEL_SILENT = 0x3ff;
+
+    /* Pending operation queue: OP_STRIDE ints per entry. */
+    private static final int OP_STRIDE = 5;
+    private static final int OP_WRITE = 0;
+    private static final int OP_ADDRESS = 1;
+    private static final int OP_DATA = 2;
+    private static final int OP_FORCE_SILENCE = 3;
+    private static final int OP_DAC_PLAY = 4;
+    private static final int OP_DAC_STOP = 5;
+    private static final int NO_CHANNEL = -1;
+
+    /*
+     * SMPS voice layout (byte index into the 25-byte voice) per slot in the
+     * chip's slot order 0..3; TL bytes exist only in 25-byte voices.
+     */
+    private static final int[] VOICE_DT_MUL = {1, 3, 2, 4};
+    private static final int[] VOICE_TL = {21, 23, 22, 24};
+    private static final int[] VOICE_RS_AR = {5, 7, 6, 8};
+    private static final int[] VOICE_AM_D1R = {9, 11, 10, 12};
+    private static final int[] VOICE_D2R = {13, 15, 14, 16};
+    private static final int[] VOICE_D1L_RR = {17, 19, 18, 20};
+    private static final int VOICE_LENGTH_WITH_TL = 25;
+
+    /*
+     * DAC cadence. The Z80 drivers deliver two 4-bit DPCM samples per byte
+     * with a fixed instruction path of DacData.baseCycles() Z80 cycles per
+     * byte (counted in the disassemblies with the final, not-taken 8-cycle
+     * djnz of each half included: s1disasm sound/z80.asm zPlayPCMLoop "301 in
+     * total", s2disasm s2.sounddriver.asm zWriteToDAC "295 cycles for two
+     * samples", skdisasm Sound/Z80 Sound Driver.asm zPlayDigitalAudio
+     * .dac_playback_loop total), plus the pitch loop "djnz $" run once per
+     * half with b = rate: the taken branch costs 13 cycles, so each half adds
+     * 13 * (rate - 1) cycles and a rate byte of 0 counts 256 times.
+     */
+    private static final int Z80_DJNZ_TAKEN_CYCLES = 13;
+    private static final int DAC_SAMPLES_PER_BYTE = 2;
+    private static final int Z80_DJNZ_ZERO_COUNT = 256;
+    /**
+     * Internal FM cycles per Z80 cycle: {@code (7670453 / 6) / 3579545}. Both
+     * clocks divide the 53.693175 MHz master clock (by 7 and by 15), so the
+     * ratio is exactly {@code 15 / 42 = 5 / 14}.
+     */
+    private static final int FM_CYCLES_PER_Z80_CYCLE_NUMERATOR = 5;
+    private static final int FM_CYCLES_PER_Z80_CYCLE_DENOMINATOR = 14;
+    /** The DAC accumulator counts in {@code 1 / DAC_TICK_UNITS} of an internal cycle. */
+    private static final int DAC_TICK_UNITS = FM_CYCLES_PER_Z80_CYCLE_DENOMINATOR * DAC_SAMPLES_PER_BYTE;
+    private static final int DAC_REGISTER = 0x2A;
+    /**
+     * Cadence headroom a synthetic interpolated write needs so that it has
+     * fully settled (address strobe, its hold, data strobe, its hold) before
+     * the real Z80 cadence can present its next sample.
+     */
+    private static final int SYNTHETIC_WRITE_UNITS =
+            DAC_TICK_UNITS * (ADDRESS_SETTLE_CYCLES + DATA_SETTLE_CYCLES + 2);
+    private static final int NO_DAC_VALUE = -1;
+
+    private final NukedOpn2 core = new NukedOpn2();
+    private final NukedOpn2State state = core.state();
+    private final int[] pinBuffer = new int[2];
+    private final BlipResampler resampler = new BlipResampler(INTERNAL_RATE, DEFAULT_OUTPUT_RATE);
     private final boolean[] mutes = new boolean[6];
+    private ChipWriteObserver writeObserver = ChipWriteObserver.NONE;
+    private DacData dacData;
 
-    // Scratch arrays for setInstrument() - reuse instead of allocating per call
-    private final int[] scratchDt = new int[4];
-    private final int[] scratchTl = new int[4];
-    private final int[] scratchRsAr = new int[4];
-    private final int[] scratchAmD1 = new int[4];
-    private final int[] scratchD2r = new int[4];
-    private final int[] scratchD1lRr = new int[4];
-    // Scratch buffer for voice padding
-    private final byte[] voicePadScratch = new byte[25];
+    /** Engine-level chip type: 0 discrete YM2612 (default), 1 and 2 the YM3438 output stage. */
+    private int chipType;
+    private double outputRate = DEFAULT_OUTPUT_RATE;
 
-    private int in0, in1, in2, in3;
-    private int en0, en1, en2, en3;
-    private int traceEvents;
+    /* Frame accumulation and the 1:1 frame queue used when no resampling is needed. */
+    private int frameSumLeft;
+    private int frameSumRight;
+    private int[] directFrames = new int[2 * 256];
+    private int directFrameHead;
+    private int directFrameCount;
 
+    /* Bus pacing. */
+    private int busHold;
+
+    /* Pending operations. */
+    private int[] pendingOps = new int[OP_STRIDE * 256];
+    private int pendingCount;
+    private long flushedOps;
+    private int queuedAddress;
+
+    /* DAC streaming. */
+    private int dacSampleId = NO_DAC_VALUE;
+    /** Resolved {@link #dacSampleId} in {@link #dacData}; derived, never snapshotted. */
+    private DacData.Sample dacSample;
+    private DacData dacSampleData;
+    private int dacSampleDataId = NO_DAC_VALUE;
+    private int dacPeriod;
+    private int dacIndex;
+    private int dacAccumulator;
+    private int dacPreviousValue = NO_DAC_VALUE;
+    private int dacPendingValue = NO_DAC_VALUE;
+    private int dacWritePhase;
+    private int dacWriteValue;
+    private ChipWriteObserver.PhysicalWriteOrigin dacWriteOrigin =
+            ChipWriteObserver.PhysicalWriteOrigin.EXTERNAL_BUS;
+    private boolean dacInterpolate = false;
+    /**
+     * Sample-end edges raised but not yet consumed. Raised where the ROM's
+     * playback loop runs out of sample bytes and falls through to
+     * {@code xor a / ld (zDACIndex), a / jp zPlayDigitalAudio}
+     * (Sound/Z80 Sound Driver.asm:4348-4355); a re-trigger or a stop clears
+     * the index without reaching that fall-through, so neither raises one.
+     */
+    private int dacSampleEndPending;
+    /** Diagnostic-only clock; it deliberately does not participate in snapshots. */
+    private long physicalCycle;
+
+    /** Constructs a reset chip at {@link #getDefaultOutputRate()}; nothing global is touched. */
     public Ym2612Chip() {
-        for (int i = 0; i < 6; i++) {
-            channels[i] = new Channel();
-        }
+        applyChipType(0);
         reset();
-        setChipType(YM2612_DISCRETE);
     }
 
-    public void reset() {
-        status = 0;
-        mode = 0;
-        csmKeyFlag = 0;
-        addressLatch = 0;
-        busyCycles = 0;
-        channel3SpecialMode = false;
-
-        timerACount = 0;
-        timerBCount = 0;
-        timerALoad = 1024;
-        timerBLoad = 256 << 4;
-        timerAPeriod = 0;
-        timerBPeriod = 0;
-
-        lfoCnt = 0;
-        lfoTimer = 0;
-        lfoTimerOverflow = 0;
-        lfoAm = 126;
-        lfoPm = 0;
-
-        // Reset GPGX EG counter and timer
-        egCnt = 1;
-        egTimer = 0;
-
-        dacEnabled = false;
-        dac_highpass = 0;
-
-        // Reset resampling state
-        resampleAccum = 0.0;
-        lastLeft = lastRight = 0;
-        prevLeft = prevRight = 0;
-        blipResampler.reset();
-
-        // Reset SSG-EG tracking
-        ssgEgActiveCount = 0;
-
-        for (Channel ch : channels) {
-            ch.fNum = 0;
-            ch.block = 0;
-            ch.kCode = 0;
-            ch.feedback = 31; // fb=0 means no feedback (large shift effectively disables it)
-            ch.algo = 0;
-            ch.ams = LFO_AMS_DEPTH_SHIFT[0];
-            ch.pms = 0;
-            ch.leftMask = 0xFFFFFFFF;
-            ch.rightMask = 0xFFFFFFFF;
-            ch.memValue = 0;
-
-            for (int i = 0; i < 4; i++) {
-                ch.opOut[i] = 0;
-                Operator o = ch.ops[i];
-                o.dt1 = 0;
-                o.mul = 1; // GPGX: mul=1 when reg=0
-                o.tl = 0;
-                o.tll = 0;
-                o.ksr = 0;
-                o.ar = 0;
-                o.am = 0;
-                o.d1r = 0;
-                o.d2r = 0;
-                o.d1l = 0;
-                o.rr = 0;
-                o.ssgEg = 0;
-                o.ssgn = 0;
-                o.ssgEnabled = false;
-                o.fCnt = 0;
-                o.eCnt = ENV_END;
-                o.eInc = 0;
-                o.eCmp = 0;
-                o.curEnv = EnvState.RELEASE;
-                o.chgEnM = 0;
-                o.key = false;
-                // GPGX EG state
-                o.volume = 1023; // Start silent
-                o.volOut = 1023 + o.tll; // Cache vol_out
-                o.slReg = 0; // Sustain level register
-                o.egShAr = o.egSelAr = 0;
-                o.egShD1r = o.egSelD1r = 0;
-                o.egShD2r = o.egSelD2r = 0;
-                o.egShRr = o.egSelRr = 0;
-                o.amMask = 0;
-            }
-        }
-    }
-
-    public void setMute(int ch, boolean mute) {
-        if (ch >= 0 && ch < 6)
-            mutes[ch] = mute;
-    }
-
-    /**
-     * Silence all FM channels (ROM: zFMSilenceAll).
-     * Key-off all channels, then write 0xFF to registers 0x30-0x8F on both ports.
-     */
-    public void silenceAll() {
-        // Key-off all 6 channels (reg 0x28, value = channel with no operator keys)
-        for (int ch = 0; ch < 3; ch++) {
-            write(0, 0x28, ch); // Part I channels 0-2
-            write(0, 0x28, ch | 0x04); // Part II channels 3-5
-        }
-        // Write 0xFF to registers 0x30-0x8F on both ports to kill all operator params
-        for (int reg = 0x30; reg < 0x90; reg++) {
-            write(0, reg, 0xFF);
-            write(1, reg, 0xFF);
-        }
-        // Stop DAC playback
-        stopDac();
-    }
-
-    /**
-     * Force-silence a channel by directly resetting envelope and feedback state.
-     * This is used when SFX steals a channel from music to prevent artifacts
-     * caused by state persisting across notes.
-     * <p>
-     * Unlike register writes, this takes effect immediately without needing
-     * audio samples to be rendered.
-     * <p>
-     * The feedback buffer (opOut) is reset to ensure multi-channel SFX
-     * (like the Signpost which uses FM4+FM5) start with identical state.
-     * Without this reset, residual feedback from different music channels
-     * causes the SFX channels to have different waveforms, creating
-     * a phaser/chorus effect.
-     */
-    public void forceSilenceChannel(int chIdx) {
-        if (chIdx < 0 || chIdx >= 6)
-            return;
-        Channel ch = channels[chIdx];
-
-        // Reset feedback buffer to ensure clean, identical state for multi-channel SFX
-        ch.opOut[0] = 0;
-        ch.opOut[1] = 0;
-        ch.memValue = 0;
-
-        for (int op = 0; op < 4; op++) {
-            Operator sl = ch.ops[op];
-            // Decrement SSG-EG active count before resetting
-            if (sl.ssgEnabled) {
-                ssgEgActiveCount--;
-                sl.ssgEnabled = false;
-                sl.ssgEg = 0;
-            }
-            // Fully reset envelope to silent state
-            sl.eCnt = ENV_END;
-            sl.eInc = 0;
-            sl.eCmp = ENV_END + 1;
-            sl.curEnv = EnvState.IDLE;
-            sl.chgEnM = 0xFFFFFFFF; // Allow next keyOn to proceed
-            sl.key = false; // Reset key flag for GPGX-style key handling
-            sl.volume = 1023; // GPGX: silent
-            sl.volOut = 1023 + sl.tll; // Update cache
-            sl.ssgn = 0;
-        }
-    }
-
-    public void setDacInterpolate(boolean interpolate) {
-        this.dacInterpolate = interpolate;
-    }
-
-    public void setDacHighpassEnabled(boolean enabled) {
-        this.dacHighpassEnabled = enabled;
-    }
-
+    /** Native frame rate, {@code 7670453 / 144} Hz. */
     public static double getInternalRate() {
         return INTERNAL_RATE;
     }
@@ -754,1389 +281,916 @@ public class Ym2612Chip {
         return outputRate;
     }
 
-    public void setOutputSampleRate(double newOutputRate) {
-        if (newOutputRate <= 0.0) {
+    /** Re-targets the resampler; register state and queued writes are untouched. */
+    public void setOutputSampleRate(double rate) {
+        if (rate <= 0.0) {
             return;
         }
-        outputRate = newOutputRate;
-        resampleRatio = INTERNAL_RATE / outputRate;
-        inverseResampleRatio = 1.0 / resampleRatio;
-        blipResampler.reset(INTERNAL_RATE, outputRate);  // Reuse existing buffers instead of allocating new
-        resampleAccum = 0.0;
-        lastLeft = lastRight = 0;
-        prevLeft = prevRight = 0;
+        outputRate = rate;
+        resampler.reset(INTERNAL_RATE, rate);
+        directFrameHead = 0;
+        directFrameCount = 0;
+        emitPhysicalBoundary(
+                ChipWriteObserver.PhysicalTimelineBoundary.MODEL_MUTATION);
     }
 
-    public void setUseBlipResampler(boolean use) {
-        this.useBlipResampler = use;
+    /**
+     * 0 selects the discrete YM2612 output stage ({@code ym3438_mode_ym2612 |
+     * ym3438_mode_readmode}), the production default; 1 and 2 select the
+     * YM3438 output stage ({@code ym3438_mode_readmode} only). Read mode is
+     * always on because {@link #readStatus()} reads through a single port.
+     */
+    public void setChipType(int type) {
+        applyChipType(type);
+        emitPhysicalBoundary(
+                ChipWriteObserver.PhysicalTimelineBoundary.MODEL_MUTATION);
+    }
+
+    private void applyChipType(int type) {
+        chipType = type;
+        core.setChipType(type == 0
+                ? NukedOpn2.MODE_YM2612 | NukedOpn2.MODE_READMODE
+                : NukedOpn2.MODE_READMODE);
+    }
+
+    public void setDacInterpolate(boolean interpolate) {
+        dacInterpolate = interpolate;
+        emitPhysicalBoundary(
+                ChipWriteObserver.PhysicalTimelineBoundary.MODEL_MUTATION);
     }
 
     public void setDacData(DacData data) {
-        this.dacData = data;
+        dacData = data;
     }
 
-    public int readStatus() {
-        if (busyCycles > 0)
-            status |= FM_STATUS_BUSY_BIT_MASK;
-        else
-            status &= ~FM_STATUS_BUSY_BIT_MASK;
-        return status;
+    @Override
+    public DacData liveDacDataReference() {
+        return dacData;
     }
 
+    @Override
+    public void setWriteObserver(ChipWriteObserver observer) {
+        writeObserver = observer == null ? ChipWriteObserver.NONE : observer;
+    }
+
+    @Override
+    public void reportPhysicalTimelineBoundary(
+            ChipWriteObserver.PhysicalTimelineBoundary boundary) {
+        emitPhysicalBoundary(boundary);
+    }
+
+    /** Hardware reset ({@code OPN2_Reset}); chip type, output rate and mutes are retained. */
+    public void reset() {
+        core.reset();
+        pendingCount = 0;
+        queuedAddress = 0;
+        busHold = 0;
+        frameSumLeft = 0;
+        frameSumRight = 0;
+        directFrameHead = 0;
+        directFrameCount = 0;
+        dacSampleId = NO_DAC_VALUE;
+        dacPeriod = 0;
+        dacIndex = 0;
+        dacAccumulator = 0;
+        dacPreviousValue = NO_DAC_VALUE;
+        dacPendingValue = NO_DAC_VALUE;
+        dacWritePhase = 0;
+        dacWriteValue = 0;
+        dacWriteOrigin = ChipWriteObserver.PhysicalWriteOrigin.EXTERNAL_BUS;
+        dacSampleEndPending = 0;
+        resampler.reset(INTERNAL_RATE, outputRate);
+        emitPhysicalBoundary(ChipWriteObserver.PhysicalTimelineBoundary.RESET);
+    }
+
+    // ---------------------------------------------------------------- writes
+
+    /**
+     * Combined address and data write. The effective port is {@code port} or
+     * bit 8 of {@code reg}; register and value are masked to eight bits
+     * before anything else sees them.
+     */
     public void write(int port, int reg, int val) {
-        int resolvedPort = port & 1;
-        int resolvedReg = reg & 0x1FF;
-        if ((resolvedReg & 0x100) != 0) {
-            resolvedPort = 1;
-            resolvedReg &= 0xFF;
-        }
-        writeAddress(resolvedPort, resolvedReg);
-        writeData(resolvedPort, val);
+        int resolvedPort = (port | (reg >> 8)) & 1;
+        reg &= 0xff;
+        val &= 0xff;
+        queuedAddress = (resolvedPort << 8) | reg;
+        enqueue(OP_WRITE, resolvedPort, reg, val, targetChannel(resolvedPort, reg, val));
+        writeObserver.onYm2612Write(resolvedPort, reg, val);
     }
 
+    /** Address strobe only ({@code OPN2_Write(chip, port * 2, reg)} once applied). */
     public void writeAddress(int port, int reg) {
-        addressLatch = (reg & 0xFF) | ((port & 1) != 0 ? 0x100 : 0);
+        int resolvedPort = (port | (reg >> 8)) & 1;
+        reg &= 0xff;
+        queuedAddress = (resolvedPort << 8) | reg;
+        enqueue(OP_ADDRESS, resolvedPort, reg, 0, NO_CHANNEL);
     }
 
+    /** Data strobe only ({@code OPN2_Write(chip, port * 2 + 1, val)} once applied). */
     public void writeData(int port, int val) {
-        busyCycles = BUSY_CYCLES_DATA;
-        int addr = addressLatch;
-
-        if (addr < 0x30) {
-            writeYm(addr, val);
-        } else {
-            if ((addr & 0xFF) < 0xA0) {
-                writeSlot(addr, val);
-            } else {
-                writeChannel(addr, val);
-            }
-        }
+        val &= 0xff;
+        int latchedPort = queuedAddress >> 8;
+        int latchedReg = queuedAddress & 0xff;
+        enqueue(OP_DATA, port & 1, val, 0, targetChannel(latchedPort, latchedReg, val));
     }
 
-    public void setChipType(int type) {
-        chipType = type;
-        resetOpMask();
-        if (chipType < YM2612_ENHANCED) {
-            // GPGX op_mask is defined in slot order (S0,S1,S2,S3). Map to ops[] order.
-            setOpMaskSlot(0, 3);
-            setOpMaskSlot(1, 3);
-            setOpMaskSlot(2, 3);
-            setOpMaskSlot(3, 3);
-            setOpMaskSlot(4, 1);
-            setOpMaskSlot(4, 3);
-            setOpMaskSlot(5, 1);
-            setOpMaskSlot(5, 2);
-            setOpMaskSlot(5, 3);
-            setOpMaskSlot(6, 1);
-            setOpMaskSlot(6, 2);
-            setOpMaskSlot(6, 3);
-            setOpMaskSlot(7, 0);
-            setOpMaskSlot(7, 1);
-            setOpMaskSlot(7, 2);
-            setOpMaskSlot(7, 3);
-        }
-    }
-
-    private void resetOpMask() {
-        for (int algo = 0; algo < 8; algo++) {
-            for (int op = 0; op < 4; op++) {
-                opMask[algo][op] = 0xFFFFFFFF;
-            }
-        }
-    }
-
-    private void setOpMaskSlot(int algo, int slot) {
-        int op = SLOT_TO_OP[slot & 3];
-        opMask[algo][op] = -32;
-    }
-
-    private void writeYm(int addr, int val) {
-        switch (addr) {
-            case 0x22:
-                if ((val & 0x08) != 0) {
-                    lfoTimerOverflow = LFO_SAMPLES_PER_STEP[val & 7];
-                } else {
-                    lfoTimerOverflow = 0;
-                    lfoTimer = 0;
-                    lfoAm = 126;
-                    lfoPm = 0;
-                }
-                break;
-            case 0x24:
-                timerAPeriod = (timerAPeriod & 0x03) | (val << 2);
-                timerALoad = 1024 - timerAPeriod;
-                break;
-            case 0x25:
-                timerAPeriod = (timerAPeriod & 0x3FC) | (val & 0x03);
-                timerALoad = 1024 - timerAPeriod;
-                break;
-            case 0x26:
-                timerBPeriod = val & 0xFF;
-                timerBLoad = (256 - timerBPeriod) << 4;
-                break;
-            case 0x27:
-                setTimers(val);
-                break;
-            case 0x28:
-                int chIdx = val & 0x03;
-                if (chIdx == 3)
-                    return;
-                if ((val & 0x04) != 0)
-                    chIdx += 3;
-                Channel ch = channels[chIdx];
-                int mask = (val >> 4) & 0xF;
-                if ((mask & 1) != 0)
-                    keyOn(ch, 0);
-                else
-                    keyOff(ch, 0);
-                if ((mask & 2) != 0)
-                    keyOn(ch, 2);
-                else
-                    keyOff(ch, 2);
-                if ((mask & 4) != 0)
-                    keyOn(ch, 1);
-                else
-                    keyOff(ch, 1);
-                if ((mask & 8) != 0)
-                    keyOn(ch, 3);
-                else
-                    keyOff(ch, 3);
-                break;
-            case 0x2A:
-                dacLatchedValue = (val & 0xFF) - 128;
-                dacHasLatched = true;
-                currentDacSampleId = -1;
-                currentDacSampleData = null;
-                break;
-            case 0x2B:
-                dacEnabled = (val & 0x80) != 0;
-                if (!dacEnabled)
-                    stopDac();
-                break;
-        }
-    }
-
-    private void setTimers(int val) {
-        if (((mode ^ val) & 0xC0) != 0) {
-            channels[2].ops[0].fInc = -1;
-            if (((val & 0xC0) != 0x80) && csmKeyFlag != 0) {
-                csmKeyOff();
-            }
-        }
-
-        if ((val & 0x01) != 0 && (mode & 0x01) == 0) {
-            timerACount = timerALoad;
-        }
-        if ((val & 0x02) != 0 && (mode & 0x02) == 0) {
-            timerBCount = timerBLoad;
-        }
-
-        status &= (~val >> 4);
-
-        mode = val;
-        channel3SpecialMode = (val & 0x40) != 0;
-    }
-
-    private void writeSlot(int addr, int val) {
-        int nch = addr & 3;
-        if (nch == 3)
-            return;
-        if ((addr & 0x100) != 0)
-            nch += 3;
-
-        int regSlot = (addr >> 2) & 3;
-        int opIdx = REG_TO_OP[regSlot];
-
-        Channel ch = channels[nch];
-        Operator sl = ch.ops[opIdx];
-
-        int ar = (val & 0x1F) != 0 ? 32 + ((val & 0x1F) << 1) : 0;
-        switch (addr & 0xF0) {
-            case 0x30:
-                int mulVal = val & 0x0F;
-                // GPGX: mul = 1 when register is 0, otherwise reg * 2
-                sl.mul = (mulVal == 0) ? 1 : mulVal * 2;
-                sl.dt1 = (val >> 4) & 7;
-                ch.ops[0].fInc = -1;
-                break;
-            case 0x40:
-                sl.tl = val & 0x7F;
-                sl.tll = sl.tl << (ENV_HBITS - 7);
-                // GPGX: update vol_out cache when TL changes
-                updateVolOut(sl);
-                break;
-            case 0x50:
-                sl.ar = ar;
-                sl.rs = 3 - (val >> 6);
-                ch.ops[0].fInc = -1;
-                sl.eIncA = AR_TAB[sl.ar + sl.ksr];
-                if (sl.curEnv == EnvState.ATTACK)
-                    sl.eInc = sl.eIncA;
-                updateEgRateCache(sl);
-                break;
-            case 0x60:
-                sl.amMask = (val & 0x80) != 0 ? 0xFFFFFFFF : 0;
-                sl.d1r = ar;
-                sl.eIncD = DR_TAB[sl.d1r + sl.ksr];
-                if (sl.curEnv == EnvState.DECAY1)
-                    sl.eInc = sl.eIncD;
-                updateEgRateCache(sl);
-                break;
-            case 0x70:
-                sl.d2r = ar;
-                sl.eIncS = DR_TAB[sl.d2r + sl.ksr];
-                if (sl.curEnv == EnvState.DECAY2)
-                    sl.eInc = sl.eIncS;
-                updateEgRateCache(sl);
-                break;
-            case 0x80:
-                sl.slReg = (val >> 4) & 0x0F; // Store raw 4-bit SL value
-                sl.d1l = SL_TAB[sl.slReg];
-                sl.rr = 34 + ((val & 0xF) << 2);
-                sl.eIncR = DR_TAB[sl.rr + sl.ksr];
-                if (sl.curEnv == EnvState.RELEASE)
-                    sl.eInc = sl.eIncR;
-                if (sl.curEnv == EnvState.DECAY1) {
-                    int sustainLevel = SL_VOL_TAB[sl.slReg];
-                    if (sl.volume >= sustainLevel) {
-                        sl.curEnv = EnvState.DECAY2;
-                        sl.eCnt = sl.d1l;
-                    }
-                }
-                updateEgRateCache(sl);
-                break;
-            case 0x90:
-                boolean wasEnabled = sl.ssgEnabled;
-                sl.ssgEg = val & 0x0F;
-                sl.ssgEnabled = (val & 0x08) != 0;
-                // Track active SSG-EG count for optimization
-                if (sl.ssgEnabled && !wasEnabled) {
-                    ssgEgActiveCount++;
-                } else if (!sl.ssgEnabled && wasEnabled) {
-                    ssgEgActiveCount--;
-                }
-                if (sl.curEnv != EnvState.RELEASE && sl.curEnv != EnvState.IDLE) {
-                    updateVolOut(sl);
-                }
-                break;
-        }
-    }
-
-    private void writeChannel(int addr, int val) {
-        int nch = addr & 3;
-        if (nch == 3)
-            return;
-        if ((addr & 0x100) != 0)
-            nch += 3;
-        Channel ch = channels[nch];
-
-        switch (addr & 0xFC) {
-            case 0xA0:
-                ch.fNum = (ch.fNum & 0x700) | (val & 0xFF);
-                ch.kCode = (ch.block << 2) | FKEY_TAB[ch.fNum >> 7];
-                // GPGX: fc = (fNum << block) >> 1
-                ch.fc = (ch.fNum << ch.block) >> 1;
-                ch.blockFnum = (ch.block << 11) | ch.fNum;
-                ch.ops[0].fInc = -1;
-                break;
-            case 0xA4:
-                ch.fNum = (ch.fNum & 0xFF) | ((val & 0x07) << 8);
-                ch.block = (val >> 3) & 7;
-                ch.kCode = (ch.block << 2) | FKEY_TAB[ch.fNum >> 7];
-                ch.fc = (ch.fNum << ch.block) >> 1;
-                ch.blockFnum = (ch.block << 11) | ch.fNum;
-                ch.ops[0].fInc = -1;
-                break;
-            case 0xA8:
-                if (nch == 2) {
-                    int regIdx = addr & 3;
-                    if (regIdx < 3) {
-                        int opIdx = CH3_SPECIAL_OP_MAP[regIdx];
-                        ch.slotFnum[opIdx] = (ch.slotFnum[opIdx] & 0x700) | (val & 0xFF);
-                        ch.slotKCode[opIdx] = (ch.slotBlock[opIdx] << 2) | FKEY_TAB[ch.slotFnum[opIdx] >> 7];
-                        ch.slotFc[opIdx] = (ch.slotFnum[opIdx] << ch.slotBlock[opIdx]) >> 1;
-                        ch.slotBlockFnum[opIdx] = (ch.slotBlock[opIdx] << 11) | ch.slotFnum[opIdx];
-                    }
-                    ch.ops[0].fInc = -1;
-                }
-                break;
-            case 0xAC:
-                if (nch == 2) {
-                    int regIdx = addr & 3;
-                    if (regIdx < 3) {
-                        int opIdx = CH3_SPECIAL_OP_MAP[regIdx];
-                        ch.slotFnum[opIdx] = (ch.slotFnum[opIdx] & 0xFF) | ((val & 0x07) << 8);
-                        ch.slotBlock[opIdx] = (val >> 3) & 7;
-                        ch.slotKCode[opIdx] = (ch.slotBlock[opIdx] << 2) | FKEY_TAB[ch.slotFnum[opIdx] >> 7];
-                        ch.slotFc[opIdx] = (ch.slotFnum[opIdx] << ch.slotBlock[opIdx]) >> 1;
-                        ch.slotBlockFnum[opIdx] = (ch.slotBlock[opIdx] << 11) | ch.slotFnum[opIdx];
-                    }
-                    ch.ops[0].fInc = -1;
-                }
-                break;
-            case 0xB0:
-                ch.algo = val & 7;
-                int fb = (val >> 3) & 7;
-                // GPGX feedback formula: SIN_BITS - fb where SIN_BITS=10
-                // For fb=7 (max): shift by 3 (strongest feedback)
-                // For fb=1 (min): shift by 9 (weakest non-zero feedback)
-                // For fb=0: disabled (use large shift to zero result)
-                ch.feedback = (fb != 0) ? (SIN_BITS - fb) : 31;
-                break;
-            case 0xB4:
-                ch.pan = (val >> 6) & 3;
-                ch.leftMask = (val & 0x80) != 0 ? 0xFFFFFFFF : 0;
-                ch.rightMask = (val & 0x40) != 0 ? 0xFFFFFFFF : 0;
-                ch.ams = LFO_AMS_DEPTH_SHIFT[(val >> 4) & 3];
-                ch.pms = (val & 7) * 32;
-                break;
-        }
-    }
-
-    private void calcFIncSlot(Operator sl, int fc, int kc) {
-        // GPGX refresh_fc_eg_slot: add detune, apply overflow mask, then multiply
-        fc = (fc + DT_TAB[sl.dt1][kc]) & DT_MASK;
-        // GPGX: Incr = (fc * mul) >> 1 (because mul is 1 or reg*2)
-        sl.fInc = (fc * sl.mul) >> 1;
-        int ksr = kc >> sl.rs;
-        if (sl.ksr != ksr) {
-            sl.ksr = ksr;
-            sl.eIncA = AR_TAB[sl.ar + ksr];
-            sl.eIncD = DR_TAB[sl.d1r + ksr];
-            sl.eIncS = DR_TAB[sl.d2r + ksr];
-            sl.eIncR = DR_TAB[sl.rr + ksr];
-
-            if (sl.curEnv == EnvState.ATTACK)
-                sl.eInc = sl.eIncA;
-            else if (sl.curEnv == EnvState.DECAY1)
-                sl.eInc = sl.eIncD;
-            else if (sl.eCnt < ENV_END) {
-                if (sl.curEnv == EnvState.DECAY2)
-                    sl.eInc = sl.eIncS;
-                else if (sl.curEnv == EnvState.RELEASE)
-                    sl.eInc = sl.eIncR;
-            }
-
-            // Update GPGX EG rate cache
-            updateEgRateCache(sl);
-        }
+    /** Status byte: timer A overflow bit 0, timer B bit 1, busy bit 7 ({@code OPN2_Read}). */
+    public int readStatus() {
+        flushPendingOps();
+        return core.read(0);
     }
 
     /**
-     * Update GPGX-style EG rate cache for an operator.
-     * Called when ar, d1r, d2r, rr, or ksr changes.
+     * Loads an SMPS voice: key-off, {@code 0xB0}, then per slot in slot order
+     * DT/MUL, TL (25-byte voices only), RS/AR, AM/D1R, D2R, D1L/RR and
+     * SSG-EG off. Bytes beyond the voice's length leave their registers alone.
      */
-    private void updateEgRateCache(Operator sl) {
-        // Attack rate
-        int rateArRaw = sl.ar + sl.ksr;
-        if (rateArRaw >= 94) {
-            sl.egShAr = 0;
-            sl.egSelAr = EG_RATE_ZERO;
-        } else {
-            sl.egShAr = EG_RATE_SHIFT[rateArRaw];
-            sl.egSelAr = EG_RATE_SELECT[rateArRaw];
-        }
-
-        // Decay1 rate
-        int rateD1r = sl.d1r + sl.ksr;
-        sl.egShD1r = EG_RATE_SHIFT[rateD1r];
-        sl.egSelD1r = EG_RATE_SELECT[rateD1r];
-
-        // Decay2/Sustain rate
-        int rateD2r = sl.d2r + sl.ksr;
-        sl.egShD2r = EG_RATE_SHIFT[rateD2r];
-        sl.egSelD2r = EG_RATE_SELECT[rateD2r];
-
-        // Release rate
-        int rateRr = sl.rr + sl.ksr;
-        sl.egShRr = EG_RATE_SHIFT[rateRr];
-        sl.egSelRr = EG_RATE_SELECT[rateRr];
-    }
-
-    private void calcFIncChannel(Channel ch) {
-        // GPGX: refresh_fc_eg_chan uses pre-calculated fc from register write
-        if (channel3SpecialMode && ch == channels[2]) {
-            for (int i = 0; i < 4; i++) {
-                // CH3 special: slot4 (op index 3) uses channel fc, others use per-op slotFc.
-                int fc = (i == 3) ? ch.fc : ch.slotFc[i];
-                int kc = (i == 3) ? ch.kCode : ch.slotKCode[i];
-                calcFIncSlot(ch.ops[i], fc, kc);
-            }
-        } else {
-            calcFIncSlot(ch.ops[0], ch.fc, ch.kCode);
-            calcFIncSlot(ch.ops[1], ch.fc, ch.kCode);
-            calcFIncSlot(ch.ops[2], ch.fc, ch.kCode);
-            calcFIncSlot(ch.ops[3], ch.fc, ch.kCode);
-        }
-    }
-
-    private void keyOn(Channel ch, int idx) {
-        // Ensure ksr/EG rate cache is up to date before key-on state decisions.
-        // This avoids stale ksr causing attack to be chosen when it should be blocked.
-        if (ch.ops[0].fInc == -1) {
-            calcFIncChannel(ch);
-        }
-        Operator sl = ch.ops[idx];
-        // GPGX-style: use separate key flag instead of checking envelope state.
-        // This properly gates key-on to only trigger on 0->1 transitions.
-        if (!sl.key && csmKeyFlag == 0) {
-            // Restart phase generator (GPGX: SLOT->phase = 0)
-            sl.fCnt = 0;
-
-            // Reset SSG-EG inversion (GPGX: SLOT->ssgn = 0)
-            // Our SSG-EG uses different approach but reset is still needed
-            sl.ssgn = 0;
-
-            if ((sl.ar + sl.ksr) < 94) {
-                sl.curEnv = (sl.volume <= 0)
-                        ? ((sl.slReg == 0) ? EnvState.DECAY2 : EnvState.DECAY1)
-                        : EnvState.ATTACK;
-            } else {
-                sl.volume = 0;
-                sl.curEnv = (sl.slReg == 0) ? EnvState.DECAY2 : EnvState.DECAY1;
-            }
-            updateVolOut(sl);
-
-            // Keep legacy eCnt in sync for any code that still uses it
-            sl.eCnt = ENV_ATTACK;
-            sl.chgEnM = 0xFFFFFFFF;
-            sl.eInc = sl.eIncA;
-            sl.eCmp = ENV_DECAY;
-            // Note: Do NOT reset opOut (feedback history) here.
-            // libvgm does not clear feedback on keyOn.
-        }
-        sl.key = true;
-        traceKeyEvent("KEY_ON", ch, idx, sl);
-    }
-
-    private void keyOff(Channel ch, int idx) {
-        Operator sl = ch.ops[idx];
-        // GPGX-style: only transition to RELEASE if key was on and not already
-        // releasing
-        if (sl.key && csmKeyFlag == 0) {
-            if (sl.curEnv != EnvState.RELEASE) {
-                sl.curEnv = EnvState.RELEASE;
-                if (sl.eCnt < ENV_DECAY) {
-                    sl.eCnt = (ENV_TAB[sl.eCnt >> ENV_LBITS] << ENV_LBITS) + ENV_DECAY;
-                }
-                sl.eInc = sl.eIncR;
-                sl.eCmp = ENV_END;
-                if (sl.ssgEnabled) {
-                    if (((sl.ssgn ^ (sl.ssgEg & 0x04)) != 0)) {
-                        sl.volume = (SSG_THRESHOLD - sl.volume) & MAX_ATT_INDEX;
-                    }
-                    if (sl.volume >= SSG_THRESHOLD) {
-                        sl.volume = MAX_ATT_INDEX;
-                        sl.curEnv = EnvState.IDLE;
-                    }
-                }
-                updateVolOut(sl);
-            }
-        }
-        sl.key = false;
-        traceKeyEvent("KEY_OFF", ch, idx, sl);
-    }
-
-    // Sustain level lookup table: maps 4-bit register value to GPGX volume scale.
-    // 3 dB steps: 0..14 map to 0..448 in 32-step increments, SL=15 maps to 992.
-    private static final int[] SL_VOL_TAB = {
-            0, 32, 64, 96, 128, 160, 192, 224,
-            256, 288, 320, 352, 384, 416, 448, 992
-    };
-
-    /**
-     * GPGX-style envelope advancement with rate-gated 3-sample stepping.
-     * Uses global egCnt to determine when to update each operator's envelope.
-     */
-    private void advanceEgOperator(Operator sl) {
-        switch (sl.curEnv) {
-            case ATTACK:
-                // Rate-gated check: only update if counter passes the gate
-                if ((egCnt & ((1 << sl.egShAr) - 1)) == 0) {
-                    int inc = EG_INC[sl.egSelAr + ((egCnt >> sl.egShAr) & 7)];
-                    // Exponential attack: volume += ((~volume) * inc) >> 4
-                    sl.volume += ((~sl.volume) * inc) >> 4;
-                    if (sl.volume <= 0) {
-                        sl.volume = 0;
-                        // Transition to decay phase using stored slReg directly
-                        sl.curEnv = (sl.slReg == 0) ? EnvState.DECAY2 : EnvState.DECAY1;
-                        sl.eCnt = ENV_DECAY; // Keep legacy eCnt in sync
-                    }
-                    updateVolOut(sl);
-                }
-                break;
-
-            case DECAY1:
-                if ((egCnt & ((1 << sl.egShD1r) - 1)) == 0) {
-                    int inc = EG_INC[sl.egSelD1r + ((egCnt >> sl.egShD1r) & 7)];
-                    if (sl.ssgEnabled) {
-                        if (sl.volume < SSG_THRESHOLD) {
-                            sl.volume += 4 * inc;
-                            updateVolOut(sl);
-                        }
-                    } else {
-                        sl.volume += inc;
-                        updateVolOut(sl);
-                    }
-                    int sustainLevel = SL_VOL_TAB[sl.slReg];
-                    if (sl.volume >= sustainLevel) {
-                        sl.volume = sustainLevel;
-                        sl.curEnv = EnvState.DECAY2;
-                        sl.eCnt = sl.d1l; // Keep legacy eCnt in sync
-                        updateVolOut(sl);
-                    }
-                }
-                break;
-
-            case DECAY2:
-                if ((egCnt & ((1 << sl.egShD2r) - 1)) == 0) {
-                    int inc = EG_INC[sl.egSelD2r + ((egCnt >> sl.egShD2r) & 7)];
-                    if (sl.ssgEnabled) {
-                        if (sl.volume < SSG_THRESHOLD) {
-                            sl.volume += 4 * inc;
-                            updateVolOut(sl);
-                        }
-                    } else {
-                        sl.volume += inc;
-                        if (sl.volume >= MAX_ATT_INDEX) {
-                            sl.volume = MAX_ATT_INDEX;
-                            updateVolOut(sl);
-                        } else {
-                            updateVolOut(sl);
-                        }
-                    }
-                }
-                break;
-
-            case RELEASE:
-                if ((egCnt & ((1 << sl.egShRr) - 1)) == 0) {
-                    int inc = EG_INC[sl.egSelRr + ((egCnt >> sl.egShRr) & 7)];
-                    if (sl.ssgEnabled) {
-                        if (sl.volume < SSG_THRESHOLD) {
-                            sl.volume += 4 * inc;
-                        }
-                        if (sl.volume >= SSG_THRESHOLD) {
-                            sl.volume = MAX_ATT_INDEX;
-                            sl.curEnv = EnvState.IDLE;
-                            sl.eCnt = ENV_END;
-                        }
-                    } else {
-                        sl.volume += inc;
-                        if (sl.volume >= MAX_ATT_INDEX) {
-                            sl.volume = MAX_ATT_INDEX;
-                            sl.curEnv = EnvState.IDLE;
-                            sl.eCnt = ENV_END;
-                        }
-                    }
-                    updateVolOut(sl);
-                }
-                break;
-
-            case IDLE:
-                // Do nothing
-                break;
-        }
-    }
-
-    /**
-     * Render stereo output at the configured output rate by generating at internal
-     * rate (~53kHz) and resampling when needed.
-     */
-    public void renderStereo(int[] leftBuf, int[] rightBuf) {
-        int outputLen = Math.min(leftBuf.length, rightBuf.length);
-
-        if (Math.abs(resampleRatio - 1.0) < 1e-9) {
-            // Direct output at internal rate (no resampling).
-            for (int outIdx = 0; outIdx < outputLen; outIdx++) {
-                renderOneSample();
-                leftBuf[outIdx] += lastLeft;
-                rightBuf[outIdx] += lastRight;
-            }
+    public void setInstrument(int ch, byte[] voice) {
+        if (voice == null || voice.length == 0 || ch < 0 || ch >= 6) {
             return;
         }
-
-        if (useBlipResampler) {
-            // Band-limited resampling using windowed-sinc filter
-            // This properly prevents aliasing artifacts (metallic/ringing sounds)
-            for (int outIdx = 0; outIdx < outputLen; outIdx++) {
-                // Generate internal samples until we have enough for next output
-                while (!blipResampler.hasOutputSample()) {
-                    renderOneSample();
-                    blipResampler.addInputSample(lastLeft, lastRight);
-                    blipResampler.advanceInput();
-                }
-
-                // Get the band-limited interpolated output
-                leftBuf[outIdx] += blipResampler.getOutputLeft();
-                rightBuf[outIdx] += blipResampler.getOutputRight();
-                blipResampler.advanceOutput();
-            }
-        } else {
-            // Legacy linear interpolation (kept for comparison/debugging)
-            for (int outIdx = 0; outIdx < outputLen; outIdx++) {
-                while (resampleAccum < 1.0) {
-                    prevLeft = lastLeft;
-                    prevRight = lastRight;
-                    renderOneSample();
-                    resampleAccum += inverseResampleRatio;
-                }
-                resampleAccum -= 1.0;
-
-                double t = resampleAccum * resampleRatio;
-                int left = (int) (prevLeft + t * (lastLeft - prevLeft));
-                int right = (int) (prevRight + t * (lastRight - prevRight));
-
-                leftBuf[outIdx] += left;
-                rightBuf[outIdx] += right;
-            }
-        }
-    }
-
-    /**
-     * Generate one internal sample at ~53kHz. Updates lastLeft/lastRight.
-     */
-    private void renderOneSample() {
-        // GPGX: LFO values are read BEFORE update (for use in channel calc)
-        // and then updated AFTER channel calculation
-        int pmLfo = lfoPm;
-        int envLfo = lfoAm; // GPGX: 126 (max AM) when disabled
-
-        // Explicit zeroing is faster than Arrays.fill() for small arrays in hot path
-        channelOut[0] = 0;
-        channelOut[1] = 0;
-        channelOut[2] = 0;
-        channelOut[3] = 0;
-        channelOut[4] = 0;
-        channelOut[5] = 0;
-
-        // Skip SSG-EG processing when no operators use it (common case)
-        if (ssgEgActiveCount > 0) {
-            updateSsgEg();
-        }
-
-        // DAC output
-        int dacOut = renderDac();
-        if (dacOut > LIMIT_CH_OUT_POS)
-            dacOut = LIMIT_CH_OUT_POS;
-        else if (dacOut < LIMIT_CH_OUT_NEG)
-            dacOut = LIMIT_CH_OUT_NEG;
-        if (dacEnabled && !mutes[5]) {
-            channelOut[5] = dacOut;
-        }
-
-        // FM channels
-        for (int ch = 0; ch < 6; ch++) {
-            if (mutes[ch])
-                continue;
-            if (ch == 5 && dacEnabled)
-                continue;
-            channelOut[ch] = renderChannel(ch, envLfo, pmLfo);
-        }
-
-        int leftSum = 0;
-        int rightSum = 0;
-        for (int ch = 0; ch < 6; ch++) {
-            int out = channelOut[ch];
-            Channel chan = channels[ch];
-            if (chan.leftMask != 0)
-                leftSum += out;
-            if (chan.rightMask != 0)
-                rightSum += out;
-        }
-
-        if (chipType == YM2612_DISCRETE) {
-            for (int ch = 0; ch < 6; ch++) {
-                int out = channelOut[ch];
-                Channel chan = channels[ch];
-                if (out < 0) {
-                    leftSum -= ((4 - (chan.leftMask & 1)) << 5);
-                    rightSum -= ((4 - (chan.rightMask & 1)) << 5);
-                } else {
-                    leftSum += (4 << 5);
-                    rightSum += (4 << 5);
-                }
-            }
-        }
-
-        lastLeft = leftSum;
-        lastRight = rightSum;
-
-        // GPGX: LFO updated AFTER channel calculation
-        advanceLfo();
-
-        // GPGX EG timer: only advance egCnt and envelopes every 3 samples
-        // This matches hardware where EG runs at chipclock/144/3
-        egTimer++;
-        if (egTimer >= 3) {
-            egTimer = 0;
-            // Simple increment, wrap from 4096 to 1 (skip 0)
-            egCnt++;
-            if (egCnt >= 4096)
-                egCnt = 1;
-
-            // Advance envelope generators for all channels (GPGX: advance_eg_channels)
-            for (int ch = 0; ch < 6; ch++) {
-                Channel c = channels[ch];
-                for (int op = 0; op < 4; op++) {
-                    advanceEgOperator(c.ops[op]);
-                }
-            }
-        }
-
-        tickTimers();
-    }
-
-    // DEBUG: Set to true to mute FM4 (channel 3) for Signpost SFX debugging
-    private static final boolean DEBUG_MUTE_FM4 = false;
-
-    private int renderChannel(int chIdx, int envLfo, int pmLfo) {
-        Channel ch = channels[chIdx];
-
-        // DEBUG: Mute FM4 to test if two-channel interference causes the reverb
-        if (DEBUG_MUTE_FM4 && chIdx == 3) {
-            return 0;
-        }
-
-        // Note: Do NOT early-exit for silent channels. Even when all operators are
-        // at ENV_END, we must continue updating phase (fCnt) and feedback (opOut).
-        // Early-exit was preventing proper feedback accumulation, causing artifacts
-        // in high-feedback instruments like Signpost SFX (0xCF).
-
-        if (ch.ops[0].fInc == -1)
-            calcFIncChannel(ch);
-
-        // GET_CURRENT_PHASE - capture fCnt BEFORE incrementing (like libvgm)
-        // Slot order matches ym2612.c: S0=op0, S1=op2, S2=op1, S3=op3
-        in0 = ch.ops[0].fCnt;
-        in1 = ch.ops[2].fCnt;
-        in2 = ch.ops[1].fCnt;
-        in3 = ch.ops[3].fCnt;
-
-        // UPDATE_PHASE - increment fCnt AFTER capturing
-        boolean lfoPmActive = ch.pms != 0;
-        if (lfoPmActive) {
-            if (channel3SpecialMode && chIdx == 2) {
-                for (int i = 0; i < 4; i++) {
-                    Operator op = ch.ops[i];
-                    int blockFnum = (i == 3) ? ch.blockFnum : ch.slotBlockFnum[i];
-                    int kc = (i == 3) ? ch.kCode : ch.slotKCode[i]; // GPGX: keyscale code not modified by LFO
-                    int pm = ch.pms + pmLfo;
-                    int lfoOffset = LFO_PM_TABLE[((blockFnum & 0x7F0) << 4) + pm];
-                    if (lfoOffset != 0) {
-                        // GPGX: LFO works with one more bit of precision (12-bit)
-                        int blk = blockFnum >> 11;
-                        int fc = ((blockFnum << 1) + lfoOffset) & 0xFFF;
-                        fc = (fc << blk) >> 2; // GPGX formula
-                        fc = (fc + DT_TAB[op.dt1][kc]) & DT_MASK;
-                        op.fCnt += (fc * op.mul) >> 1;
-                    } else {
-                        op.fCnt += op.fInc;
-                    }
-                }
-            } else {
-                int blockFnum = ch.blockFnum;
-                int pm = ch.pms + pmLfo;
-                int lfoOffset = LFO_PM_TABLE[((blockFnum & 0x7F0) << 4) + pm];
-                if (lfoOffset != 0) {
-                    int blk = blockFnum >> 11;
-                    int kc = ch.kCode;
-                    int fcBase = ((blockFnum << 1) + lfoOffset) & 0xFFF;
-                    fcBase = (fcBase << blk) >> 2;
-                    for (Operator op : ch.ops) {
-                        int fc = (fcBase + DT_TAB[op.dt1][kc]) & DT_MASK;
-                        op.fCnt += (fc * op.mul) >> 1;
-                    }
-                } else {
-                    for (Operator op : ch.ops) {
-                        op.fCnt += op.fInc;
-                    }
-                }
-            }
-        } else {
-            for (Operator op : ch.ops) {
-                op.fCnt += op.fInc;
-            }
-        }
-
-        // GET_CURRENT_ENV - read envelope values for this sample
-        // Note: EG advancement happens separately every 3 samples in renderOneSample
-        GET_CURRENT_ENV(ch, 0, envLfo);
-        GET_CURRENT_ENV(ch, 1, envLfo);
-        GET_CURRENT_ENV(ch, 2, envLfo);
-        GET_CURRENT_ENV(ch, 3, envLfo);
-
-        doAlgo(ch);
-
-        // GPGX-style asymmetric clipping
-        if (ch.out > LIMIT_CH_OUT_POS)
-            ch.out = LIMIT_CH_OUT_POS;
-        else if (ch.out < LIMIT_CH_OUT_NEG)
-            ch.out = LIMIT_CH_OUT_NEG;
-
-        return ch.out;
-    }
-
-    private void GET_CURRENT_ENV(Channel ch, int slot, int envLfo) {
-        Operator sl = ch.ops[slot];
-        // GPGX: Use cached vol_out (= volume + tll)
-        // This avoids per-sample recalculation
-        int env = sl.volOut;
-        int am = envLfo >> ch.ams;
-        env += (am & sl.amMask);
-
-        switch (slot) {
-            case 0 -> en0 = env;
-            case 1 -> en1 = env;
-            case 2 -> en2 = env;
-            case 3 -> en3 = env;
-        }
-    }
-
-    /**
-     * Bounds-checked TL_TAB lookup for cross-modulation between operators.
-     * Returns 0 (silence) when index exceeds table bounds.
-     * This ensures proper fade-out when envelope/TL gets very high.
-     * <p>
-     * Phase modulation: modulation is added AFTER phase shift.
-     * GPGX uses pm >> 1 for cross-modulation (op_calc).
-     */
-    private static int opCalc(int phase, int env, int pm) {
-        // GPGX op_calc(): (phase >> SIN_BITS) + (pm >> 1)
-        int idx = ((phase >> SIN_BITS) + (pm >> 1)) & SIN_MASK;
-        int p = (env << 3) + SIN_TAB[idx];
-        if (p >= TL_TAB_LEN)
-            return 0;
-        return TL_TAB[p];
-    }
-
-    /**
-     * Feedback calculation for Slot 1 - uses pm directly without >> 1 shift.
-     * GPGX op_calc1() (ym2612.c:1427) applies feedback modulation at full strength.
-     */
-    private static int opCalc1(int phase, int env, int pm) {
-        // GPGX op_calc1(): (phase >> SIN_BITS) + pm (no >> 1)
-        int idx = ((phase >> SIN_BITS) + pm) & SIN_MASK;
-        int p = (env << 3) + SIN_TAB[idx];
-        if (p >= TL_TAB_LEN)
-            return 0;
-        return TL_TAB[p];
-    }
-
-    private static int opCalc1(int phase, int env, int pm, int mask) {
-        int out = opCalc1(phase, env, pm);
-        return out & mask;
-    }
-
-    /**
-     * opCalc without modulation (for carriers with no input modulation)
-     */
-    private static int opCalc(int phase, int env) {
-        // GPGX: (phase >> SIN_BITS) & SIN_MASK
-        int p = (env << 3) + SIN_TAB[(phase >> SIN_BITS) & SIN_MASK];
-        if (p >= TL_TAB_LEN)
-            return 0;
-        return TL_TAB[p];
-    }
-
-    private static int opCalc(int phase, int env, int pm, int mask) {
-        int out = opCalc(phase, env, pm);
-        return out & mask;
-    }
-
-    private static int opCalcNoModMasked(int phase, int env, int mask) {
-        int out = opCalc(phase, env);
-        return out & mask;
-    }
-
-    private void doAlgo(Channel ch) {
-        // Phase values (in0..in3) are already set by renderChannel's GET_CURRENT_PHASE
-        // step.
-        // in0..in3 are in slot order S0,S1,S2,S3. Our GET_CURRENT_ENV stores:
-        // en0=S0, en1=S2, en2=S1, en3=S3 (because ops[] is [S0,S2,S1,S3]).
-        // Reorder here to match libvgm's S0,S1,S2,S3 expectations.
-        final int env0 = en0;
-        final int env1 = en2;
-        final int env2 = en1;
-        final int env3 = en3;
-
-        // GPGX-style: Modulation is now passed separately to opCalc() instead of
-        // being added to the phase directly. This allows GPGX-accurate scaling.
-
-        // GPGX ENV_QUIET check: when envelope is quiet, operator output is forced to 0.
-        // This causes feedback buffer to naturally decay when notes fade out.
-        boolean s0Quiet = env0 >= ENV_QUIET;
-
-        // GPGX mask indices follow SLOT numbers: SLOT1=mask[0], SLOT2=mask[1], SLOT3=mask[2], SLOT4=mask[3]
-        // Our operators: M1=SLOT1 (in0), C1=SLOT2 (in1), M2=SLOT3 (in2), C2=SLOT4 (in3)
-        int[] mask = opMask[ch.algo];
-        int maskM1 = mask[0];  // SLOT1
-        int maskC1 = mask[2];  // SLOT3 - for in1/env1
-        int maskM2 = mask[1];  // SLOT2 - for in2/env2
-        int maskC2 = mask[3];  // SLOT4
-
-        // GPGX: feedback uses opCalc1() which applies pm directly (no >> 1 shift)
-        // Previous code used opCalc() with fb << 1 to compensate, but this creates subtle phase differences
-        int fb = (ch.feedback < SIN_BITS) ? (ch.opOut[0] + ch.opOut[1]) >> ch.feedback : 0;
-        ch.opOut[1] = ch.opOut[0];
-        int s0_out = s0Quiet ? 0 : opCalc1(in0, env0, fb, maskM1);
-        ch.opOut[0] = s0_out; // ALWAYS update - quiet means 0 propagates
-
-        switch (ch.algo) {
-            case 0: {
-                // M1 -> C1 -> MEM -> M2 -> C2 (carrier)
-                int m2 = ch.memValue;
-                int mem = opCalc(in1, env1, s0_out, maskC1);
-                int m2_out = opCalc(in2, env2, m2, maskM2);
-                ch.out = opCalc(in3, env3, m2_out, maskC2) >> OUT_SHIFT;
-                ch.memValue = mem;
-                break;
-            }
-            case 1: {
-                // (M1 + C1) -> MEM -> M2 -> C2 (carrier)
-                int m2 = ch.memValue;
-                int c1_out = opCalcNoModMasked(in1, env1, maskC1); // C1 no modulation
-                int mem = s0_out + c1_out;
-                int m2_out = opCalc(in2, env2, m2, maskM2);
-                ch.out = opCalc(in3, env3, m2_out, maskC2) >> OUT_SHIFT;
-                ch.memValue = mem;
-                break;
-            }
-            case 2: {
-                // M1 + (C1 -> MEM -> M2) -> C2 (carrier)
-                int m2 = ch.memValue;
-                // C1 no modulation
-                int mem = opCalcNoModMasked(in1, env1, maskC1);
-                int m2_out = opCalc(in2, env2, m2, maskM2);
-                ch.out = opCalc(in3, env3, s0_out + m2_out, maskC2) >> OUT_SHIFT;
-                ch.memValue = mem;
-                break;
-            }
-            case 3: {
-                // M1 -> C1 -> MEM + M2 -> C2 (carrier)
-                int c2 = ch.memValue;
-                int mem = opCalc(in1, env1, s0_out, maskC1);
-                int m2_out = opCalcNoModMasked(in2, env2, maskM2); // M2 no modulation
-                c2 += m2_out;
-                ch.out = opCalc(in3, env3, c2, maskC2) >> OUT_SHIFT;
-                ch.memValue = mem;
-                break;
-            }
-            case 4: {
-                // M1 -> C1 (carrier) + M2 -> C2 (carrier)
-                int c1_out = opCalc(in1, env1, s0_out, maskC1);
-                int m2_out = opCalcNoModMasked(in2, env2, maskM2); // M2 no modulation
-                int c2_out = opCalc(in3, env3, m2_out, maskC2);
-                ch.out = (c1_out + c2_out) >> OUT_SHIFT;
-                break;
-            }
-            case 5: {
-                // GPGX: M1 -> (C1 + M2 + C2) all carriers, M2 uses delayed MEM
-                // connect1 = NULL special: mem = c1 = c2 = M1_out
-                // C1 (SLOT2, in1) uses c1 = this M1
-                // M2 (SLOT3, in2) uses m2 = old mem (1-sample delayed M1)
-                // C2 (SLOT4, in3) uses c2 = this M1
-                int m2 = ch.memValue;
-                int c1_out = opCalc(in1, env1, s0_out, maskC1);  // C1 uses this M1
-                int m2_out = opCalc(in2, env2, m2, maskM2);      // M2 uses old mem
-                int c2_out = opCalc(in3, env3, s0_out, maskC2);  // C2 uses this M1
-                ch.out = (c1_out + m2_out + c2_out) >> OUT_SHIFT;
-                ch.memValue = s0_out;
-                break;
-            }
-            case 6: {
-                // M1 -> C1 (carrier) + M2 (carrier) + C2 (carrier)
-                int c1_out = opCalc(in1, env1, s0_out, maskC1);
-                int m2_out = opCalcNoModMasked(in2, env2, maskM2); // M2 no modulation
-                int c2_out = opCalcNoModMasked(in3, env3, maskC2); // C2 no modulation
-                ch.out = (c1_out + m2_out + c2_out) >> OUT_SHIFT;
-                break;
-            }
-            case 7: {
-                // All carriers, no modulation
-                int c1_out = opCalcNoModMasked(in1, env1, maskC1);
-                int m2_out = opCalcNoModMasked(in2, env2, maskM2);
-                int c2_out = opCalcNoModMasked(in3, env3, maskC2);
-                ch.out = (s0_out + c1_out + m2_out + c2_out) >> OUT_SHIFT;
-                break;
-            }
-        }
-
-    }
-
-    private static int getVoiceByte(byte[] v, int idx) {
-        return (idx >= 0 && idx < v.length) ? (v[idx] & 0xFF) : 0;
-    }
-
-    public void setInstrument(int chIdx, byte[] voice) {
-        if (chIdx < 0 || chIdx >= 6 || voice.length < 1)
-            return;
-        Channel ch = channels[chIdx];
-
-        int port = (chIdx < 3) ? 0 : 1;
-        int hwCh = chIdx % 3;
-        int chVal = (port == 0) ? hwCh : (hwCh + 4);
-
-        // Key off all operators before loading new voice (like Z80 zFMSilenceChannel).
-        // This ensures any residual sound from previous notes is silenced.
-        write(0, 0x28, chVal);
-
-        // Minimal reset: only mark frequency for recalculation.
-        // Do NOT reset opOut (feedback history) or full envelope state here.
-        // libvgm does not perform comprehensive resets on voice load - it relies
-        // on the register writes to set up the channel. Aggressive resets were
-        // causing Signpost SFX (0xCF) to have altered timbre due to feedback
-        // state being cleared when it should persist naturally.
-        ch.ops[0].fInc = -1;
-
-        boolean hasTl = voice.length >= 25;
-        int expectedLen = hasTl ? 25 : 21;
-        if (voice.length < expectedLen) {
-            // Use scratch buffer instead of allocating new array
-            System.arraycopy(voice, 0, voicePadScratch, 0, voice.length);
-            voice = voicePadScratch;
-        }
-
-        int val00 = getVoiceByte(voice, 0);
-        int feedback = (val00 >> 3) & 7;
-        int algo = val00 & 7;
-
-        write(port, 0xB0 + hwCh, (feedback << 3) | algo);
-
-        // Map SMPS voice data to YM operator order using static index arrays
-        // and instance scratch arrays to avoid per-call allocations
-        for (int i = 0; i < 4; i++) {
-            scratchDt[i] = getVoiceByte(voice, DT_IDX[i]);
-            scratchTl[i] = hasTl ? getVoiceByte(voice, TL_IDX[i]) : 0;
-            scratchRsAr[i] = getVoiceByte(voice, RS_AR_IDX[i]);
-            scratchAmD1[i] = getVoiceByte(voice, AM_D1R_IDX[i]);
-            scratchD2r[i] = getVoiceByte(voice, D2R_IDX[i]);
-            scratchD1lRr[i] = getVoiceByte(voice, D1L_RR_IDX[i]);
-        }
-
+        int port = ch / 3;
+        int hardwareChannel = ch % 3;
+        write(0, 0x28, hardwareChannel + (port == 0 ? 0 : 4));
+        write(port, 0xB0 + hardwareChannel, voice[0]);
+        boolean hasTl = voice.length >= VOICE_LENGTH_WITH_TL;
         for (int slot = 0; slot < 4; slot++) {
-            write(port, 0x30 + slot * 4 + hwCh, scratchDt[slot]);
-            write(port, 0x40 + slot * 4 + hwCh, scratchTl[slot]);
-            write(port, 0x50 + slot * 4 + hwCh, scratchRsAr[slot]);
-            write(port, 0x60 + slot * 4 + hwCh, scratchAmD1[slot]);
-            write(port, 0x70 + slot * 4 + hwCh, scratchD2r[slot]);
-            write(port, 0x80 + slot * 4 + hwCh, scratchD1lRr[slot]);
-            write(port, 0x90 + slot * 4 + hwCh, 0);
+            int register = slot * 4 + hardwareChannel;
+            writeVoiceByte(port, 0x30 + register, voice, VOICE_DT_MUL[slot]);
+            if (hasTl) {
+                writeVoiceByte(port, 0x40 + register, voice, VOICE_TL[slot]);
+            }
+            writeVoiceByte(port, 0x50 + register, voice, VOICE_RS_AR[slot]);
+            writeVoiceByte(port, 0x60 + register, voice, VOICE_AM_D1R[slot]);
+            writeVoiceByte(port, 0x70 + register, voice, VOICE_D2R[slot]);
+            writeVoiceByte(port, 0x80 + register, voice, VOICE_D1L_RR[slot]);
+            write(port, 0x90 + register, 0);
         }
     }
 
-    // DAC sample transitions produce audible clicks (no crossfade).
-    // The original hardware exhibits the same behavior, so this is accurate.
-    public void playDac(int note) {
-        if (dacData == null)
-            return;
-        DacData.DacEntry entry = dacData.mapping.get(note);
-        if (entry != null) {
-            this.currentDacSampleId = entry.sampleId;
-            this.currentDacSampleData = dacData.samples.get(entry.sampleId);
-            this.dacPos = 0;
-            int rateByte = entry.rate & 0xFF;
-            // Z80 djnz loops (N-1) times; first iteration is in BaseCycles.
-            // SMPSPlay dac.c:107: Divisor = BaseCycles + LoopCycles * (Rate - 1)
-            int effectiveRate = Math.max(1, rateByte);
-            double dacBaseCycles = dacData.baseCycles;
-            double cyclesPerBlock = dacBaseCycles + (DAC_LOOP_CYCLES * (effectiveRate - 1));
-            double cyclesPerSample = cyclesPerBlock / DAC_LOOP_SAMPLES;
-            double rateHz = Z80_CLOCK / cyclesPerSample;
-            // DAC step is now relative to internal rate since renderDac() is called at
-            // ~53kHz
-            this.dacStep = Math.max(0.0001, rateHz / INTERNAL_RATE);
+    private void writeVoiceByte(int port, int register, byte[] voice, int index) {
+        if (index < voice.length) {
+            write(port, register, voice[index]);
         }
+    }
+
+    /**
+     * Register-level silence (ROM {@code zFMSilenceAll}): key-off for all six
+     * channels, then every slot register {@code 0x30..0x8F} on both ports set
+     * to {@code 0xFF}. Not a reset.
+     */
+    public void silenceAll() {
+        for (int key : new int[] {0x00, 0x04, 0x01, 0x05, 0x02, 0x06}) {
+            write(0, 0x28, key);
+        }
+        for (int register = 0x30; register < 0x90; register++) {
+            write(0, register, 0xFF);
+            write(1, register, 0xFF);
+        }
+    }
+
+    /**
+     * Engine policy, not hardware: when an SFX steals a channel the envelope
+     * is forced straight to the released, fully attenuated state so the next
+     * key-on starts clean instead of chirping from the music note's level.
+     * Applied in order with the queued writes.
+     */
+    public void forceSilenceChannel(int ch) {
+        if (ch < 0 || ch >= 6) {
+            return;
+        }
+        enqueue(OP_FORCE_SILENCE, ch, 0, 0, ch);
+        emitPhysicalBoundary(ChipWriteObserver.PhysicalTimelineBoundary.MODEL_MUTATION);
+    }
+
+    /** Output-stage mute: the channel keeps running and contributes its silent resting level. */
+    public void setMute(int ch, boolean mute) {
+        if (ch >= 0 && ch < 6) {
+            mutes[ch] = mute;
+            emitPhysicalBoundary(ChipWriteObserver.PhysicalTimelineBoundary.MODEL_MUTATION);
+        }
+    }
+
+    // ------------------------------------------------------------------ DAC
+
+    /** Starts streaming the sample mapped to {@code note} through the live {@link DacData}. */
+    public void playDac(int note) {
+        if (dacData == null) {
+            return;
+        }
+        DacData.DacEntry entry = dacData.mappingForNote(note);
+        if (entry == null || !dacData.hasSample(entry.sampleId())) {
+            return;
+        }
+        enqueue(OP_DAC_PLAY, entry.sampleId(), dacPeriod(dacData.baseCycles(), entry.rate()), 0, 5);
     }
 
     public void stopDac() {
-        currentDacSampleId = -1;
-        currentDacSampleData = null;
-        dacHasLatched = false;
-        dacPos = 0;
-    }
-
-    private int renderDac() {
-        if (!dacEnabled) {
-            return 0;
-        }
-        int sample = 0;
-        if (currentDacSampleId != -1 && dacData != null) {
-            byte[] data = currentDacSampleData;
-            if (data != null && dacPos < data.length) {
-                int idx = (int) dacPos;
-                double frac = dacPos - idx;
-                int s1 = (data[idx] & 0xFF) - 128;
-                if (dacInterpolate) {
-                    int s2 = (idx + 1 < data.length) ? ((data[idx + 1] & 0xFF) - 128) : s1;
-                    double lerp = s1 * (1.0 - frac) + s2 * frac;
-                    sample = lerp >= 0 ? (int)(lerp + 0.5) : (int)(lerp - 0.5);
-                } else {
-                    sample = s1;
-                }
-                dacPos += dacStep;
-                if (dacPos >= data.length) {
-                    currentDacSampleId = -1;
-                    currentDacSampleData = null;
-                    dacPos = 0;
-                }
-            }
-        } else if (dacHasLatched) {
-            sample = dacLatchedValue;
-        } else {
-            return 0;
-        }
-
-        sample = (int) (sample * DAC_GAIN);
-
-        if (dacHighpassEnabled) {
-            // Highpass Filter
-            sample = (sample << HIGHPASS_FRACT) - dac_highpass;
-            dac_highpass += sample >> HIGHPASS_SHIFT;
-            sample >>= HIGHPASS_FRACT;
-        }
-
-        return sample;
+        enqueue(OP_DAC_STOP, 0, 0, 0, 5);
     }
 
     /**
-     * Legacy helper for unit tests (TestYm2612AlgorithmRouting).
-     * Assumes MEM = 0 (pre-GPGX) and does not model output masking.
+     * Consumes one pending sample-end edge, or reports that none is pending.
+     * The owning session turns an edge into the ROM's {@code 2Bh = 0}
+     * (Sound/Z80 Sound Driver.asm:4256-4260) through its physical policy; the
+     * chip states the fact and writes no enable byte of its own.
      */
-    public static double computeModulationInput(int algo, int opIndex, double[] opOut, double feedback) {
-        return computeModulationInputWithMem(algo, opIndex, opOut, feedback, 0.0);
+    public boolean consumeDacSampleEnded() {
+        if (dacSampleEndPending == 0) {
+            return false;
+        }
+        dacSampleEndPending--;
+        return true;
     }
 
     /**
-     * Helper for unit tests (TestYm2612AlgorithmRouting).
-     * Models the GPGX MEM path for algorithms 0-3 and 5. Output masking is not
-     * modeled.
+     * Z80 cycles per PCM sample, expressed in {@link #DAC_TICK_UNITS}ths of an
+     * internal FM cycle: {@code (baseCycles + 2 * 13 * (loops - 1)) / 2} Z80
+     * cycles per sample times {@code 5 / 14} FM cycles per Z80 cycle.
      */
-    public static double computeModulationInputWithMem(int algo, int opIndex, double[] opOut, double feedback,
-            double memValue) {
-        if (opIndex == 0)
-            return feedback;
-        if (opIndex < 0 || opIndex >= OP_TO_SLOT.length)
-            return 0;
-        // Map op outputs into slot order (S0,S1,S2,S3) used by ym2612.c algorithms.
-        double slot0 = opOut[0]; // Op1 (feedback operator)
-        double slot1 = opOut[2]; // Op3
-        double slot2 = opOut[1]; // Op2
-        double slot3 = opOut[3]; // Op4
-        int slotIndex = OP_TO_SLOT[opIndex];
-
-        final double v = slotIndex == 2 ? memValue : slotIndex == 3 ? slot2 : 0;
-        return switch (algo) {
-            case 0 -> (slotIndex == 1 ? slot0 : v);
-            case 1 -> v;
-            case 2 -> (slotIndex == 2 ? memValue : slotIndex == 3 ? slot0 + slot2 : 0);
-            case 3 -> (slotIndex == 1 ? slot0 : slotIndex == 3 ? memValue + slot2 : 0);
-            case 4 -> (slotIndex == 1 ? slot0 : slotIndex == 3 ? slot2 : 0);
-            case 5 -> slotIndex == 2 ? memValue : slot0;
-            case 6 -> (slotIndex == 1 ? slot0 : 0);
-            default -> 0;
-        };
+    static int dacPeriod(int baseCycles, int rate) {
+        int loops = (rate & 0xff) == 0 ? Z80_DJNZ_ZERO_COUNT : rate & 0xff;
+        int z80CyclesPerByte = baseCycles + DAC_SAMPLES_PER_BYTE * Z80_DJNZ_TAKEN_CYCLES * (loops - 1);
+        return z80CyclesPerByte * FM_CYCLES_PER_Z80_CYCLE_NUMERATOR;
     }
 
-    /**
-     * Legacy helper for unit tests (TestYm2612AlgorithmRouting).
-     */
-    public static double computeCarrierSum(int algo, double[] opOut) {
-        double slot0 = opOut[0];
-        double slot1 = opOut[2];
-        double slot2 = opOut[1];
-        double slot3 = opOut[3];
-        return switch (algo) {
-            case 4 -> slot1 + slot3;
-            case 5, 6 -> slot1 + slot2 + slot3;
-            case 7 -> slot0 + slot1 + slot2 + slot3;
-            default -> slot3;
-        };
+    // --------------------------------------------------------------- render
+
+    public void renderStereo(int[] left, int[] right) {
+        renderStereo(left, right, Math.min(left.length, right.length));
     }
 
-    private void csmKeyOn() {
-        Channel ch = channels[2];
-        keyOnCsm(ch, 0);
-        keyOnCsm(ch, 1);
-        keyOnCsm(ch, 2);
-        keyOnCsm(ch, 3);
-        csmKeyFlag = 1;
-    }
-
-    private void csmKeyOff() {
-        Channel ch = channels[2];
-        keyOffCsm(ch, 0);
-        keyOffCsm(ch, 1);
-        keyOffCsm(ch, 2);
-        keyOffCsm(ch, 3);
-        csmKeyFlag = 0;
-    }
-
-    private void keyOnCsm(Channel ch, int idx) {
-        // Ensure ksr/EG rate cache is up to date before key-on state decisions.
-        if (ch.ops[0].fInc == -1) {
-            calcFIncChannel(ch);
-        }
-        Operator sl = ch.ops[idx];
-        if (!sl.key && csmKeyFlag == 0) {
-            sl.fCnt = 0;
-            sl.ssgn = 0;
-            if ((sl.ar + sl.ksr) < 94) {
-                sl.curEnv = (sl.volume <= 0)
-                        ? ((sl.slReg == 0) ? EnvState.DECAY2 : EnvState.DECAY1)
-                        : EnvState.ATTACK;
-            } else {
-                sl.volume = 0;
-                sl.curEnv = (sl.slReg == 0) ? EnvState.DECAY2 : EnvState.DECAY1;
-            }
-            updateVolOut(sl);
-        }
-        traceKeyEvent("CSM_KEY_ON", ch, idx, sl);
-    }
-
-    private void updateVolOut(Operator sl) {
-        // GPGX behavior: apply SSG-EG inversion only during ATTACK/DECAY/SUSTAIN.
-        // In RELEASE/OFF, vol_out uses the non-inverted attenuation level.
-        boolean invert = sl.ssgEnabled
-                && sl.curEnv != EnvState.RELEASE
-                && sl.curEnv != EnvState.IDLE
-                && ((sl.ssgn ^ (sl.ssgEg & 0x04)) != 0);
-        if (invert) {
-            sl.volOut = ((SSG_THRESHOLD - sl.volume) & MAX_ATT_INDEX) + sl.tll;
-        } else {
-            sl.volOut = sl.volume + sl.tll;
-        }
-    }
-
-    private void updateSsgEg() {
-        for (int ch = 0; ch < 6; ch++) {
-            Channel channel = channels[ch];
-            for (int op = 0; op < 4; op++) {
-                Operator sl = channel.ops[op];
-                if ((sl.ssgEg & 0x08) != 0 && sl.volume >= SSG_THRESHOLD
-                        && sl.curEnv != EnvState.RELEASE && sl.curEnv != EnvState.IDLE) {
-                    if ((sl.ssgEg & 0x01) != 0) {
-                        if ((sl.ssgEg & 0x02) != 0) {
-                            sl.ssgn = 4;
-                        }
-                        if (sl.curEnv != EnvState.ATTACK && ((sl.ssgn ^ (sl.ssgEg & 0x04)) == 0)) {
-                            sl.volume = MAX_ATT_INDEX;
-                        }
-                    } else {
-                        if ((sl.ssgEg & 0x02) != 0) {
-                            sl.ssgn ^= 4;
-                        } else {
-                            sl.fCnt = 0;
-                        }
-                        if (sl.curEnv != EnvState.ATTACK) {
-                            if ((sl.ar + sl.ksr) < 94) {
-                                sl.curEnv = EnvState.ATTACK;
-                            } else {
-                                sl.volume = 0;
-                                sl.curEnv = (sl.slReg == 0) ? EnvState.DECAY2 : EnvState.DECAY1;
-                            }
-                        }
-                    }
-                    updateVolOut(sl);
-                }
-            }
-        }
-    }
-
-    private void advanceLfo() {
-        if (lfoTimerOverflow != 0) {
-            lfoTimer++;
-            if (lfoTimer >= lfoTimerOverflow) {
-                lfoTimer = 0;
-                lfoCnt = (lfoCnt + 1) & LFO_MASK;
-                if (lfoCnt < 64) {
-                    lfoAm = (lfoCnt ^ 63) << 1;
-                } else {
-                    lfoAm = (lfoCnt & 63) << 1;
-                }
-                lfoPm = lfoCnt >> 2;
-            }
-        }
-    }
-
-    private void keyOffCsm(Channel ch, int idx) {
-        Operator sl = ch.ops[idx];
-        if (!sl.key && sl.curEnv != EnvState.RELEASE && sl.curEnv != EnvState.IDLE) {
-            sl.curEnv = EnvState.RELEASE;
-            if (sl.ssgEnabled) {
-                if (((sl.ssgn ^ (sl.ssgEg & 0x04)) != 0)) {
-                    sl.volume = (SSG_THRESHOLD - sl.volume) & MAX_ATT_INDEX;
-                }
-                if (sl.volume >= SSG_THRESHOLD) {
-                    sl.volume = MAX_ATT_INDEX;
-                    sl.curEnv = EnvState.IDLE;
-                }
-            }
-            updateVolOut(sl);
-        }
-        traceKeyEvent("CSM_KEY_OFF", ch, idx, sl);
-    }
-
-    private void traceKeyEvent(String event, Channel ch, int opIdx, Operator sl) {
-        if (!TRACE_KEY_EVENTS || traceEvents >= TRACE_EVENT_LIMIT) {
+    /** Accumulates {@code frames} output-rate stereo samples into the arrays. */
+    public void renderStereo(int[] left, int[] right, int frames) {
+        frames = Math.min(frames, Math.min(left.length, right.length));
+        if (frames <= 0) {
             return;
         }
-        int chIdx = channelIndex(ch);
-        if (TRACE_CHANNEL >= 0 && TRACE_CHANNEL != chIdx) {
+        flushPendingOps();
+        if (isDirectOutput()) {
+            for (int i = 0; i < frames; i++) {
+                while (directFrameCount == 0) {
+                    clockOnce();
+                }
+                int position = directFrameHead * 2;
+                left[i] += directFrames[position];
+                right[i] += directFrames[position + 1];
+                directFrameHead = (directFrameHead + 1) % (directFrames.length / 2);
+                directFrameCount--;
+            }
             return;
         }
-        traceEvents++;
-        LOG.finest("YM2612 " + event
-                + " ch=" + chIdx
-                + " op=" + opIdx
-                + " key=" + sl.key
-                + " env=" + sl.curEnv
-                + " vol=" + sl.volume
-                + " volOut=" + sl.volOut
-                + " tl=" + sl.tl
-                + " ssg=0x" + Integer.toHexString(sl.ssgEg)
-                + " ar=" + sl.ar
-                + " ksr=" + sl.ksr);
+        for (int i = 0; i < frames; i++) {
+            while (!resampler.hasOutputSample()) {
+                clockOnce();
+            }
+            long packed = resampler.getOutputStereoPacked();
+            left[i] += (int) (packed >> 32);
+            right[i] += (int) packed;
+            resampler.advanceOutput();
+        }
     }
 
-    private int channelIndex(Channel ch) {
-        for (int i = 0; i < channels.length; i++) {
-            if (channels[i] == ch) {
-                return i;
-            }
-        }
-        return -1;
+    private boolean isDirectOutput() {
+        return outputRate == INTERNAL_RATE;
     }
 
-    private void tickTimers() {
-        csmKeyFlag <<= 1;
-        if ((mode & 0x01) != 0) {
-            timerACount--;
-            if (timerACount <= 0) {
-                if ((mode & 0x04) != 0) {
-                    status |= FM_STATUS_TIMERA_BIT_MASK;
-                }
-                timerACount = timerALoad;
-                if ((mode & 0xC0) == 0x80) {
-                    csmKeyOn();
+    /**
+     * One internal cycle: services the DAC stream and its bus strobes, clocks
+     * the core, applies the output-stage mutes to the cycle's pin values and
+     * closes the frame on the 24th cycle.
+     */
+    private void clockOnce() {
+        int cycle = state.cycles;
+        serviceDac(cycle);
+        core.clock(pinBuffer);
+        int leftPin = pinBuffer[0];
+        int rightPin = pinBuffer[1];
+        if (mutes[PIN_WINDOW_CHANNEL[cycle >> 2]]) {
+            int silent = (core.chipType() & NukedOpn2.MODE_YM2612) != 0 ? YM2612_SILENT_PIN_VALUE : 0;
+            leftPin = silent;
+            rightPin = silent;
+        }
+        frameSumLeft += leftPin;
+        frameSumRight += rightPin;
+        if (busHold > 0) {
+            busHold--;
+        }
+        if (state.cycles == 0) {
+            emitFrame(frameSumLeft << OUTPUT_SHIFT, frameSumRight << OUTPUT_SHIFT);
+            frameSumLeft = 0;
+            frameSumRight = 0;
+        }
+        physicalCycle++;
+    }
+
+    private void emitFrame(int leftSample, int rightSample) {
+        if (!isDirectOutput()) {
+            resampler.addInputSample(leftSample, rightSample);
+            return;
+        }
+        int capacity = directFrames.length / 2;
+        if (directFrameCount == capacity) {
+            int[] grown = new int[directFrames.length * 2];
+            for (int i = 0; i < directFrameCount; i++) {
+                int from = ((directFrameHead + i) % capacity) * 2;
+                grown[i * 2] = directFrames[from];
+                grown[i * 2 + 1] = directFrames[from + 1];
+            }
+            directFrames = grown;
+            directFrameHead = 0;
+            capacity = directFrames.length / 2;
+        }
+        int position = ((directFrameHead + directFrameCount) % capacity) * 2;
+        directFrames[position] = leftSample;
+        directFrames[position + 1] = rightSample;
+        directFrameCount++;
+    }
+
+    /**
+     * Advances the DAC stream by one cycle and presents its {@code 0x2A}
+     * strobes when the bus is free. While a value is waiting for the bus the
+     * cadence pauses, as the Z80 loop pauses while it cannot reach the chip;
+     * samples are never dropped.
+     *
+     * <p>Only real Z80 sample writes may occupy {@link #dacPendingValue}, the
+     * slot that gates the cadence. The optional interpolated write is
+     * synthetic and is never deferred: it is started only when the bus is
+     * idle, no real sample is waiting, and the cadence cannot reach its next
+     * sample before the synthetic write has fully settled; otherwise this
+     * frame's interpolation is dropped. An earlier implementation queued the
+     * synthetic value in the gating slot, which paused the Z80 clock for the
+     * bus settle time on every frame and stretched samples ~1.7x (about 9.5
+     * semitones flat, measured 2026-09-02).
+     */
+    private void serviceDac(int cycle) {
+        if (dacSampleId != NO_DAC_VALUE && dacPendingValue == NO_DAC_VALUE) {
+            dacAccumulator += DAC_TICK_UNITS;
+            if (dacAccumulator >= dacPeriod) {
+                dacAccumulator -= dacPeriod;
+                int value = dacSampleAt(dacIndex);
+                if (value == NO_DAC_VALUE) {
+                    dacSampleId = NO_DAC_VALUE;
+                    dacSampleEndPending++;
+                } else {
+                    dacPendingValue = value;
+                    dacPreviousValue = value;
+                    dacIndex++;
                 }
             }
         }
-        if ((csmKeyFlag & 2) != 0) {
-            csmKeyOff();
+        if (busHold > 0) {
+            return;
         }
-        if ((mode & 0x02) != 0) {
-            timerBCount -= 1;
-            if (timerBCount <= 0) {
-                if ((mode & 0x08) != 0) {
-                    status |= FM_STATUS_TIMERB_BIT_MASK;
+        if (dacWritePhase == 1) {
+            core.write(1, dacWriteValue);
+            emitPhysicalYmWrite(1, dacWriteValue, dacWriteOrigin);
+            dacWritePhase = 0;
+            busHold = DATA_SETTLE_CYCLES;
+        } else if (dacPendingValue != NO_DAC_VALUE) {
+            core.write(0, DAC_REGISTER);
+            dacWriteOrigin = ChipWriteObserver.PhysicalWriteOrigin.DAC_STREAM;
+            emitPhysicalYmWrite(0, DAC_REGISTER, dacWriteOrigin);
+            dacWriteValue = dacPendingValue;
+            dacPendingValue = NO_DAC_VALUE;
+            dacWritePhase = 1;
+            busHold = ADDRESS_SETTLE_CYCLES;
+            // The ROM's playback loop sends this byte over the same
+            // address/data pair the sequencer uses (:4305-4306, :4318-4319),
+            // so it is an observable write like any other. The interpolated
+            // branch below is not: it has no ROM counterpart.
+            writeObserver.onYm2612Write(0, DAC_REGISTER, dacWriteValue);
+        } else if (dacInterpolate && cycle == 0 && dacSampleId != NO_DAC_VALUE
+                && dacPreviousValue != NO_DAC_VALUE
+                && dacAccumulator + SYNTHETIC_WRITE_UNITS < dacPeriod) {
+            int next = dacSampleAt(dacIndex);
+            if (next != NO_DAC_VALUE) {
+                int interpolated = dacPreviousValue
+                        + (int) (((long) (next - dacPreviousValue) * dacAccumulator) / dacPeriod);
+                if (interpolated != dacWriteValue) {
+                    core.write(0, DAC_REGISTER);
+                    dacWriteOrigin = ChipWriteObserver.PhysicalWriteOrigin.DAC_INTERPOLATION;
+                    emitPhysicalYmWrite(0, DAC_REGISTER, dacWriteOrigin);
+                    dacWriteValue = interpolated;
+                    dacWritePhase = 1;
+                    busHold = ADDRESS_SETTLE_CYCLES;
                 }
-                do {
-                    timerBCount += timerBLoad;
-                } while (timerBCount <= 0);
             }
-        }
-        if (busyCycles > 0) {
-            busyCycles = Math.max(0, busyCycles - (YM_CYCLES_PER_SAMPLE * 1));
         }
     }
+
+    /** Unsigned PCM byte {@code index} of the current sample, or {@link #NO_DAC_VALUE} past its end. */
+    private int dacSampleAt(int index) {
+        if (dacData == null) {
+            return NO_DAC_VALUE;
+        }
+        // The bank's lookup boxes the id; resolve it once per (bank, id) pair
+        // instead of once per streamed byte. The cache is derived state, not
+        // snapshot state: any restore that changes either key re-resolves.
+        if (dacSample == null || dacSampleData != dacData || dacSampleDataId != dacSampleId) {
+            dacSample = dacData.sample(dacSampleId);
+            dacSampleData = dacData;
+            dacSampleDataId = dacSampleId;
+        }
+        DacData.Sample sample = dacSample;
+        if (sample == null || index >= sample.length()) {
+            return NO_DAC_VALUE;
+        }
+        return sample.byteAt(index) & 0xff;
+    }
+
+    // ------------------------------------------------------ pending ops
+
+    private void enqueue(int kind, int a, int b, int c, int channel) {
+        int base = pendingCount * OP_STRIDE;
+        if (base + OP_STRIDE > pendingOps.length) {
+            pendingOps = Arrays.copyOf(pendingOps, pendingOps.length * 2);
+        }
+        pendingOps[base] = kind;
+        pendingOps[base + 1] = a;
+        pendingOps[base + 2] = b;
+        pendingOps[base + 3] = c;
+        pendingOps[base + 4] = channel;
+        pendingCount++;
+    }
+
+    /**
+     * The channel a write touches, for channel-bounded rollback: key on/off
+     * by its channel bits ({@code ym3438.c:238}, {@code 0x28}), DAC registers
+     * by FM6, slot and channel registers by {@code reg & 3} plus three for
+     * port 1 ({@code OP_OFFSET} / {@code CH_OFFSET}); global registers and
+     * invalid channel codes are {@link #NO_CHANNEL}.
+     */
+    private static int targetChannel(int port, int reg, int val) {
+        if (reg == 0x28) {
+            return (val & 0x03) == 0x03 ? NO_CHANNEL : (val & 0x03) + ((val >> 2) & 1) * 3;
+        }
+        if (reg == 0x2A || reg == 0x2B) {
+            return 5;
+        }
+        if (reg >= 0x30 && reg < 0xB8) {
+            return (reg & 0x03) == 0x03 ? NO_CHANNEL : (reg & 0x03) + port * 3;
+        }
+        return NO_CHANNEL;
+    }
+
+    private void flushPendingOps() {
+        if (pendingCount == 0) {
+            return;
+        }
+        for (int i = 0; i < pendingCount; i++) {
+            int base = i * OP_STRIDE;
+            switch (pendingOps[base]) {
+                case OP_WRITE -> {
+                    applyAddress(pendingOps[base + 1], pendingOps[base + 2]);
+                    applyData(pendingOps[base + 1], pendingOps[base + 3]);
+                }
+                case OP_ADDRESS -> applyAddress(pendingOps[base + 1], pendingOps[base + 2]);
+                case OP_DATA -> applyData(pendingOps[base + 1], pendingOps[base + 2]);
+                case OP_FORCE_SILENCE -> silenceChannelNow(pendingOps[base + 1]);
+                case OP_DAC_PLAY -> {
+                    dacSampleId = pendingOps[base + 1];
+                    dacPeriod = pendingOps[base + 2];
+                    dacIndex = 0;
+                    dacAccumulator = dacPeriod;
+                    dacPreviousValue = NO_DAC_VALUE;
+                    dacPendingValue = NO_DAC_VALUE;
+                }
+                case OP_DAC_STOP -> {
+                    dacSampleId = NO_DAC_VALUE;
+                    dacPendingValue = NO_DAC_VALUE;
+                }
+                default -> throw new IllegalStateException("unknown pending op " + pendingOps[base]);
+            }
+        }
+        flushedOps += pendingCount;
+        pendingCount = 0;
+        waitBusIdle();
+    }
+
+    private void waitBusIdle() {
+        while (busHold > 0 || dacWritePhase != 0) {
+            clockOnce();
+        }
+    }
+
+    private void applyAddress(int port, int reg) {
+        waitBusIdle();
+        core.write(port * 2, reg);
+        emitPhysicalYmWrite(port * 2, reg,
+                ChipWriteObserver.PhysicalWriteOrigin.EXTERNAL_BUS);
+        busHold = ADDRESS_SETTLE_CYCLES;
+    }
+
+    private void applyData(int port, int val) {
+        waitBusIdle();
+        core.write(port * 2 + 1, val);
+        emitPhysicalYmWrite(port * 2 + 1, val,
+                ChipWriteObserver.PhysicalWriteOrigin.EXTERNAL_BUS);
+        busHold = DATA_SETTLE_CYCLES;
+    }
+
+    private void emitPhysicalYmWrite(int busPort, int value,
+            ChipWriteObserver.PhysicalWriteOrigin origin) {
+        if (writeObserver.observesPhysicalWrites()) {
+            writeObserver.onYm2612BusWrite(physicalCycle, busPort, value,
+                    origin);
+        }
+    }
+
+    private void emitPhysicalBoundary(
+            ChipWriteObserver.PhysicalTimelineBoundary boundary) {
+        if (writeObserver.observesPhysicalWrites()) {
+            writeObserver.onPhysicalTimelineBoundary(
+                    ChipWriteObserver.ChipClockDomain.YM2612_INTERNAL_CYCLE,
+                    physicalCycle, boundary);
+        }
+    }
+
+    /**
+     * Puts the channel's four operators ({@code keyOn}, {@code ym3438.c:1160}:
+     * slots {@code ch}, {@code ch + 6}, {@code ch + 12}, {@code ch + 18}) into
+     * the released, fully attenuated state of {@code OPN2_Reset} and clears
+     * their key state, including a {@code 0x28} latch still aimed at the
+     * channel so the sequencer's next pass cannot re-key it.
+     */
+    private void silenceChannelNow(int ch) {
+        waitBusIdle();
+        for (int operator = 0; operator < 4; operator++) {
+            int slot = ch + operator * 6;
+            state.egLevel[slot] = EG_LEVEL_SILENT;
+            state.egOut[slot] = EG_LEVEL_SILENT;
+            state.egState[slot] = EG_STATE_RELEASE;
+            state.egKon[slot] = 0;
+            state.egKonLatch[slot] = 0;
+            state.egKonCsm[slot] = 0;
+            state.egSsgDir[slot] = 0;
+            state.egSsgInv[slot] = 0;
+            state.egSsgPgrstLatch[slot] = 0;
+            state.egSsgRepeatLatch[slot] = 0;
+            state.egSsgHoldUpLatch[slot] = 0;
+            state.modeKon[slot] = 0;
+        }
+        if (state.modeKonChannel == ch) {
+            Arrays.fill(state.modeKonOperator, 0);
+        }
+    }
+
+    // ------------------------------------------------------------ snapshot
+
+    /** Mutable owner-private transaction storage; never used by durable snapshots. */
+    static final class MutationBackup implements FmChip.MutationBackup {
+        private Ym2612Chip owner;
+        private int chipType;
+        private int frameSumLeft;
+        private int frameSumRight;
+        private int directFrameCount;
+        private int busHold;
+        private int pendingCount;
+        private int queuedAddress;
+        private int dacSampleId;
+        private int dacPeriod;
+        private int dacIndex;
+        private int dacAccumulator;
+        private int dacPreviousValue;
+        private int dacPendingValue;
+        private int dacWritePhase;
+        private int dacWriteValue;
+        private int dacSampleEndPending;
+        private double outputRate;
+        private boolean dacInterpolate;
+        private boolean[] mutes = new boolean[6];
+        private final NukedOpn2State core = new NukedOpn2State();
+        private final BlipResampler.MutationBackup resampler = new BlipResampler.MutationBackup();
+        private int[] direct = new int[0], ops = new int[0];
+    }
+
+    @Override
+    public FmChip.MutationBackup createMutationBackup() {
+        MutationBackup backup = new MutationBackup();
+        backup.owner = this;
+        return backup;
+    }
+
+    private MutationBackup own(FmChip.MutationBackup candidate) {
+        if (!(candidate instanceof MutationBackup backup) || (backup.owner != null && backup.owner != this)) {
+            throw new IllegalArgumentException("foreign FM mutation backup");
+        }
+        return backup;
+    }
+
+    @Override
+    public void captureMutation(FmChip.MutationBackup candidate) {
+        MutationBackup backup = own(candidate);
+        backup.chipType = chipType;
+        backup.frameSumLeft = frameSumLeft;
+        backup.frameSumRight = frameSumRight;
+        backup.directFrameCount = directFrameCount;
+        backup.busHold = busHold;
+        backup.pendingCount = pendingCount;
+        backup.queuedAddress = queuedAddress;
+        backup.dacSampleId = dacSampleId;
+        backup.dacPeriod = dacPeriod;
+        backup.dacIndex = dacIndex;
+        backup.dacAccumulator = dacAccumulator;
+        backup.dacPreviousValue = dacPreviousValue;
+        backup.dacPendingValue = dacPendingValue;
+        backup.dacWritePhase = dacWritePhase;
+        backup.dacWriteValue = dacWriteValue;
+        backup.dacSampleEndPending = dacSampleEndPending;
+        backup.outputRate = outputRate;
+        backup.dacInterpolate = dacInterpolate;
+        if (backup.mutes.length < mutes.length) backup.mutes = new boolean[mutes.length];
+        System.arraycopy(mutes, 0, backup.mutes, 0, mutes.length);
+        backup.core.copyFrom(state);
+        int directSize = directFrameCount * 2;
+        if (backup.direct.length < directSize) backup.direct = new int[directSize];
+        for (int i = 0; i < directFrameCount; i++) {
+            int from = ((directFrameHead + i) % (directFrames.length / 2)) * 2;
+            backup.direct[i * 2] = directFrames[from];
+            backup.direct[i * 2 + 1] = directFrames[from + 1];
+        }
+        int opSize = pendingCount * OP_STRIDE;
+        if (backup.ops.length < opSize) backup.ops = new int[opSize];
+        System.arraycopy(pendingOps, 0, backup.ops, 0, opSize);
+        resampler.captureMutation(backup.resampler);
+    }
+
+    @Override
+    public void restoreMutation(FmChip.MutationBackup candidate) {
+        MutationBackup backup = own(candidate);
+        chipType = backup.chipType;
+        frameSumLeft = backup.frameSumLeft;
+        frameSumRight = backup.frameSumRight;
+        directFrameCount = backup.directFrameCount;
+        busHold = backup.busHold;
+        pendingCount = backup.pendingCount;
+        queuedAddress = backup.queuedAddress;
+        dacSampleId = backup.dacSampleId;
+        dacPeriod = backup.dacPeriod;
+        dacIndex = backup.dacIndex;
+        dacAccumulator = backup.dacAccumulator;
+        dacPreviousValue = backup.dacPreviousValue;
+        dacPendingValue = backup.dacPendingValue;
+        dacWritePhase = backup.dacWritePhase;
+        dacWriteValue = backup.dacWriteValue;
+        dacSampleEndPending = backup.dacSampleEndPending;
+        outputRate = backup.outputRate;
+        dacInterpolate = backup.dacInterpolate;
+        System.arraycopy(backup.mutes, 0, mutes, 0, mutes.length);
+        applyChipType(chipType);
+        state.copyFrom(backup.core);
+        int directSize = directFrameCount * 2;
+        if (directFrames.length < directSize) directFrames = new int[directSize];
+        System.arraycopy(backup.direct, 0, directFrames, 0, directSize);
+        directFrameHead = 0;
+        int opSize = pendingCount * OP_STRIDE;
+        if (pendingOps.length < opSize) pendingOps = new int[opSize];
+        System.arraycopy(backup.ops, 0, pendingOps, 0, opSize);
+        dacWriteOrigin = dacWritePhase == 0
+                ? ChipWriteObserver.PhysicalWriteOrigin.EXTERNAL_BUS
+                : ChipWriteObserver.PhysicalWriteOrigin.RESTORED_UNKNOWN;
+        resampler.restoreMutation(backup.resampler);
+        emitPhysicalBoundary(ChipWriteObserver.PhysicalTimelineBoundary.SNAPSHOT_RESTORE);
+    }
+
+    /** Pure: captures the complete chip, queue, DAC, output-stage and resampler state. */
+    public Snapshot captureSnapshot() {
+        int[] direct = new int[directFrameCount * 2];
+        int capacity = directFrames.length / 2;
+        for (int i = 0; i < directFrameCount; i++) {
+            int from = ((directFrameHead + i) % capacity) * 2;
+            direct[i * 2] = directFrames[from];
+            direct[i * 2 + 1] = directFrames[from + 1];
+        }
+        return new Snapshot(
+                chipType,
+                outputRate,
+                state,
+                frameSumLeft,
+                frameSumRight,
+                direct,
+                busHold,
+                Arrays.copyOf(pendingOps, pendingCount * OP_STRIDE),
+                queuedAddress,
+                dacSampleId,
+                dacPeriod,
+                dacIndex,
+                dacAccumulator,
+                dacPeriod == 0 ? 0.0 : dacIndex + (double) dacAccumulator / dacPeriod,
+                dacPreviousValue,
+                dacPendingValue,
+                dacWritePhase,
+                dacWriteValue,
+                dacSampleEndPending,
+                dacInterpolate,
+                mutes,
+                resampler.captureSnapshot());
+    }
+
+    /** Total and authoritative: the chip continues bit-exactly from the snapshot. */
+    @Override
+    public void restoreSnapshot(FmChip.Snapshot candidate) {
+        if (!(candidate instanceof Snapshot snapshot)) {
+            throw new IllegalArgumentException(
+                    "snapshot was captured by a different FM core: " + candidate.getClass().getSimpleName());
+        }
+        applyChipType(snapshot.chipType());
+        outputRate = snapshot.outputRate();
+        state.copyFrom(snapshot.coreRef());
+        frameSumLeft = snapshot.frameSumLeft();
+        frameSumRight = snapshot.frameSumRight();
+        int[] direct = snapshot.directFramesRef();
+        if (directFrames.length < direct.length) {
+            directFrames = new int[Math.max(direct.length, directFrames.length * 2)];
+        }
+        System.arraycopy(direct, 0, directFrames, 0, direct.length);
+        directFrameHead = 0;
+        directFrameCount = direct.length / 2;
+        busHold = snapshot.busHold();
+        int[] ops = snapshot.pendingOpsRef();
+        if (pendingOps.length < ops.length) {
+            pendingOps = new int[Math.max(ops.length, pendingOps.length * 2)];
+        }
+        System.arraycopy(ops, 0, pendingOps, 0, ops.length);
+        pendingCount = ops.length / OP_STRIDE;
+        queuedAddress = snapshot.queuedAddress();
+        dacSampleId = snapshot.currentDacSampleId();
+        dacPeriod = snapshot.dacPeriod();
+        dacIndex = snapshot.dacIndex();
+        dacAccumulator = snapshot.dacAccumulator();
+        dacPreviousValue = snapshot.dacPreviousValue();
+        dacPendingValue = snapshot.dacPendingValue();
+        dacWritePhase = snapshot.dacWritePhase();
+        dacWriteValue = snapshot.dacWriteValue();
+        dacWriteOrigin = dacWritePhase == 0
+                ? ChipWriteObserver.PhysicalWriteOrigin.EXTERNAL_BUS
+                : ChipWriteObserver.PhysicalWriteOrigin.RESTORED_UNKNOWN;
+        dacSampleEndPending = snapshot.dacSampleEndPending();
+        dacInterpolate = snapshot.dacInterpolate();
+        System.arraycopy(snapshot.mutesRef(), 0, mutes, 0, mutes.length);
+        resampler.restoreSnapshot(snapshot.resampler());
+        emitPhysicalBoundary(
+                ChipWriteObserver.PhysicalTimelineBoundary.SNAPSHOT_RESTORE);
+    }
+
+    /**
+     * Channel-bounded rollback token for one SFX admission. Because writes are
+     * applied only when the chip next renders, everything an admission does
+     * to its channels before it is accepted or rejected is still in the
+     * pending queue; the token records where the queue stood, and restoring
+     * removes the entries queued since then that target the masked channels.
+     */
+    @Override
+    public FmChip.SfxAdmissionState captureSfxAdmissionState(int affectedChannelMask) {
+        return new SfxAdmissionState(affectedChannelMask & 0x3f, flushedOps + pendingCount, queuedAddress);
+    }
+
+    @Override
+    public void restoreSfxAdmissionState(FmChip.SfxAdmissionState candidate) {
+        if (!(candidate instanceof SfxAdmissionState admission)) {
+            throw new IllegalArgumentException("foreign FM admission state");
+        }
+        long firstNewOp = admission.opsEnqueuedAtCapture() - flushedOps;
+        int start = (int) Math.max(0, Math.min(pendingCount, firstNewOp));
+        int kept = start;
+        for (int i = start; i < pendingCount; i++) {
+            int channel = pendingOps[i * OP_STRIDE + 4];
+            boolean affected = channel != NO_CHANNEL
+                    && (admission.affectedChannelMask() & (1 << channel)) != 0;
+            if (affected) {
+                continue;
+            }
+            if (kept != i) {
+                System.arraycopy(pendingOps, i * OP_STRIDE, pendingOps, kept * OP_STRIDE, OP_STRIDE);
+            }
+            kept++;
+        }
+        pendingCount = kept;
+        queuedAddress = admission.queuedAddress();
+        for (int i = start; i < pendingCount; i++) {
+            int kind = pendingOps[i * OP_STRIDE];
+            if (kind == OP_WRITE || kind == OP_ADDRESS) {
+                queuedAddress = (pendingOps[i * OP_STRIDE + 1] << 8) | pendingOps[i * OP_STRIDE + 2];
+            }
+        }
+        emitPhysicalBoundary(
+                ChipWriteObserver.PhysicalTimelineBoundary.MODEL_MUTATION);
+    }
+
+    /**
+     * Complete chip state for rewind. {@code core} is the Nuked
+     * {@code ym3438_t} state; the other components are the adapter's own.
+     * Arrays and the core state are copied on construction and on access.
+     */
+    public record Snapshot(
+            int chipType,
+            double outputRate,
+            NukedOpn2State core,
+            int frameSumLeft,
+            int frameSumRight,
+            int[] directFrames,
+            int busHold,
+            int[] pendingOps,
+            int queuedAddress,
+            int currentDacSampleId,
+            int dacPeriod,
+            int dacIndex,
+            int dacAccumulator,
+            double dacPos,
+            int dacPreviousValue,
+            int dacPendingValue,
+            int dacWritePhase,
+            int dacWriteValue,
+            int dacSampleEndPending,
+            boolean dacInterpolate,
+            boolean[] mutes,
+            BlipResampler.Snapshot resampler) implements FmChip.Snapshot {
+        public Snapshot {
+            core = core.copy();
+            directFrames = Arrays.copyOf(directFrames, directFrames.length);
+            pendingOps = Arrays.copyOf(pendingOps, pendingOps.length);
+            mutes = Arrays.copyOf(mutes, mutes.length);
+        }
+
+        @Override
+        public NukedOpn2State core() { return core.copy(); }
+
+        @Override
+        public int[] directFrames() { return Arrays.copyOf(directFrames, directFrames.length); }
+
+        @Override
+        public int[] pendingOps() { return Arrays.copyOf(pendingOps, pendingOps.length); }
+
+        /** Whether deferred work is reconstructable from the future raw bus strobes alone. */
+        public boolean hasOnlyPendingBusWrites() {
+            for (int index = 0; index < pendingOps.length; index += OP_STRIDE) {
+                int kind = pendingOps[index];
+                if (kind != OP_WRITE && kind != OP_ADDRESS && kind != OP_DATA) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        @Override
+        public boolean[] mutes() { return Arrays.copyOf(mutes, mutes.length); }
+
+        /** Non-copying view for in-memory restore paths only. Do not mutate. */
+        NukedOpn2State coreRef() { return core; }
+
+        /** Non-copying view for in-memory restore paths only. Do not mutate. */
+        int[] directFramesRef() { return directFrames; }
+
+        /** Non-copying view for in-memory restore paths only. Do not mutate. */
+        int[] pendingOpsRef() { return pendingOps; }
+
+        /** Non-copying view for in-memory restore paths only. Do not mutate. */
+        boolean[] mutesRef() { return mutes; }
+
+        @Override
+        public boolean equals(Object candidate) {
+            return candidate instanceof Snapshot other
+                    && chipType == other.chipType
+                    && Double.compare(outputRate, other.outputRate) == 0
+                    && Objects.equals(core, other.core)
+                    && frameSumLeft == other.frameSumLeft
+                    && frameSumRight == other.frameSumRight
+                    && Arrays.equals(directFrames, other.directFrames)
+                    && busHold == other.busHold
+                    && Arrays.equals(pendingOps, other.pendingOps)
+                    && queuedAddress == other.queuedAddress
+                    && currentDacSampleId == other.currentDacSampleId
+                    && dacPeriod == other.dacPeriod
+                    && dacIndex == other.dacIndex
+                    && dacAccumulator == other.dacAccumulator
+                    && Double.compare(dacPos, other.dacPos) == 0
+                    && dacPreviousValue == other.dacPreviousValue
+                    && dacPendingValue == other.dacPendingValue
+                    && dacWritePhase == other.dacWritePhase
+                    && dacWriteValue == other.dacWriteValue
+                    && dacSampleEndPending == other.dacSampleEndPending
+                    && dacInterpolate == other.dacInterpolate
+                    && Arrays.equals(mutes, other.mutes)
+                    && Objects.equals(resampler, other.resampler);
+        }
+
+        @Override
+        public int hashCode() {
+            int result = Objects.hash(chipType, outputRate, core,
+                    frameSumLeft, frameSumRight, busHold, queuedAddress,
+                    currentDacSampleId, dacPeriod, dacIndex, dacAccumulator,
+                    dacPos, dacPreviousValue, dacPendingValue, dacWritePhase,
+                    dacWriteValue, dacSampleEndPending, dacInterpolate,
+                    resampler);
+            result = 31 * result + Arrays.hashCode(directFrames);
+            result = 31 * result + Arrays.hashCode(pendingOps);
+            return 31 * result + Arrays.hashCode(mutes);
+        }
+    }
+
+    /** See {@link #captureSfxAdmissionState(int)}. */
+    record SfxAdmissionState(int affectedChannelMask, long opsEnqueuedAtCapture, int queuedAddress)
+            implements FmChip.SfxAdmissionState { }
 }

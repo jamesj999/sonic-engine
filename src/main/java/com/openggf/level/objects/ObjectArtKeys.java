@@ -49,6 +49,8 @@ public final class ObjectArtKeys {
     public static final String BREAKABLE_WALL = "breakable_wall";
     public static final String SCENERY = "scenery";
     public static final String RESULTS = "results";
+    // GAME OVER / TIME OVER card (S1/S2 Obj39, S3K Obj_GameOver)
+    public static final String GAME_OVER = "game_over";
     public static final String EGG_PRISON = "egg_prison";
 
     // Hidden bonus points (S1 end-of-act)

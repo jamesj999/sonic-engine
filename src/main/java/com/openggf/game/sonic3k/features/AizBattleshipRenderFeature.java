@@ -4,6 +4,9 @@ import com.openggf.camera.Camera;
 import com.openggf.configuration.SonicConfiguration;
 import com.openggf.configuration.SonicConfigurationService;
 import com.openggf.game.GameServices;
+import com.openggf.game.render.SpecialRenderEffect;
+import com.openggf.game.render.SpecialRenderEffectContext;
+import com.openggf.game.render.SpecialRenderEffectStage;
 import com.openggf.game.sonic3k.Sonic3kObjectArtKeys;
 import com.openggf.game.sonic3k.constants.Sonic3kZoneIds;
 import com.openggf.game.sonic3k.objects.AizBattleshipInstance;
@@ -26,7 +29,7 @@ import java.util.logging.Logger;
  * foreground layout while propellers remain separate sprite art rendered on
  * top of the strip.
  */
-public final class AizBattleshipRenderFeature {
+public final class AizBattleshipRenderFeature implements SpecialRenderEffect {
     private static final Logger LOG =
             Logger.getLogger(AizBattleshipRenderFeature.class.getName());
 
@@ -38,7 +41,7 @@ public final class AizBattleshipRenderFeature {
     private static final int PROPELLER_Y = 0x0A71;
     private static final int PROPELLER_FRAME_DELAY = 2;
 
-    private final SonicConfigurationService configService = SonicConfigurationService.getInstance();
+    private final SonicConfigurationService configService = GameServices.configuration();
     private final PatternDesc reusableDesc = new PatternDesc();
 
     private int pendingStripHeight;
@@ -47,7 +50,7 @@ public final class AizBattleshipRenderFeature {
     private final GLCommand prepareOverlayCommand = new GLCommand(
             GLCommand.CommandType.CUSTOM,
             (cx, cy, cw, ch) -> {
-                GraphicsManager graphicsManager = GraphicsManager.getInstance();
+                GraphicsManager graphicsManager = GameServices.graphics();
                 graphicsManager.setUseWaterShader(false);
                 PatternRenderCommand.resetFrameState();
                 int viewportX = graphicsManager.getViewportX();
@@ -65,11 +68,21 @@ public final class AizBattleshipRenderFeature {
 
     private final GLCommand cleanupOverlayCommand = new GLCommand(
             GLCommand.CommandType.CUSTOM,
-            (cx, cy, cw, ch) -> GraphicsManager.getInstance().disableScissor());
+            (cx, cy, cw, ch) -> GameServices.graphics().disableScissor());
 
     public void reset() {
         loggedFirstRender = false;
         pendingStripHeight = 0;
+    }
+
+    @Override
+    public SpecialRenderEffectStage stage() {
+        return SpecialRenderEffectStage.AFTER_SPRITES;
+    }
+
+    @Override
+    public void render(SpecialRenderEffectContext context) {
+        renderAfterBackground(context.camera(), context.frameCounter());
     }
 
     public void renderAfterBackground(Camera camera, int frameCounter) {
@@ -96,9 +109,12 @@ public final class AizBattleshipRenderFeature {
         }
 
         pendingStripHeight = Math.min(STRIP_HEIGHT_PX, screenHeight);
-        GraphicsManager graphicsManager = GraphicsManager.getInstance();
-        graphicsManager.registerCommand(prepareOverlayCommand);
+        GraphicsManager graphicsManager = GameServices.graphics();
+        // Render attached bombs BEFORE the scissor so the full bomb sprite is
+        // visible as it emerges from the port.  The ship strip drawn afterwards
+        // (within scissor) covers the portion behind the hull via painter's algorithm.
         renderAttachedBombs(levelManager);
+        graphicsManager.registerCommand(prepareOverlayCommand);
         renderShipStrip(camera, battleship, screenWidth, pendingStripHeight);
         renderPropellers(camera, battleship, frameCounter, levelManager);
         graphicsManager.registerCommand(cleanupOverlayCommand);
@@ -129,7 +145,7 @@ public final class AizBattleshipRenderFeature {
                                  int screenWidth,
                                  int stripHeight) {
         LevelManager levelManager = GameServices.level();
-        GraphicsManager graphicsManager = GraphicsManager.getInstance();
+        GraphicsManager graphicsManager = GameServices.graphics();
         int cameraX = camera.getX();
         int cameraY = camera.getY();
         int sourceX = battleship.getSecondaryCameraX();

@@ -1,5 +1,6 @@
 package com.openggf.game.sonic1.objects;
 import com.openggf.game.PlayableEntity;
+import com.openggf.game.solid.SolidCheckpointBatch;
 
 import com.openggf.game.sonic1.Sonic1SwitchManager;
 import com.openggf.game.sonic1.constants.Sonic1Constants;
@@ -8,11 +9,14 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
+import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.SolidContact;
+import com.openggf.level.objects.SolidExecutionMode;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.ObjectTerrainUtils;
@@ -63,7 +67,7 @@ import java.util.List;
  * Reference: docs/s1disasm/_incObj/52 Moving Blocks.asm
  */
 public class Sonic1MovingBlockObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, SpawnRewindRecreatable {
 
     // ---- MBlock_Var table: {obActWid, obFrame} indexed by (subtype >> 4) ----
     // From disassembly: dc.b $10, 0 / dc.b $20, 1 / dc.b $20, 2 / dc.b $40, 3 / dc.b $30, 4
@@ -117,8 +121,8 @@ public class Sonic1MovingBlockObjectInstance extends AbstractObjectInstance
     private int moveType;
 
     // Visual properties
-    private final int activeWidth;   // obActWid
-    private final int mappingFrame;  // obFrame
+    private int activeWidth;   // obActWid
+    private int mappingFrame;  // obFrame
 
     // Routine state: 2 = MBlock_Platform, 4 = MBlock_StandOn
     // In routine 4, the player is standing on the platform
@@ -209,17 +213,24 @@ public class Sonic1MovingBlockObjectInstance extends AbstractObjectInstance
         return y;
     }
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         ensureInitialized();
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        playerStanding = isPlayerRiding();
-
-        // MBlock_StandOn (routine 4): ExitPlatform, save X, move, MvSonicOnPtfm2
-        // MBlock_Platform (routine 2): move, PlatformObject
-        // Both call MBlock_Move then check deletion.
+        // ROM order:
+        // - routine 2: MBlock_Move, then PlatformObject
+        // - routine 4: ExitPlatform, save X, MBlock_Move, then MvSonicOnPtfm2
+        // So the platform moves first, and the standing latch that gates
+        // type 02/04/09 advancement is effectively the prior frame's state.
         applyMovement();
 
         updateDynamicSpawn(x, y);
+
+        SolidCheckpointBatch batch = checkpointAll();
+        playerStanding = hasStandingContact(batch);
+    }
+
+    @Override
+    public SolidExecutionMode solidExecutionMode() {
+        return SolidExecutionMode.MANUAL_CHECKPOINT;
     }
 
     @Override
@@ -232,7 +243,7 @@ public class Sonic1MovingBlockObjectInstance extends AbstractObjectInstance
 
     @Override
     public SolidObjectParams getSolidParams() {
-        return new SolidObjectParams(activeWidth, HALF_HEIGHT, MV_SONIC_OFFSET);
+        return SolidObjectParams.of(activeWidth, HALF_HEIGHT, MV_SONIC_OFFSET);
     }
 
     @Override
@@ -241,9 +252,73 @@ public class Sonic1MovingBlockObjectInstance extends AbstractObjectInstance
     }
 
     @Override
+    public boolean usesCollisionHalfWidthForTopLanding() {
+        // ROM MBlock_Platform (routine 2) passes `move.b obActWid(a0),d1` directly
+        // into PlatformObject, whose X-range landing check uses that d1 as the full
+        // landing half-width (`add.w d1,d0 / bmi Plat_Exit; add.w d1,d1 / cmp d1,d0
+        // / bhs Plat_Exit` -> land range [objX-obActWid, objX+obActWid),
+        // docs/s1disasm/_incObj/52 Moving Blocks.asm:57-61; sub PlatformObject.asm:27-34).
+        // obActWid (0x10 here) is already the standable half-width, so it must NOT
+        // receive the generic SolidObjectFull `-$B` narrowing (which would shrink the
+        // landing width to obActWid-0xB=0x5). Without this, a player landing more than
+        // 5px from the block centre was rejected -- MZ3 f8646: a falling rolling player
+        // at relX 0xC from the rightward moving block (Obj 0x52 @0x1289) was outside the
+        // narrowed 0x5 landing width, so resolveContact returned no contact and he fell
+        // through. Same obActWid-direct landing-width pattern as the swing platform and
+        // CollapsingFloor PlatformObject paths.
+        return true;
+    }
+
+    @Override
+    public boolean rejectsZeroDistanceTopSolidLanding() {
+        // ROM MBlock_Platform routes the landing through PlatformObject ->
+        // Plat_NoXCheck_AltY, whose land band is gated by an UNSIGNED
+        // `cmpi.w #-16,d0 / blo Plat_Exit` (docs/s1disasm/_incObj/sub
+        // PlatformObject.asm:51-52). That rejects the exact-touch case d0 = 0
+        // (0x0000 <u 0xFFF0): the standable band is d0 in [-16,-1] (strict
+        // penetration -- the feet must be at least 1px below the surface). The
+        // engine's default accepts d0 = 0 (S3K SolidObjectTop_1P semantics), so a
+        // player whose feet land exactly on the surface seated ONE FRAME EARLY vs
+        // ROM. MZ3 f8973: falling-right onto the moving block (Obj 0x52 @0x13CF,
+        // d0 = 0, feet 0x07B0 == surface 0x07B0) the engine grounded at f8973 while
+        // ROM stays airborne and lands at f8974 (d0 <= -1). Mirrors the same
+        // PlatformObject-family override on Obj 18 / Obj 53 / Obj 5A / Obj 63 / Obj
+        // 6C / Obj 1A. Object-local to Obj 0x52.
+        return true;
+    }
+
+    @Override
+    public boolean carriesAirborneRiderAfterExitPlatform() {
+        return true;
+    }
+
+    @Override
+    public boolean usesPreUpdatePositionForSolidContact(PlayableEntity player) {
+        // ROM Obj52 evaluates its solid helper at a different point depending on
+        // whether the player is already standing on the block:
+        //   - Routine 2 (MBlock_Platform, no rider): MBlock_Move runs FIRST, then
+        //     PlatformObject, so a fresh landing observes the block's POST-move
+        //     x_pos (docs/s1disasm/_incObj/52 Moving Blocks.asm:55-61).
+        //   - Routine 4 (MBlock_StandOn, rider): ExitPlatform runs FIRST (the
+        //     walk-off bounds check), then MBlock_Move, then MvSonicOnPtfm2 (same
+        //     file:64-83). ExitPlatform therefore observes the block's PRE-move
+        //     x_pos (docs/s1disasm/_incObj/sub ExitPlatform.asm:24-29).
+        // The engine moves the block in update() before the solid checkpoint, so
+        // the continued-ride bounds check must use the pre-update x to match
+        // ExitPlatform's pre-move evaluation; the fresh-landing PlatformObject
+        // check keeps the post-move x. Without the pre-move bounds for the rider,
+        // an oscillating block carried the rider one frame too long at the right
+        // edge (MZ2 f8661: ROM clears Status_OnObj at f8660 and goes airborne at
+        // f8661; the engine walked off one frame late and re-landed instead of
+        // ever going airborne). The carry delta (currentX - ridingX) is unchanged
+        // because it is still measured against the same pre-move ridingX.
+        ObjectManager objectManager = services().objectManager();
+        return objectManager != null && objectManager.isRidingObject(player, this);
+    }
+
+    @Override
     public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        // Standing state managed via isPlayerRiding() in update()
+        // Standing state is driven via manual checkpoints in update().
     }
 
     @Override
@@ -260,7 +335,20 @@ public class Sonic1MovingBlockObjectInstance extends AbstractObjectInstance
     @Override
     public boolean isPersistent() {
         // out_of_range.w DeleteObject,mblock_origX(a0)
-        return !isDestroyed() && isInRange(origX);
+        return !isDestroyed() && isInRangeAt(origX);
+    }
+
+    @Override
+    public int getOutOfRangeReferenceX() {
+        return origX;
+    }
+
+    @Override
+    public boolean clearsRespawnStateOnCounterBasedOutOfRange() {
+        // docs/s1disasm/s1disasm/_incObj/52 Moving Blocks.asm:
+        // MBlock_ChkDel uses `out_of_range.w DeleteObject,mblock_origX(a0)`.
+        // It does not call RememberState, so bit 7 in v_objstate remains set.
+        return false;
     }
 
     // ========================================
@@ -562,18 +650,4 @@ public class Sonic1MovingBlockObjectInstance extends AbstractObjectInstance
         y = fallMotion.y;
     }
 
-    /**
-     * Check if the object is within out-of-range distance from camera using the given X.
-     * Matches the S1 out_of_range macro behavior.
-     */
-    private boolean isInRange(int objectX) {
-        var camera = services().camera();
-        if (camera == null) {
-            return true;
-        }
-        int objRounded = objectX & 0xFF80;
-        int camRounded = (camera.getX() - 128) & 0xFF80;
-        int distance = (objRounded - camRounded) & 0xFFFF;
-        return distance <= (128 + 320 + 192);
-    }
 }

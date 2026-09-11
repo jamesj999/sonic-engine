@@ -109,4 +109,19 @@ public interface LevelSelectProvider {
     default void initializeFromTitleScreen() {
         initialize();
     }
+
+    /**
+     * Sets the viewport width so the level select can center its 320-px-wide
+     * content block within a wider projection (widescreen support).
+     *
+     * <p>At native width (320) every element stays in its exact original position —
+     * the x offset is {@code (320 - 320) / 2 = 0}, so native output is byte-identical.
+     * Default implementation is a no-op (safe for implementations that have not yet
+     * been made widescreen-aware).
+     *
+     * @param width the projection-space viewport width; must be &ge; 320
+     */
+    default void setViewportWidth(int width) {
+        // no-op default — subclasses opt in
+    }
 }

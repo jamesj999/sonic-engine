@@ -1,24 +1,25 @@
 package com.openggf.game.sonic3k.objects;
 
 import com.openggf.game.PlayableEntity;
-import com.openggf.game.sonic3k.Sonic3kLevelEventManager;
+import com.openggf.game.sonic3k.S3kPaletteOwners;
+import com.openggf.game.sonic3k.S3kPaletteWriteSupport;
 import com.openggf.game.sonic3k.Sonic3kObjectArtKeys;
 import com.openggf.game.sonic3k.audio.Sonic3kMusic;
 import com.openggf.game.sonic3k.audio.Sonic3kSfx;
 import com.openggf.game.sonic3k.constants.Sonic3kConstants;
-import com.openggf.game.sonic3k.events.Sonic3kAIZEvents;
+import com.openggf.game.sonic3k.events.S3kAizEventWriteSupport;
 import com.openggf.graphics.GLCommand;
-import com.openggf.level.Palette;
-import com.openggf.level.objects.ObjectManager;
-
+import com.openggf.level.objects.ObjectLifetimeOps;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.objects.boss.AbstractBossChild;
 import com.openggf.level.objects.boss.AbstractBossInstance;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
 import java.util.List;
+import java.util.function.Supplier;
 import java.util.logging.Logger;
 
 /**
@@ -33,7 +34,8 @@ import java.util.logging.Logger;
  * - loc_6862E pre-exit (explosion + wait)
  * - loc_68646/loc_68690 exit + cleanup
  */
-public class AizMinibossCutsceneInstance extends AbstractBossInstance {
+public class AizMinibossCutsceneInstance extends AbstractBossInstance
+        implements SpawnRewindRecreatable {
     private static final Logger LOG = Logger.getLogger(AizMinibossCutsceneInstance.class.getName());
     private static final int ROUTINE_INIT = 0;
     private static final int ROUTINE_WAIT_TRIGGER = 2;
@@ -75,8 +77,17 @@ public class AizMinibossCutsceneInstance extends AbstractBossInstance {
 
     private int waitTimer = -1;
     private S3kBossExplosionController explosionController;
-    private Runnable waitCallback;
+    private WaitCallback waitCallback = WaitCallback.NONE;
     private int savedCameraMaxX;
+
+    private enum WaitCallback {
+        NONE,
+        INITIAL_DELAY_COMPLETE,
+        DESCEND_COMPLETE,
+        SWING_COMPLETE,
+        PRE_EXIT_COMPLETE,
+        EXIT_COMPLETE
+    }
 
     public AizMinibossCutsceneInstance(ObjectSpawn spawn) {
         super(spawn, "AIZMinibossCutscene");
@@ -87,7 +98,7 @@ public class AizMinibossCutsceneInstance extends AbstractBossInstance {
         state.routine = ROUTINE_INIT;
         state.hitCount = COLLISION_PROPERTY_UNKILLABLE;
         waitTimer = -1;
-        waitCallback = null;
+        waitCallback = WaitCallback.NONE;
         savedCameraMaxX = 0;
     }
 
@@ -127,7 +138,62 @@ public class AizMinibossCutsceneInstance extends AbstractBossInstance {
     }
 
     @Override
-    protected void updateBossLogic(int frameCounter, PlayableEntity playerEntity) {
+    public boolean isPersistent() {
+        // ROM Obj_AIZMinibossCutscene dispatches directly through its active
+        // routines and exit timer without a normal out-of-range deletion path
+        // (sonic3k.asm:136734-136896), so the subtype-2 special explosion
+        // controller can exhaust all 39 Random_Number draws.
+        return true;
+    }
+
+    /**
+     * The AIZ1 cutscene miniboss is a one-shot scripted scene object: its long fly-off
+     * (EXIT_TIME_AIZ1 = 0x120) is usually still running when the AIZ1->AIZ2 fire transition
+     * snapshots persistent objects, so it (and its persistent flame-barrel children) would
+     * otherwise be carried into AIZ2. There the world delta is not applied to it (the default
+     * {@code onCarriedAcrossSeamlessTransition} is a no-op), stranding its still-firing flame
+     * children partway through AIZ2 with no coherent parent — they keep hurting the player.
+     *
+     * <p>ROM: Obj_AIZMinibossCutscene's object RAM slot does not survive the AIZ2 level reload.
+     * Mirror that by removing this object and its tracked children when the act transition
+     * carries them, instead of letting them ride into AIZ2.
+     */
+    @Override
+    public void onCarriedAcrossSeamlessTransition(int offsetX, int offsetY) {
+        for (var child : getChildComponents()) {
+            ObjectLifetimeOps.destroyBossChildLatched(child);
+        }
+        getChildComponents().clear();
+        ObjectLifetimeOps.destroyLatched(this);
+    }
+
+    /**
+     * The cutscene miniboss publishes its touch entry AFTER its own movement,
+     * exactly like {@link AizMinibossInstance}: both of its moving routines end
+     * in {@code MoveWaitTouch} — {@code AIZMiniboss_MoveWaitTouch} for the drop
+     * (sonic3k.asm:136817-136818) and {@code AIZMiniboss_SwingMoveWaitTouch} for
+     * the swing (sonic3k.asm:136845-136847) — and {@code MoveWaitTouch} runs
+     * {@code MoveSprite2} before {@code Draw_And_Touch_Sprite}
+     * (sonic3k.asm:179687-179690). {@code Add_SpriteToCollisionResponseList}
+     * stores only the object-RAM pointer (sonic3k.asm:21200-21209), so the
+     * player slot's {@code Touch_Loop} reads {@code x_pos(a1)}/{@code y_pos(a1)}
+     * live (sonic3k.asm:20661-20662, 20674, 20693) and therefore observes the
+     * position produced by this object's PREVIOUS pass, not the one before it.
+     *
+     * <p>Without this the swing's touch box lagged an extra frame: at the AIZ1
+     * swing the engine tested {@code y_pos} $34E where the ROM tested $34F, and
+     * the 1px difference put {@code Touch_Height}'s {@code d0} at $16 instead of
+     * $17 against a $16 player height, firing the boss rebound
+     * ({@code Touch_Enemy}.checkhurtenemy, sonic3k.asm:20907-20914) one frame
+     * early.
+     */
+    @Override
+    public boolean usesCurrentTouchResponseState() {
+        return true;
+    }
+
+    @Override
+    protected void updateBossLogic(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         switch (state.routine) {
             case ROUTINE_INIT -> updateInit();
@@ -156,28 +222,25 @@ public class AizMinibossCutsceneInstance extends AbstractBossInstance {
         if (level == null || level.getPaletteCount() <= 1) {
             return;
         }
-        Palette pal = level.getPalette(1);
         // ROM: bit 0 of $20(a0) determines which color set
         boolean useDark = (state.invulnerabilityTimer & 1) != 0;
         int[] colors = useDark ? CUSTOM_FLASH_DARK : CUSTOM_FLASH_BRIGHT;
-        for (int i = 0; i < CUSTOM_FLASH_INDICES.length; i++) {
-            byte[] bytes = {(byte) ((colors[i] >> 8) & 0xFF), (byte) (colors[i] & 0xFF)};
-            pal.getColor(CUSTOM_FLASH_INDICES[i]).fromSegaFormat(bytes, 0);
-        }
-        var gm = services().graphicsManager();
-        if (gm.isGlInitialized()) {
-            gm.cachePaletteTexture(pal, 1);
-        }
+        S3kPaletteWriteSupport.applyColors(
+                services().paletteOwnershipRegistryOrNull(),
+                level,
+                services().graphicsManager(),
+                S3kPaletteOwners.AIZ_MINIBOSS_CUTSCENE,
+                S3kPaletteOwners.PRIORITY_CUTSCENE_OVERRIDE,
+                1,
+                CUSTOM_FLASH_INDICES,
+                colors);
     }
 
     private void updateInit() {
         var camera = services().camera();
         savedCameraMaxX = camera.getMaxX();
 
-        Sonic3kAIZEvents events = getAizEvents();
-        if (events != null) {
-            events.setBossFlag(true);
-        }
+        S3kAizEventWriteSupport.setBossFlag(services(), true);
 
         java.util.logging.Logger.getLogger("AIZMinibossCutscene")
                 .info("Cutscene INIT -> WAIT_TRIGGER at x=" + state.x + " y=" + state.y);
@@ -199,22 +262,26 @@ public class AizMinibossCutsceneInstance extends AbstractBossInstance {
         services().fadeOutMusic();
 
         state.routine = ROUTINE_WAIT;
-        setWait(WAIT_AFTER_TRIGGER, this::onInitialDelayComplete);
+        setWait(WAIT_AFTER_TRIGGER, WaitCallback.INITIAL_DELAY_COMPLETE);
     }
 
     private void onInitialDelayComplete() {
         state.routine = ROUTINE_DESCEND;
         state.yVel = DESCEND_VEL;
-        setWait(DESCEND_TIME, this::onDescendComplete);
+        setWait(DESCEND_TIME, WaitCallback.DESCEND_COMPLETE);
 
-        var objectManager = services().objectManager();
-        spawnChild(new AizMinibossBodyChild(this), objectManager);
-        spawnChild(new AizMinibossArmChild(this), objectManager);
+        spawnTrackedChild(() -> new AizMinibossBodyChild(this));
+        spawnTrackedChild(() -> new AizMinibossArmChild(this));
         for (int i = 0; i < 3; i++) {
-            spawnChild(new AizMinibossFlameBarrelChild(this, i, true), objectManager);
+            int index = i;
+            spawnTrackedChild(() -> new AizMinibossFlameBarrelChild(this, index, true));
         }
 
-        services().playMusic(Sonic3kMusic.MINIBOSS.id);
+        // ROM AIZMiniboss_StartDropMusic plays mus_Miniboss, $2E
+        // (sonic3k.asm:136809-136811), not mus_MinibossK, $18. Both resolve to
+        // the same arrangement in the S&K driver table, so this is inaudible
+        // today and audible the moment the S3 table is selected.
+        services().playMusic(Sonic3kMusic.MINIBOSS_S3.id);
     }
 
     private void onDescendComplete() {
@@ -223,12 +290,12 @@ public class AizMinibossCutsceneInstance extends AbstractBossInstance {
         state.routine = ROUTINE_SWING;
         state.yVel = 0;
         swingMotion.setup1(state);
-        setWait(SWING_TIME, this::onSwingComplete);
+        setWait(SWING_TIME, WaitCallback.SWING_COMPLETE);
     }
 
     private void onSwingComplete() {
         // ROM: loc_6862E — directly after swing, spawn explosion and set pre-exit wait
-        setWait(PRE_EXIT_TIME, this::onPreExitComplete);
+        setWait(PRE_EXIT_TIME, WaitCallback.PRE_EXIT_COMPLETE);
         // ROM: Obj_BossExplosionSpecial positions at screen center (overrides child offset)
         var camera = services().camera();
         explosionController = new S3kBossExplosionController(
@@ -240,16 +307,12 @@ public class AizMinibossCutsceneInstance extends AbstractBossInstance {
             return;
         }
         explosionController.tick();
-        var objectManager = services().objectManager();
-        if (objectManager == null) {
-            return;
-        }
         for (var pending : explosionController.drainPendingExplosions()) {
             // ROM: sub_52850 plays sfx_Explode when spawning each child
             if (pending.playSfx()) {
                 services().playSfx(Sonic3kSfx.EXPLODE.id);
             }
-            objectManager.addDynamicObject(new S3kBossExplosionChild(pending.x(), pending.y()));
+            spawnChild(() -> new S3kBossExplosionChild(pending.x(), pending.y()));
         }
     }
 
@@ -262,16 +325,15 @@ public class AizMinibossCutsceneInstance extends AbstractBossInstance {
         services().fadeOutMusic();
 
         int exitFrames = isAiz1() ? EXIT_TIME_AIZ1 : EXIT_TIME_OTHER;
-        setWait(exitFrames, this::onExitComplete);
+        setWait(exitFrames, WaitCallback.EXIT_COMPLETE);
 
-        Sonic3kAIZEvents events = getAizEvents();
-        if (events != null) {
-            events.setEventsFg5(true);
+        if (services().levelEventProvider() instanceof com.openggf.game.sonic3k.events.AizObjectEventBridge) {
+            S3kAizEventWriteSupport.setEventsFg5(services(), true);
             java.util.logging.Logger.getLogger("AIZMinibossCutscene")
                     .info("PRE_EXIT complete: setEventsFg5(true), exitFrames=" + exitFrames);
         } else {
             java.util.logging.Logger.getLogger("AIZMinibossCutscene")
-                    .warning("PRE_EXIT complete but getAizEvents() returned null! Fire transition NOT triggered.");
+                    .warning("PRE_EXIT complete but no AIZ event bridge was available; fire transition not triggered.");
         }
     }
 
@@ -293,17 +355,19 @@ public class AizMinibossCutsceneInstance extends AbstractBossInstance {
     }
 
     private void onExitComplete() {
-        Sonic3kAIZEvents events = getAizEvents();
-        if (events != null) {
-            events.setBossFlag(false);
-        }
-        boolean transitionInProgress = events != null
-                && (events.isFireTransitionActive() || events.isAct2TransitionRequested());
+        S3kAizEventWriteSupport.setBossFlag(services(), false);
+        boolean transitionInProgress = S3kAizEventWriteSupport.isFireTransitionActive(services())
+                || S3kAizEventWriteSupport.isAct2TransitionRequested(services());
 
         // During the unwinnable AIZ1 cutscene transition, BG events own camera/music flow.
         // Only restore defaults when no transition handoff is active.
         if (!transitionInProgress) {
-            services().audioManager().getBackend().restoreMusic();
+            int levelMusicId = services().getApparentLevelMusicId();
+            if (levelMusicId >= 0) {
+                // ROM restores the level track here; AudioManager.restoreMusic()
+                // only unwinds a temporary saved-song slot.
+                services().playMusic(levelMusicId);
+            }
             var camera = services().camera();
             camera.setMinX((short) 0);
             camera.setMaxX((short) savedCameraMaxX);
@@ -313,7 +377,7 @@ public class AizMinibossCutsceneInstance extends AbstractBossInstance {
         setDestroyed(true);
     }
 
-    private void setWait(int frames, Runnable callback) {
+    private void setWait(int frames, WaitCallback callback) {
         waitTimer = frames;
         waitCallback = callback;
     }
@@ -326,32 +390,39 @@ public class AizMinibossCutsceneInstance extends AbstractBossInstance {
         if (waitTimer >= 0) {
             return;
         }
-        Runnable callback = waitCallback;
-        waitCallback = null;
-        if (callback != null) {
-            callback.run();
+        runWaitCallback();
+    }
+
+    private void runWaitCallback() {
+        if (waitCallback == WaitCallback.NONE) {
+            return;
+        }
+        WaitCallback callback = waitCallback;
+        waitCallback = WaitCallback.NONE;
+        switch (callback) {
+            case INITIAL_DELAY_COMPLETE -> onInitialDelayComplete();
+            case DESCEND_COMPLETE -> onDescendComplete();
+            case SWING_COMPLETE -> onSwingComplete();
+            case PRE_EXIT_COMPLETE -> onPreExitComplete();
+            case EXIT_COMPLETE -> onExitComplete();
+            case NONE -> {}
         }
     }
 
-    private void spawnChild(AbstractBossChild child,
-                            ObjectManager objectManager) {
+    private <T extends AbstractBossChild> T spawnTrackedChild(Supplier<T> factory) {
+        T child = spawnChild(factory);
         childComponents.add(child);
-        if (objectManager != null) {
-            objectManager.addDynamicObject(child);
-        }
+        return child;
     }
 
     private void spawnDebris() {
-        var objectManager = services().objectManager();
-        if (objectManager == null) {
-            return;
-        }
         int cameraX = services().camera().getX();
         for (int i = 0; i < DEBRIS_X_OFFSETS.length; i++) {
             int x = cameraX + DEBRIS_X_OFFSETS[i];
             int y = DEBRIS_Y_POSITIONS[i];
-            objectManager.addDynamicObject(new AizMinibossDebrisChild(
-                    x, y, DEBRIS_X_VELOCITIES[i], DEBRIS_FRAMES[i]));
+            int xVelocity = DEBRIS_X_VELOCITIES[i];
+            int frame = DEBRIS_FRAMES[i];
+            spawnChild(() -> new AizMinibossDebrisChild(x, y, xVelocity, frame));
         }
     }
 
@@ -359,7 +430,14 @@ public class AizMinibossCutsceneInstance extends AbstractBossInstance {
         try {
             byte[] line = services().rom().readBytes(
                     Sonic3kConstants.PAL_AIZ_MINIBOSS_ADDR, 32);
-            services().updatePalette(1, line);
+            S3kPaletteWriteSupport.applyLine(
+                    services().paletteOwnershipRegistryOrNull(),
+                    services().currentLevel(),
+                    services().graphicsManager(),
+                    S3kPaletteOwners.AIZ_MINIBOSS_CUTSCENE,
+                    S3kPaletteOwners.PRIORITY_CUTSCENE_OVERRIDE,
+                    1,
+                    line);
         } catch (Exception e) {
             LOG.fine(() -> "AizMinibossCutsceneInstance.loadBossPalette: " + e.getMessage());
         }
@@ -367,10 +445,6 @@ public class AizMinibossCutsceneInstance extends AbstractBossInstance {
 
     private boolean isAiz1() {
         return services().romZoneId() == 0 && services().currentAct() == 0;
-    }
-
-    private Sonic3kAIZEvents getAizEvents() {
-        return ((Sonic3kLevelEventManager) services().levelEventProvider()).getAizEvents();
     }
 
     @Override

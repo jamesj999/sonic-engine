@@ -43,7 +43,7 @@ import java.util.List;
  * <b>Disassembly Reference:</b> s2.asm ObjD5 (CNZ Elevator), lines 58376-58498
  */
 public class ElevatorObjectInstance extends BoxObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
 
     // State constants (from disassembly routine offsets)
     private static final int STATE_WAIT_FOR_CONTACT = 0;
@@ -58,9 +58,10 @@ public class ElevatorObjectInstance extends BoxObjectInstance
 
     // Platform collision dimensions
     // d1 = 0x10 (half-width = 16 pixels)
-    // d3 = 9 (platform height for collision)
+    // d3 = 9 (platform surface offset for PlatformObjectD5/MvSonicOnPtfm)
     private static final int HALF_WIDTH = 16;
     private static final int PLATFORM_HEIGHT = 9;
+    private static final int STALE_LOGICAL_HORIZONTAL_FRAMES = 3;
 
     // Position tracking
     private int x;              // Current X (constant, same as spawn)
@@ -83,6 +84,11 @@ public class ElevatorObjectInstance extends BoxObjectInstance
         // Use platform half-width for debug box, cyan color
         super(spawn, name, HALF_WIDTH, PLATFORM_HEIGHT, 0.2f, 0.8f, 0.8f, false);
         init();
+    }
+
+    @Override
+    public ElevatorObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new ElevatorObjectInstance(ctx.spawn(), getName());
     }
 
     private void init() {
@@ -124,13 +130,45 @@ public class ElevatorObjectInstance extends BoxObjectInstance
     }
     @Override
     public SolidObjectParams getSolidParams() {
-        // From disassembly: d1 = 0x10 (half-width), d3 = 9 (platform height)
-        return new SolidObjectParams(HALF_WIDTH, PLATFORM_HEIGHT, PLATFORM_HEIGHT + 1);
+        // S2 ObjD5 passes d3=9 directly to PlatformObjectD5; continued riding
+        // uses that same value in MvSonicOnPtfm (s2.asm:58438-58443, 35621-35657).
+        return SolidObjectParams.of(HALF_WIDTH, PLATFORM_HEIGHT, PLATFORM_HEIGHT);
     }
 
     @Override
     public boolean isTopSolidOnly() {
         // Elevators are platform objects - only solid from the top
+        return true;
+    }
+
+    @Override
+    public int staleHorizontalLogicalInputFramesWhileRiding(PlayableEntity player, int rideFrames) {
+        // ObjD5 calls PlatformObjectD5 after its state routine
+        // (s2.asm:58435-58443). The helper returns immediately when the
+        // character is already standing on another platform, and otherwise
+        // keeps the rider through MvSonicOnPtfm (s2.asm:35617-35657,
+        // 35402-35420). CNZ traces show BK2 right input in the CSV at f5997
+        // while ROM inertia remains zero until f6000, so replay must not let
+        // the V-int-aligned input row accelerate the rider before the ROM's
+        // ObjD5/PlatformObjectD5 phase consumes it.
+        return STALE_LOGICAL_HORIZONTAL_FRAMES;
+    }
+
+    @Override
+    public boolean preservesStaleHorizontalInputEdgeWhileMoving(PlayableEntity player) {
+        // ObjD5's PlatformObjectD5 ride helper keeps the same held Ctrl_1_Logical
+        // input path while the elevator can zero Sonic's inertia mid-ride; do
+        // not re-arm the initial stale-input window after that reset
+        // (docs/s2disasm/s2.asm:35860-35874, 58905-58915).
+        return true;
+    }
+
+    @Override
+    public boolean skipsNewContactWhilePlayerAlreadyOnObject(PlayableEntity player) {
+        // PlatformObjectD5 checks ObjD5's own standing bit first. If this
+        // elevator is not already carrying the player but Status_OnObj is set
+        // on the player, it returns d4=0 instead of replacing the current
+        // support (docs/s2disasm/s2.asm:35860-35894, 58905-58915).
         return true;
     }
 
@@ -154,7 +192,7 @@ public class ElevatorObjectInstance extends BoxObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // Apply velocity FIRST (matches ROM ObjectMove timing)
         applyVelocity();

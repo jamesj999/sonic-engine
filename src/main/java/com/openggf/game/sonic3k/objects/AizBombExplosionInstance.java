@@ -6,6 +6,7 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnCoordinateZeroPairRewindRecreatable;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
 
@@ -22,27 +23,31 @@ import java.util.List;
  * sprites after they spawn. ROM parity here is the per-wrap X correction via
  * {@code Level_repeat_offset}.
  */
-public class AizBombExplosionInstance extends AbstractObjectInstance implements TouchResponseProvider {
+public class AizBombExplosionInstance extends AbstractObjectInstance
+        implements TouchResponseProvider, SpawnCoordinateZeroPairRewindRecreatable {
 
     private static final int COLLISION_FLAGS = 0x8B;
-    private static final int FRAME_DURATION = 3;
-
-    private static final int[][] ANIM_FRAMES = {
-            {1, 2, 3, 4, 5},    // Anim 0: large explosion
-            {6, 7, 8, 9, 10},   // Anim 1: small explosion
+    private static final int[][][] ANIM_SCRIPTS = {
+            {{1, 3}, {2, 4}, {3, 5}, {4, 5}, {5, 5}},
+            {{6, 2}, {7, 3}, {8, 4}, {9, 5}, {10, 5}, {11, 5}},
     };
-
-    private static final int COLLISION_ACTIVE_FRAMES = 3;
 
     /** World-space X position. */
     private int posX;
-    private final int posY;
-    private final int animIndex;
-    private final int initialDelay;
+    private int posY;
+    // animIndex/initialDelay are non-final so the rewind field capturer reapplies
+    // them after spawn-coordinate recreate uses placeholders 0.
+    private int animIndex;
+    private int initialDelay;
 
+    /** ROM {@code $2E(a0)} while the fragment is still Obj_AIZBombExplosion. */
     private int delayTimer;
+    /** ROM {@code anim_frame}: index of the NEXT script entry to load. */
     private int animFrame;
-    private int frameTick;
+    /** ROM {@code anim_frame_timer}. */
+    private int frameTimer;
+    /** ROM {@code mapping_frame}. */
+    private int mappingFrame;
     private boolean active;
 
     /**
@@ -55,44 +60,62 @@ public class AizBombExplosionInstance extends AbstractObjectInstance implements 
         super(new ObjectSpawn(x, y, 0, 0, 0, false, 0), "AIZBombExplosion");
         this.posX = x;
         this.posY = y;
-        this.animIndex = Math.min(animIndex, ANIM_FRAMES.length - 1);
+        this.animIndex = Math.min(animIndex, ANIM_SCRIPTS.length - 1);
         this.initialDelay = delay;
         this.delayTimer = delay;
         this.animFrame = 0;
-        this.frameTick = 0;
-        this.active = (delay == 0);
+        this.frameTimer = 0;
+        this.mappingFrame = ANIM_SCRIPTS[this.animIndex][0][0];
+        this.active = false;
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity player) {
+    public void update(int vIntRunCount, PlayableEntity player) {
         if (isDestroyed()) return;
 
         if (!active) {
+            // ROM Obj_AIZBombExplosion (sonic3k.asm:105471): subq.w #1,$2E(a0) /
+            // bmi.s loc_505B4 / rts. The wait therefore lasts delay+1 frames --
+            // it ends on the frame the counter goes negative, not the frame it
+            // reaches zero. loc_505B4 then falls through via `bra.s loc_505E4`,
+            // so the fragment animates on the very frame it becomes active.
             delayTimer--;
-            if (delayTimer <= 0) {
-                active = true;
+            if (delayTimer >= 0) {
+                return;
             }
-            return;
+            active = true;
         }
 
-        frameTick++;
-        if (frameTick >= FRAME_DURATION) {
-            frameTick = 0;
-            animFrame++;
-
-            int[] frames = ANIM_FRAMES[animIndex];
-            if (animFrame >= frames.length) {
+        // ROM loc_505E4 -> Animate_SpriteIrregularDelay (sonic3k.asm:36238):
+        // `subq.b #1,anim_frame_timer(a0) / bcc.s locret`. The branch is taken
+        // while the subtraction did not borrow, so a script entry whose delay
+        // byte is D is held for D+1 frames, and the timer of 0 that a freshly
+        // transitioned fragment carries advances on its first call.
+        frameTimer--;
+        if (frameTimer < 0) {
+            int[][] script = ANIM_SCRIPTS[animIndex];
+            if (animFrame >= script.length) {
+                // Script terminator $FC: Animate_SpriteIrregularDelay's loc_1AD0C
+                // adds 2 to routine, and loc_505E4's `tst.b routine(a0) / bne`
+                // jumps to Delete_Current_Sprite on that same frame -- so the
+                // terminator frame is never drawn and never collidable.
                 setDestroyed(true);
+                return;
             }
+            mappingFrame = script[animFrame][0];
+            frameTimer = script[animFrame][1];
+            animFrame++;
         }
     }
 
     @Override
     public int getCollisionFlags() {
-        if (!active || animFrame >= COLLISION_ACTIVE_FRAMES) {
+        if (!active) {
             return 0;
         }
-        return COLLISION_FLAGS;
+        // ROM loc_505FC: cmp.b mapping_frame,d0 / bls.s skip collision, so
+        // equality with (4 + anim) is already non-collidable.
+        return currentMappingFrame() < (4 + animIndex) ? COLLISION_FLAGS : 0;
     }
 
     @Override
@@ -104,6 +127,17 @@ public class AizBombExplosionInstance extends AbstractObjectInstance implements 
     @Override
     public int getY() { return posY; }
 
+    @Override
+    public String traceDebugDetails() {
+        return String.format("anim=%d delay=%d frame=%d timer=%d active=%s map=%02X",
+                animIndex,
+                delayTimer,
+                animFrame,
+                frameTimer,
+                active,
+                currentMappingFrame());
+    }
+
     /** ROM: subtract Level_repeat_offset on wrap frames. */
     public void applyWrapOffset(int offset) {
         posX -= offset;
@@ -113,16 +147,13 @@ public class AizBombExplosionInstance extends AbstractObjectInstance implements 
     public void appendRenderCommands(List<GLCommand> commands) {
         if (isDestroyed() || !active) return;
 
-        int[] frames = ANIM_FRAMES[animIndex];
-        if (animFrame >= frames.length) return;
-
         ObjectRenderManager rm = services().renderManager();
         if (rm == null) return;
 
         PatternSpriteRenderer renderer = rm.getRenderer(Sonic3kObjectArtKeys.AIZ2_BOMB_EXPLODE);
         if (renderer == null || !renderer.isReady()) return;
 
-        renderer.drawFrameIndex(frames[animFrame], getX(), posY, false, false);
+        renderer.drawFrameIndex(currentMappingFrame(), getX(), posY, false, false);
     }
 
     @Override
@@ -130,4 +161,8 @@ public class AizBombExplosionInstance extends AbstractObjectInstance implements 
 
     @Override
     public int getPriorityBucket() { return 1; }
+
+    private int currentMappingFrame() {
+        return mappingFrame;
+    }
 }

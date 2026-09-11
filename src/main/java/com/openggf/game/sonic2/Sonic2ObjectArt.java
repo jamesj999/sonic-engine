@@ -1,6 +1,6 @@
 package com.openggf.game.sonic2;
 
-import com.openggf.game.GameModuleRegistry;
+import com.openggf.game.GameServices;
 import com.openggf.game.ZoneArtProvider;
 import com.openggf.game.common.CommonSpriteDataLoader;
 import com.openggf.game.sonic2.constants.Sonic2Constants;
@@ -35,6 +35,18 @@ import java.util.logging.Logger;
 public class Sonic2ObjectArt {
     private static final Logger LOGGER = Logger.getLogger(Sonic2ObjectArt.class.getName());
     private static final int ANIMAL_TILE_OFFSET = 0x14;
+    private static final int TORNADO_ART_TILE = Sonic2Constants.ART_TILE_ENDING_TORNADO;
+    private static final int TORNADO_SONIC_RIDER_OFFSET = Sonic2Constants.ART_TILE_SONIC - TORNADO_ART_TILE;
+    private static final int TORNADO_TAILS_RIDER_OFFSET = Sonic2Constants.ART_TILE_TAILS - TORNADO_ART_TILE;
+    private static final int TORNADO_RIDER_TILE_COUNT = 6;
+
+    /**
+     * VRAM tile index of the 1-up monitor's life-counter icon piece (obj26 frame 2,
+     * {@code Map_obj26_0034}, tile {@code $154}). In the ROM this is
+     * {@code ArtTile_ArtNem_life_counter} ({@code = ArtTile_ArtNem_Powerups + $154}),
+     * shared with the HUD life counter, so the icon shows the main character's face.
+     */
+    public static final int MONITOR_LIFE_ICON_TILE = 340;
     private static final AnimalType[] DEFAULT_ANIMALS = { AnimalType.RABBIT, AnimalType.RABBIT };
     private static final AnimalType[][] ZONE_ANIMALS = {
             { AnimalType.SQUIRREL, AnimalType.FLICKY }, // 0 EHZ
@@ -82,8 +94,14 @@ public class Sonic2ObjectArt {
 
         // Load Monitor Art (base art)
         Pattern[] monitorBasePatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_MONITOR_ADDR, "Monitor");
-        // Load Tails Life Art (used for Tails Monitor icon, requests tile 340)
-        Pattern[] tailsLifePatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_TAILS_LIFE_ADDR, "TailsLife");
+        // Load the life-counter art for the 1-up monitor icon (obj26 frame 2's icon
+        // piece maps to tile $154 = MONITOR_LIFE_ICON_TILE). In the ROM that tile is
+        // ArtTile_ArtNem_life_counter, the same VRAM the HUD life counter uses, so the
+        // standard 1-up monitor displays the main character's face. PlrList_Std1 loads
+        // Sonic's life art there for every level; Tails-alone and Knuckles (lock-on)
+        // override this tile in Sonic2ObjectArtProvider, mirroring PlrList_TailsLife /
+        // the Knuckles HUD patch. (s2.asm:89193; mappings/sprite/obj26.asm)
+        Pattern[] lifeIconPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_SONIC_LIFE_ADDR, "SonicLife");
 
         List<SpriteMappingFrame> monitorMappings = loadMappingFrames(Sonic2Constants.MAP_UNC_MONITOR_ADDR);
 
@@ -99,18 +117,18 @@ public class Sonic2ObjectArt {
         int requiredSize = maxTileIndex + 1;
         // Ensure we have enough space for Tails Life Art starting at 340 (0x154 * 32
         // bytes = 10880 offset)
-        int lifeArtOffset = 340;
-        requiredSize = Math.max(requiredSize, lifeArtOffset + tailsLifePatterns.length);
+        int lifeArtOffset = MONITOR_LIFE_ICON_TILE;
+        requiredSize = Math.max(requiredSize, lifeArtOffset + lifeIconPatterns.length);
 
         Pattern[] monitorPatterns = new Pattern[requiredSize];
         // Copy base patterns
         if (monitorBasePatterns.length > 0) {
             System.arraycopy(monitorBasePatterns, 0, monitorPatterns, 0, monitorBasePatterns.length);
         }
-        // Copy Tails Life patterns at offset 340
-        if (tailsLifePatterns.length > 0 && lifeArtOffset < monitorPatterns.length) {
-            System.arraycopy(tailsLifePatterns, 0, monitorPatterns, lifeArtOffset,
-                    Math.min(tailsLifePatterns.length, monitorPatterns.length - lifeArtOffset));
+        // Copy the main character's life-counter art at the icon tile offset
+        if (lifeIconPatterns.length > 0 && lifeArtOffset < monitorPatterns.length) {
+            System.arraycopy(lifeIconPatterns, 0, monitorPatterns, lifeArtOffset,
+                    Math.min(lifeIconPatterns.length, monitorPatterns.length - lifeArtOffset));
         }
 
         // Fill gaps with empty patterns to prevent NPEs
@@ -192,49 +210,8 @@ public class Sonic2ObjectArt {
         ObjectSpriteSheet speedBoosterSheet = loadSpeedBoosterSheet();
         ObjectSpriteSheet blueBallsSheet = loadBlueBallsSheet();
 
-        // Breakable Block / Rock art (Object 0x32) - CPZ metal block or HTZ rock
-        ZoneArtProvider.ObjectArtConfig breakableBlockArtConfig = getObjectArtConfig(Sonic2ObjectIds.BREAKABLE_BLOCK, zoneIndex);
-        int breakableBlockArtAddr = breakableBlockArtConfig != null
-                ? breakableBlockArtConfig.artAddress()
-                : Sonic2Constants.ART_NEM_CPZ_METAL_BLOCK_ADDR;
-        int breakableBlockPalette = breakableBlockArtConfig != null
-                ? breakableBlockArtConfig.palette()
-                : 3;
-        String breakableBlockName = (zoneIndex == Sonic2Constants.ZONE_HTZ) ? "HTZRock" : "CPZMetalBlock";
-        Pattern[] breakableBlockPatterns = safeLoadNemesisPatterns(breakableBlockArtAddr, breakableBlockName);
-        int breakableBlockMapAddr = (zoneIndex == Sonic2Constants.ZONE_HTZ)
-                ? Sonic2Constants.MAP_UNC_OBJ32_HTZ_ADDR
-                : Sonic2Constants.MAP_UNC_OBJ32_CPZ_ADDR;
-        List<SpriteMappingFrame> breakableBlockMappings = loadMappingFrames(breakableBlockMapAddr);
-        ObjectSpriteSheet breakableBlockSheet = new ObjectSpriteSheet(
-                breakableBlockPatterns, breakableBlockMappings, breakableBlockPalette, 1);
-
-        // CPZ/OOZ/WFZ Moving Platform art (Object 0x19)
-        // Load art based on zone via ZoneArtProvider
-        ZoneArtProvider.ObjectArtConfig platformArtConfig = getObjectArtConfig(Sonic2ObjectIds.GENERIC_PLATFORM_B, zoneIndex);
-        int cpzPlatformArtAddr = platformArtConfig != null ? platformArtConfig.artAddress() : Sonic2Constants.ART_NEM_CPZ_ELEVATOR_ADDR;
-        int cpzPlatformPalette = platformArtConfig != null ? platformArtConfig.palette() : 3;
-        Pattern[] cpzPlatformPatterns = safeLoadNemesisPatterns(cpzPlatformArtAddr, "CPZPlatform");
-        List<SpriteMappingFrame> cpzPlatformMappings = loadMappingFrames(Sonic2Constants.MAP_UNC_OBJ19_ADDR);
-        ObjectSpriteSheet cpzPlatformSheet = new ObjectSpriteSheet(cpzPlatformPatterns, cpzPlatformMappings, cpzPlatformPalette, 0);
-
-        ObjectSpriteSheet cpzStairBlockSheet = loadCpzStairBlockSheet();
-
-        // CPZ/MCZ Sideways Platform art (Object 0x7A) - horizontal moving platform
-        // Uses same patterns as CPZ Stair Block but different mappings (tiles 16+, 48x16 platform)
-        List<SpriteMappingFrame> sidewaysPformMappings = loadMappingFrames(Sonic2Constants.MAP_UNC_CPZ_STAIR_BLOCK_ADDR);
-        Pattern[] cpzStairBlockPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_CPZ_STAIRBLOCK_ADDR, "CPZStairBlock");
-        ObjectSpriteSheet sidewaysPformSheet = new ObjectSpriteSheet(cpzStairBlockPatterns, sidewaysPformMappings, 3, 1);
-
-        ObjectSpriteSheet cpzPylonSheet = loadCpzPylonSheet();
-        ObjectSpriteSheet pipeExitSpringSheet = loadPipeExitSpringSheet();
         SpriteAnimationSet pipeExitSpringAnimations = createPipeExitSpringAnimations();
-
-        ObjectSpriteSheet tippingFloorSheet = loadTippingFloorSheet();
         SpriteAnimationSet tippingFloorAnimations = createTippingFloorAnimations();
-
-        ObjectSpriteSheet barrierSheet = loadBarrierSheet();
-        ObjectSpriteSheet springboardSheet = loadSpringboardSheet();
         SpriteAnimationSet springboardAnimations = createSpringboardAnimations();
 
         ObjectSpriteSheet bubblesSheet = loadBubblesSheet();
@@ -278,6 +255,8 @@ public class Sonic2ObjectArt {
         Pattern[] hudLivesPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_SONIC_LIFE_ADDR, "SonicLife");
         Pattern[] hudLivesNumbers = safeLoadUncompressedPatterns(Sonic2Constants.ART_UNC_LIVES_NUMBERS_ADDR,
                 Sonic2Constants.ART_UNC_LIVES_NUMBERS_SIZE, "LivesNumbers");
+        Pattern[] debugFontPatterns = safeLoadUncompressedPatterns(Sonic2Constants.ART_UNC_DEBUG_FONT_ADDR,
+                Sonic2Constants.ART_UNC_DEBUG_FONT_SIZE, "DebugFont");
         ObjectArtData artData = new ObjectArtData(
                 monitorSheet,
                 spikeSheet,
@@ -306,15 +285,6 @@ public class Sonic2ObjectArt {
                 flipperSheet,
                 speedBoosterSheet,
                 blueBallsSheet,
-                breakableBlockSheet,
-                cpzPlatformSheet,
-                cpzStairBlockSheet,
-                sidewaysPformSheet,
-                cpzPylonSheet,
-                pipeExitSpringSheet,
-                tippingFloorSheet,
-                barrierSheet,
-                springboardSheet,
                 resultsSheet,
                 bubblesSheet,
                 leavesSheet,
@@ -322,10 +292,7 @@ public class Sonic2ObjectArt {
                 hudTextPatterns,
                 hudLivesPatterns,
                 hudLivesNumbers,
-                (Pattern[]) null, // debugFontPatterns
-                monitorMappings,
-                springMappings,
-                checkpointMappings,
+                debugFontPatterns,
                 monitorAnimations,
                 springAnimations,
                 checkpointAnimations,
@@ -406,6 +373,16 @@ public class Sonic2ObjectArt {
     }
 
     // ---- Extracted sheet builders (used by loadForZone and PLC registry) ----
+
+    /**
+     * Obj39 GAME OVER / TIME OVER sheet: ArtNem_Game_Over with Obj39_MapUnc_14C6C.
+     * The ROM decompresses it through PLCID_GameOver when CheckGameOver asks for
+     * it; the engine keeps the sheet resident and uses the PLC queue for timing.
+     */
+    public ObjectSpriteSheet loadGameOverSheet() {
+        return buildArtSheetFromRom(Sonic2Constants.ART_NEM_GAME_OVER_ADDR,
+                Sonic2Constants.MAPPINGS_GAME_OVER_ADDR, 0, 1);
+    }
 
     public ObjectSpriteSheet loadSpikeSheet() {
         return buildArtSheetFromRom(Sonic2Constants.ART_NEM_SPIKES_ADDR,
@@ -524,9 +501,43 @@ public class Sonic2ObjectArt {
                 Sonic2Constants.MAP_UNC_BLUE_BALLS_ADDR, 3, 0);
     }
 
+    public ObjectSpriteSheet loadBreakableBlockSheet(int zoneIndex) {
+        ZoneArtProvider.ObjectArtConfig artConfig =
+                getObjectArtConfig(Sonic2ObjectIds.BREAKABLE_BLOCK, zoneIndex);
+        int artAddr = artConfig != null
+                ? artConfig.artAddress()
+                : Sonic2Constants.ART_NEM_CPZ_METAL_BLOCK_ADDR;
+        int palette = artConfig != null ? artConfig.palette() : 3;
+        String assetName = (zoneIndex == Sonic2Constants.ZONE_HTZ) ? "HTZRock" : "CPZMetalBlock";
+        Pattern[] patterns = safeLoadNemesisPatterns(artAddr, assetName);
+        int mappingAddr = (zoneIndex == Sonic2Constants.ZONE_HTZ)
+                ? Sonic2Constants.MAP_UNC_OBJ32_HTZ_ADDR
+                : Sonic2Constants.MAP_UNC_OBJ32_CPZ_ADDR;
+        List<SpriteMappingFrame> mappings = loadMappingFrames(mappingAddr);
+        return new ObjectSpriteSheet(patterns, mappings, palette, 1);
+    }
+
+    public ObjectSpriteSheet loadGenericPlatformBSheet(int zoneIndex) {
+        ZoneArtProvider.ObjectArtConfig artConfig =
+                getObjectArtConfig(Sonic2ObjectIds.GENERIC_PLATFORM_B, zoneIndex);
+        int artAddr = artConfig != null
+                ? artConfig.artAddress()
+                : Sonic2Constants.ART_NEM_CPZ_ELEVATOR_ADDR;
+        int palette = artConfig != null ? artConfig.palette() : 3;
+        Pattern[] patterns = safeLoadNemesisPatterns(artAddr, "GenericPlatformB");
+        List<SpriteMappingFrame> mappings = loadMappingFrames(Sonic2Constants.MAP_UNC_OBJ19_ADDR);
+        return new ObjectSpriteSheet(patterns, mappings, palette, 0);
+    }
+
     public ObjectSpriteSheet loadCpzStairBlockSheet() {
         Pattern[] patterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_CPZ_STAIRBLOCK_ADDR, "CPZStairBlock");
         List<SpriteMappingFrame> mappings = createCPZStairBlockMappings();
+        return new ObjectSpriteSheet(patterns, mappings, 3, 1);
+    }
+
+    public ObjectSpriteSheet loadSidewaysPformSheet() {
+        List<SpriteMappingFrame> mappings = loadMappingFrames(Sonic2Constants.MAP_UNC_CPZ_STAIR_BLOCK_ADDR);
+        Pattern[] patterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_CPZ_STAIRBLOCK_ADDR, "CPZStairBlock");
         return new ObjectSpriteSheet(patterns, mappings, 3, 1);
     }
 
@@ -588,14 +599,70 @@ public class Sonic2ObjectArt {
                 Sonic2Constants.MAP_UNC_BARRIER_ADDR, 1, 1);
     }
 
+    /** Obj2D_Init uses ArtKos_LevelArt, palette 3, in both Metropolis zone slots. */
+    public ObjectSpriteSheet loadMtzBarrierSheet(com.openggf.level.Level level) {
+        if (level == null) {
+            return null;
+        }
+        // Map_obj2D_002A repeats a 3x4 piece at level tile $5F (through $6A).
+        int copyCount = Math.min(level.getPatternCount(), 0x6B);
+        Pattern[] patterns = new Pattern[copyCount];
+        for (int i = 0; i < copyCount; i++) {
+            patterns[i] = level.getPattern(i);
+        }
+        return new ObjectSpriteSheet(patterns,
+                loadMappingFrames(Sonic2Constants.MAP_UNC_BARRIER_ADDR), 3, 1);
+    }
+
     public ObjectSpriteSheet loadSpringboardSheet() {
         return buildArtSheetFromRom(Sonic2Constants.ART_NEM_LEVER_SPRING_ADDR,
                 Sonic2Constants.MAP_UNC_SPRINGBOARD_ADDR, 0, 1);
     }
 
     public ObjectSpriteSheet loadBubblesSheet() {
-        return buildArtSheetFromRom(Sonic2Constants.ART_NEM_BUBBLES_ADDR,
-                Sonic2Constants.MAP_UNC_SMALL_BUBBLES_ADDR, 1, 1);
+        Pattern[] bigBubblePatterns = safeLoadNemesisPatterns(
+                Sonic2Constants.ART_NEM_BUBBLE_GENERATOR_ADDR, "BigBubbles");
+        Pattern[] standardBubblePatterns = safeLoadNemesisPatterns(
+                Sonic2Constants.ART_NEM_BUBBLES_ADDR, "Bubbles");
+        Pattern[] countdownPatterns = safeLoadUncompressedPatterns(
+                Sonic2Constants.ART_UNC_COUNTDOWN_ADDR,
+                6 * 6 * Pattern.PATTERN_SIZE_IN_ROM, "DrowningCountdown");
+        if (bigBubblePatterns.length == 0 && standardBubblePatterns.length == 0) {
+            return null;
+        }
+
+        int standardBubbleOffset = Sonic2Constants.ART_TILE_STANDARD_WATER_BUBBLES
+                - Sonic2Constants.ART_TILE_BUBBLES;
+        int requiredSize = Math.max(bigBubblePatterns.length,
+                standardBubbleOffset + standardBubblePatterns.length);
+        int countdownOffset = requiredSize;
+        Pattern[] patterns = createBlankPatterns(requiredSize + countdownPatterns.length);
+        System.arraycopy(bigBubblePatterns, 0, patterns, 0,
+                Math.min(bigBubblePatterns.length, patterns.length));
+        if (standardBubbleOffset >= 0 && standardBubbleOffset < patterns.length) {
+            System.arraycopy(standardBubblePatterns, 0, patterns, standardBubbleOffset,
+                    Math.min(standardBubblePatterns.length, patterns.length - standardBubbleOffset));
+        }
+        System.arraycopy(countdownPatterns, 0, patterns, countdownOffset, countdownPatterns.length);
+
+        List<SpriteMappingFrame> mappings = loadMappingFrames(Sonic2Constants.MAP_UNC_SMALL_BUBBLES_ADDR);
+        // Obj0A frames 8-$D all map the same six-tile VRAM window. The ROM's
+        // Obj0A_LoadCountdownArt replaces that window with one of six blocks
+        // from ArtUnc_Countdown. Keep the blocks side-by-side in this immutable
+        // sheet and redirect each mapping frame to its matching block. Adding
+        // art_tile $855B to mapping word $1F41 wraps the tile index to $49C,
+        // clears both flip bits through carry, and selects palette line 1.
+        for (int frame = 8; frame <= 13 && frame < mappings.size(); frame++) {
+            SpriteMappingPiece romPiece = mappings.get(frame).pieces().getFirst();
+            SpriteMappingPiece atlasPiece = new SpriteMappingPiece(
+                    romPiece.xOffset(), romPiece.yOffset(),
+                    romPiece.widthTiles(), romPiece.heightTiles(),
+                    countdownOffset + (frame - 8) * 6,
+                    false, false,
+                    1, romPiece.priority());
+            mappings.set(frame, new SpriteMappingFrame(List.of(atlasPiece)));
+        }
+        return new ObjectSpriteSheet(patterns, mappings, 0, 1);
     }
 
     public ObjectSpriteSheet loadLeavesSheet() {
@@ -666,6 +733,24 @@ public class Sonic2ObjectArt {
     public ObjectSpriteSheet loadOOZBurnFlameSheet() {
         return buildArtSheetFromRom(Sonic2Constants.ART_NEM_OOZ_BURN_ADDR,
                 Sonic2Constants.MAP_UNC_OBJ33_B_ADDR, 3, 1);
+    }
+
+    /**
+     * Load OOZ SlidingSpike sprite sheet (Object 0x43).
+     * ROM: ArtNem_SpikyThing at 0x8007C, mapping Obj43_MapUnc_23FE0.
+     */
+    public ObjectSpriteSheet loadOOZSlidingSpikeSheet() {
+        return buildArtSheetFromRom(Sonic2Constants.ART_NEM_SPIKY_THING_ADDR,
+                Sonic2Constants.MAP_UNC_OBJ43_ADDR, 2, 1);
+    }
+
+    /**
+     * Load OOZ pressure spring sprite sheet (Object 0x45).
+     * ROM: ArtNem_PushSpring at 0x80C64, mapping Obj45_MapUnc_2451A.
+     */
+    public ObjectSpriteSheet loadOOZPressureSpringSheet() {
+        return buildArtSheetFromRom(Sonic2Constants.ART_NEM_PUSH_SPRING_ADDR,
+                Sonic2Constants.MAP_UNC_OBJ45_ADDR, 2, 1);
     }
 
     /**
@@ -923,7 +1008,46 @@ public class Sonic2ObjectArt {
         if (patterns.length == 0) {
             return null;
         }
-        List<SpriteMappingFrame> mappings = loadMappingFrames(Sonic2Constants.MAP_UNC_OBJ80_WFZ_ADDR);
+        // ROM Obj80_WFZ_Init draws with make_art_tile(ArtTile_ArtNem_WfzHook_Fudge,1,0):
+        // the mappings are authored against base $03FE, but the art is loaded to
+        // $03FA (plreq ArtTile_ArtNem_WfzHook). Apply the +4 "fudge" tile offset so
+        // the chain (piece tile 0) and hook (piece tile 4) resolve to the ROM tiles;
+        // without it the chain shows the 4 leading art tiles and the hook renders the
+        // chain tiles (garbled). See s2.asm:56667-56668, s2.constants.asm:2399-2400.
+        int hookFudgeOffset = Sonic2Constants.ART_TILE_WFZ_HOOK_FUDGE - Sonic2Constants.ART_TILE_WFZ_HOOK;
+        List<SpriteMappingFrame> mappings = loadMappingFramesWithTileOffset(
+                Sonic2Constants.MAP_UNC_OBJ80_WFZ_ADDR, hookFudgeOffset);
+        return new ObjectSpriteSheet(patterns, mappings, 1, 1);
+    }
+
+    /**
+     * Load ObjBB removed WFZ unknown object sheet.
+     * ROM: ObjBB_SubObjData uses ObjBB_MapUnc_3BBA0 with
+     * make_art_tile(ArtTile_ArtNem_Unknown,1,0). ArtTile_ArtNem_Unknown is
+     * $03FA, the same tile base as ArtTile_ArtNem_WfzHook.
+     */
+    public ObjectSpriteSheet loadWfzUnknownSheet() {
+        Pattern[] patterns = safeLoadNemesisPatterns(
+                Sonic2Constants.ART_NEM_WFZ_HOOK_ADDR, "WFZUnknown");
+        if (patterns.length == 0) {
+            return null;
+        }
+        List<SpriteMappingFrame> mappings = loadMappingFrames(Sonic2Constants.MAP_UNC_OBJBB_ADDR);
+        return new ObjectSpriteSheet(patterns, mappings, 1, 1);
+    }
+
+    /**
+     * Load WFZ floating platform sheet (Obj19 / WFZPlatform).
+     * ROM: ArtNem_WfzFloatingPlatform + Obj19_MapUnc_2222A,
+     * make_art_tile(ArtTile_ArtNem_WfzFloatingPlatform,1,1).
+     */
+    public ObjectSpriteSheet loadWfzFloatingPlatformSheet() {
+        Pattern[] patterns = safeLoadNemesisPatterns(
+                Sonic2Constants.ART_NEM_WFZ_PLATFORM_ADDR, "WFZFloatingPlatform");
+        if (patterns.length == 0) {
+            return null;
+        }
+        List<SpriteMappingFrame> mappings = loadMappingFrames(Sonic2Constants.MAP_UNC_OBJ19_ADDR);
         return new ObjectSpriteSheet(patterns, mappings, 1, 1);
     }
 
@@ -938,7 +1062,8 @@ public class Sonic2ObjectArt {
             return null;
         }
         List<SpriteMappingFrame> mappings = loadMappingFrames(Sonic2Constants.MAP_UNC_OBJB2_A_ADDR);
-        return new ObjectSpriteSheet(patterns, mappings, 0, 1);
+        Pattern[] combined = createTornadoCombinedPatterns(patterns, mappings);
+        return new ObjectSpriteSheet(combined, mappings, 0, 1);
     }
 
     /**
@@ -1011,8 +1136,25 @@ public class Sonic2ObjectArt {
             return null;
         }
         List<SpriteMappingFrame> mappings = loadMappingFrames(Sonic2Constants.MAP_UNC_OBJBD_ADDR);
-        // Palette line 3 = index 2 in engine (palette 0 is universal)
-        return new ObjectSpriteSheet(patterns, mappings, 2, 1);
+        // ROM make_art_tile(ArtTile_ArtNem_WfzBeltPlatform,3,1): palette line 3 (passed directly).
+        return new ObjectSpriteSheet(patterns, mappings, 3, 1);
+    }
+
+    // ========== WFZ Stick / unused badnik (Object 0xBF) ==========
+
+    /**
+     * Load ObjBF WFZStick sprite sheet.
+     * ROM: ArtNem_WfzUnusedBadnik at 0x8DDF6, mappings ObjBF_MapUnc_3BEE0,
+     * make_art_tile(ArtTile_ArtNem_WfzUnusedBadnik,3,1).
+     */
+    public ObjectSpriteSheet loadWfzStickSheet() {
+        Pattern[] patterns = safeLoadNemesisPatterns(
+                Sonic2Constants.ART_NEM_WFZ_UNUSED_BADNIK_ADDR, "WfzUnusedBadnik");
+        if (patterns.length == 0) {
+            return null;
+        }
+        List<SpriteMappingFrame> mappings = loadMappingFrames(Sonic2Constants.MAP_UNC_OBJBF_ADDR);
+        return new ObjectSpriteSheet(patterns, mappings, 3, 1);
     }
 
     // ========== WFZ Laser (Object 0xB9) ==========
@@ -1959,6 +2101,31 @@ public class Sonic2ObjectArt {
         return S2SpriteDataLoader.loadMappingFramesWithTileOffset(reader, mappingAddr, tileOffset);
     }
 
+    private Pattern[] createTornadoCombinedPatterns(Pattern[] tornadoPatterns, List<SpriteMappingFrame> mappings) {
+        int requiredSize = Math.max(tornadoPatterns.length, computeMaxTileIndex(mappings) + 1);
+        Pattern[] combined = createBlankPatterns(requiredSize);
+
+        System.arraycopy(tornadoPatterns, 0, combined, 0, Math.min(tornadoPatterns.length, combined.length));
+        copyTornadoRiderPatterns(combined, Sonic2Constants.ART_UNC_SONIC_ADDR,
+                TORNADO_SONIC_RIDER_OFFSET, "TornadoSonicRider");
+        copyTornadoRiderPatterns(combined, Sonic2Constants.ART_UNC_TAILS_ADDR,
+                TORNADO_TAILS_RIDER_OFFSET, "TornadoTailsRider");
+
+        return combined;
+    }
+
+    private void copyTornadoRiderPatterns(Pattern[] combined, int artAddr, int targetOffset, String assetName) {
+        if (targetOffset < 0 || targetOffset >= combined.length) {
+            return;
+        }
+        Pattern[] riderPatterns = safeLoadUncompressedPatterns(
+                artAddr, TORNADO_RIDER_TILE_COUNT * Pattern.PATTERN_SIZE_IN_ROM, assetName);
+        int copyLength = Math.min(riderPatterns.length, combined.length - targetOffset);
+        if (copyLength > 0) {
+            System.arraycopy(riderPatterns, 0, combined, targetOffset, copyLength);
+        }
+    }
+
     /**
      * Build an ObjectSpriteSheet from ROM art and mapping addresses.
      * Loads Nemesis-compressed patterns and parses S2 mapping frames from ROM.
@@ -2332,7 +2499,7 @@ public class Sonic2ObjectArt {
      * @return the art configuration, or null if not available
      */
     private ZoneArtProvider.ObjectArtConfig getObjectArtConfig(int objectId, int zoneIndex) {
-        return GameModuleRegistry.getCurrent().getZoneArtProvider().getObjectArt(objectId, zoneIndex);
+        return GameServices.module().getZoneArtProvider().getObjectArt(objectId, zoneIndex);
     }
 
     /**
@@ -2897,6 +3064,15 @@ public class Sonic2ObjectArt {
         return new ObjectSpriteSheet(combined, mappings, 0, 0);
     }
 
+    public ObjectSpriteSheet loadOOZBossSheet() {
+        Pattern[] patterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_OOZ_BOSS_ADDR, "OOZBoss");
+        if (patterns.length == 0) {
+            return null;
+        }
+        List<SpriteMappingFrame> mappings = loadMappingFrames(Sonic2Constants.MAP_UNC_OOZ_BOSS_ADDR);
+        return new ObjectSpriteSheet(patterns, mappings, 0, 1);
+    }
+
     // ========== DEZ Silver Sonic / Mecha Sonic (Object 0xAF) ==========
 
     /**
@@ -3114,26 +3290,40 @@ public class Sonic2ObjectArt {
 
     /**
      * Load WFZ Robotnik sprite sheet.
-     * ROM: ArtNem_Eggpod_1 at 0x8E886, tile base $0500, palette line 0.
-     * 8 frames from ObjC6_MapUnc_3D0EE.
-     *
-     * TODO: ROM Robotnik in WFZ (ObjC5 subtype $A0) uses Ani_objC5_objC6 which references
-     * ObjC5_SubObjData4 with ArtTile_ArtKos_LevelArt ($0000) as the tile base. The mapping
-     * frames contain absolute tile indices ($500+) because the art is loaded into specific
-     * VRAM positions by the PLC system (PLCID_WfzBoss). This Nemesis-based approach loads
-     * the art directly and uses relative tile indices, which may produce slightly different
-     * visuals. When the PLC system is fully implemented, this should be converted to use
-     * KosinskiM-compressed level art tiles with absolute VRAM tile indices matching the ROM.
+     * ROM: ObjC6_SubObjData2 uses ObjC6_MapUnc_3D0EE with ArtTile_ArtKos_LevelArt ($0000).
+     * PLCID_WfzBoss loads the Robotnik art blocks at absolute VRAM tile positions:
+     * Upper=$0500, Running=$0518, Lower=$0564. The sheet is therefore composed from those
+     * ROM Nemesis blocks and mappings are shifted by -$0500.
      *
      * @return sprite sheet for WFZ Robotnik, or null on failure
      */
     public ObjectSpriteSheet loadWFZRobotnikSheet() {
         Pattern[] patterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_ROBOTNIK_UPPER_ADDR, "WfzRobotnik");
-        if (patterns.length == 0) {
+        Pattern[] runningPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_ROBOTNIK_RUNNING_ADDR, "WfzRobotnikRunning");
+        Pattern[] lowerPatterns = safeLoadNemesisPatterns(Sonic2Constants.ART_NEM_ROBOTNIK_LOWER_ADDR, "WfzRobotnikLower");
+        if (patterns.length == 0 && runningPatterns.length == 0 && lowerPatterns.length == 0) {
             return null;
         }
-        List<SpriteMappingFrame> mappings = loadMappingFrames(Sonic2Constants.MAP_UNC_WFZ_ROBOTNIK_ADDR);
-        return new ObjectSpriteSheet(patterns, mappings, 0, 1);
+
+        int runningOffset = 0x0518 - 0x0500;
+        int lowerOffset = 0x0564 - 0x0500;
+        int combinedSize = lowerOffset + lowerPatterns.length;
+        Pattern[] combined = new Pattern[combinedSize];
+        for (int i = 0; i < combinedSize; i++) {
+            combined[i] = new Pattern();
+        }
+
+        System.arraycopy(patterns, 0, combined, 0, Math.min(patterns.length, combinedSize));
+        if (runningOffset + runningPatterns.length <= combinedSize) {
+            System.arraycopy(runningPatterns, 0, combined, runningOffset, runningPatterns.length);
+        }
+        if (lowerOffset + lowerPatterns.length <= combinedSize) {
+            System.arraycopy(lowerPatterns, 0, combined, lowerOffset, lowerPatterns.length);
+        }
+
+        List<SpriteMappingFrame> mappings = loadMappingFramesWithTileOffset(
+                Sonic2Constants.MAP_UNC_WFZ_ROBOTNIK_ADDR, -0x0500);
+        return new ObjectSpriteSheet(combined, mappings, 0, 1);
     }
 
     /**

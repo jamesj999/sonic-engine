@@ -63,6 +63,24 @@ are note pitches. Values $E0-$FF are commands:
 The exact command set varies slightly between S1, S2, and S3K, which is why each game has
 its own SMPS configuration.
 
+S3K coordinate-flag commands are decoded by `Sonic3kCoordFlagHandler`. Most
+live commands have engine semantics. The ROM inventory in
+`docs/architecture/research/audio/2026-08-08-s3k-smps-meta-command-reachability.md`
+proves by fixed-point control-flow traversal that shipped S&K music (`01-33`),
+S3 music (`01-32`), and all 169 S&K-loader SFX streams (`33-DB`) never reach meta
+subcommands `SND_CMD`, `MUS_PAUSE`, or `COPY_MEM`. The same proof covers both
+native SFX tables (`33-DF`, 173 entries each) with strict full-bank traversal,
+including the differing `9B`/`AD` payloads and `DC-DF` aliases. Native dispatch
+has S&K's `DC` CreditsK music special case while S3 dispatches `DC-DF` as SFX.
+The strict CFG also treats bank-end falloff, malformed roots/pointers, and
+unknown commands/subcommands as unresolved rather than silently advancing;
+`EB` follows its ROM index-plus-pointer layout. The handler
+consumes their documented operands only to keep a custom/imported stream
+aligned; it does not claim native sound dispatch, all-track halt/resume, or
+shared-Z80-memory copying. If a supported ROM or custom stream reaches one,
+port the Z80-owned behavior at the sequencer/driver boundary using the native
+contract before treating it as implemented.
+
 ## Per-Game Driver Differences
 
 The three games use subtly different SMPS driver configurations. These are captured in
@@ -154,8 +172,9 @@ mvn exec:java -Dexec.mainClass="com.openggf.tools.disasm.RomOffsetFinder" \
 ## Comparing Against SMPSPlay
 
 [SMPSPlay](https://github.com/ValleyBell/SMPSPlay) by ValleyBell is the reference SMPS
-playback tool. It supports all three games and produces bit-accurate output from the
-same ROM data. To verify the engine's audio accuracy:
+playback tool. It supports all three games and provides the comparison target for
+the same ROM data; OpenGGF does not yet claim bit-accurate output for every command
+or register write. To verify the engine's audio accuracy:
 
 1. Play a song in SMPSPlay and capture the output.
 2. Play the same song in OpenGGF and capture the output.
@@ -167,9 +186,8 @@ Common sources of differences:
 - **Modulation timing:** Vibrato/tremolo delay and depth.
 - **DAC sample rate:** Derived from Z80 `djnz` loop timing; different base cycle counts
   per game.
-- **PSG noise behavior:** The `PSG_NOISE_SHIFT_EVERY_TOGGLE` config flag controls whether
-  the noise LFSR shifts on every toggle (MAME-style) or only on positive edges
-  (Genesis Plus GX style).
+- **PSG noise behavior:** The noise LFSR always shifts once per rising edge of the noise
+  square wave (the libvgm/hardware rule); there is no configurable every-toggle mode.
 
 ## Common Audio Bugs
 

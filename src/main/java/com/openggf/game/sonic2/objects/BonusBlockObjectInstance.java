@@ -6,8 +6,20 @@ import com.openggf.audio.GameSound;
 import com.openggf.game.sonic2.Sonic2ObjectArtKeys;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
+import com.openggf.level.objects.ObjectLifetimeOps;
 import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.TouchActorContextPolicy;
+import com.openggf.level.objects.TouchAttackBouncePolicy;
+import com.openggf.level.objects.TouchCategoryDecodeMode;
+import com.openggf.level.objects.TouchOverlapStopPolicy;
+import com.openggf.level.objects.TouchResponseListener;
+import com.openggf.level.objects.TouchResponseProvider;
+import com.openggf.level.objects.TouchResponseProfile;
+import com.openggf.level.objects.TouchResponseResult;
+import com.openggf.level.objects.TouchShieldDeflectCapability;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.TrigLookupTable;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
@@ -35,7 +47,7 @@ import java.util.List;
  *   <tr><td>Object ID</td><td>0xD8</td><td>ObjPtr_BonusBlock</td></tr>
  *   <tr><td>Bounce Velocity</td><td>$700 (1792)</td><td>line 59653</td></tr>
  *   <tr><td>Collision Flags</td><td>$D7</td><td>line 59541</td></tr>
- *   <tr><td>Collision Box</td><td>12x24 pixels</td><td>Touch_Sizes[0x17]</td></tr>
+ *   <tr><td>Collision Box</td><td>8x8 pixel radii</td><td>Touch_Sizes[0x17]</td></tr>
  *   <tr><td>width_pixels</td><td>$10 (16 px)</td><td>line 59539</td></tr>
  *   <tr><td>Sound</td><td>SndID_BonusBumper (0xD8)</td><td>line 59667</td></tr>
  *   <tr><td>Max Hits</td><td>3</td><td>line 59681</td></tr>
@@ -75,7 +87,8 @@ import java.util.List;
  * @see BumperObjectInstance Round bumper with radial physics
  * @see HexBumperObjectInstance Hex bumper with 4-direction quantized physics
  */
-public class BonusBlockObjectInstance extends AbstractObjectInstance {
+public class BonusBlockObjectInstance extends AbstractObjectInstance
+        implements TouchResponseProvider, TouchResponseListener, RewindRecreatable {
 
     // ========================================================================
     // ROM Constants
@@ -89,18 +102,20 @@ public class BonusBlockObjectInstance extends AbstractObjectInstance {
     private static final int BOUNCE_VELOCITY = 0x700;
 
     /**
-     * Collision box width = 12 pixels.
+     * Collision half-width = 8 pixels.
      * <p>
-     * ROM Reference: Touch_Sizes[0x17] at s2.asm line 84574
+     * ROM Reference: collision_flags=$D7 selects Touch_Sizes[0x17] at
+     * docs/s2disasm/s2.asm:59570 and docs/s2disasm/s2.asm:84623.
      */
-    private static final int COLLISION_WIDTH = 12;
+    private static final int COLLISION_RADIUS_X = 8;
 
     /**
-     * Collision box height = 24 pixels.
+     * Collision half-height = 8 pixels.
      * <p>
-     * ROM Reference: Touch_Sizes[0x17] at s2.asm line 84574
+     * ROM Reference: collision_flags=$D7 selects Touch_Sizes[0x17] at
+     * docs/s2disasm/s2.asm:59570 and docs/s2disasm/s2.asm:84623.
      */
-    private static final int COLLISION_HEIGHT = 24;
+    private static final int COLLISION_RADIUS_Y = 8;
 
     /**
      * Maximum hits before block is destroyed.
@@ -108,6 +123,17 @@ public class BonusBlockObjectInstance extends AbstractObjectInstance {
      * ROM Reference: s2.asm line 59681
      */
     private static final int MAX_HITS = 3;
+
+    private static final TouchResponseProfile TOUCH_RESPONSE_PROFILE = new TouchResponseProfile(
+            TouchCategoryDecodeMode.SONIC2_SPECIAL_PROPERTY,
+            true,
+            false,
+            false,
+            TouchShieldDeflectCapability.NONE,
+            0,
+            TouchAttackBouncePolicy.STANDARD_ENEMY_KILL,
+            TouchActorContextPolicy.MAIN_FULL_SIDEKICK_HURT_ONLY,
+            TouchOverlapStopPolicy.STOP_AFTER_FIRST_OVERLAP_FOR_ALL_ACTORS);
 
     // ========================================================================
     // Group Tracking (Static State)
@@ -177,14 +203,25 @@ public class BonusBlockObjectInstance extends AbstractObjectInstance {
     /** Animation timer */
     private int animTimer = 0;
 
-    /** Hit cooldown to prevent multiple hits per frame */
-    private int hitCooldown = 0;
+    /** ROM collision_property latch set by Touch_Special for P1/P2. */
+    private int collisionProperty = 0;
+
+    /** ROM objoff_30 cooldown for the main player. */
+    private int mainPlayerHitCooldown = 0;
+
+    /** ROM objoff_31 cooldown for the first sidekick. */
+    private int sidekickHitCooldown = 0;
 
     private static final int HIT_COOLDOWN_FRAMES = 4;
 
     public BonusBlockObjectInstance(ObjectSpawn spawn, String name) {
         super(spawn, name);
         initOrientation();
+    }
+
+    @Override
+    public BonusBlockObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new BonusBlockObjectInstance(ctx.spawn(), getName());
     }
 
     /**
@@ -215,16 +252,13 @@ public class BonusBlockObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) {
             return;
         }
 
-        // Update hit cooldown
-        if (hitCooldown > 0) {
-            hitCooldown--;
-        }
+        processPendingTouches(player);
 
         // Update animation timer
         if (animTimer > 0) {
@@ -233,30 +267,82 @@ public class BonusBlockObjectInstance extends AbstractObjectInstance {
                 animFrame = baseAnimFrame;
             }
         }
+    }
 
-        // Check collision with player
-        if (player != null && !player.isHurt() && !player.getDead() && hitCooldown == 0) {
-            if (checkCollision(player)) {
-                handleHit(player);
+    private void processPendingTouches(AbstractPlayableSprite player) {
+        int pending = collisionProperty;
+        if (pending == 0 && mainPlayerHitCooldown == 0 && sidekickHitCooldown == 0) {
+            return;
+        }
+
+        if (mainPlayerHitCooldown > 0) {
+            mainPlayerHitCooldown--;
+        } else if ((pending & 0x01) != 0 && player != null && !player.isHurt() && !player.getDead()) {
+            handleHit(player);
+            mainPlayerHitCooldown = HIT_COOLDOWN_FRAMES;
+        }
+
+        if (isDestroyed()) {
+            collisionProperty = 0;
+            return;
+        }
+
+        if (sidekickHitCooldown > 0) {
+            sidekickHitCooldown--;
+        } else if ((pending & 0x02) != 0) {
+            if (services().playerQuery().nativeP2OrNull() instanceof AbstractPlayableSprite sidekick
+                    && !sidekick.isHurt()
+                    && !sidekick.getDead()) {
+                handleHit(sidekick);
+                sidekickHitCooldown = HIT_COOLDOWN_FRAMES;
             }
         }
+
+        collisionProperty = 0;
     }
 
     /**
-     * Check collision using player center position.
+     * S2 TouchResponse rectangle overlap used by ObjD8's SPECIAL collision flag.
      * <p>
-     * Note: Player getX()/getY() returns top-left corner, so we use getCentreX()/getCentreY()
-     * to compare with the bonus block's center position (spawn.x(), spawn.y()).
+     * ROM references: ObjD8 sets {@code collision_flags=$D7} (docs/s2disasm/s2.asm:59570);
+     * {@code Touch_Sizes[$17]} is {@code 8,8} radii (docs/s2disasm/s2.asm:84623);
+     * {@code Touch_Boss}/SPECIAL checks use {@code x_pos-8}, {@code y_pos-(y_radius-3)},
+     * width {@code $10}, and doubled height before comparing against object radii
+     * (docs/s2disasm/s2.asm:84658-84706).
      */
-    private boolean checkCollision(AbstractPlayableSprite player) {
-        int dx = Math.abs(player.getCentreX() - spawn.x());
-        int dy = Math.abs(player.getCentreY() - spawn.y());
+    static boolean overlapsRomTouchBox(int playerCentreX, int playerCentreY, int playerYRadius,
+            int objectCentreX, int objectCentreY, int objectRadiusX, int objectRadiusY) {
+        int playerX = playerCentreX - 8;
+        int baseYRadius = Math.max(1, playerYRadius - 3);
+        int playerY = playerCentreY - baseYRadius;
+        int playerHeight = baseYRadius * 2;
+        return overlapsRomTouchBox(playerX, playerY, playerHeight,
+                objectCentreX, objectCentreY, objectRadiusX, objectRadiusY, 0x10);
+    }
 
-        int playerHalfWidth = 8; // Approximate
-        int playerHalfHeight = player.getYRadius();
+    private static boolean overlapsRomTouchBox(int playerX, int playerY, int playerHeight,
+            int objectCentreX, int objectCentreY, int objectRadiusX, int objectRadiusY, int playerWidth) {
+        int dx = objectCentreX - objectRadiusX - playerX;
+        if (dx < 0) {
+            int sum = (dx & 0xFFFF) + ((objectRadiusX * 2) & 0xFFFF);
+            if (sum <= 0xFFFF) {
+                return false;
+            }
+        } else if (dx > playerWidth) {
+            return false;
+        }
 
-        return dx < (COLLISION_WIDTH / 2 + playerHalfWidth) &&
-               dy < (COLLISION_HEIGHT / 2 + playerHalfHeight);
+        int dy = objectCentreY - objectRadiusY - playerY;
+        if (dy < 0) {
+            int sum = (dy & 0xFFFF) + ((objectRadiusY * 2) & 0xFFFF);
+            if (sum <= 0xFFFF) {
+                return false;
+            }
+        } else if (dy > playerHeight) {
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -285,8 +371,6 @@ public class BonusBlockObjectInstance extends AbstractObjectInstance {
      * </pre>
      */
     private void handleHit(AbstractPlayableSprite player) {
-        hitCooldown = HIT_COOLDOWN_FRAMES;
-
         // Apply bounce
         applyBounce(player);
 
@@ -312,9 +396,7 @@ public class BonusBlockObjectInstance extends AbstractObjectInstance {
 
             // Mark as destroyed in persistence table to prevent respawning
             ObjectManager objectManager = services().objectManager();
-            if (objectManager != null) {
-                objectManager.markRemembered(spawn);
-            }
+            ObjectLifetimeOps.markSpawnRemembered(objectManager, spawn);
 
             // ROM: Increment group destroy counter (lines 59676-59680)
             int groupIndex = getSaucerDataIndex();
@@ -331,15 +413,61 @@ public class BonusBlockObjectInstance extends AbstractObjectInstance {
         services().gameState().addScore(points);
 
         // Spawn floating points display
-        PointsObjectInstance pointsObj = new PointsObjectInstance(
+        int awardedPoints = points;
+        spawnFreeChild(() -> new PointsObjectInstance(
                 new ObjectSpawn(spawn.x(), spawn.y(), 0x29, 0, 0, false, 0),
-                services(), points);
-        services().objectManager().addDynamicObject(pointsObj);
+                services(), awardedPoints));
 
         // Trigger hit animation
         if (!isDestroyed()) {
             animFrame = HIT_FRAME_MAP[baseAnimFrame];
             animTimer = ANIM_DURATION;
+        }
+    }
+
+    @Override
+    public int getCollisionFlags() {
+        return 0xD7;
+    }
+
+    @Override
+    public int getCollisionProperty() {
+        return collisionProperty;
+    }
+
+    @Override
+    public TouchResponseProfile getTouchResponseProfile() {
+        return TOUCH_RESPONSE_PROFILE;
+    }
+
+    @Override
+    public TouchResponseProfile getTouchResponseProfile(boolean multiRegionSource) {
+        return TOUCH_RESPONSE_PROFILE;
+    }
+
+    @Override
+    public boolean usesSonic2TouchSpecialPropertyResponse() {
+        return true;
+    }
+
+    @Override
+    public boolean requiresContinuousTouchCallbacks() {
+        return true;
+    }
+
+    @Override
+    public boolean requiresRenderFlagForTouch() {
+        // S2 TouchResponse scans collision_flags directly, then ObjD8 consumes
+        // collision_property in ObjD8_Main (docs/s2disasm/s2.asm:59565-59604).
+        return false;
+    }
+
+    @Override
+    public void onTouchResponse(PlayableEntity playerEntity, TouchResponseResult result, int frameCounter) {
+        if (playerEntity instanceof AbstractPlayableSprite sprite && sprite.isCpuControlled()) {
+            collisionProperty |= 0x02;
+        } else {
+            collisionProperty |= 0x01;
         }
     }
 
@@ -378,10 +506,12 @@ public class BonusBlockObjectInstance extends AbstractObjectInstance {
                 break;
         }
 
-        // Common state changes (ROM: loc_2C806, lines 59683-59687)
+        // Common state changes (ROM: loc_2C806, docs/s2disasm/s2.asm:59687-59691).
+        // ObjD8 does not clear inertia; preserve gSpeed after the bounce.
         player.setAir(true);
+        player.setRollingJump(false);
+        player.setJumping(false);
         player.setPushing(false);
-        player.setGSpeed((short) 0);
     }
 
     /**
@@ -517,4 +647,3 @@ public class BonusBlockObjectInstance extends AbstractObjectInstance {
         return hitCount;
     }
 }
-

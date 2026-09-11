@@ -1,13 +1,12 @@
 package com.openggf.game.sonic2.specialstage;
 
 import com.openggf.graphics.GraphicsManager;
+import com.openggf.level.Palette;
 import com.openggf.level.PatternDesc;
 
 import java.util.ArrayList;
-import java.util.Comparator;
+import java.util.Arrays;
 import java.util.List;
-
-import static com.openggf.game.sonic2.specialstage.Sonic2SpecialStageConstants.TAILS_PATTERN_OFFSET;
 
 /**
  * Handles rendering for Sonic 2 Special Stage.
@@ -23,6 +22,9 @@ public class Sonic2SpecialStageRenderer {
     public static final int H32_TILES_Y = 28;
     public static final int TILE_SIZE = 8;
     public static final int H32_HEIGHT = H32_TILES_Y * TILE_SIZE;
+    private static final int PALETTE_ROW_COUNT = 4;
+    private static final int PALETTE_ROW_CONTENT_BYTES = 2 + Palette.PALETTE_SIZE * 3;
+    private static final int MAX_PALETTE_CONTENT_BYTES = PALETTE_ROW_COUNT * PALETTE_ROW_CONTENT_BYTES;
 
     private final GraphicsManager graphicsManager;
 
@@ -31,12 +33,26 @@ public class Sonic2SpecialStageRenderer {
 
     private int backgroundPatternBase;
     private int trackPatternBase;
+    private boolean staticBackgroundDirty = true;
+    private long staticBackgroundStageGeneration;
+    private long cachedBackgroundStageGeneration = -1;
+    private Object staticBackgroundContextGeneration;
+    private Object cachedBackgroundContextGeneration;
+    private byte[] cachedBackgroundMappings;
+    private byte[] cachedBackgroundPaletteContent;
+    private boolean cachedBackgroundPaletteContentInitialized;
+    private int cachedBackgroundPaletteRowMask;
     private int playerPatternBase;
     private int hudPatternBase;
     private int startPatternBase;
     private int messagesPatternBase;
+    private int tailsTextPatternBase;
 
     private List<Sonic2SpecialStagePlayer> players = new ArrayList<>();
+    private Sonic2SpecialStagePlayer[] playerOrderPrimary = new Sonic2SpecialStagePlayer[0];
+    private Sonic2SpecialStagePlayer[] playerOrderScratch = new Sonic2SpecialStagePlayer[0];
+    private Sonic2SpecialStagePlayer[] playerOrderSorted = playerOrderPrimary;
+    private int playerOrderCount;
     private Sonic2SpecialStageIntro intro;
 
     // Object rendering (Phase 4)
@@ -46,6 +62,10 @@ public class Sonic2SpecialStageRenderer {
     private int explosionPatternBase;  // For bomb explosion animation (uses separate art)
     private int emeraldPatternBase;    // For chaos emerald
     private Sonic2SpecialStageManager.Sonic2SpecialStageObjectManager objectManager;
+    private Sonic2SpecialStageObject[] objectOrderPrimary = new Sonic2SpecialStageObject[0];
+    private Sonic2SpecialStageObject[] objectOrderScratch = new Sonic2SpecialStageObject[0];
+    private Sonic2SpecialStageObject[] objectOrderSorted = objectOrderPrimary;
+    private int objectOrderCount;
     private Sonic2PerspectiveData perspectiveData;
 
     // Shadow rendering (Phase 5)
@@ -55,6 +75,7 @@ public class Sonic2SpecialStageRenderer {
 
     // Checkpoint system
     private Sonic2SpecialStageCheckpoint checkpoint;
+    private int frameCounter;
 
     /**
      * START banner sprite-piece definition (Obj5F frame0 from obj5F_a.asm).
@@ -107,9 +128,42 @@ public class Sonic2SpecialStageRenderer {
     }
 
     public void setPatternBases(int backgroundBase, int trackBase) {
+        if (this.backgroundPatternBase != backgroundBase) {
+            invalidateStaticBackground();
+        }
         this.backgroundPatternBase = backgroundBase;
         this.trackPatternBase = trackBase;
         this.playerPatternBase = trackBase + 256;
+    }
+
+    void beginStaticBackgroundStage(long stageGeneration) {
+        if (staticBackgroundStageGeneration != stageGeneration) {
+            staticBackgroundStageGeneration = stageGeneration;
+            invalidateStaticBackground();
+        }
+    }
+
+    void onRenderContextGenerationChanged(Object contextGeneration) {
+        if (staticBackgroundContextGeneration != contextGeneration) {
+            staticBackgroundContextGeneration = contextGeneration;
+            invalidateStaticBackground();
+        }
+    }
+
+    void invalidateStaticBackground() {
+        staticBackgroundDirty = true;
+    }
+
+    boolean needsStaticBackgroundRebuild(byte[] mappings) {
+        return needsStaticBackgroundRebuild(mappings, null);
+    }
+
+    boolean needsStaticBackgroundRebuild(byte[] mappings, Palette[] palettes) {
+        return staticBackgroundDirty
+                || cachedBackgroundStageGeneration != staticBackgroundStageGeneration
+                || cachedBackgroundContextGeneration != staticBackgroundContextGeneration
+                || !Arrays.equals(cachedBackgroundMappings, mappings)
+                || !paletteContentMatches(palettes);
     }
 
     public void setPlayerPatternBase(int playerBase) {
@@ -117,7 +171,14 @@ public class Sonic2SpecialStageRenderer {
     }
 
     public void setPlayers(List<Sonic2SpecialStagePlayer> players) {
+        if (this.players != players) {
+            clearPlayerRenderOrder();
+        }
         this.players = players != null ? players : new ArrayList<>();
+    }
+
+    public void setFrameCounter(int frameCounter) {
+        this.frameCounter = frameCounter;
     }
 
     public void setIntro(Sonic2SpecialStageIntro intro) {
@@ -128,6 +189,10 @@ public class Sonic2SpecialStageRenderer {
         this.hudPatternBase = hudBase;
         this.startPatternBase = startBase;
         this.messagesPatternBase = messagesBase;
+    }
+
+    public void setTailsTextPatternBase(int tailsTextPatternBase) {
+        this.tailsTextPatternBase = tailsTextPatternBase;
     }
 
     public void setObjectPatternBases(int ringBase, int bombBase) {
@@ -151,6 +216,9 @@ public class Sonic2SpecialStageRenderer {
     }
 
     public void setObjectManager(Sonic2SpecialStageManager.Sonic2SpecialStageObjectManager objectManager) {
+        if (this.objectManager != objectManager) {
+            clearObjectRenderOrder();
+        }
         this.objectManager = objectManager;
     }
 
@@ -262,6 +330,20 @@ public class Sonic2SpecialStageRenderer {
      * @param mappings Enigma-decoded mapping data (16-bit words)
      */
     public void renderBackgroundToFBO(byte[] mappings) {
+        renderBackgroundToFBO(mappings, null);
+    }
+
+    void renderBackgroundToFBO(byte[] mappings, Palette[] palettes) {
+        if (mappings == null || mappings.length < 2) {
+            return;
+        }
+        if (!needsStaticBackgroundRebuild(mappings, palettes)) {
+            return;
+        }
+        rebuildBackgroundToFBO(mappings, palettes);
+    }
+
+    void rebuildBackgroundToFBO(byte[] mappings, Palette[] palettes) {
         if (mappings == null || mappings.length < 2) {
             return;
         }
@@ -272,6 +354,7 @@ public class Sonic2SpecialStageRenderer {
         int mapWidth = H32_TILES_X; // 32 tiles wide
         int mapTotalHeight = 32;    // Background is 32 tiles tall
         int mapHeight = Math.min(wordCount / mapWidth, mapTotalHeight);
+        int usedPaletteRowMask = 0;
 
         for (int ty = 0; ty < mapHeight; ty++) {
             for (int tx = 0; tx < mapWidth; tx++) {
@@ -285,6 +368,8 @@ public class Sonic2SpecialStageRenderer {
                 // Skip empty tiles
                 if (word == 0)
                     continue;
+
+                usedPaletteRowMask |= 1 << ((word >>> 13) & 0x3);
 
                 reusableDesc.set(word);
                 PatternDesc desc = reusableDesc;
@@ -303,6 +388,79 @@ public class Sonic2SpecialStageRenderer {
         }
 
         graphicsManager.flushPatternBatch();
+        cachedBackgroundMappings = mappings.clone();
+        cachedBackgroundPaletteRowMask = usedPaletteRowMask;
+        retainPaletteContent(palettes);
+        cachedBackgroundStageGeneration = staticBackgroundStageGeneration;
+        cachedBackgroundContextGeneration = staticBackgroundContextGeneration;
+        staticBackgroundDirty = false;
+    }
+
+    private boolean paletteContentMatches(Palette[] palettes) {
+        if (!cachedBackgroundPaletteContentInitialized) {
+            return false;
+        }
+        int required = Integer.bitCount(cachedBackgroundPaletteRowMask) * PALETTE_ROW_CONTENT_BYTES;
+        if (cachedBackgroundPaletteContent == null
+                || cachedBackgroundPaletteContent.length < required) {
+            return false;
+        }
+        int offset = 0;
+        for (int row = 0; row < PALETTE_ROW_COUNT; row++) {
+            if ((cachedBackgroundPaletteRowMask & (1 << row)) == 0) {
+                continue;
+            }
+            if (cachedBackgroundPaletteContent[offset++] != (byte) row) {
+                return false;
+            }
+            Palette palette = palettes != null && row < palettes.length ? palettes[row] : null;
+            boolean present = palette != null;
+            if (cachedBackgroundPaletteContent[offset++] != (byte) (present ? 1 : 0)) {
+                return false;
+            }
+            if (present) {
+                for (int color = 0; color < Palette.PALETTE_SIZE; color++) {
+                    Palette.Color value = palette.getColor(color);
+                    if (cachedBackgroundPaletteContent[offset++] != value.r
+                            || cachedBackgroundPaletteContent[offset++] != value.g
+                            || cachedBackgroundPaletteContent[offset++] != value.b) {
+                        return false;
+                    }
+                }
+            } else {
+                offset += Palette.PALETTE_SIZE * 3;
+            }
+        }
+        return true;
+    }
+
+    private void retainPaletteContent(Palette[] palettes) {
+        cachedBackgroundPaletteContentInitialized = true;
+        if (cachedBackgroundPaletteContent == null
+                || cachedBackgroundPaletteContent.length != MAX_PALETTE_CONTENT_BYTES) {
+            cachedBackgroundPaletteContent = new byte[MAX_PALETTE_CONTENT_BYTES];
+        }
+        int offset = 0;
+        for (int row = 0; row < PALETTE_ROW_COUNT; row++) {
+            if ((cachedBackgroundPaletteRowMask & (1 << row)) == 0) {
+                continue;
+            }
+            cachedBackgroundPaletteContent[offset++] = (byte) row;
+            Palette palette = palettes != null && row < palettes.length ? palettes[row] : null;
+            cachedBackgroundPaletteContent[offset++] = (byte) (palette != null ? 1 : 0);
+            if (palette != null) {
+                for (int color = 0; color < Palette.PALETTE_SIZE; color++) {
+                    Palette.Color value = palette.getColor(color);
+                    cachedBackgroundPaletteContent[offset++] = value.r;
+                    cachedBackgroundPaletteContent[offset++] = value.g;
+                    cachedBackgroundPaletteContent[offset++] = value.b;
+                }
+            } else {
+                Arrays.fill(cachedBackgroundPaletteContent, offset,
+                        offset + Palette.PALETTE_SIZE * 3, (byte) 0);
+                offset += Palette.PALETTE_SIZE * 3;
+            }
+        }
     }
 
     /**
@@ -560,39 +718,61 @@ public class Sonic2SpecialStageRenderer {
 
     /**
      * Renders all player sprites with their shadows.
-     * Players are sorted by priority (higher priority = drawn later = on top).
-     * Shadows are rendered first (behind players).
+     * Players are sorted by priority, but a LOWER priority(a0) value wins ROM's
+     * Sprite_Table ordering and ends up in front, so bodies are drawn from the
+     * highest priority bucket down to the lowest. Shadows are rendered first
+     * (behind players).
      */
     public void renderPlayers() {
-        if (players.isEmpty()) {
+        int playerCount = preparePlayerRenderOrder();
+        if (playerCount == 0) {
             return;
         }
 
-        List<Sonic2SpecialStagePlayer> sortedPlayers = new ArrayList<>(players);
-        sortedPlayers.sort(Comparator.comparingInt(Sonic2SpecialStagePlayer::getPriority));
+        // ROM's DisplaySprite queues priority(a0) into an ascending Object_Display_Lists
+        // index (s2.asm:30358-30363), and BuildSprites drains those lists low-index first
+        // (s2.asm:30523-30636), so a lower priority(a0) value always reaches Sprite_Table
+        // first. Same-tile-priority VDP sprites earlier in Sprite_Table occlude later ones
+        // (SpriteManager.java's MainCharacter/Sidekick slot-0/1 note), so the LOWEST
+        // priority(a0) value ends up in front. This painter's-algorithm renderer must
+        // therefore submit the highest priority bucket first and the lowest last, for
+        // both the shadow and body passes so they share one order.
+        int minPriority = playerRenderOrderAt(0).getPriority();
+        int maxPriority = playerRenderOrderAt(playerCount - 1).getPriority() + 1;
 
-        // Render shadows first using shadow batch (VDP shadow/highlight mode)
-        // Shadows must render before players so they appear behind them
+        // Render shadows first using shadow batch (VDP shadow/highlight mode).
+        // Shadows must render before players so they appear behind them.
         if (shadowFlatPatternBase > 0 || shadowDiagPatternBase > 0 || shadowSidePatternBase > 0) {
             graphicsManager.beginShadowBatch();
-            for (Sonic2SpecialStagePlayer player : sortedPlayers) {
-                // Don't render shadow when invulnerability flash is active
-                if (player.isInvulnerable() && (System.currentTimeMillis() & 0x80) != 0) {
-                    continue;
+            for (int priority = maxPriority; priority >= minPriority; priority--) {
+                for (int i = 0; i < playerCount; i++) {
+                    Sonic2SpecialStagePlayer player = playerRenderOrderAt(i);
+                    if (player.getPriority() == priority && !isInvulnerabilityFlashHidden(player)) {
+                        renderPlayerShadow(player);
+                    }
                 }
-                renderPlayerShadow(player);
             }
             graphicsManager.flushShadowBatch();
         }
 
-        // Render players on top of shadows using normal pattern batch
+        // Render players on top of shadows using normal pattern batch.
+        // Obj88 occupies a later ROM object slot than either player body, so submit it
+        // one bucket before (i.e. numerically above) the body when they'd otherwise tie.
         graphicsManager.beginPatternBatch();
-        for (Sonic2SpecialStagePlayer player : sortedPlayers) {
-            if (player.isInvulnerable() && (System.currentTimeMillis() & 0x80) != 0) {
-                continue;
+        for (int priority = maxPriority; priority >= minPriority; priority--) {
+            for (int i = 0; i < playerCount; i++) {
+                Sonic2SpecialStagePlayer player = playerRenderOrderAt(i);
+                if (player.getPriority() + 1 == priority && !isInvulnerabilityFlashHidden(player)
+                        && player.shouldRenderTailsTails()) {
+                    renderTailsTails(player);
+                }
             }
-
-            renderPlayer(player);
+            for (int i = 0; i < playerCount; i++) {
+                Sonic2SpecialStagePlayer player = playerRenderOrderAt(i);
+                if (player.getPriority() == priority && !isInvulnerabilityFlashHidden(player)) {
+                    renderPlayer(player);
+                }
+            }
         }
 
         graphicsManager.flushPatternBatch();
@@ -603,7 +783,7 @@ public class Sonic2SpecialStageRenderer {
      *
      * Special stage sprites are NOT simple grids - they consist of multiple
      * sprite pieces at different positions with different sizes.
-     * Data is from obj09.asm (Sonic) / obj0A.asm (Tails) mappings.
+     * Data is from Obj09 (Sonic) / Obj10 (Tails) mappings.
      *
      * @param player The player to render
      */
@@ -618,15 +798,12 @@ public class Sonic2SpecialStageRenderer {
         // No need to invert since SSAnglePos already adds SS_Offset_Y
         int screenY = player.getYPos();
 
-        int basePattern = playerPatternBase;
-        if (player.getPlayerType() == Sonic2SpecialStagePlayer.PlayerType.TAILS) {
-            basePattern += TAILS_PATTERN_OFFSET;
-        }
-
         // Get the mapping frame for current animation
         int mappingFrame = player.getMappingFrame();
         Sonic2SpecialStageSpriteMappings.SpriteFrame frame =
-            Sonic2SpecialStageSpriteMappings.getSonicFrame(mappingFrame);
+                player.getPlayerType() == Sonic2SpecialStagePlayer.PlayerType.TAILS
+                        ? Sonic2SpecialStageSpriteMappings.getTailsFrame(mappingFrame)
+                        : Sonic2SpecialStageSpriteMappings.getSonicFrame(mappingFrame);
 
         boolean playerXFlip = player.isRenderXFlip();
         boolean playerYFlip = player.isRenderYFlip();
@@ -660,7 +837,7 @@ public class Sonic2SpecialStageRenderer {
                     int srcRow = finalVFlip ? (piece.heightTiles - 1 - ty) : ty;
                     // Column-major index: column * height + row
                     int tileIndexInPiece = srcCol * piece.heightTiles + srcRow;
-                    int patternId = basePattern + piece.tileIndex + tileIndexInPiece;
+                    int patternId = playerPatternBase + piece.tileIndex + tileIndexInPiece;
 
                     reusableDesc.set(0);
                     PatternDesc desc = reusableDesc;
@@ -678,6 +855,39 @@ public class Sonic2SpecialStageRenderer {
                     int tileScreenY = screenY + pieceY + tileOffsetY;
 
                     graphicsManager.renderPatternWithId(patternId, desc, tileScreenX, tileScreenY);
+                }
+            }
+        }
+    }
+
+    private void renderTailsTails(Sonic2SpecialStagePlayer player) {
+        final int screenCenterOffset = (320 - 256) / 2;
+        int screenX = screenCenterOffset + player.getXPos();
+        int screenY = player.getYPos();
+        boolean playerXFlip = player.isRenderXFlip();
+        boolean playerYFlip = player.isRenderYFlip();
+        Sonic2SpecialStageSpriteMappings.SpriteFrame frame =
+                Sonic2SpecialStageSpriteMappings.getTailsTailsFrame(player.getTailsTailsMappingFrame());
+
+        for (Sonic2SpecialStageSpriteMappings.SpritePiece piece : frame.pieces) {
+            int pieceX = playerXFlip ? -piece.xOffset - piece.widthTiles * TILE_SIZE : piece.xOffset;
+            int pieceY = playerYFlip ? -piece.yOffset - piece.heightTiles * TILE_SIZE : piece.yOffset;
+            boolean finalHFlip = piece.hFlip ^ playerXFlip;
+            boolean finalVFlip = piece.vFlip ^ playerYFlip;
+            for (int tx = 0; tx < piece.widthTiles; tx++) {
+                for (int ty = 0; ty < piece.heightTiles; ty++) {
+                    int srcCol = finalHFlip ? piece.widthTiles - 1 - tx : tx;
+                    int srcRow = finalVFlip ? piece.heightTiles - 1 - ty : ty;
+                    int patternId = playerPatternBase + piece.tileIndex + srcCol * piece.heightTiles + srcRow;
+                    reusableDesc.set(0);
+                    reusableDesc.setPriority(true);
+                    reusableDesc.setPaletteIndex(2);
+                    reusableDesc.setHFlip(finalHFlip);
+                    reusableDesc.setVFlip(finalVFlip);
+                    reusableDesc.setPatternIndex(patternId & 0x7FF);
+                    graphicsManager.renderPatternWithId(patternId, reusableDesc,
+                            screenX + pieceX + tx * TILE_SIZE,
+                            screenY + pieceY + ty * TILE_SIZE);
                 }
             }
         }
@@ -769,17 +979,16 @@ public class Sonic2SpecialStageRenderer {
      * Uses distinctive colored patterns to represent each player.
      */
     public void renderPlaceholderPlayers() {
+        int playerCount = preparePlayerRenderOrder();
         if (players.isEmpty()) {
             return;
         }
 
-        List<Sonic2SpecialStagePlayer> sortedPlayers = new ArrayList<>(players);
-        sortedPlayers.sort(Comparator.comparingInt(Sonic2SpecialStagePlayer::getPriority));
-
         graphicsManager.beginPatternBatch();
 
-        for (Sonic2SpecialStagePlayer player : sortedPlayers) {
-            if (player.isInvulnerable() && (System.currentTimeMillis() & 0x80) != 0) {
+        for (int i = 0; i < playerCount; i++) {
+            Sonic2SpecialStagePlayer player = playerRenderOrderAt(i);
+            if (isInvulnerabilityFlashHidden(player)) {
                 continue;
             }
 
@@ -825,6 +1034,51 @@ public class Sonic2SpecialStageRenderer {
         graphicsManager.flushPatternBatch();
     }
 
+    private static boolean isPlayerRenderEligible(Sonic2SpecialStagePlayer player) {
+        return player.isSpawned()
+                && player.getRoutine() != Sonic2SpecialStagePlayer.RoutineState.INIT;
+    }
+
+    int preparePlayerRenderOrder() {
+        int previousCount = playerOrderCount;
+        int requestedCount = players.size();
+        ensurePlayerOrderCapacity(requestedCount);
+        int writtenCount = 0;
+        try {
+            for (int i = 0; i < requestedCount; i++) {
+                Sonic2SpecialStagePlayer player = players.get(i);
+                if (isPlayerRenderEligible(player)) {
+                    playerOrderPrimary[writtenCount++] = player;
+                }
+            }
+            clearRange(playerOrderPrimary, writtenCount, previousCount);
+            clearRange(playerOrderScratch, 0, previousCount);
+            playerOrderSorted = stableSortPlayers(
+                    playerOrderPrimary, playerOrderScratch, writtenCount);
+            playerOrderCount = writtenCount;
+            return writtenCount;
+        } catch (RuntimeException | Error failure) {
+            int clearThrough = Math.max(previousCount,
+                    Math.max(writtenCount, requestedCount));
+            clearRange(playerOrderPrimary, 0, clearThrough);
+            clearRange(playerOrderScratch, 0, clearThrough);
+            playerOrderSorted = playerOrderPrimary;
+            playerOrderCount = 0;
+            throw failure;
+        }
+    }
+
+    Sonic2SpecialStagePlayer playerRenderOrderAt(int index) {
+        if (index < 0 || index >= playerOrderCount) {
+            throw new IndexOutOfBoundsException(index);
+        }
+        return playerOrderSorted[index];
+    }
+
+    private boolean isInvulnerabilityFlashHidden(Sonic2SpecialStagePlayer player) {
+        return player.isInvulnerable() && ((frameCounter >> 3) & 1) != 0;
+    }
+
     // ========== Intro UI Rendering ==========
 
     /**
@@ -856,7 +1110,8 @@ public class Sonic2SpecialStageRenderer {
 
     /**
      * Renders the START banner sprite using the real Obj5F frame0 sprite pieces.
-     * During WAIT1 phase, renders individual pieces flying off instead of the full banner.
+     * During the Obj5F child-flight window (WAIT1 into the overlapping WAIT2
+     * countdown), renders individual pieces instead of the full banner.
      *
      * Mega Drive coordinate system: Y=0 is at the TOP of the screen.
      * intro.getBannerX()/getBannerY() are in that same space.
@@ -1205,6 +1460,11 @@ public class Sonic2SpecialStageRenderer {
     private static final int HUD_TILE_SONIC_END = 0x04;   // " SONIC" last tile
     private static final int HUD_TILE_RING = 0x0A;        // "RING" - 4x2 tiles
     private static final int HUD_TILE_S = 0x3C;           // "S" suffix - 1x2 tiles
+    private static final int HUD_TILE_TOTAL = 0x26;
+
+    /** Character composition and ROM-owned per-player ring counters for Obj5E/Obj87. */
+    public record RingHudState(boolean sonicActive, boolean tailsActive,
+                               int sonicRings, int tailsRings, int totalRings) { }
 
     /**
      * Renders the ring counter HUD during gameplay.
@@ -1220,63 +1480,68 @@ public class Sonic2SpecialStageRenderer {
      * @param ringCount Current number of rings collected
      */
     public void renderRingCounter(int ringCount) {
+        renderRingCounter(new RingHudState(true, false, ringCount, 0, ringCount));
+    }
+
+    public void renderRingCounter(RingHudState state) {
         graphicsManager.beginPatternBatch();
 
-        final int H32_WIDTH = 256;
-        final int SCREEN_CENTER_OFFSET = (320 - H32_WIDTH) / 2;
-
-        // For single-player Sonic, from SSHUDLayout SSHUD_Sonic: X = $D4 (212)
-        // From obj5E mapping, pieces are offset from this center
-        // Adjusted by -6 for better centering in our viewport
-        final int objectCenterX = SCREEN_CENTER_OFFSET + 0xD4 - 6;  // 32 + 212 - 6 = 238
-
-        // Y positions from obj5E mapping (relative to object, which is at y=0 for HUD)
-        final int sonicY = 0x10;   // 16 - top row for " SONIC"
-        final int ringsY = 0x18;   // 24 - bottom row for "RINGS"
-
-        // Palette assignments from spritePiece definitions
-        final int sonicPalette = 1;  // " SONIC" uses palette 1 (blue)
-        final int ringsPalette = 2;  // "RINGS" and digits use palette 2
-
-        // ===== Render " SONIC" label (palette 1) =====
-        // From mapping: 4x1 at x=-$60 (-96) + 1x1 at x=-$40 (-64)
-        int sonicX1 = objectCenterX - 0x60;  // First 4 tiles at -96 offset
-        int sonicX2 = objectCenterX - 0x40;  // Last tile at -64 offset
-        renderHudLabel(sonicX1, sonicY, HUD_TILE_SONIC, 4, 1, sonicPalette);
-        renderHudLabel(sonicX2, sonicY, HUD_TILE_SONIC_END, 1, 1, sonicPalette);
-
-        // ===== Render "RINGS" label (palette 2) =====
-        // From mapping: "RING" 4x2 at x=-$68 (-104) + "S" 1x2 at x=-$48 (-72)
-        int ringX = objectCenterX - 0x68;    // "RING" at -104 offset
-        int sX = objectCenterX - 0x48;       // "S" at -72 offset
-        renderHudLabel(ringX, ringsY, HUD_TILE_RING, 4, 2, ringsPalette);
-        renderHudLabel(sX, ringsY, HUD_TILE_S, 1, 2, ringsPalette);
-
-        // ===== Render ring count digits (palette 2) =====
-        // Position digits after "RINGS" label with 4px spacer
-        // "S" ends at sX + 8, then add 4px gap
-        int digitX = sX + 8 + 4;  // 4px spacer after "S"
-        int digitY = 0x20;  // 32 - from Obj87
-
-        // Hundreds digit
-        if (ringCount >= 100) {
-            int hundreds = (ringCount / 100) % 10;
-            renderHudDigit(digitX, digitY, hundreds, ringsPalette);
-            digitX += 8;
+        final int viewportX = (320 - H32_TILES_X * TILE_SIZE) / 2;
+        boolean team = state.sonicActive() && state.tailsActive();
+        if (team) {
+            renderSonicHudFrame(viewportX + 0x80);
+            renderTailsHudFrame(viewportX + 0x80);
+            renderTotalHudFrame(viewportX + 0x80);
+            renderLeftAlignedDigits(state.sonicRings(), viewportX + 0x48);
+            renderLeftAlignedDigits(state.tailsRings(), viewportX + 0xE0);
+            renderCenteredTotalDigits(state.totalRings(), viewportX);
+        } else if (state.tailsActive()) {
+            renderTailsHudFrame(viewportX + 0x38);
+            renderLeftAlignedDigits(state.tailsRings(), viewportX + 0x9C);
+        } else {
+            renderSonicHudFrame(viewportX + 0xD4);
+            renderLeftAlignedDigits(state.sonicRings(), viewportX + 0x9C);
         }
-
-        // Tens digit (show if >= 10)
-        if (ringCount >= 10) {
-            int tens = (ringCount / 10) % 10;
-            renderHudDigit(digitX, digitY, tens, ringsPalette);
-            digitX += 8;
-        }
-
-        // Ones digit (always shown)
-        int ones = ringCount % 10;
-        renderHudDigit(digitX, digitY, ones, ringsPalette);
 
         graphicsManager.flushPatternBatch();
+    }
+
+    private void renderSonicHudFrame(int objectX) {
+        renderHudLabel(objectX - 0x60, 0x10, HUD_TILE_SONIC, 4, 1, 1);
+        renderHudLabel(objectX - 0x40, 0x10, HUD_TILE_SONIC_END, 1, 1, 1);
+        renderHudLabel(objectX - 0x68, 0x18, HUD_TILE_RING, 4, 2, 2);
+        renderHudLabel(objectX - 0x48, 0x18, HUD_TILE_S, 1, 2, 2);
+    }
+
+    private void renderTailsHudFrame(int objectX) {
+        renderLabel(tailsTextPatternBase, objectX + 0x38, 0x10, 0, 4, 1, 2);
+        renderLabel(tailsTextPatternBase, objectX + 0x58, 0x10, 4, 1, 1, 2);
+        renderHudLabel(objectX + 0x30, 0x18, HUD_TILE_RING, 4, 2, 2);
+        renderHudLabel(objectX + 0x50, 0x18, HUD_TILE_S, 1, 2, 2);
+    }
+
+    private void renderTotalHudFrame(int objectX) {
+        renderHudLabel(objectX - 0x14, 0x10, HUD_TILE_TOTAL, 4, 4, 2);
+        renderHudLabel(objectX + 0x0C, 0x10, HUD_TILE_TOTAL + 0x10, 1, 4, 2);
+    }
+
+    private void renderLeftAlignedDigits(int count, int x) {
+        int value = Math.max(0, count);
+        if (value >= 100) {
+            renderHudDigit(x, 0x20, (value / 100) % 10, 2);
+            x += 8;
+        }
+        if (value >= 10) {
+            renderHudDigit(x, 0x20, (value / 10) % 10, 2);
+            x += 8;
+        }
+        renderHudDigit(x, 0x20, value % 10, 2);
+    }
+
+    private void renderCenteredTotalDigits(int count, int viewportX) {
+        int value = Math.max(0, count);
+        int x = viewportX + (value >= 100 ? 0x78 : value >= 10 ? 0x7C : 0x80);
+        renderLeftAlignedDigits(value, x);
     }
 
     /**
@@ -1291,11 +1556,16 @@ public class Sonic2SpecialStageRenderer {
      * @param paletteIndex Palette to use
      */
     private void renderHudLabel(int x, int y, int tileOffset, int widthTiles, int heightTiles, int paletteIndex) {
+        renderLabel(hudPatternBase, x, y, tileOffset, widthTiles, heightTiles, paletteIndex);
+    }
+
+    private void renderLabel(int patternBase, int x, int y, int tileOffset,
+                             int widthTiles, int heightTiles, int paletteIndex) {
         // VDP uses column-major tile ordering
         for (int tx = 0; tx < widthTiles; tx++) {
             for (int ty = 0; ty < heightTiles; ty++) {
                 int localTileIndex = tx * heightTiles + ty;
-                int patternId = hudPatternBase + tileOffset + localTileIndex;
+                int patternId = patternBase + tileOffset + localTileIndex;
 
                 reusableDesc.set(0);
                     PatternDesc desc = reusableDesc;
@@ -1455,12 +1725,11 @@ public class Sonic2SpecialStageRenderer {
 
         List<Sonic2SpecialStageObject> objects = objectManager.getActiveObjects();
         if (objects.isEmpty()) {
+            clearObjectRenderOrder();
             return;
         }
 
-        // Sort by depth (higher depth = further away = draw first)
-        List<Sonic2SpecialStageObject> sortedObjects = new ArrayList<>(objects);
-        sortedObjects.sort((a, b) -> Integer.compare(b.getDepth(), a.getDepth()));
+        int objectCount = prepareObjectRenderOrder(objects);
 
         final int H32_WIDTH = 256;
         final int SCREEN_CENTER_OFFSET = (320 - H32_WIDTH) / 2;
@@ -1469,7 +1738,8 @@ public class Sonic2SpecialStageRenderer {
         // Only render shadows if shadow art is loaded
         if (shadowFlatPatternBase > 0 || shadowDiagPatternBase > 0 || shadowSidePatternBase > 0) {
             graphicsManager.beginShadowBatch();
-            for (Sonic2SpecialStageObject obj : sortedObjects) {
+            for (int i = 0; i < objectCount; i++) {
+                Sonic2SpecialStageObject obj = objectRenderOrderAt(i);
                 if (!obj.isOnScreen()) {
                     continue;
                 }
@@ -1491,7 +1761,8 @@ public class Sonic2SpecialStageRenderer {
 
         // Render objects on top of shadows using normal pattern batch
         graphicsManager.beginPatternBatch();
-        for (Sonic2SpecialStageObject obj : sortedObjects) {
+        for (int i = 0; i < objectCount; i++) {
+            Sonic2SpecialStageObject obj = objectRenderOrderAt(i);
             if (!obj.isOnScreen()) {
                 continue;
             }
@@ -1514,6 +1785,188 @@ public class Sonic2SpecialStageRenderer {
         }
 
         graphicsManager.flushPatternBatch();
+    }
+
+    int prepareObjectRenderOrder(List<Sonic2SpecialStageObject> objects) {
+        int requestedCount = objects.size();
+        int previousCount = objectOrderCount;
+        ensureObjectOrderCapacity(requestedCount);
+        int writtenCount = 0;
+        try {
+            for (; writtenCount < requestedCount; writtenCount++) {
+                objectOrderPrimary[writtenCount] = objects.get(writtenCount);
+            }
+            clearRange(objectOrderPrimary, requestedCount, previousCount);
+            clearRange(objectOrderScratch, 0, previousCount);
+            objectOrderSorted = stableSortObjects(
+                    objectOrderPrimary, objectOrderScratch, requestedCount);
+            objectOrderCount = requestedCount;
+            return requestedCount;
+        } catch (RuntimeException | Error failure) {
+            int clearThrough = Math.max(previousCount,
+                    Math.max(writtenCount, requestedCount));
+            clearRange(objectOrderPrimary, 0, clearThrough);
+            clearRange(objectOrderScratch, 0, clearThrough);
+            objectOrderSorted = objectOrderPrimary;
+            objectOrderCount = 0;
+            throw failure;
+        }
+    }
+
+    Sonic2SpecialStageObject objectRenderOrderAt(int index) {
+        if (index < 0 || index >= objectOrderCount) {
+            throw new IndexOutOfBoundsException(index);
+        }
+        return objectOrderSorted[index];
+    }
+
+    private void ensurePlayerOrderCapacity(int required) {
+        if (playerOrderPrimary.length >= required) {
+            return;
+        }
+        int capacity = growCapacity(playerOrderPrimary.length, required);
+        playerOrderPrimary = Arrays.copyOf(playerOrderPrimary, capacity);
+        playerOrderScratch = Arrays.copyOf(playerOrderScratch, capacity);
+        playerOrderSorted = playerOrderPrimary;
+    }
+
+    private void ensureObjectOrderCapacity(int required) {
+        if (objectOrderPrimary.length >= required) {
+            return;
+        }
+        int capacity = growCapacity(objectOrderPrimary.length, required);
+        objectOrderPrimary = Arrays.copyOf(objectOrderPrimary, capacity);
+        objectOrderScratch = Arrays.copyOf(objectOrderScratch, capacity);
+        objectOrderSorted = objectOrderPrimary;
+    }
+
+    private static int growCapacity(int current, int required) {
+        int doubled = current == 0 ? 4 : current << 1;
+        return Math.max(required, doubled);
+    }
+
+    private void clearPlayerRenderOrder() {
+        clearRange(playerOrderPrimary, 0, playerOrderCount);
+        clearRange(playerOrderScratch, 0, playerOrderCount);
+        playerOrderSorted = playerOrderPrimary;
+        playerOrderCount = 0;
+    }
+
+    private void clearObjectRenderOrder() {
+        clearRange(objectOrderPrimary, 0, objectOrderCount);
+        clearRange(objectOrderScratch, 0, objectOrderCount);
+        objectOrderSorted = objectOrderPrimary;
+        objectOrderCount = 0;
+    }
+
+    private static void clearRange(Object[] values, int from, int previousCount) {
+        if (from < previousCount) {
+            Arrays.fill(values, from, previousCount, null);
+        }
+    }
+
+    private static Sonic2SpecialStagePlayer[] stableSortPlayers(
+            Sonic2SpecialStagePlayer[] primary,
+            Sonic2SpecialStagePlayer[] scratch,
+            int count) {
+        Sonic2SpecialStagePlayer[] source = primary;
+        Sonic2SpecialStagePlayer[] destination = scratch;
+        for (int width = 1; width < count; width = nextMergeWidth(width, count)) {
+            for (int start = 0; start < count; start += width << 1) {
+                int middle = Math.min(start + width, count);
+                int end = Math.min(start + (width << 1), count);
+                mergePlayers(source, destination, start, middle, end);
+            }
+            Sonic2SpecialStagePlayer[] swap = source;
+            source = destination;
+            destination = swap;
+        }
+        return source;
+    }
+
+    private static void mergePlayers(
+            Sonic2SpecialStagePlayer[] source,
+            Sonic2SpecialStagePlayer[] destination,
+            int start,
+            int middle,
+            int end) {
+        int left = start;
+        int right = middle;
+        for (int out = start; out < end; out++) {
+            if (right >= end || (left < middle
+                    && playerOrdersBeforeOrTiesWith(source[left], source[right]))) {
+                destination[out] = source[left++];
+            } else {
+                destination[out] = source[right++];
+            }
+        }
+    }
+
+    /**
+     * Sonic's Obj09 is always MainCharacter and Tails' Obj09 instance is always
+     * Sidekick, the first and second objects respectively (s2.constants.asm:1101-1103),
+     * so Sonic's sprite always reaches {@code Sprite_Table} first each frame
+     * (s2.asm:30523-30594). Same-priority VDP sprites earlier in the table occlude
+     * later ones, so when both players' depth-derived priority ties
+     * (s2.asm:69505-69544), the sidekick must sort first here (rendered first,
+     * ends up underneath) and the main character last (rendered last, stays on
+     * top), matching ROM instead of the incidental original-order stability used
+     * for every other tie.
+     */
+    private static boolean playerOrdersBeforeOrTiesWith(
+            Sonic2SpecialStagePlayer left, Sonic2SpecialStagePlayer right) {
+        int leftPriority = left.getPriority();
+        int rightPriority = right.getPriority();
+        if (leftPriority != rightPriority) {
+            return leftPriority < rightPriority;
+        }
+        boolean leftIsSidekick = !left.isMainCharacter();
+        boolean rightIsSidekick = !right.isMainCharacter();
+        if (leftIsSidekick != rightIsSidekick) {
+            return leftIsSidekick;
+        }
+        return true;
+    }
+
+    private static Sonic2SpecialStageObject[] stableSortObjects(
+            Sonic2SpecialStageObject[] primary,
+            Sonic2SpecialStageObject[] scratch,
+            int count) {
+        Sonic2SpecialStageObject[] source = primary;
+        Sonic2SpecialStageObject[] destination = scratch;
+        for (int width = 1; width < count; width = nextMergeWidth(width, count)) {
+            for (int start = 0; start < count; start += width << 1) {
+                int middle = Math.min(start + width, count);
+                int end = Math.min(start + (width << 1), count);
+                mergeObjects(source, destination, start, middle, end);
+            }
+            Sonic2SpecialStageObject[] swap = source;
+            source = destination;
+            destination = swap;
+        }
+        return source;
+    }
+
+    private static void mergeObjects(
+            Sonic2SpecialStageObject[] source,
+            Sonic2SpecialStageObject[] destination,
+            int start,
+            int middle,
+            int end) {
+        int left = start;
+        int right = middle;
+        for (int out = start; out < end; out++) {
+            if (right >= end || (left < middle
+                    && source[left].getDepth() >= source[right].getDepth())) {
+                destination[out] = source[left++];
+            } else {
+                destination[out] = source[right++];
+            }
+        }
+    }
+
+    private static int nextMergeWidth(int width, int count) {
+        return width > count / 2 ? count : width << 1;
     }
 
     /**
@@ -1884,6 +2337,7 @@ public class Sonic2SpecialStageRenderer {
      */
     private void renderCheckpointHand(int screenCenterOffset) {
         int handX = screenCenterOffset + checkpoint.getHandX();
+        int wingsY = checkpoint.getWingsY();
         int handY = checkpoint.getHandY();
         boolean thumbsUp = checkpoint.isHandThumbsUp();
 
@@ -1891,7 +2345,7 @@ public class Sonic2SpecialStageRenderer {
         final int handPalette = 1;
 
         // Render wings first (Frame $14 = Map_obj5A_00F4) - behind hand
-        renderCheckpointWingsFrame20(handX, handY, handPalette);
+        renderCheckpointWingsFrame20(handX, wingsY, handPalette);
 
         // Render hand (Frame $15 = Map_obj5A_0136)
         // vFlip = !thumbsUp (thumbs down when failing)

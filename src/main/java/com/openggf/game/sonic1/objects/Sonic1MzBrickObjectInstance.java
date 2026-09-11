@@ -12,6 +12,8 @@ import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
+import com.openggf.level.objects.SolidRoutineProfile;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.ObjectTerrainUtils;
@@ -41,7 +43,7 @@ import java.util.List;
  * Reference: docs/s1disasm/_incObj/46 MZ Bricks.asm
  */
 public class Sonic1MzBrickObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, SpawnRewindRecreatable {
 
     // From disassembly: move.w #$1B,d1
     private static final int HALF_WIDTH = 0x1B;
@@ -120,7 +122,7 @@ public class Sonic1MzBrickObjectInstance extends AbstractObjectInstance
         return y;
     }
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // From disassembly: tst.b obRender(a0) / bpl.s .chkdel
         // Only process behavior when on-screen (render flag bit 7 set)
@@ -299,7 +301,7 @@ public class Sonic1MzBrickObjectInstance extends AbstractObjectInstance
 
     @Override
     public SolidObjectParams getSolidParams() {
-        return new SolidObjectParams(HALF_WIDTH, AIR_HALF_HEIGHT, GROUND_HALF_HEIGHT);
+        return SolidObjectParams.of(HALF_WIDTH, AIR_HALF_HEIGHT, GROUND_HALF_HEIGHT);
     }
 
     @Override
@@ -308,6 +310,13 @@ public class Sonic1MzBrickObjectInstance extends AbstractObjectInstance
         // ROM uses obActWid ($10) for Solid_Landed / SolidObject_InsideTop,
         // not the collision halfWidth ($1B).
         return ACTIVE_WIDTH;
+    }
+
+    @Override
+    public SolidRoutineProfile getSolidRoutineProfile() {
+        // Solid_ChkCollision rejects the right edge with BHI, so a player at
+        // exactly x_pos + 2*d1 remains a side contact and retains Status_Push.
+        return SolidRoutineProfile.fullSolid(false, true, false);
     }
 
     @Override

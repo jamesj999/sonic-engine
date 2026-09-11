@@ -23,6 +23,12 @@ public abstract class AbstractBonusStageCoordinator implements BonusStageProvide
     public boolean hasBonusStages() { return true; }
 
     @Override
+    public boolean supportsRewind() {
+        return activeType == BonusStageType.GUMBALL
+                || activeType == BonusStageType.GLOWING_SPHERE;
+    }
+
+    @Override
     public void onEnter(BonusStageType type, BonusStageState savedState) {
         this.savedState = savedState;
         this.activeType = type;
@@ -76,6 +82,7 @@ public abstract class AbstractBonusStageCoordinator implements BonusStageProvide
     @Override
     public BonusStageState getSavedState() { return savedState; }
 
+    @Override
     public BonusStageType getActiveType() { return activeType; }
 
     /** Accumulate rings during the bonus stage. Called by gumball item objects. */
@@ -96,5 +103,28 @@ public abstract class AbstractBonusStageCoordinator implements BonusStageProvide
     @Override
     public void setAwardedShield(ShieldType type) {
         this.awardedShield = type;
+    }
+
+    /**
+     * Immutable capture of the reward accumulators that objects mutate across
+     * frames during a bonus stage. Held rewind restores these so a backward
+     * seek that un-collects a gumball item rolls the pending reward totals back
+     * in lockstep with the item objects' own restored state.
+     */
+    public record BonusStageAccumulatorSnapshot(int rings, int lives, ShieldType shield) {}
+
+    /** Snapshots the live reward accumulators for rewind capture. */
+    public BonusStageAccumulatorSnapshot captureAccumulators() {
+        return new BonusStageAccumulatorSnapshot(ringsCollected, livesAwarded, awardedShield);
+    }
+
+    /** Restores reward accumulators from a rewind snapshot. */
+    public void restoreAccumulators(BonusStageAccumulatorSnapshot snapshot) {
+        if (snapshot == null) {
+            return;
+        }
+        this.ringsCollected = snapshot.rings();
+        this.livesAwarded = snapshot.lives();
+        this.awardedShield = snapshot.shield();
     }
 }

@@ -1,14 +1,15 @@
 package com.openggf.game.sonic3k.objects;
 
-import com.openggf.configuration.SonicConfiguration;
-import com.openggf.configuration.SonicConfigurationService;
+import com.openggf.debug.DebugRenderContext;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
+import com.openggf.level.objects.RomObjectCodePointerProvider;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 import com.openggf.game.PlayableEntity;
@@ -18,8 +19,8 @@ import java.util.List;
 /**
  * Object 0x28 - InvisibleBlock (Sonic 3 &amp; Knuckles).
  * <p>
- * Provides solid collision without visual representation (only renders
- * a debug wireframe when the debug view is enabled).
+ * Provides solid collision without visual representation. Its collision volume
+ * is available through the dedicated object-debug overlay.
  * <p>
  * ROM: Obj_InvisibleBlock (sonic3k.asm)
  * <p>
@@ -34,15 +35,31 @@ import java.util.List;
  * Calls SolidObjectFull2 for full solid object collision.
  */
 public class Sonic3kInvisibleBlockObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, SpawnRewindRecreatable, RomObjectCodePointerProvider {
+
+    /**
+     * Word 0 of this object's S3K SST holds its live ROM code pointer.
+     * ROM {@code Obj_InvisibleBlock} is installed from the S3K object pointer table at
+     * {@code $0001EC18} (table read from the user-supplied ROM; the
+     * label is defined at docs/skdisasm/sonic3k.asm:42661).
+     * Its whole code block lies in one bank, so the HIGH word that
+     * {@code sub_13EFC} latches into {@code Tails_CPU_interact} and compares
+     * on the next off-screen on-object frame is {@code $0001}
+     * (docs/skdisasm/sonic3k.asm:26816-26843).
+     */
+    @Override
+    public int romObjectCodePointerHighWord() {
+        return 0x0001;
+    }
+
 
     /** Gray color for debug wireframe rendering. */
     private static final float DEBUG_R = 0.5f;
     private static final float DEBUG_G = 0.5f;
     private static final float DEBUG_B = 0.5f;
 
-    private final int halfWidth;
-    private final int halfHeight;
+    private int halfWidth;
+    private int halfHeight;
 
     public Sonic3kInvisibleBlockObjectInstance(ObjectSpawn spawn) {
         this(spawn, "InvisibleBlock");
@@ -68,7 +85,46 @@ public class Sonic3kInvisibleBlockObjectInstance extends AbstractObjectInstance
         int d1 = halfWidth + 11;
         int d2 = halfHeight;
         int d3 = halfHeight + 1;
-        return new SolidObjectParams(d1, d2, d3);
+        return SolidObjectParams.of(d1, d2, d3);
+    }
+
+    @Override
+    public boolean usesInclusiveRightEdge() {
+        // Every S3K invisible-block variant calls SolidObjectFull2. Its X
+        // entry gate rejects with bhi, so relX == width * 2 is still a valid
+        // contact (sonic3k.asm:41065-41067,43268-43574).
+        return true;
+    }
+
+    @Override
+    public boolean bypassesOffscreenSolidGate() {
+        // Obj_InvisibleBlock and both hurt variants jump directly through
+        // SolidObjectFull2. Unlike SolidObjectFull_1P, that entry never tests
+        // render_flags bit 7 before falling into SolidObject_cont
+        // (sonic3k.asm:41065-41067,43268-43574).
+        return true;
+    }
+
+    @Override
+    public boolean zeroXSpeedStopsOnLeftSideContact() {
+        // SolidObjectFull2 reaches SolidObject_cont directly. On the left
+        // branch, x_vel >= 0 falls through loc_1E056 and clears both x_vel and
+        // ground_vel; only a negative velocity is treated as moving away
+        // (sonic3k.asm:41468-41483). In particular, x_vel == 0 must still
+        // discard residual ground_vel before applying the side separation.
+        return true;
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity player) {
+        // The normal, horizontal-hurt, and vertical-hurt routines all finish
+        // with the same coarse Sprite_OnScreen_Test-style range check before
+        // returning (loc_1EC6C/loc_1F45E/loc_1F606). Clearing the respawn bit
+        // here is important as well as freeing the SST slot: Load_Sprites may
+        // then reconsider the placement if the camera backs up.
+        if (!isInRangeAt(getX())) {
+            setDestroyedByOffscreen();
+        }
     }
 
     @Override
@@ -85,42 +141,22 @@ public class Sonic3kInvisibleBlockObjectInstance extends AbstractObjectInstance
 
     @Override
     public void appendRenderCommands(List<GLCommand> commands) {
-        // Only render in debug mode (invisible block).
-        if (!isDebugViewEnabled()) {
-            return;
-        }
+        // Obj_InvisibleBlock and its hurt variants are invisible.
+    }
 
+    @Override
+    public void appendDebugRenderCommands(DebugRenderContext ctx) {
         int centerX = spawn.x();
         int centerY = spawn.y();
 
-        int left = centerX - halfWidth;
-        int right = centerX + halfWidth;
-        int top = centerY - halfHeight;
-        int bottom = centerY + halfHeight;
-
-        // Draw wireframe rectangle
-        appendLine(commands, left, top, right, top);
-        appendLine(commands, right, top, right, bottom);
-        appendLine(commands, right, bottom, left, bottom);
-        appendLine(commands, left, bottom, left, top);
+        ctx.drawRect(centerX, centerY, halfWidth, halfHeight,
+                DEBUG_R, DEBUG_G, DEBUG_B);
 
         // Draw center crosshair
         int crossHalf = Math.min(halfWidth, halfHeight) / 2;
         if (crossHalf > 0) {
-            appendLine(commands, centerX - crossHalf, centerY, centerX + crossHalf, centerY);
-            appendLine(commands, centerX, centerY - crossHalf, centerX, centerY + crossHalf);
+            ctx.drawCross(centerX, centerY, crossHalf,
+                    DEBUG_R, DEBUG_G, DEBUG_B);
         }
-    }
-
-    private void appendLine(List<GLCommand> commands, int x1, int y1, int x2, int y2) {
-        commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
-                DEBUG_R, DEBUG_G, DEBUG_B, x1, y1, 0, 0));
-        commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID,
-                DEBUG_R, DEBUG_G, DEBUG_B, x2, y2, 0, 0));
-    }
-
-    private boolean isDebugViewEnabled() {
-        return SonicConfigurationService.getInstance()
-                .getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED);
     }
 }

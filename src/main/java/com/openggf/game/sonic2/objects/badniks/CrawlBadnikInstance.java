@@ -9,8 +9,19 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.ObjectPlayerParticipationPolicy;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.TouchActorContextPolicy;
+import com.openggf.level.objects.TouchAttackBouncePolicy;
+import com.openggf.level.objects.TouchCategoryDecodeMode;
+import com.openggf.level.objects.TouchOverlapStopPolicy;
+import com.openggf.level.objects.TouchResponseListener;
+import com.openggf.level.objects.TouchResponseProfile;
 import com.openggf.level.objects.TouchResponseResult;
+import com.openggf.level.objects.TouchShieldDeflectCapability;
 import com.openggf.level.render.PatternSpriteRenderer;
+import com.openggf.physics.TrigLookupTable;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 import com.openggf.util.AnimationTimer;
 
@@ -63,7 +74,7 @@ import java.util.List;
  *   <li>Frame 3: Impact (player in air)</li>
  * </ul>
  */
-public class CrawlBadnikInstance extends AbstractBadnikInstance {
+public class CrawlBadnikInstance extends AbstractBadnikInstance implements TouchResponseListener, RewindRecreatable {
 
     // ========================================================================
     // ROM Constants
@@ -81,8 +92,22 @@ public class CrawlBadnikInstance extends AbstractBadnikInstance {
     /** Bounce velocity magnitude = $700 (1792 in 8.8 fixed point) */
     private static final int BOUNCE_VELOCITY = 0x700;
 
-    /** Collision size index 0x09 (from disassembly pattern) */
-    private static final int COLLISION_SIZE_INDEX = 0x09;
+    /** Collision size index 0x17 = collision_flags($D7) & $3F — maps to Touch_Sizes[23] = (8,8) */
+    private static final int COLLISION_SIZE_INDEX = 0x17;
+
+    /** Half-height from Touch_Sizes[0x17] — used for ROM-accurate Touch_Special Y threshold. */
+    private static final int TOUCH_HEIGHT_RADIUS = 8;
+
+    private static final TouchResponseProfile TOUCH_RESPONSE_PROFILE = new TouchResponseProfile(
+            TouchCategoryDecodeMode.SONIC2_SPECIAL_PROPERTY,
+            false,
+            true,
+            false,
+            TouchShieldDeflectCapability.NONE,
+            0,
+            TouchAttackBouncePolicy.STANDARD_ENEMY_KILL,
+            TouchActorContextPolicy.MAIN_FULL_SIDEKICK_HURT_ONLY,
+            TouchOverlapStopPolicy.STOP_AFTER_FIRST_OVERLAP_FOR_ALL_ACTORS);
 
     /** Animation delay for walking (frames per animation tick) */
     private static final int ANIM_DELAY = 0x13; // 19 frames
@@ -116,10 +141,11 @@ public class CrawlBadnikInstance extends AbstractBadnikInstance {
     private int pauseTimer;          // Frames until resume walking
     private int impactTimer;         // Frames showing impact animation
     private int xSubpixel;           // Subpixel accumulator for smooth movement
-    private boolean playerApproaching; // True when player is near and rolling
     private boolean vulnerable;      // True when hit from back (collision_flags = $17)
+    private int attackingCollisionFlags; // ROM collision_flags while in ATTACKING
+    private PlayableEntity pendingTouchPlayer; // Deferred touch from Touch_Special (ROM parity)
+    private boolean touchAppliedThisFrame;     // Guard: step 2 applied bounce; skip step 3 direct check
     private final AnimationTimer walkAnim = new AnimationTimer(ANIM_DELAY, 2);
-    private int lastFrameCounter;    // Cached for wobble calculation in applyBounce
 
     public CrawlBadnikInstance(ObjectSpawn spawn) {
         super(spawn, "Crawl", Sonic2BadnikConfig.DESTRUCTION);
@@ -129,8 +155,8 @@ public class CrawlBadnikInstance extends AbstractBadnikInstance {
         this.pauseTimer = 0;
         this.impactTimer = 0;
         this.xSubpixel = 0;
-        this.playerApproaching = false;
         this.vulnerable = false;
+        this.attackingCollisionFlags = 0xD7;
 
         // Initial facing based on x_flip spawn flag
         // x_flip=1 (bit 0 set) means facing RIGHT
@@ -142,93 +168,114 @@ public class CrawlBadnikInstance extends AbstractBadnikInstance {
     }
 
     @Override
-    protected void updateMovement(int frameCounter, PlayableEntity playerEntity) {
+    public CrawlBadnikInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new CrawlBadnikInstance(ctx.spawn());
+    }
+
+    @Override
+    protected void updateMovement(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        lastFrameCounter = frameCounter;
 
-        // Check if player is approaching (to switch to attack mode)
-        checkPlayerProximity(player);
-
+        // ROM: each routine handles its own state transitions; proximity check
+        // (loc_3D416) is called AFTER movement in the walking routine only.
         switch (state) {
-            case WALKING -> updateWalking(frameCounter);
+            case WALKING -> updateWalking(player);
             case PAUSING -> updatePausing();
-            case ATTACKING -> updateAttacking(frameCounter, player);
+            case ATTACKING -> updateAttacking(player);
         }
 
-        // Decrement impact timer
         if (impactTimer > 0) {
             impactTimer--;
         }
+
+        // Reset after step 3 so the guard is clear for the next frame's step 2.
+        touchAppliedThisFrame = false;
     }
 
     /**
-     * Check if player is approaching and should trigger attack mode.
-     * ROM: loc_3D416 in ObjC8_Walking - saves current routine before switching to attack.
-     * ROM: loc_3D39A in ObjC8_Attacking - restores previous routine when out of range.
+     * Walking state (Routine 2) — mirrors loc_3D27C (s2.asm:81826).
+     * ROM: decrement timer → if zero transition to pause; else move + check proximity.
+     * Proximity check (loc_3D416) runs AFTER movement, not before.
      */
-    private void checkPlayerProximity(AbstractPlayableSprite player) {
-        if (player == null) {
-            playerApproaching = false;
-            return;
-        }
-
-        // Simple proximity check - if player is within reasonable range
-        int dx = Math.abs(player.getCentreX() - currentX);
-        int dy = Math.abs(player.getCentreY() - currentY);
-
-        // Player must be close and rolling (or in air rolling)
-        boolean isRolling = player.getRolling() || player.getRollingJump();
-        playerApproaching = dx < 64 && dy < 48 && isRolling;
-
-        // Switch to attacking mode when player approaches
-        // ROM: move.b routine(a0),objoff_2C(a0) - save current routine
-        if (playerApproaching && state != State.ATTACKING) {
-            previousState = state;  // Save current state (WALKING or PAUSING)
-            state = State.ATTACKING;
-        } else if (!playerApproaching && state == State.ATTACKING) {
-            // ROM: move.b objoff_2C(a0),routine(a0) - restore previous routine
-            state = previousState;  // Restore saved state
-        }
-    }
-
-    /**
-     * Walking state (Routine 2):
-     * - Move horizontally at walk speed
-     * - Count down until pause
-     */
-    private void updateWalking(int frameCounter) {
-        // Apply velocity using subpixel accumulator for smooth movement
-        xSubpixel += Math.abs(xVelocity);
-        if (xSubpixel >= 0x100) {
-            int pixels = xSubpixel >> 8;
-            xSubpixel &= 0xFF;
-            if (facingLeft) {
-                currentX -= pixels;
-            } else {
-                currentX += pixels;
-            }
-        }
-
-        // Decrement walk timer
+    private void updateWalking(AbstractPlayableSprite player) {
         walkTimer--;
         if (walkTimer <= 0) {
-            // Transition to pause state
             state = State.PAUSING;
             pauseTimer = PAUSE_DURATION;
             xVelocity = 0;
+            return;
+        }
+
+        // ObjectMove (JmpTo26_ObjectMove, s2.asm:81853 -> ObjectMove): ROM adds the
+        // SIGNED x_vel to the 16.16 (x_pos:x_sub) position. For leftward motion this
+        // BORROWS from x_pos on the first sub-pixel underflow rather than carrying only
+        // after an abs-accumulator crosses 0x100. The previous abs accumulator decremented
+        // x_pos one pixel-step LATE on every leftward run, so the Crawl's frozen x_pos at
+        // an ATTACKING-entry frame that was not an exact 8-frame boundary landed 1px off
+        // ROM (e.g. CNZ2 s20 froze at 0x32F instead of ROM 0x32E). Use a signed 16:8 step
+        // (equivalent to ObjectMove's 16.16 for |x_vel| < 0x100) so the per-frame x_pos
+        // matches ROM at every frame, not only on carry boundaries.
+        int xTotal = (xSubpixel & 0xFF) + (xVelocity & 0xFF);
+        currentX += (xVelocity >> 8) + (xTotal >> 8);
+        xSubpixel = xTotal & 0xFF;
+
+        // loc_3D416 (s2.asm:82411): enter attack mode if the CLOSEST character is
+        // within the orientation box. ROM calls Obj_GetOrientationToPlayer
+        // (s2.asm:72755), which selects whichever of Main/Sidekick has the smaller
+        // absolute horizontal distance, then tests d2/d3 (Crawl_pos - char_pos).
+        // ROM box: addi.w #$40,d; cmpi.w #$80,d; bhs rts  -> keep when -$40 <= d < $40.
+        // ROM does NOT check rolling here; the bounce check is in loc_3D2D4.
+        AbstractPlayableSprite closest = closestCharacter(player);
+        if (closest != null && withinOrientationBox(closest)) {
+            previousState = state;
+            state = State.ATTACKING;
+            attackingCollisionFlags = 0xD7;
         }
     }
 
     /**
-     * Pausing state (Routine 4):
-     * - Stop movement
-     * - Wait for pause duration
-     * - Then reverse direction
+     * Mirrors Obj_GetOrientationToPlayer's character selection (s2.asm:72755-72781):
+     * picks whichever of MainCharacter / Sidekick has the smaller absolute horizontal
+     * distance to the Crawl, with the MainCharacter winning ties (bls.s branch).
+     */
+    private AbstractPlayableSprite closestCharacter(AbstractPlayableSprite main) {
+        AbstractPlayableSprite closest = main;
+        int bestDist = main != null ? Math.abs(main.getCentreX() - currentX) : Integer.MAX_VALUE;
+        for (PlayableEntity entity :
+                services().playerQuery().playersFor(ObjectPlayerParticipationPolicy.ALL_ENGINE_PLAYERS)) {
+            if (entity == main || !(entity instanceof AbstractPlayableSprite sidekick)) {
+                continue;
+            }
+            int dist = Math.abs(sidekick.getCentreX() - currentX);
+            // ROM cmp.w d5,d4 / bls.s + : sidekick wins only when strictly closer.
+            if (dist < bestDist) {
+                bestDist = dist;
+                closest = sidekick;
+            }
+        }
+        return closest;
+    }
+
+    /**
+     * ROM orientation box (loc_3D416 / loc_3D2D4, s2.asm:82306-82311):
+     * d2 = x_pos(Crawl) - x_pos(char); addi.w #$40,d2; cmpi.w #$80,d2; bhs -> outside.
+     * The original 64x64 half-extent box; the engine keeps the long-standing
+     * {@code |delta| < 64} expression, which already matched ROM at every prior
+     * Crawl/Sonic contact site. The only behaviour change in this fix is WHICH
+     * character supplies the delta (closest of Main/Sidekick), not the box size.
+     */
+    private boolean withinOrientationBox(AbstractPlayableSprite character) {
+        int dx = Math.abs(character.getCentreX() - currentX);
+        int dy = Math.abs(character.getCentreY() - currentY);
+        return dx < 64 && dy < 64;
+    }
+
+    /**
+     * Pausing state (Routine 4) — mirrors loc_3D2A6 (s2.asm:81841).
      */
     private void updatePausing() {
         pauseTimer--;
         if (pauseTimer <= 0) {
-            // Reverse direction
             facingLeft = !facingLeft;
             xVelocity = facingLeft ? -WALK_VELOCITY : WALK_VELOCITY;
             walkTimer = WALK_DURATION;
@@ -237,13 +284,95 @@ public class CrawlBadnikInstance extends AbstractBadnikInstance {
     }
 
     /**
-     * Attacking state (Routine 6):
-     * - Stop movement (stay in place)
-     * - Collision handling will bounce or destroy based on direction
+     * Attacking state (Routine 6) — mirrors loc_3D2D4 (s2.asm:81856).
+     * ROM: sets collision_flags=$D7, then exits to previous routine if
+     * |dx| >= 64 OR |dy| >= 64 (loc_3D39A).
+     * Touch_Special defers contact to the next frame via collision_property.
      */
-    private void updateAttacking(int frameCounter, AbstractPlayableSprite player) {
-        // In attack mode, Crawl stops and waits
-        // Collision handling is done through onPlayerAttack
+    private void updateAttacking(AbstractPlayableSprite player) {
+        attackingCollisionFlags = 0xD7;
+
+        // ROM: ObjC8_Attacking reads+clears collision_property, which Touch_Special set in step 2.
+        // pendingTouchPlayer mirrors collision_property: set in onTouchResponse, consumed here.
+        if (pendingTouchPlayer instanceof AbstractPlayableSprite pending) {
+            pendingTouchPlayer = null;
+            applyAttackingTouch(pending);
+        }
+
+        // ROM exit check (loc_3D2D4, s2.asm:82304-82311): Obj_GetOrientationToPlayer
+        // selects the closest character; if it leaves the $40/$80 box, branch to
+        // loc_3D39A and revert to the prior routine. Match the same closest-character
+        // selection so the Crawl stays frozen in ATTACKING while the SIDEKICK is the
+        // nearby character even when the MainCharacter is already out of range.
+        AbstractPlayableSprite closest = closestCharacter(player);
+        if (closest == null) {
+            return;
+        }
+        if (!withinOrientationBox(closest)) {
+            state = previousState;
+            return;
+        }
+
+        int dx = Math.abs(closest.getCentreX() - currentX);
+        int dy = Math.abs(closest.getCentreY() - currentY);
+
+        // ROM: Touch_Special fires every frame the character geometrically overlaps Crawl.
+        // Our SPECIAL is edge-triggered, so the callback is blocked when Crawl transitions
+        // WALKING→ATTACKING while the character is already in the overlapping set (from the
+        // prior ENEMY interaction). Synthesise the collision_property check directly using the
+        // same combined extents as isOverlapping: x ≤ touch_x_radius+8 (playerX=centreX-8,
+        // playerWidth=16), y ≤ touch_y_radius+baseYRadius (baseYRadius=max(1,yr-3)).
+        // touchAppliedThisFrame prevents a double-apply when onTouchResponse already fired.
+        if (!touchAppliedThisFrame) {
+            int baseYRadius = Math.max(1, closest.getYRadius() - 3);
+            if (dx <= TOUCH_HEIGHT_RADIUS + 8 && dy <= TOUCH_HEIGHT_RADIUS + baseYRadius) {
+                applyAttackingTouch(closest);
+            }
+        }
+    }
+
+    /**
+     * Direction-aware touch resolution for ATTACKING state, deferred one frame
+     * to match Touch_Special behaviour (s2.asm:81896).
+     */
+    private void applyAttackingTouch(AbstractPlayableSprite player) {
+        if (isDestroyed() || player == null) {
+            return;
+        }
+        touchAppliedThisFrame = true;
+        // ROM: cmpi.b #AniIDSonAni_Roll,anim(a1) — checks roll/spin ANIMATION (ID=2), set for
+        // ground rolling, rolling jumps, AND normal jumps (Sonic always curls during any jump).
+        // getRolling() = ground roll only; getRollingJump() = roll-jump; isJumping() = normal jump.
+        boolean isRolling = player.getRolling() || player.getRollingJump() || player.isJumping();
+        boolean inAir = player.getAir();
+
+        if (!isRolling) {
+            // ROM loc_3D36C: non-rolling contact turns the bouncer into a HURT touch object
+            // for the next touch pass; invincibility downgrades it to normal ENEMY flags.
+            attackingCollisionFlags = player.getInvincibleFrames() > 0 ? 0x17 : 0x97;
+            animFrame = FRAME_WALK_2;
+            return;
+        }
+
+        if (inAir) {
+            applyBounce(player, FRAME_IMPACT_AIR);
+            return;
+        }
+
+        boolean playerToLeft = player.getCentreX() < currentX;
+        boolean hittingFromFront = facingLeft ? playerToLeft : !playerToLeft;
+
+        if (hittingFromFront) {
+            applyBounce(player, FRAME_IMPACT_GROUND);
+        } else {
+            // ROM: ObjC8_Attacking (s2.asm:81856) sets collision_flags=$17 (vulnerable) and
+            // returns to the previous routine. Touch_KillEnemy fires on the NEXT frame (step 2)
+            // via the ENEMY touch category → onPlayerAttack → destroyBadnik.
+            // Don't destroy immediately; revert state so ENEMY touch handles it next frame.
+            vulnerable = true;
+            attackingCollisionFlags = 0x17;
+            state = previousState;
+        }
     }
 
     @Override
@@ -292,46 +421,49 @@ public class CrawlBadnikInstance extends AbstractBadnikInstance {
             // Shield side - bounce player away (radial bounce)
             applyBounce(player, FRAME_IMPACT_GROUND);
         } else {
-            // Back side - vulnerable, destroy like normal badnik
+            // Back side - vulnerable, destroy like normal badnik.
+            // applyEnemyBounce in handleTouchResponse applies the Touch_KillEnemy y_speed change.
             vulnerable = true;
             destroyBadnik(player);
         }
     }
 
     /**
-     * Apply radial bounce to player (similar to BumperObjectInstance).
-     * ROM Reference: lines 81930-81954
+     * Apply radial bounce to player (mirrors loc_3D3A4, s2.asm:81932-81958).
+     * ROM Reference: lines 81932-81958
      */
     private void applyBounce(AbstractPlayableSprite player, int impactFrame) {
-        // Calculate direction from Crawl to player
+        // ROM: d1=x_pos(Crawl)-x_pos(Player), d2=y_pos(Crawl)-y_pos(Player)
         int dx = currentX - player.getCentreX();
         int dy = currentY - player.getCentreY();
 
-        // Calculate angle
-        double angle = StrictMath.atan2(dy, dx);
+        // ROM: jsr (CalcAngle).l — integer arctangent lookup (returns 0x40 when dx=dy=0)
+        int angle = TrigLookupTable.calcAngle((short) dx, (short) dy);
 
-        // If player is exactly at center, push them away from front
-        if (dx == 0 && dy == 0) {
-            angle = facingLeft ? Math.PI : 0;
-        }
+        // ROM: move.b (Level_frame_counter).w,d1; andi.w #3,d1
+        // Level_frame_counter is a big-endian word; move.b reads the HIGH byte.
+        // Use the level frame counter (not the global object frameCounter) to match ROM behaviour.
+        // BumperObjectInstance uses the same pattern (s2.asm:44675-44677).
+        int levelFrameCounter = services().levelManager() != null
+                ? services().levelManager().getFrameCounter()
+                : 0;
+        angle = (angle + ((levelFrameCounter >> 8) & 3)) & 0xFF;
 
-        // Add wobble based on frame counter (ROM: add (Timer_frames & 3) to angle)
-        double wobble = (lastFrameCounter & 3) * (2.0 * StrictMath.PI / 256.0);
-        angle += wobble;
+        // ROM: CalcSine → d1=cos(angle), d0=sin(angle)
+        // x_vel = cos * -$700 >> 8; y_vel = sin * -$700 >> 8
+        int cosVal = TrigLookupTable.cosHex(angle);
+        int sinVal = TrigLookupTable.sinHex(angle);
+        int xVel = cosVal * -BOUNCE_VELOCITY >> 8;
+        int yVel = sinVal * -BOUNCE_VELOCITY >> 8;
 
-        // Calculate velocity components
-        // ROM: vel = -sin/cos(angle) * $700 >> 8
-        int xVel = (int) (-StrictMath.sin(angle) * BOUNCE_VELOCITY);
-        int yVel = (int) (-StrictMath.cos(angle) * BOUNCE_VELOCITY);
-
-        // Apply to player
         player.setXSpeed((short) xVel);
         player.setYSpeed((short) yVel);
 
-        // Set player to airborne state
+        // ROM: bset #in_air; bclr #rolljumping; bclr #pushing; clr.b jumping
         player.setAir(true);
+        player.setRollingJump(false);
+        player.setJumping(false);
         player.setPushing(false);
-        player.setGSpeed((short) 0);
 
         // Show impact animation
         animFrame = impactFrame;
@@ -342,7 +474,7 @@ public class CrawlBadnikInstance extends AbstractBadnikInstance {
     }
 
     @Override
-    protected void updateAnimation(int frameCounter) {
+    protected void updateAnimation(int vIntRunCount) {
         // If showing impact animation, keep that frame
         if (impactTimer > 0) {
             return; // animFrame already set by applyBounce
@@ -351,6 +483,45 @@ public class CrawlBadnikInstance extends AbstractBadnikInstance {
         // Walking animation - alternate between frames 0 and 1
         walkAnim.tick();
         animFrame = walkAnim.getFrame(); // 0 = FRAME_WALK_1, 1 = FRAME_WALK_2
+    }
+
+    /**
+     * In ATTACKING state the ROM uses collision_flags=$D7 (Touch_Special/SPECIAL routing)
+     * rather than $17 (ENEMY). This defers bounce/destroy by one frame, matching the ROM.
+     */
+    @Override
+    public int getCollisionFlags() {
+        if (state == State.ATTACKING) {
+            return attackingCollisionFlags;
+        }
+        return super.getCollisionFlags();
+    }
+
+    @Override
+    public boolean usesSonic2TouchSpecialPropertyResponse() {
+        return true;
+    }
+
+    @Override
+    public TouchResponseProfile getTouchResponseProfile() {
+        return TOUCH_RESPONSE_PROFILE;
+    }
+
+    @Override
+    public TouchResponseProfile getTouchResponseProfile(boolean multiRegionSource) {
+        return TOUCH_RESPONSE_PROFILE;
+    }
+
+    /**
+     * Mirrors ROM Touch_Special setting collision_property bit 0 (s2.asm:81896).
+     * ObjC8_Attacking reads+clears it in the same 68k frame (step 3, updateAttacking).
+     */
+    @Override
+    public void onTouchResponse(PlayableEntity player, TouchResponseResult result, int frameCounter) {
+        if (state != State.ATTACKING || isDestroyed()) {
+            return;
+        }
+        pendingTouchPlayer = player;
     }
 
     @Override

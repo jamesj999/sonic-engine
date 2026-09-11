@@ -5,6 +5,7 @@ import com.openggf.data.RomManager;
 import com.openggf.game.GameServices;
 import com.openggf.game.sonic2.constants.Sonic2Constants;
 import com.openggf.graphics.GraphicsManager;
+import com.openggf.graphics.PatternAtlasRange;
 import com.openggf.level.Palette;
 import com.openggf.level.Pattern;
 import com.openggf.level.objects.ObjectSpriteSheet;
@@ -41,7 +42,7 @@ public class Sonic2CreditsTextRenderer {
      * Avoids collision with S1 credit text (0xB0000), S2 title screen credit text (0x80000),
      * S1 GHZ background (0xD0000), and other pattern ranges.
      */
-    private static final int PATTERN_BASE = 0xE0000;
+    private static final int PATTERN_BASE = PatternAtlasRange.S3K_TITLE_SCREEN_ANIMATION.base();
 
     private PatternSpriteRenderer renderer;
     private List<SpriteMappingFrame> mappingFrames;
@@ -124,7 +125,7 @@ public class Sonic2CreditsTextRenderer {
             gpuDirty = false;
         }
 
-        GraphicsManager gm = GraphicsManager.getInstance();
+        GraphicsManager gm = GameServices.graphics();
         gm.beginPatternBatch();
         renderer.drawFrameIndex(creditsNum, SCREEN_CENTER_X, SCREEN_CENTER_Y);
         gm.flushPatternBatch();
@@ -146,7 +147,7 @@ public class Sonic2CreditsTextRenderer {
      * Caches credit text patterns and ending palettes to the GPU.
      */
     private void cacheToGpu() {
-        GraphicsManager gm = GraphicsManager.getInstance();
+        GraphicsManager gm = GameServices.graphics();
         if (gm == null || gm.isHeadlessMode()) {
             return;
         }

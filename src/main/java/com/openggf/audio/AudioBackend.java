@@ -1,13 +1,50 @@
 package com.openggf.audio;
 
+import com.openggf.audio.driver.SfxContentionObserver;
+import com.openggf.audio.driver.SmpsDriverServiceObserver;
+import com.openggf.audio.rewind.AudioSourceDescriptor;
+import com.openggf.audio.output.AudioPresentationSink;
+import com.openggf.audio.output.NoDeviceAudioSink;
 import com.openggf.audio.smps.AbstractSmpsData;
 import com.openggf.audio.smps.DacData;
 import com.openggf.audio.smps.SmpsSequencerConfig;
+import com.openggf.audio.synth.ChipWriteObserver;
 
+import java.util.function.Consumer;
+
+/**
+ * SMPS source construction, profile routing, and logical music-source
+ * descriptors for one game. The backend is <strong>not</strong> a presentation
+ * owner: {@code AudioPresentationProducer} owns the presentation clock, final
+ * PCM, history, reverse cursor, and every capture lease, and
+ * {@code OpenAlPcmSink} is the only writer of a real audio device.
+ */
 public interface AudioBackend {
+
     void init();
 
     void setAudioProfile(GameAudioProfile profile);
+
+    default void setAdmissionObserver(AudioAdmissionObserver observer) {
+    }
+
+    default void setDriverServiceObserver(
+            SmpsDriverServiceObserver observer) {
+    }
+
+    default void setChipWriteObserver(ChipWriteObserver observer) {
+    }
+
+    default void setSfxContentionObserver(
+            SfxContentionObserver observer) {
+    }
+
+    default void registerAudioProfileCoordHandlers(GameAudioProfile profile) {
+    }
+
+    default AudioPresentationTuning presentationTuning() {
+        return AudioPresentationTuning.DEFAULT;
+    }
 
     /**
      * Plays music by ID (potentially loading from ROM or fallback map).
@@ -47,6 +84,20 @@ public interface AudioBackend {
     }
 
     /**
+     * Plays an SFX with a fully captured sequencer and classification tuple.
+     * Existing backends retain source compatibility through the explicit-config
+     * overload; SMPS-aware backends override this to consume {@code policy}.
+     */
+    default void playSfxSmps(
+            AbstractSmpsData data,
+            DacData dacData,
+            float pitch,
+            SmpsSequencerConfig config,
+            SmpsSfxPlaybackPolicy policy) {
+        playSfxSmps(data, dacData, pitch, config);
+    }
+
+    /**
      * Plays a sound effect by name (mapped to a WAV file).
      * 
      * @param sfxName The name of the SFX (e.g., "JUMP", "RING").
@@ -69,7 +120,8 @@ public interface AudioBackend {
     /**
      * Fade out the currently playing music over time.
      * ROM equivalent: MusID_FadeOut (0xF9) / zFadeOutMusic.
-     * Does not affect SFX - only music channels fade.
+     * Host policy owns the command's pre-fade effects; Sonic 1 stops its
+     * normal and special SFX tracks before fading the music channels.
      *
      * @param steps total number of volume steps (ROM default: 0x28 = 40)
      * @param delay frames between each volume step (ROM default: 3)
@@ -129,4 +181,21 @@ public interface AudioBackend {
      * Called when the game window is restored or regains focus.
      */
     void resume();
+
+    default void prepareLogicalMusicSource(AudioSourceDescriptor descriptor) {
+    }
+
+    default int outputSampleRate() {
+        return 48_000;
+    }
+
+    /**
+     * Creates the speaker-only final-PCM sink for this backend. Backends no
+     * longer own audible music or SFX sources.
+     */
+    default AudioPresentationSink createPresentationSink(
+            Consumer<Throwable> failureHandler,
+            Consumer<String> warningHandler) {
+        return new NoDeviceAudioSink(outputSampleRate());
+    }
 }

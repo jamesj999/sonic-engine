@@ -1,6 +1,7 @@
 package com.openggf.level;
 
 import com.openggf.graphics.GraphicsManager;
+import com.openggf.game.GameServices;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.rings.RingSpawn;
 import com.openggf.level.rings.RingSpriteSheet;
@@ -38,6 +39,11 @@ public abstract class AbstractLevel implements Level {
     protected int maxX;
     protected int minY;
     protected int maxY;
+
+    // Snapshot epoch counter for copy-on-write tracking.
+    // Incremented on each snapshot restore; used by Block/Chunk/Map to
+    // detect when to clone internal arrays.
+    private long snapshotEpoch = 0L;
 
     protected AbstractLevel(int zoneIndex) {
         this.zoneIndex = zoneIndex;
@@ -84,7 +90,7 @@ public abstract class AbstractLevel implements Level {
             return;
         }
         patterns = Arrays.copyOf(patterns, minCount);
-        GraphicsManager graphicsMan = GraphicsManager.getInstance();
+        GraphicsManager graphicsMan = GameServices.graphics();
         for (int i = patternCount; i < minCount; i++) {
             patterns[i] = new Pattern();
             if (graphicsMan.isGlInitialized()) {
@@ -177,4 +183,39 @@ public abstract class AbstractLevel implements Level {
     public int getZoneIndex() {
         return zoneIndex;
     }
+
+    // ===== Snapshot epoch API =====
+
+    /** Returns the current snapshot epoch for copy-on-write tracking. */
+    public long currentEpoch() {
+        return snapshotEpoch;
+    }
+
+    /** Increments the snapshot epoch. Called after restoring a snapshot. */
+    public void bumpEpoch() {
+        snapshotEpoch++;
+    }
+
+    /** Returns a reference to the live blocks array. */
+    public Block[] blocksReference() {
+        return blocks;
+    }
+
+    /** Returns a reference to the live chunks array. */
+    public Chunk[] chunksReference() {
+        return chunks;
+    }
+
+    /** Replaces the live blocks array (used by snapshot restore). */
+    public void replaceBlocks(Block[] newBlocks) {
+        this.blocks = newBlocks;
+        this.blockCount = newBlocks.length;
+    }
+
+    /** Replaces the live chunks array (used by snapshot restore). */
+    public void replaceChunks(Chunk[] newChunks) {
+        this.chunks = newChunks;
+        this.chunkCount = newChunks.length;
+    }
+
 }

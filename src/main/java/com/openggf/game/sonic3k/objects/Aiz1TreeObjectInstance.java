@@ -5,6 +5,8 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 
 import java.util.List;
@@ -25,10 +27,15 @@ import java.util.List;
  * It also forces palette line 2 over FG tiles that may use palette line 1,
  * preventing boss-palette colour bleed into the tree canopy.
  */
-public class Aiz1TreeObjectInstance extends AbstractObjectInstance {
+public class Aiz1TreeObjectInstance extends AbstractObjectInstance implements RewindRecreatable {
 
     public Aiz1TreeObjectInstance(ObjectSpawn spawn) {
         super(spawn, "AIZ1Tree");
+    }
+
+    @Override
+    public Aiz1TreeObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new Aiz1TreeObjectInstance(ctx.spawn());
     }
 
     @Override

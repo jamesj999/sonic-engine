@@ -4,9 +4,9 @@ import com.openggf.game.sonic1.Sonic1GameModule;
 import com.openggf.game.sonic1.credits.Sonic1EndingProvider;
 import com.openggf.game.sonic2.Sonic2GameModule;
 import com.openggf.game.sonic2.credits.Sonic2EndingProvider;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.mock;
 
 /**
@@ -30,9 +30,8 @@ public class TestEndingProviderContract {
     public void testSonic1GameModuleHasEndingProvider() {
         Sonic1GameModule module = new Sonic1GameModule();
         EndingProvider provider = module.getEndingProvider();
-        assertNotNull("Sonic1GameModule should provide an EndingProvider", provider);
-        assertTrue("Sonic1GameModule EndingProvider should be Sonic1EndingProvider",
-                provider instanceof Sonic1EndingProvider);
+        assertNotNull(provider, "Sonic1GameModule should provide an EndingProvider");
+        assertTrue(provider instanceof Sonic1EndingProvider, "Sonic1GameModule EndingProvider should be Sonic1EndingProvider");
     }
 
     // ========================================================================
@@ -43,9 +42,8 @@ public class TestEndingProviderContract {
     public void testSonic2GameModuleHasEndingProvider() {
         Sonic2GameModule module = new Sonic2GameModule();
         EndingProvider provider = module.getEndingProvider();
-        assertNotNull("Sonic2GameModule should provide an EndingProvider", provider);
-        assertTrue("Sonic2GameModule EndingProvider should be Sonic2EndingProvider",
-                provider instanceof Sonic2EndingProvider);
+        assertNotNull(provider, "Sonic2GameModule should provide an EndingProvider");
+        assertTrue(provider instanceof Sonic2EndingProvider, "Sonic2GameModule EndingProvider should be Sonic2EndingProvider");
     }
 
     // ========================================================================
@@ -60,7 +58,7 @@ public class TestEndingProviderContract {
         GameModule stubModule = mock(GameModule.class, org.mockito.Mockito.CALLS_REAL_METHODS);
         EndingProvider defaultResult = stubModule.getEndingProvider();
 
-        assertNull("Default GameModule.getEndingProvider() should return null", defaultResult);
+        assertNull(defaultResult, "Default GameModule.getEndingProvider() should return null");
     }
 
     // ========================================================================
@@ -70,7 +68,7 @@ public class TestEndingProviderContract {
     @Test
     public void testEndingPhaseHasFiveValues() {
         EndingPhase[] phases = EndingPhase.values();
-        assertEquals("EndingPhase should have 5 values", 5, phases.length);
+        assertEquals(5, phases.length, "EndingPhase should have 5 values");
     }
 
     @Test
@@ -87,14 +85,10 @@ public class TestEndingProviderContract {
     @Test
     public void testEndingPhaseOrdinalOrder() {
         // Verify phases are in the expected sequential order
-        assertTrue("CUTSCENE should come before CREDITS_TEXT",
-                EndingPhase.CUTSCENE.ordinal() < EndingPhase.CREDITS_TEXT.ordinal());
-        assertTrue("CREDITS_TEXT should come before CREDITS_DEMO",
-                EndingPhase.CREDITS_TEXT.ordinal() < EndingPhase.CREDITS_DEMO.ordinal());
-        assertTrue("CREDITS_DEMO should come before POST_CREDITS",
-                EndingPhase.CREDITS_DEMO.ordinal() < EndingPhase.POST_CREDITS.ordinal());
-        assertTrue("POST_CREDITS should come before FINISHED",
-                EndingPhase.POST_CREDITS.ordinal() < EndingPhase.FINISHED.ordinal());
+        assertTrue(EndingPhase.CUTSCENE.ordinal() < EndingPhase.CREDITS_TEXT.ordinal(), "CUTSCENE should come before CREDITS_TEXT");
+        assertTrue(EndingPhase.CREDITS_TEXT.ordinal() < EndingPhase.CREDITS_DEMO.ordinal(), "CREDITS_TEXT should come before CREDITS_DEMO");
+        assertTrue(EndingPhase.CREDITS_DEMO.ordinal() < EndingPhase.POST_CREDITS.ordinal(), "CREDITS_DEMO should come before POST_CREDITS");
+        assertTrue(EndingPhase.POST_CREDITS.ordinal() < EndingPhase.FINISHED.ordinal(), "POST_CREDITS should come before FINISHED");
     }
 
     // ========================================================================
@@ -127,15 +121,15 @@ public class TestEndingProviderContract {
     public void testSonic1InitialPhaseIsCreditsText() {
         // S1 has no cutscene, goes straight to credits text
         Sonic1EndingProvider provider = new Sonic1EndingProvider();
-        assertEquals("S1 initial phase should be CREDITS_TEXT (no cutscene)",
-                EndingPhase.CREDITS_TEXT, provider.getCurrentPhase());
+        assertEquals(EndingPhase.CREDITS_TEXT, provider.getCurrentPhase(), "S1 initial phase should be CREDITS_TEXT (no cutscene)");
     }
 
     @Test
     public void testSonic2InitialPhaseIsCutscene() {
         // S2 starts with a cutscene
         Sonic2EndingProvider provider = new Sonic2EndingProvider();
-        assertEquals("S2 initial phase should be CUTSCENE",
-                EndingPhase.CUTSCENE, provider.getCurrentPhase());
+        assertEquals(EndingPhase.CUTSCENE, provider.getCurrentPhase(), "S2 initial phase should be CUTSCENE");
     }
 }
+
+

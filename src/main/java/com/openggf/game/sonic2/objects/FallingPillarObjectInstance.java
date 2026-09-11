@@ -9,8 +9,9 @@ import com.openggf.graphics.GraphicsManager;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.PatternDesc;
 import com.openggf.level.objects.AbstractObjectInstance;
-import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
@@ -48,7 +49,7 @@ import java.util.logging.Logger;
  * </ul>
  */
 public class FallingPillarObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
     private static final Logger LOGGER = Logger.getLogger(FallingPillarObjectInstance.class.getName());
 
     private static final int PALETTE_INDEX = 1;
@@ -66,7 +67,7 @@ public class FallingPillarObjectInstance extends AbstractObjectInstance
 
     private static final LazyMappingHolder MAPPINGS = new LazyMappingHolder();
 
-    private final boolean isChild;
+    private boolean isChild;
     private int x;
     private int y;
     private int baseX;
@@ -80,6 +81,11 @@ public class FallingPillarObjectInstance extends AbstractObjectInstance
 
     public FallingPillarObjectInstance(ObjectSpawn spawn, String name) {
         this(spawn, name, false, spawn.y());
+    }
+
+    @Override
+    public FallingPillarObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new FallingPillarObjectInstance(ctx.spawn(), getName());
     }
 
     private FallingPillarObjectInstance(ObjectSpawn spawn, String name, boolean isChild, int childY) {
@@ -131,7 +137,7 @@ public class FallingPillarObjectInstance extends AbstractObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (!isChild && !childSpawned) {
             spawnChild();
@@ -143,12 +149,10 @@ public class FallingPillarObjectInstance extends AbstractObjectInstance
     }
 
     private void spawnChild() {
-        ObjectManager objectManager = services().objectManager();
-        if (objectManager == null) {
+        if (services().objectManager() == null) {
             return;
         }
-        FallingPillarObjectInstance child = createChild();
-        objectManager.addDynamicObject(child);
+        FallingPillarObjectInstance child = spawnChild(this::createChild);
         markChildSpawned(child);
     }
 
@@ -164,7 +168,7 @@ public class FallingPillarObjectInstance extends AbstractObjectInstance
         if (player == null) {
             return;
         }
-        int dx = x - player.getX();
+        int dx = x - player.getCentreX();
         if (dx < 0) {
             dx = -dx;
         }
@@ -264,13 +268,13 @@ public class FallingPillarObjectInstance extends AbstractObjectInstance
     @Override
     public SolidObjectParams getSolidParams() {
         if (isChild) {
-            return new SolidObjectParams(
+            return SolidObjectParams.of(
                     CHILD_HALF_WIDTH + 0x0B,
                     CHILD_HALF_HEIGHT,
                     CHILD_HALF_HEIGHT + 1
             );
         }
-        return new SolidObjectParams(
+        return SolidObjectParams.of(
                 TOP_HALF_WIDTH + 0x0B,
                 TOP_HALF_HEIGHT,
                 TOP_HALF_HEIGHT + 1

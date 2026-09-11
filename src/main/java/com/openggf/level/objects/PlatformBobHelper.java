@@ -84,4 +84,11 @@ public final class PlatformBobHelper {
     public int getAngle() {
         return angle;
     }
+
+    /**
+     * Restores the current bob angle from a rewind snapshot.
+     */
+    public void restoreAngle(int angle) {
+        this.angle = Math.max(0, Math.min(angle, maxAngle));
+    }
 }

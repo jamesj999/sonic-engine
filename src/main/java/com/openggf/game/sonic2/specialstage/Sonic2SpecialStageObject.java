@@ -272,6 +272,37 @@ public abstract class Sonic2SpecialStageObject {
         return highPriority;
     }
 
+    Sonic2SpecialStageSnapshot.BaseObjectSnapshot captureBaseRewindSnapshot() {
+        return new Sonic2SpecialStageSnapshot.BaseObjectSnapshot(
+                state,
+                angle,
+                depthFixed,
+                screenX,
+                screenY,
+                trackFloorY,
+                animIndex,
+                animFrame,
+                animTimer,
+                onScreen,
+                highPriority);
+    }
+
+    void restoreBaseRewindSnapshot(Sonic2SpecialStageSnapshot.BaseObjectSnapshot snapshot) {
+        state = snapshot.state();
+        angle = snapshot.angle();
+        depthFixed = snapshot.depthFixed();
+        screenX = snapshot.screenX();
+        screenY = snapshot.screenY();
+        trackFloorY = snapshot.trackFloorY();
+        animIndex = snapshot.animIndex();
+        animFrame = snapshot.animFrame();
+        animTimer = snapshot.animTimer();
+        onScreen = snapshot.onScreen();
+        highPriority = snapshot.highPriority();
+    }
+
+    abstract Sonic2SpecialStageSnapshot.ObjectSnapshot captureRewindSnapshot();
+
     /**
      * Returns whether this object is a ring.
      */

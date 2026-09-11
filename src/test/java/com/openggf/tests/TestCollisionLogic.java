@@ -1,10 +1,10 @@
 package com.openggf.tests;
 
-import org.junit.Test;
-import org.junit.Assume;
-import com.openggf.tools.KosinskiReader;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Assumptions;
+import com.openggf.data.compression.KosinskiReader;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.IOException;
 import java.nio.channels.FileChannel;
@@ -21,16 +21,16 @@ public class TestCollisionLogic {
 
         if (path.toFile().exists()) {
             try (FileChannel fileChannel = FileChannel.open(path, StandardOpenOption.READ)) {
-                collisionBuffer = KosinskiReader.decompress(fileChannel, true);
+                collisionBuffer = KosinskiReader.decompress(fileChannel);
             }
         } else {
             // Fallback: Try to read from ROM
-            Path romPath = Path.of("Sonic The Hedgehog 2 (W) (REV01) [!].gen");
-            Assume.assumeTrue("Test data not available (neither .kos file nor ROM found)", romPath.toFile().exists());
+            Path romPath = Path.of("s2.gen");
+            Assumptions.assumeTrue(romPath.toFile().exists(), "Test data not available (neither .kos file nor ROM found)");
 
             try (FileChannel romChannel = FileChannel.open(romPath, StandardOpenOption.READ)) {
                 romChannel.position(0x44E50); // Offset for EHZ and HTZ primary from collisionindexes.txt
-                collisionBuffer = KosinskiReader.decompress(romChannel, true);
+                collisionBuffer = KosinskiReader.decompress(romChannel);
             }
         }
 
@@ -41,8 +41,8 @@ public class TestCollisionLogic {
         }
 
         // Verify decompressed data is non-empty and contains valid collision indices
-        assertTrue("Decompressed collision buffer should not be empty", collisionBuffer.length > 0);
-        assertTrue("Collision array should have entries", collisionArray.length > 0);
+        assertTrue(collisionBuffer.length > 0, "Decompressed collision buffer should not be empty");
+        assertTrue(collisionArray.length > 0, "Collision array should have entries");
 
         // EHZ collision data uses collision block indices; verify some are non-zero
         boolean hasNonZero = false;
@@ -52,13 +52,13 @@ public class TestCollisionLogic {
                 break;
             }
         }
-        assertTrue("Collision array should contain non-zero entries", hasNonZero);
+        assertTrue(hasNonZero, "Collision array should contain non-zero entries");
 
         // All values should be valid unsigned byte range (0-255)
         for (int i = 0; i < collisionBuffer.length; i++) {
-            assertTrue("Collision value at index " + i + " should be in range 0-255",
-                    collisionArray[i] >= 0 && collisionArray[i] <= 255);
+            assertTrue(collisionArray[i] >= 0 && collisionArray[i] <= 255, "Collision value at index " + i + " should be in range 0-255");
         }
     }
 
 }
+

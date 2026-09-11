@@ -1,15 +1,19 @@
 package com.openggf.game.sonic1.objects;
+import com.openggf.audio.GameMusic;
 import com.openggf.game.PlayableEntity;
+import com.openggf.game.sonic1.resources.Sonic1PlcService;
+import com.openggf.game.sonic1.constants.Sonic1AnimationIds;
 
 import com.openggf.camera.Camera;
-import com.openggf.game.sonic1.audio.Sonic1Music;
 import com.openggf.game.sonic1.audio.Sonic1Sfx;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
+import com.openggf.level.objects.ObjectLifetimeOps;
 import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.level.objects.SignpostSparkleObjectInstance;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
@@ -37,7 +41,8 @@ import java.util.logging.Logger;
  *   <li>Anim 3 (.sonic): frame 4 at delay $F (static Sonic)</li>
  * </ul>
  */
-public class Sonic1SignpostObjectInstance extends AbstractObjectInstance {
+public class Sonic1SignpostObjectInstance extends AbstractObjectInstance
+        implements SpawnRewindRecreatable {
     private static final Logger LOGGER = Logger.getLogger(Sonic1SignpostObjectInstance.class.getName());
 
     // Routine states matching disassembly Sign_Index offsets
@@ -132,15 +137,13 @@ public class Sonic1SignpostObjectInstance extends AbstractObjectInstance {
         int currentAct = services().currentAct();
         if (currentAct >= BOSS_ACT_INDEX) {
             ObjectManager objMgr = services().objectManager();
-            if (objMgr != null) {
-                objMgr.markRemembered(spawn);
-            }
+            ObjectLifetimeOps.markSpawnRemembered(objMgr, spawn);
             setDestroyed(true);
         }
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         ensureInitialized();
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed() || player == null) {
@@ -286,13 +289,11 @@ public class Sonic1SignpostObjectInstance extends AbstractObjectInstance {
             sparkleTimer = SPARKLE_SPAWN_DELAY;
 
             int[] offset = SPARKLE_POSITIONS[sparkleIndex];
-            int sparkleX = spawn.x() + offset[0];
-            int sparkleY = spawn.y() + offset[1];
+            final int sparkleX = spawn.x() + offset[0];
+            final int sparkleY = spawn.y() + offset[1];
 
-            SignpostSparkleObjectInstance sparkle = new SignpostSparkleObjectInstance(sparkleX, sparkleY);
-            ObjectManager objectManager = services().objectManager();
-            if (objectManager != null) {
-                objectManager.addDynamicObject(sparkle);
+            if (services().objectManager() != null) {
+                spawnFreeChild(() -> new SignpostSparkleObjectInstance(sparkleX, sparkleY));
             }
 
             // ROM: addq.b #2,sparkle_id(a0); andi.b #$E,sparkle_id(a0)
@@ -319,6 +320,17 @@ public class Sonic1SignpostObjectInstance extends AbstractObjectInstance {
      *   addq.b #2,obRoutine(a0)            - advance to GotThroughAct
      */
     private void updateWalkOff(AbstractPlayableSprite player) {
+        if (isRetainedGiantRingPlayerSstDeleted(player)) {
+            // The native player SST has been cleared, so no later player-slot
+            // animation dispatch can rewrite Flash_Collect's retained
+            // id_Null byte. Keep the structural engine sprite aligned with
+            // that absent-slot state while the signpost commits v_endcard.
+            player.setAnimationId(Sonic1AnimationIds.NULL.id());
+            player.setForcedAnimationId(Sonic1AnimationIds.NULL.id());
+            triggerGotThroughAct(player);
+            return;
+        }
+
         // ROM re-applies control lock every frame while player is on the ground.
         // If player is in air, skip the control lock (original S1 behavior).
         if (!player.getAir()) {
@@ -339,12 +351,44 @@ public class Sonic1SignpostObjectInstance extends AbstractObjectInstance {
     }
 
     /**
+     * Object 7C clears the Sonic SST after collecting a giant ring. The engine
+     * retains the structural sprite, so this conjunction is the S1-owned
+     * equivalent of Sign_SonicRun's {@code tst.b (v_player+obID)} reading zero.
+     */
+    private boolean isRetainedGiantRingPlayerSstDeleted(AbstractPlayableSprite player) {
+        var gameState = services().gameState();
+        return gameState != null
+                && gameState.isBigRingCollected()
+                && !player.isNativeSlotPresent();
+    }
+
+    /**
      * GotThroughAct subroutine from the disassembly.
      * ROM: clr.b (v_invinc).w; clr.b (f_timecount).w;
      *      move.b #id_GotThroughCard,(v_endcard).w;
      *      move.w #bgm_GotThrough,d0; jsr (QueueSound2).l
      */
     private void triggerGotThroughAct(AbstractPlayableSprite player) {
+        var levelGamestate = services().levelGamestate();
+        final int elapsedSeconds = levelGamestate != null ? levelGamestate.getElapsedSeconds() : 0;
+        final int ringCount = player.getRingCount();
+        final int actNumber = services().currentAct() + 1; // 1-indexed for display
+        final boolean specialStageAfter = services().gameState() != null
+                && services().gameState().isBigRingCollected();
+        Sonic1FixedEndCardSlot.ClaimResult claim = Sonic1FixedEndCardSlot.claim(
+                services(),
+                new Sonic1FixedEndCardSlot.ResultsData(
+                        elapsedSeconds, ringCount, actNumber, specialStageAfter));
+        Sonic1ResultsScreenObjectInstance card = claim.requireCard();
+        if (claim.state() == Sonic1FixedEndCardSlot.ClaimState.EXISTING_COMMITTED) {
+            resultsSpawned = true;
+            routineState = STATE_COMPLETE;
+            return;
+        }
+        if (!queueResultsPlc()) {
+            return;
+        }
+        card.markResultsPlcCommitted();
         resultsSpawned = true;
         routineState = STATE_COMPLETE;
         LOGGER.info("S1 Player off-screen, triggering GotThroughAct");
@@ -354,22 +398,21 @@ public class Sonic1SignpostObjectInstance extends AbstractObjectInstance {
 
         // ROM: move.w #bgm_GotThrough,d0; jsr (QueueSound2).l
         try {
-            services().playMusic(Sonic1Music.GOT_THROUGH.id);
+            services().playMusic(GameMusic.ACT_CLEAR);
         } catch (Exception e) {
             LOGGER.warning("Failed to play stage clear music: " + e.getMessage());
         }
 
-        var levelGamestate = services().levelGamestate();
-        int elapsedSeconds = levelGamestate != null ? levelGamestate.getElapsedSeconds() : 0;
-        int ringCount = player.getRingCount();
-        int actNumber = services().currentAct() + 1; // 1-indexed for display
+        LOGGER.info("S1 Results screen committed in fixed v_endcard slot");
+    }
 
-        Sonic1ResultsScreenObjectInstance resultsScreen = new Sonic1ResultsScreenObjectInstance(
-                elapsedSeconds, ringCount, actNumber);
-        ObjectManager objectManager = services().objectManager();
-        if (objectManager != null) {
-            objectManager.addDynamicObject(resultsScreen);
-            LOGGER.info("S1 Results screen spawned");
+    private boolean queueResultsPlc() {
+        try {
+            Sonic1PlcService plc = services().gameModule().getGameService(Sonic1PlcService.class);
+            if (plc != null) plc.replaceQueued(16);
+            return true;
+        } catch (Exception ignored) {
+            return false;
         }
     }
 

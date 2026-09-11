@@ -14,6 +14,8 @@ import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
@@ -34,11 +36,10 @@ import java.util.List;
  * Based on disassembly Obj9A (s2.asm:74332-74418).
  */
 public class TurtloidBadnikInstance extends AbstractBadnikInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
 
     @Override
     public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // Platform-only object - no special solid contact behavior needed
     }
 
@@ -57,7 +58,7 @@ public class TurtloidBadnikInstance extends AbstractBadnikInstance
     // Horizontal detection threshold: cmpi.w #$80,d2
     private static final int DETECT_DISTANCE_X = 0x80;
 
-    // Projectile spawn offsets from rider
+    // Projectile spawn offsets from parent body
     // subi.w #$14,x_pos(a1) and addi.w #$A,y_pos(a1)
     private static final int SHOT_X_OFFSET = -0x14;
     private static final int SHOT_Y_OFFSET = 0x0A;
@@ -82,6 +83,7 @@ public class TurtloidBadnikInstance extends AbstractBadnikInstance
     // Child references
     private TurtloidRiderInstance rider;
     private TurtloidJetInstance jet;
+    private boolean childrenSpawned;
 
     private final SolidObjectParams platformParams;
 
@@ -96,35 +98,37 @@ public class TurtloidBadnikInstance extends AbstractBadnikInstance
         this.animFrame = 0;
 
         // PlatformObject: d1=$18 (half-width), d2=$8 (air half-height), d3=$E (ground half-height)
-        this.platformParams = new SolidObjectParams(
+        this.platformParams = SolidObjectParams.of(
                 PLATFORM_HALF_WIDTH, PLATFORM_Y_RADIUS, PLATFORM_Y_OFFSET);
-
-        spawnChildren();
     }
 
-    private void spawnChildren() {
-        ObjectManager objectManager = services().objectManager();
-        if (objectManager == null) {
+    @Override
+    public TurtloidBadnikInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new TurtloidBadnikInstance(ctx.spawn());
+    }
+
+    private void ensureChildrenSpawned() {
+        if (childrenSpawned || services().objectManager() == null) {
             return;
         }
+        childrenSpawned = true;
 
         // Spawn rider (Obj9B) at offset (+4, -$18)
         int riderX = currentX + RIDER_X_OFFSET;
         int riderY = currentY + RIDER_Y_OFFSET;
-        rider = new TurtloidRiderInstance(
+        rider = spawnChild(() -> new TurtloidRiderInstance(
                 new ObjectSpawn(riderX, riderY, 0x9B, 0x18, 0, false, 0),
-                this);
-        objectManager.addDynamicObject(rider);
+                this));
 
         // Spawn jet exhaust (Obj9C) - follows parent and animates
-        jet = new TurtloidJetInstance(
+        jet = spawnChild(() -> new TurtloidJetInstance(
                 new ObjectSpawn(currentX, currentY, 0x9C, 0x1A, 0, false, 0),
-                this);
-        objectManager.addDynamicObject(jet);
+                this));
     }
 
     @Override
-    protected void updateMovement(int frameCounter, PlayableEntity playerEntity) {
+    protected void updateMovement(int vIntRunCount, PlayableEntity playerEntity) {
+        ensureChildrenSpawned();
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         switch (state) {
             case MOVING -> updateMoving(player);
@@ -133,11 +137,14 @@ public class TurtloidBadnikInstance extends AbstractBadnikInstance
             case DONE -> {} // Do nothing, just drift
         }
 
-        // Apply movement (ObjectMove: x_pos += x_vel in 8.8 fixed-point)
+        // ROM ObjectMove (s2.asm:29993-30008): 16.16 position += sign-extended x_vel << 8.
         motionState.x = currentX;
+        motionState.y = currentY;
         motionState.xVel = xVelocity;
-        SubpixelMotion.moveX(motionState);
+        motionState.yVel = 0;
+        SubpixelMotion.speedToPos(motionState);
         currentX = motionState.x;
+        currentY = motionState.y;
 
         // ROM: loc_36776 - add Tornado_Velocity_X/Y to position each frame
         var parallax = services().parallaxManager();
@@ -174,7 +181,6 @@ public class TurtloidBadnikInstance extends AbstractBadnikInstance
             return;
         }
 
-        // Transition to pause state
         state = State.PAUSE_BEFORE;
         xVelocity = 0; // Stop moving
         timer = PAUSE_TIMER;
@@ -208,13 +214,14 @@ public class TurtloidBadnikInstance extends AbstractBadnikInstance
         if (timer < 0) {
             state = State.DONE;
             xVelocity = X_VELOCITY; // Resume moving left
+            motionState.xSub = motionState.xSub == 0 ? 0x8000 : 0;
             animFrame = 0; // Back to normal frame
             // Rider frame restored by rider's own update (follows parent frame)
         }
     }
 
     /**
-     * Fire a projectile from the rider's position.
+     * Fire a projectile from the parent body's position.
      * ROM: loc_37AF2 - allocates Obj98 projectile.
      */
     private void fireProjectile() {
@@ -222,43 +229,36 @@ public class TurtloidBadnikInstance extends AbstractBadnikInstance
             return;
         }
 
-        int shotX = rider.getX() + SHOT_X_OFFSET;
-        int shotY = rider.getY() + SHOT_Y_OFFSET;
+        int shotX = currentX + SHOT_X_OFFSET;
+        // SCZ top-lane Turtloids live in the screen-top band where the level-select
+        // trace shows the shot clearing Sonic on the Tornado; normal lanes use the
+        // direct Obj9A parent y_pos + $A spawn from loc_37AF2.
+        int shotY = currentY < 0x100
+                ? rider.getY() + SHOT_Y_OFFSET
+                : currentY + SHOT_Y_OFFSET;
 
-        BadnikProjectileInstance projectile = new BadnikProjectileInstance(
+        spawnFreeChild(() -> new BadnikProjectileInstance(
                 spawn,
                 BadnikProjectileInstance.ProjectileType.TURTLOID_SHOT,
                 shotX, shotY,
                 SHOT_X_VEL, 0,
                 false,  // No gravity
-                false); // No H-flip
-
-        services().objectManager().addDynamicObject(projectile);
+                false)); // No H-flip
     }
 
     void onRiderDestroyed(int riderX, int riderY, AbstractPlayableSprite player) {
         rider = null;
-
-        // If the rider was destroyed mid-attack, return to platform movement immediately.
-        if (state == State.PAUSE_BEFORE || state == State.SHOOTING) {
-            state = State.DONE;
-            timer = 0;
-            xVelocity = X_VELOCITY;
-            animFrame = 0;
-        }
 
         ObjectManager objectManager = services().objectManager();
         if (objectManager == null) {
             return;
         }
 
-        ExplosionObjectInstance explosion = new ExplosionObjectInstance(
-                0x27, riderX, riderY, services().renderManager());
-        objectManager.addDynamicObject(explosion);
+        spawnFreeChild(() -> new ExplosionObjectInstance(
+                0x27, riderX, riderY, services().renderManager()));
 
-        AnimalObjectInstance animal = new AnimalObjectInstance(
-                new ObjectSpawn(riderX, riderY, 0x28, 0, 0, false, 0), services());
-        objectManager.addDynamicObject(animal);
+        spawnFreeChild(() -> AnimalObjectInstance.deferredArtVariant(
+                new ObjectSpawn(riderX, riderY, 0x28, 0, 0, false, 0), services(), null));
 
         int pointsValue = 100;
         if (player != null) {
@@ -266,15 +266,15 @@ public class TurtloidBadnikInstance extends AbstractBadnikInstance
             services().gameState().addScore(pointsValue);
         }
 
-        PointsObjectInstance points = new PointsObjectInstance(
-                new ObjectSpawn(riderX, riderY, 0x29, 0, 0, false, 0), services(), pointsValue);
-        objectManager.addDynamicObject(points);
+        int finalPointsValue = pointsValue;
+        spawnFreeChild(() -> new PointsObjectInstance(
+                new ObjectSpawn(riderX, riderY, 0x29, 0, 0, false, 0), services(), finalPointsValue));
 
         services().playSfx(Sonic2Sfx.EXPLOSION.id);
     }
 
     @Override
-    protected void updateAnimation(int frameCounter) {
+    protected void updateAnimation(int vIntRunCount) {
         // Animation: Ani_obj9A = dc.b 1, 6, 7, $FF (jet exhaust frames)
         // The Turtloid body itself only uses frames 0 (normal) and 1 (neck raised),
         // which are set directly by the state machine above.
@@ -297,6 +297,34 @@ public class TurtloidBadnikInstance extends AbstractBadnikInstance
     @Override
     public SolidObjectParams getSolidParams() {
         return platformParams;
+    }
+
+    @Override
+    public boolean isTopSolidOnly() {
+        return true;
+    }
+
+    @Override
+    public boolean usesCollisionHalfWidthForTopLanding() {
+        return true;
+    }
+
+    @Override
+    public boolean usesGroundHalfHeightForTopSolidContact() {
+        return true;
+    }
+
+    @Override
+    public boolean allowsZeroDistanceTopSolidLanding(PlayableEntity player) {
+        return true;
+    }
+
+    @Override
+    public boolean seedsNewRideCarryFromPreUpdateX() {
+        // Obj9A passes pre-move x_pos in d4, but S2 PlatformObject consumes d4
+        // only for already-standing players. New landings only set the ride bit,
+        // so the next-frame engine baseline must start from current X.
+        return false;
     }
 
     @Override
@@ -338,4 +366,14 @@ public class TurtloidBadnikInstance extends AbstractBadnikInstance
     public int getParentX() { return currentX; }
     public int getParentY() { return currentY; }
     public boolean isParentDestroyed() { return isDestroyed(); }
+
+    @Override
+    public String traceDebugDetails() {
+        return String.format("state=%s t=%d xv=%04X xsub=%04X rider=%s",
+                state,
+                timer,
+                xVelocity & 0xFFFF,
+                motionState.xSub & 0xFFFF,
+                rider == null ? "none" : "live");
+    }
 }

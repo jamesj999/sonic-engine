@@ -147,3 +147,5 @@ class TestSonic3kSpecialStageGrid {
         assertEquals(0x0A, grid.getCellByIndex(5), "AND should clear high bit");
     }
 }
+
+

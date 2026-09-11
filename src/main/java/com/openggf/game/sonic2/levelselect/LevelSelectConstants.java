@@ -1,5 +1,7 @@
 package com.openggf.game.sonic2.levelselect;
 
+import com.openggf.graphics.PatternAtlasRange;
+
 /**
  * Constants and data tables for the Sonic 2 Level Select screen.
  *
@@ -14,7 +16,7 @@ package com.openggf.game.sonic2.levelselect;
 public final class LevelSelectConstants {
 
     /** Pattern base ID for level select art (high ID to avoid conflicts) */
-    public static final int PATTERN_BASE = 0x50000;
+    public static final int PATTERN_BASE = PatternAtlasRange.MENU_AND_DATA_SELECT.base();
 
     /** Pattern offset for menu background art (separate from menu box/font/icon art) */
     public static final int MENU_BACK_OFFSET = 0x500;

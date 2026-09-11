@@ -4,6 +4,7 @@ import com.openggf.audio.smps.AbstractSmpsData;
 import com.openggf.audio.smps.DacData;
 import com.openggf.audio.smps.SmpsSequencer;
 import com.openggf.audio.driver.SmpsDriver;
+import com.openggf.audio.driver.SmpsDriverTestAccess;
 import com.openggf.audio.synth.Ym2612Chip;
 import com.openggf.data.Rom;
 import com.openggf.game.sonic2.audio.Sonic2SmpsSequencerConfig;
@@ -90,7 +91,7 @@ public class AudioReferenceGenerator {
             return;
         }
 
-        SmpsDriver driver = new SmpsDriver(SAMPLE_RATE);
+        SmpsDriver driver = SmpsDriverTestAccess.create(SAMPLE_RATE);
         driver.setRegion(SmpsSequencer.Region.NTSC);
 
         SmpsSequencer seq = new SmpsSequencer(musicData, dacData, driver, Sonic2SmpsSequencerConfig.CONFIG);
@@ -116,7 +117,7 @@ public class AudioReferenceGenerator {
             return;
         }
 
-        SmpsDriver driver = new SmpsDriver(SAMPLE_RATE);
+        SmpsDriver driver = SmpsDriverTestAccess.create(SAMPLE_RATE);
         driver.setRegion(SmpsSequencer.Region.NTSC);
 
         SmpsSequencer seq = new SmpsSequencer(sfxData, dacData, driver, Sonic2SmpsSequencerConfig.CONFIG);
@@ -147,7 +148,7 @@ public class AudioReferenceGenerator {
         AbstractSmpsData sfx1Data = loader.loadSfx(sfx1Id);
         AbstractSmpsData sfx2Data = loader.loadSfx(sfx2Id);
 
-        SmpsDriver driver = new SmpsDriver(SAMPLE_RATE);
+        SmpsDriver driver = SmpsDriverTestAccess.create(SAMPLE_RATE);
         driver.setRegion(SmpsSequencer.Region.NTSC);
 
         SmpsSequencer musicSeq = new SmpsSequencer(musicData, dacData, driver, Sonic2SmpsSequencerConfig.CONFIG);
@@ -186,7 +187,7 @@ public class AudioReferenceGenerator {
             }
 
             int toRead = Math.min(buffer.length, totalSamples - samplesWritten);
-            driver.read(buffer);
+            SmpsDriverTestAccess.read(driver, buffer);
             System.arraycopy(buffer, 0, audio, samplesWritten, toRead);
             samplesWritten += toRead;
         }
@@ -202,7 +203,7 @@ public class AudioReferenceGenerator {
         int samplesWritten = 0;
         while (samplesWritten < totalSamples) {
             int toRead = Math.min(buffer.length, totalSamples - samplesWritten);
-            driver.read(buffer);
+            SmpsDriverTestAccess.read(driver, buffer);
             System.arraycopy(buffer, 0, audio, samplesWritten, toRead);
             samplesWritten += toRead;
         }
@@ -218,7 +219,7 @@ public class AudioReferenceGenerator {
         int samplesWritten = 0;
         try {
             while (!driver.isComplete() && samplesWritten < maxSamples) {
-                driver.read(buffer);
+                SmpsDriverTestAccess.read(driver, buffer);
                 for (int i = 0; i < buffer.length && samplesWritten < maxSamples; i++) {
                     dos.writeShort(buffer[i]);
                     samplesWritten++;
@@ -275,7 +276,7 @@ public class AudioReferenceGenerator {
      * Requires ROM file in working directory or via -Dsonic.rom.path
      */
     public static void main(String[] args) {
-        String romPath = System.getProperty("sonic.rom.path", "Sonic The Hedgehog 2 (W) (REV01) [!].gen");
+        String romPath = System.getProperty("sonic.rom.path", "s2.gen");
         File romFile = new File(romPath);
 
         if (!romFile.exists()) {

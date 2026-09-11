@@ -1,8 +1,8 @@
 package com.openggf.level.resources;
 
 import com.openggf.data.Rom;
-import com.openggf.tools.KosinskiReader;
-import com.openggf.tools.NemesisReader;
+import com.openggf.data.compression.KosinskiReader;
+import com.openggf.data.compression.NemesisReader;
 
 import java.io.IOException;
 import java.nio.channels.FileChannel;
@@ -40,8 +40,25 @@ public class ResourceLoader {
 
     private final Rom rom;
 
+    private int lastOpEndBytes;
+
     public ResourceLoader(Rom rom) {
         this.rom = rom;
+    }
+
+    /**
+     * Destination offset one byte past the end of the <em>last</em> operation applied by the
+     * most recent {@link #loadWithOverlays} call.
+     *
+     * <p>This is the composing decompressor's final write pointer, as distinct from the
+     * composed buffer's total extent returned by {@code loadWithOverlays}: an overlay that
+     * lands inside a larger base leaves the write pointer short of the buffer end. Callers
+     * that need to reproduce a ROM routine which reads that pointer back (for example
+     * Sonic 2's LoadZoneTiles, {@code move.w a1,d3} after its last {@code bsr.w KosDec} --
+     * docs/s2disasm/s2.asm:6483-6494) must use this, not the buffer length.
+     */
+    public int lastOpEndBytes() {
+        return lastOpEndBytes;
     }
 
     /**
@@ -65,10 +82,11 @@ public class ResourceLoader {
         // Start with the initial buffer size
         byte[] buffer = new byte[initialBufferSize];
         int usedLength = 0;
+        lastOpEndBytes = 0;
 
         for (LoadOp op : ops) {
             byte[] decompressed = decompress(op);
-            int destOffset = op.destOffsetBytes();
+            int destOffset = op.appendsToPrevious() ? usedLength : op.destOffsetBytes();
             int requiredSize = destOffset + decompressed.length;
 
             // Expand buffer if needed to accommodate this operation
@@ -81,8 +99,13 @@ public class ResourceLoader {
 
             // Track the maximum extent of data
             usedLength = Math.max(usedLength, requiredSize);
+            // ...and, separately, where this decode's write pointer stopped.
+            lastOpEndBytes = requiredSize;
 
-            if (op.destOffsetBytes() > 0) {
+            if (op.appendsToPrevious()) {
+                LOG.fine(String.format("Applied append: ROM 0x%06X -> offset 0x%04X (%d bytes)",
+                        op.romAddr(), destOffset, decompressed.length));
+            } else if (op.destOffsetBytes() > 0) {
                 LOG.fine(String.format("Applied overlay: ROM 0x%06X -> offset 0x%04X (%d bytes)",
                         op.romAddr(), op.destOffsetBytes(), decompressed.length));
             } else {

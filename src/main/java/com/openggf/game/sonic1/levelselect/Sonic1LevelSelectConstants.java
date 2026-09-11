@@ -1,6 +1,7 @@
 package com.openggf.game.sonic1.levelselect;
 
 import com.openggf.game.sonic1.scroll.Sonic1ZoneConstants;
+import com.openggf.graphics.PatternAtlasRange;
 
 /**
  * Constants and data tables for the Sonic 1 Level Select screen.
@@ -18,7 +19,7 @@ import com.openggf.game.sonic1.scroll.Sonic1ZoneConstants;
 public final class Sonic1LevelSelectConstants {
 
     /** Pattern base ID for level select art (high ID to avoid conflicts) */
-    public static final int PATTERN_BASE = 0x50000;
+    public static final int PATTERN_BASE = PatternAtlasRange.MENU_AND_DATA_SELECT.base();
 
     /** Screen dimensions */
     public static final int SCREEN_WIDTH = 320;

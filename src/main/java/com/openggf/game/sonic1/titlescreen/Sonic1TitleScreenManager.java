@@ -4,10 +4,12 @@ import com.openggf.control.InputHandler;
 import com.openggf.configuration.SonicConfiguration;
 import com.openggf.configuration.SonicConfigurationService;
 import com.openggf.game.sonic1.audio.Sonic1Music;
+import com.openggf.game.GameServices;
 import com.openggf.game.TitleScreenProvider;
 import com.openggf.game.sonic1.constants.Sonic1Constants;
+import com.openggf.game.sonic1.resources.Sonic1PlcService;
 import com.openggf.game.sonic1.scroll.SwScrlGhz;
-import com.openggf.graphics.GLCommand;
+import com.openggf.game.titlescreen.SegaPaletteFade;
 import com.openggf.graphics.GraphicsManager;
 import com.openggf.level.Palette;
 import com.openggf.level.PatternDesc;
@@ -20,7 +22,6 @@ import java.util.List;
 import java.util.logging.Logger;
 
 import static org.lwjgl.opengl.GL11.glClearColor;
-import com.openggf.game.GameServices;
 
 /**
  * Manages the Sonic 1 Title Screen.
@@ -44,7 +45,7 @@ public class Sonic1TitleScreenManager implements TitleScreenProvider {
 
     private static Sonic1TitleScreenManager instance;
 
-    private final SonicConfigurationService configService = SonicConfigurationService.getInstance();
+    private final SonicConfigurationService configService;
     private final Sonic1TitleScreenDataLoader dataLoader = new Sonic1TitleScreenDataLoader();
     private final PatternDesc reusableDesc = new PatternDesc();
 
@@ -53,18 +54,81 @@ public class Sonic1TitleScreenManager implements TitleScreenProvider {
     // Frame counter for overall timing
     private int frameCounter = 0;
 
-    // Fade timing
+    // Fade timing. GM_Title fades the assembled title screen in with PaletteFadeIn:
+    // 22 VBlank periods (move.w #22-1,d4), each running FadeIn_AddColor once over
+    // all 64 colours. Only WaitForVBlank, the fade step and RunPLC run inside that
+    // loop; ExecuteObjects, DeformLayers and PalCycle_Title stay frozen until
+    // Tit_MainLoop starts.
     private int fadeTimer = 0;
-    private static final int FADE_DURATION = 16;
+    private static final int FADE_DURATION = SegaPaletteFade.ROM_FADE_FRAMES;
 
-    // Intro text timing (matches S2: 22 frames fade, 96 frames hold)
+    // Intro text timing: the "SONIC TEAM PRESENTS" screen uses the same
+    // PaletteFadeIn / PaletteFadeOut pair (22 frames each) and holds for 96 frames.
     private int introTextTimer = 0;
-    private static final int INTRO_TEXT_FADE_DURATION = 22;
+    private static final int INTRO_TEXT_FADE_DURATION = SegaPaletteFade.ROM_FADE_FRAMES;
     private static final int INTRO_TEXT_HOLD_DURATION = 96;
+    private int segaLogoTimer = 0;
+    private boolean segaPcmStarted = false;
+    private SegaLogoFadePhase segaLogoFadePhase = SegaLogoFadePhase.FADING_IN;
+    private int segaLogoFadeTimer = 0;
+    private final Sonic1TitleScreenDataLoader.SegaLogoPaletteCycleState segaLogoPaletteCycle =
+            new Sonic1TitleScreenDataLoader.SegaLogoPaletteCycleState();
+    private static final int SEGA_LOGO_FADE_FRAMES = 22;
+    private static final int SEGA_LOGO_PALETTE_FRAMES = 76;
+    private static final int SEGA_LOGO_PCM_FRAMES = 98;
+    private static final int SEGA_LOGO_POST_CHANT_FRAMES = 30;
+
+    private enum SegaLogoFadePhase {
+        FADING_IN,
+        ACTIVE,
+        FADING_OUT
+    }
 
     // Screen dimensions
     private static final int SCREEN_WIDTH = 320;
     private static final int SCREEN_HEIGHT = 224;
+    static final int SEGA_LOGO_SCAN_X = 8 * 8;
+    static final int SEGA_LOGO_SCAN_Y = 10 * 8;
+
+    // Widescreen helpers ---------------------------------------------------
+
+    /**
+     * Returns the current projection viewport width in game pixels.
+     * At native 320 this equals SCREEN_WIDTH exactly.
+     * Uses GraphicsManager.getProjectionWidth() which is propagated each frame
+     * by Engine — same approach as AbstractResultsScreen.xOffset().
+     */
+    private int viewportWidth() {
+        try {
+            int w = GameServices.graphics().getProjectionWidth();
+            return w > 0 ? w : SCREEN_WIDTH;
+        } catch (Exception ignored) {
+            return SCREEN_WIDTH;
+        }
+    }
+
+    /**
+     * Horizontal offset that shifts the native-320 content block to the centre
+     * of the current viewport.  Zero at native (byte-identical); positive at
+     * wider resolutions.
+     */
+    private int xOffset() {
+        return (viewportWidth() - SCREEN_WIDTH) / 2;
+    }
+
+    /**
+     * Number of 8-px tile columns to fill the viewport.
+     * Includes one extra column on each side so the sub-tile H-scroll offset
+     * never leaves a visible gap.  At native 320 this equals 42 (matching the
+     * existing literal), so the background is byte-identical at native width.
+     *
+     * <p>Package-visible for unit tests.
+     */
+    public static int bgTileColumns(int viewportWidth) {
+        return (viewportWidth + 7) / 8 + 2;
+    }
+
+    // End widescreen helpers -----------------------------------------------
 
     // Sprite rendering
     private PatternSpriteRenderer sonicSpriteRenderer;
@@ -102,6 +166,14 @@ public class Sonic1TitleScreenManager implements TitleScreenProvider {
     // to Plane A tile row 9: (104 - startPixelY) / 8 = (104 - 32) / 8 = 9.
     private static final int PLANE_A_SPLIT_ROW = 9;
 
+    // Top screen row of the M_PSB_Limiter band. Obj0F frame 2 (v_ttlsonichide) sits
+    // at obScreenY = $80+$B0 (screen Y 176) and its first row of ten 4x4 pieces is at
+    // piece offset -$48, i.e. screen Y 176-72 = 104. Ten 32px-wide sprites exhaust the
+    // VDP's 320-pixel-per-line budget, so every sprite after it in the SAT is dropped
+    // on those lines. TitleSonic has obPriority 1 and therefore loses; the "TM" object
+    // shares priority 0 but occupies an earlier slot, so it still draws.
+    private static final int SPRITE_LIMITER_TOP_Y = 104;
+
     // Background scroll using GHZ parallax scroll handler
     private int bgCameraX = 0;
     private SwScrlGhz scrollHandler;
@@ -110,19 +182,30 @@ public class Sonic1TitleScreenManager implements TitleScreenProvider {
     // Palette cycling (water animation)
     private int palCycleTimer = 0;
     private int palCycleFrame = 0;
+    private boolean titlePlcPending;
     private static final int PAL_CYCLE_SPEED = 6; // Update every 6 frames (from disassembly)
     private static final int PAL_CYCLE_FRAMES = 4; // 4 cycle frames (32 bytes / 8 bytes per frame)
 
     // Credit text rendering
     private boolean creditTextCached = false;
 
-    private Sonic1TitleScreenManager() {}
+    public Sonic1TitleScreenManager() {
+        this(null);
+    }
+
+    Sonic1TitleScreenManager(SonicConfigurationService configService) {
+        this.configService = configService;
+    }
 
     public static Sonic1TitleScreenManager getInstance() {
         if (instance == null) {
             instance = new Sonic1TitleScreenManager();
         }
         return instance;
+    }
+
+    private SonicConfigurationService configuration() {
+        return configService != null ? configService : GameServices.configuration();
     }
 
     /**
@@ -143,10 +226,17 @@ public class Sonic1TitleScreenManager implements TitleScreenProvider {
             return;
         }
 
+        titlePlcPending = !queueTitlePlc();
+
         // Reset all state
         frameCounter = 0;
         fadeTimer = 0;
         introTextTimer = 0;
+        segaLogoTimer = 0;
+        segaPcmStarted = false;
+        segaLogoFadePhase = SegaLogoFadePhase.FADING_IN;
+        segaLogoFadeTimer = 0;
+        segaLogoPaletteCycle.reset();
         creditTextCached = false;
         spritesInitialized = false;
         bgCameraX = 0;
@@ -167,9 +257,9 @@ public class Sonic1TitleScreenManager implements TitleScreenProvider {
 
         // Reset data loader cache so patterns get re-uploaded
         dataLoader.resetCache();
+        dataLoader.resetSegaLogoPaletteCycle();
 
-        // Start with intro text phase
-        state = State.INTRO_TEXT_FADE_IN;
+        state = State.SEGA_LOGO;
 
         // Apply title palette
         applyTitlePalette();
@@ -177,17 +267,38 @@ public class Sonic1TitleScreenManager implements TitleScreenProvider {
         LOGGER.info("Sonic 1 Title Screen initialized");
     }
 
+    private boolean queueTitlePlc() {
+        try {
+            Sonic1PlcService plcService = GameServices.module().getGameService(Sonic1PlcService.class);
+            if (plcService != null) {
+                plcService.replaceQueued(0);
+            }
+            return true;
+        } catch (Exception ignored) {
+            // The presentation renderer also runs without a gameplay module in focused tests.
+            return false;
+        }
+    }
+
     @Override
     public void update(InputHandler input) {
         if (state == State.INACTIVE) {
             return;
         }
+        if (titlePlcPending) {
+            titlePlcPending = !queueTitlePlc();
+            if (titlePlcPending) return;
+        }
 
         frameCounter++;
 
-        int startKey = configService.getInt(SonicConfiguration.JUMP);
+        int startKey = configuration().getInt(SonicConfiguration.JUMP);
 
         switch (state) {
+            case SEGA_LOGO:
+                updateSegaLogo(input, startKey);
+                break;
+
             case INTRO_TEXT_FADE_IN:
                 introTextTimer++;
                 if (introTextTimer >= INTRO_TEXT_FADE_DURATION) {
@@ -195,7 +306,7 @@ public class Sonic1TitleScreenManager implements TitleScreenProvider {
                     introTextTimer = 0;
                 }
                 // Skip intro on Start/Jump press
-                if (input.isKeyPressed(startKey)) {
+                if (confirmPressed(input, startKey)) {
                     skipToMainScreen();
                 }
                 break;
@@ -206,7 +317,7 @@ public class Sonic1TitleScreenManager implements TitleScreenProvider {
                     state = State.INTRO_TEXT_FADE_OUT;
                     introTextTimer = 0;
                 }
-                if (input.isKeyPressed(startKey)) {
+                if (confirmPressed(input, startKey)) {
                     skipToMainScreen();
                 }
                 break;
@@ -216,23 +327,24 @@ public class Sonic1TitleScreenManager implements TitleScreenProvider {
                 if (introTextTimer >= INTRO_TEXT_FADE_DURATION) {
                     transitionToMainScreen();
                 }
-                if (input.isKeyPressed(startKey)) {
+                if (confirmPressed(input, startKey)) {
                     skipToMainScreen();
                 }
                 break;
 
             case FADE_IN:
+                // PaletteFadeIn owns the frame here: no object execution, background
+                // scroll or palette cycle until the fade loop returns to Tit_MainLoop.
                 fadeTimer++;
                 if (fadeTimer >= FADE_DURATION) {
                     state = State.ACTIVE;
                     fadeTimer = 0;
                 }
-                updateMainScreen();
                 break;
 
             case ACTIVE:
                 updateMainScreen();
-                if (input.isKeyPressed(startKey)) {
+                if (confirmPressed(input, startKey)) {
                     state = State.EXITING;
                 }
                 break;
@@ -250,6 +362,78 @@ public class Sonic1TitleScreenManager implements TitleScreenProvider {
         transitionToMainScreen();
     }
 
+    /**
+     * Keyboard Start/Jump press or gamepad confirm (Start / any face action button),
+     * matching {@link com.openggf.game.MasterTitleScreen}'s gamepad-aware confirm gate.
+     */
+    private static boolean confirmPressed(InputHandler input, int startKey) {
+        return input.isKeyPressed(startKey) || input.logical().menuAccept();
+    }
+
+    private void updateSegaLogo(InputHandler input, int startKey) {
+        if (updateSegaLogoFadeIn()) {
+            return;
+        }
+        if (updateSegaLogoFadeOut()) {
+            return;
+        }
+
+        segaLogoTimer++;
+        if (segaLogoTimer <= SEGA_LOGO_PALETTE_FRAMES) {
+            dataLoader.advanceSegaLogoPaletteCycle(segaLogoPaletteCycle);
+        }
+        int chantStart = SEGA_LOGO_PALETTE_FRAMES;
+        int skipWindowStart = chantStart + SEGA_LOGO_PCM_FRAMES;
+        int autoEnd = skipWindowStart + SEGA_LOGO_POST_CHANT_FRAMES;
+
+        if (!segaPcmStarted && segaLogoTimer >= chantStart) {
+            segaPcmStarted = true;
+            GameServices.audio().playMusic(com.openggf.game.sonic1.audio.Sonic1SmpsConstants.CMD_SEGA);
+        }
+        if (segaLogoTimer >= autoEnd || (segaLogoTimer >= skipWindowStart && confirmPressed(input, startKey))) {
+            beginSegaLogoFadeOut();
+        }
+    }
+
+    private boolean updateSegaLogoFadeIn() {
+        if (segaLogoFadePhase != SegaLogoFadePhase.FADING_IN) {
+            return false;
+        }
+        segaLogoFadeTimer++;
+        if (segaLogoFadeTimer < SEGA_LOGO_FADE_FRAMES) {
+            return true;
+        }
+        segaLogoFadePhase = SegaLogoFadePhase.ACTIVE;
+        segaLogoFadeTimer = 0;
+        return false;
+    }
+
+    private boolean updateSegaLogoFadeOut() {
+        if (segaLogoFadePhase != SegaLogoFadePhase.FADING_OUT) {
+            return false;
+        }
+        segaLogoFadeTimer++;
+        if (segaLogoFadeTimer < SEGA_LOGO_FADE_FRAMES) {
+            return true;
+        }
+        state = State.INTRO_TEXT_FADE_IN;
+        introTextTimer = 0;
+        segaLogoTimer = 0;
+        segaPcmStarted = false;
+        segaLogoFadePhase = SegaLogoFadePhase.FADING_IN;
+        segaLogoFadeTimer = 0;
+        return true;
+    }
+
+    private void beginSegaLogoFadeOut() {
+        if (segaLogoFadePhase == SegaLogoFadePhase.FADING_OUT) {
+            return;
+        }
+        segaLogoFadePhase = SegaLogoFadePhase.FADING_OUT;
+        segaLogoFadeTimer = 0;
+        GameServices.audio().stopSegaPcm();
+    }
+
     private void transitionToMainScreen() {
         state = State.FADE_IN;
         fadeTimer = 0;
@@ -258,6 +442,13 @@ public class Sonic1TitleScreenManager implements TitleScreenProvider {
         palCycleTimer = 0;
         palCycleFrame = 0;
         scrollHandler = new SwScrlGhz();
+
+        // GM_Title runs ExecuteObjects, DeformLayers and BuildSprites exactly once
+        // before PaletteFadeIn, so the fade-in shows the already-built first frame:
+        // TSon_Main advances to TSon_Delay and falls straight through into its first
+        // delay tick, and the GHZ deformation is seeded at background X 0.
+        updateTitleSonic();
+        scrollHandler.update(horizScrollBuf, bgCameraX, 0, frameCounter, 0);
 
         // Play title music
         GameServices.audio().playMusic(Sonic1Music.TITLE.id);
@@ -292,11 +483,12 @@ public class Sonic1TitleScreenManager implements TitleScreenProvider {
      */
     private void updateTitleSonic() {
         switch (sonicRoutine) {
-            case 0: // Init - advance to delay
+            case 0: // TSon_Main - advance to delay. There is no rts after the
+                    // AnimateSprite call, so the routine falls through into
+                    // TSon_Delay and consumes the first delay tick this same frame.
                 sonicRoutine = 2;
-                break;
-
-            case 2: // Delay - wait 30 frames
+                // fall through
+            case 2: // TSon_Delay - wait until obDelayAni (30-1) goes negative
                 sonicDelayTimer--;
                 if (sonicDelayTimer < 0) {
                     sonicRoutine = 4; // Move
@@ -405,7 +597,9 @@ public class Sonic1TitleScreenManager implements TitleScreenProvider {
             int subTileX = bgPixelPos & 7;
             int startTileX = bgPixelPos >> 3;
 
-            for (int screenTile = 0; screenTile < 42; screenTile++) {
+            // bgTileColumns() returns 42 at native 320 — byte-identical at native width.
+            int tileColumns = bgTileColumns(viewportWidth());
+            for (int screenTile = 0; screenTile < tileColumns; screenTile++) {
                 int mapTileX = startTileX + screenTile;
                 // Wrap horizontally within the nametable
                 mapTileX = ((mapTileX % mapWidth) + mapWidth) % mapWidth;
@@ -465,7 +659,7 @@ public class Sonic1TitleScreenManager implements TitleScreenProvider {
         }
 
         // Re-upload palette line 2 to GPU
-        dataLoader.rechachePaletteLine(2);
+        dataLoader.rechachePaletteLine(GameServices.graphics(), 2);
     }
 
     @Override
@@ -474,10 +668,17 @@ public class Sonic1TitleScreenManager implements TitleScreenProvider {
             return;
         }
 
-        GraphicsManager gm = GraphicsManager.getInstance();
+        GraphicsManager gm = GameServices.graphics();
 
-        // Ensure palettes are uploaded to GPU (required for all pattern rendering)
-        dataLoader.cachePalettesToGpu();
+        if (state == State.SEGA_LOGO) {
+            drawSegaLogo(gm);
+            return;
+        }
+
+        // Ensure palettes are uploaded to GPU (required for all pattern rendering).
+        // Fades go through the palette, as PaletteFadeIn / PaletteFadeOut do on the
+        // Mega Drive: blue, then green, then red on the way in; red, green, blue out.
+        dataLoader.cachePalettesToGpu(gm, paletteFadeMode(), paletteFadeSteps());
 
         // Intro text phases: render "SONIC TEAM PRESENTS"
         if (state == State.INTRO_TEXT_FADE_IN || state == State.INTRO_TEXT_HOLD ||
@@ -492,8 +693,8 @@ public class Sonic1TitleScreenManager implements TitleScreenProvider {
         }
 
         // Cache patterns to GPU
-        dataLoader.cacheGhzToGpu();
-        dataLoader.cacheForegroundToGpu();
+        dataLoader.cacheGhzToGpu(gm);
+        dataLoader.cacheForegroundToGpu(gm);
 
         // --- Render Plane B (GHZ background) ---
         gm.beginPatternBatch();
@@ -516,10 +717,17 @@ public class Sonic1TitleScreenManager implements TitleScreenProvider {
         gm.beginPatternBatch();
 
         // TitleSonic sprite (only visible when not in delay state)
+        // xOffset() == 0 at native 320 — byte-identical at native width.
         if (sonicRoutine >= 4 && sonicSpriteRenderer != null && sonicSpriteRenderer.isReady()) {
-            int screenX = SONIC_X - 128; // VDP to screen coords
+            int screenX = xOffset() + SONIC_X - 128; // VDP to screen coords, centred in viewport
             int screenY = sonicScreenY - 128;
+            enableSpriteLimiterScissor(gm);
             sonicSpriteRenderer.drawFrameIndex(sonicAnimFrame, screenX, screenY);
+            // Pattern draws are queued commands: they only reach GL in
+            // flushScreenSpace(), so the scissor must still be active here.
+            gm.flushPatternBatch();
+            gm.flushScreenSpace();
+            gm.disableScissor();
         }
 
         gm.flushPatternBatch();
@@ -542,20 +750,100 @@ public class Sonic1TitleScreenManager implements TitleScreenProvider {
         drawTMSymbol(gm);
 
         gm.flushPatternBatch();
+    }
 
-        // Fade overlay for FADE_IN state
-        if (state == State.FADE_IN) {
-            float fadeAmount = 1.0f - (float) fadeTimer / FADE_DURATION;
-            if (fadeAmount > 0.0f) {
-                gm.registerCommand(new GLCommand(
-                        GLCommand.CommandType.RECTI,
-                        -1,
-                        GLCommand.BlendType.ONE_MINUS_SRC_ALPHA,
-                        0.0f, 0.0f, 0.0f, fadeAmount,
-                        0, 0, SCREEN_WIDTH, SCREEN_HEIGHT
-                ));
+    /**
+     * Palette fade direction for the intro text and main title screen phases.
+     * The SEGA screen keeps its own phase tracking in {@link #segaLogoFadeMode()}.
+     */
+    private SegaPaletteFade.Mode paletteFadeMode() {
+        if (state == State.INTRO_TEXT_FADE_IN || state == State.FADE_IN) {
+            return SegaPaletteFade.Mode.FROM_BLACK;
+        }
+        if (state == State.INTRO_TEXT_FADE_OUT) {
+            return SegaPaletteFade.Mode.TO_BLACK;
+        }
+        return SegaPaletteFade.Mode.NONE;
+    }
+
+    /**
+     * Number of FadeIn_AddColor / FadeOut_DecColor passes visible on the current
+     * frame. Each PaletteFadeIn iteration first waits for VBlank (which transfers the
+     * palette built so far) and only then applies the next step, so the frame drawn
+     * after the N-th update shows N-1 steps: the first fade frame is fully black
+     * (or, fading out, still the full palette) and the 22nd frame shows all 21 steps.
+     */
+    private int paletteFadeSteps() {
+        return switch (state) {
+            case FADE_IN -> Math.max(0, fadeTimer - 1);
+            case INTRO_TEXT_FADE_IN, INTRO_TEXT_FADE_OUT -> Math.max(0, introTextTimer - 1);
+            default -> 0;
+        };
+    }
+
+    private void drawSegaLogo(GraphicsManager gm) {
+        dataLoader.cacheSegaLogoToGpu(gm, segaLogoFadeMode(), segaLogoFadeTimer);
+        drawSegaLogoScan(gm);
+        int[] map = dataLoader.getSegaLogoMap();
+        if (map == null || map.length == 0) {
+            return;
+        }
+        gm.beginPatternBatch();
+        int width = dataLoader.getSegaLogoWidth();
+        int height = dataLoader.getSegaLogoHeight();
+        for (int ty = 0; ty < height; ty++) {
+            for (int tx = 0; tx < width; tx++) {
+                int word = map[ty * width + tx];
+                if (word == 0) {
+                    continue;
+                }
+                reusableDesc.set(word);
+                int tileIndex = reusableDesc.getPatternIndex();
+                gm.renderPatternWithId(
+                        Sonic1TitleScreenDataLoader.SEGA_LOGO_PATTERN_BASE + tileIndex,
+                        reusableDesc,
+                        xOffset() + tx * 8,
+                        ty * 8);
             }
         }
+        gm.flushPatternBatch();
+    }
+
+    private SegaPaletteFade.Mode segaLogoFadeMode() {
+        if (segaLogoFadePhase == SegaLogoFadePhase.FADING_IN) {
+            return SegaPaletteFade.Mode.FROM_BLACK;
+        }
+        if (segaLogoFadePhase == SegaLogoFadePhase.FADING_OUT) {
+            return SegaPaletteFade.Mode.TO_BLACK;
+        }
+        return SegaPaletteFade.Mode.NONE;
+    }
+
+    private void drawSegaLogoScan(GraphicsManager gm) {
+        int[] map = dataLoader.getSegaLogoScanMap();
+        if (map == null || map.length == 0) {
+            return;
+        }
+        gm.beginPatternBatch();
+        int width = dataLoader.getSegaLogoScanWidth();
+        int height = dataLoader.getSegaLogoScanHeight();
+        for (int ty = 0; ty < height; ty++) {
+            for (int tx = 0; tx < width; tx++) {
+                int word = map[ty * width + tx];
+                if (word == 0) {
+                    continue;
+                }
+                reusableDesc.set(word);
+                int tileIndex = reusableDesc.getPatternIndex();
+                gm.renderPatternWithId(
+                        Sonic1TitleScreenDataLoader.SEGA_LOGO_PATTERN_BASE + tileIndex,
+                        reusableDesc,
+                        xOffset() + SEGA_LOGO_SCAN_X + tx * 8,
+                        SEGA_LOGO_SCAN_Y + ty * 8);
+            }
+        }
+        gm.flushPatternBatch();
+        gm.flushScreenSpace();
     }
 
     /**
@@ -564,36 +852,41 @@ public class Sonic1TitleScreenManager implements TitleScreenProvider {
     private void drawIntroText(GraphicsManager gm) {
         // Cache credit text patterns on first draw
         if (!creditTextCached) {
-            dataLoader.cacheCreditTextToGpu();
+            dataLoader.cacheCreditTextToGpu(gm);
             creditTextCached = true;
             initCreditTextSpriteRenderer(gm);
         }
 
         // Render "SONIC TEAM PRESENTS" as a single sprite mapping at screen center
+        // Object center position: x=0x120, y=0xF0 (VDP coords) → screen x=160, y=112.
+        // At widescreen we place the sprite at the viewport mid-point so it stays centred.
+        // At native 320 viewportWidth()/2 == 160 — byte-identical.
         if (creditTextSpriteRenderer != null && creditTextSpriteRenderer.isReady()) {
             gm.beginPatternBatch();
-            // Object center position: x=0x120, y=0xF0 (VDP coords) → screen x=160, y=112
-            // Frame index 0 within the credit text sprite sheet (which only has 1 frame)
-            creditTextSpriteRenderer.drawFrameIndex(0, 160, 112);
+            creditTextSpriteRenderer.drawFrameIndex(0, viewportWidth() / 2, 112);
             gm.flushPatternBatch();
         }
+        // The fade in and out of this screen is applied to the palette lines in
+        // draw() before this call; no overlay is drawn.
+    }
 
-        // Apply fade overlay
-        float fadeAmount = 0.0f;
-        if (state == State.INTRO_TEXT_FADE_IN) {
-            fadeAmount = 1.0f - (float) introTextTimer / INTRO_TEXT_FADE_DURATION;
-        } else if (state == State.INTRO_TEXT_FADE_OUT) {
-            fadeAmount = (float) introTextTimer / INTRO_TEXT_FADE_DURATION;
-        }
-        if (fadeAmount > 0.0f) {
-            gm.registerCommand(new GLCommand(
-                    GLCommand.CommandType.RECTI,
-                    -1,
-                    GLCommand.BlendType.ONE_MINUS_SRC_ALPHA,
-                    0.0f, 0.0f, 0.0f, fadeAmount,
-                    0, 0, SCREEN_WIDTH, SCREEN_HEIGHT
-            ));
-        }
+    /**
+     * Restricts subsequent drawing to the screen rows above the M_PSB_Limiter band,
+     * modelling the VDP per-scanline sprite budget that erases TitleSonic from
+     * screen Y {@value #SPRITE_LIMITER_TOP_Y} downwards. Without this, Sonic's torso
+     * shows below the bottom edge of the logo, where Plane A has no opaque tiles to
+     * hide it.
+     */
+    private void enableSpriteLimiterScissor(GraphicsManager gm) {
+        int vpX = gm.getViewportX();
+        int vpY = gm.getViewportY();
+        int vpW = gm.getViewportWidth();
+        int vpH = gm.getViewportHeight();
+        float scaleY = (float) vpH / SCREEN_HEIGHT;
+        // Game Y is top-down; GL scissor Y is bottom-up.
+        int scissorY = vpY + (int) Math.floor((SCREEN_HEIGHT - SPRITE_LIMITER_TOP_Y) * scaleY);
+        int scissorH = Math.max(1, (int) Math.ceil(SPRITE_LIMITER_TOP_Y * scaleY));
+        gm.enableScissor(vpX, scissorY, vpW, scissorH);
     }
 
     /**
@@ -621,7 +914,8 @@ public class Sonic1TitleScreenManager implements TitleScreenProvider {
 
         // Plane A logo starts at VDP nametable offset $206 in a 64-wide plane:
         // $206 / $80 = row 4, ($206 % $80) / 2 = col 3 → pixel (24, 32)
-        int startPixelX = 24;
+        // At native 320 xOffset() == 0, so startPixelX == 24 — byte-identical.
+        int startPixelX = xOffset() + 24;
         int startPixelY = 32;
 
         int clampedEnd = Math.min(endRow, mapHeight);
@@ -706,9 +1000,10 @@ public class Sonic1TitleScreenManager implements TitleScreenProvider {
      * Position from disassembly: x=$170, y=$F8 (VDP) → screen (240, 120).
      */
     private void drawTMSymbol(GraphicsManager gm) {
-        dataLoader.cacheTmToGpu();
+        dataLoader.cacheTmToGpu(gm);
 
-        int baseX = TM_X;
+        // xOffset() == 0 at native 320 — byte-identical at native width.
+        int baseX = xOffset() + TM_X;
         int baseY = TM_Y;
 
         // TM is 1 piece: 2 tiles wide, 1 tile tall, at tile 0 (relative to TM patterns)
@@ -778,12 +1073,14 @@ public class Sonic1TitleScreenManager implements TitleScreenProvider {
     public void setClearColor() {
         // During intro text, background is black
         if (state == State.INTRO_TEXT_FADE_IN || state == State.INTRO_TEXT_HOLD ||
-                state == State.INTRO_TEXT_FADE_OUT) {
+                state == State.INTRO_TEXT_FADE_OUT || state == State.SEGA_LOGO) {
             glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
             return;
         }
-        // Main title screen uses VDP register $8720 = palette line 2, color 0
-        Palette bgPal = dataLoader.getTitlePaletteLine(2);
+        // Main title screen uses VDP register $8720 = palette line 2, color 0.
+        // The backdrop is a CRAM entry, so PaletteFadeIn fades it like every other
+        // colour; read it through the same fade step draw() uploads.
+        Palette bgPal = dataLoader.resolveTitlePaletteLine(2, paletteFadeMode(), paletteFadeSteps());
         if (bgPal != null) {
             Palette.Color backdrop = bgPal.getColor(0);
             glClearColor(backdrop.rFloat(), backdrop.gFloat(), backdrop.bFloat(), 1.0f);
@@ -794,10 +1091,16 @@ public class Sonic1TitleScreenManager implements TitleScreenProvider {
 
     @Override
     public void reset() {
+        GameServices.audio().stopSegaPcm();
         state = State.INACTIVE;
         frameCounter = 0;
         fadeTimer = 0;
         introTextTimer = 0;
+        segaLogoTimer = 0;
+        segaPcmStarted = false;
+        segaLogoFadePhase = SegaLogoFadePhase.FADING_IN;
+        segaLogoFadeTimer = 0;
+        segaLogoPaletteCycle.reset();
         creditTextCached = false;
         spritesInitialized = false;
         sonicRoutine = 0;
@@ -834,6 +1137,11 @@ public class Sonic1TitleScreenManager implements TitleScreenProvider {
     }
 
     @Override
+    public TitleScreenAction consumeExitAction() {
+        return TitleScreenAction.ONE_PLAYER;
+    }
+
+    @Override
     public boolean supportsLevelSelectOverlay() {
         return true;
     }
@@ -857,11 +1165,11 @@ public class Sonic1TitleScreenManager implements TitleScreenProvider {
             return;
         }
 
-        GraphicsManager gm = GraphicsManager.getInstance();
+        GraphicsManager gm = GameServices.graphics();
 
         // Cache patterns to GPU (NOT palettes - level select palette is already active)
-        dataLoader.cacheForegroundToGpu();
-        dataLoader.cacheTmToGpu();
+        dataLoader.cacheForegroundToGpu(gm);
+        dataLoader.cacheTmToGpu(gm);
 
         if (!spritesInitialized) {
             initSpriteRenderers(gm);
@@ -882,9 +1190,16 @@ public class Sonic1TitleScreenManager implements TitleScreenProvider {
         // the normal draw() — Sonic is invisible during the initial delay.
         gm.beginPatternBatch();
         if (sonicRoutine >= 4 && sonicSpriteRenderer != null && sonicSpriteRenderer.isReady()) {
-            int screenX = SONIC_X - 128;
+            // xOffset() == 0 at native 320 — byte-identical at native width.
+            int screenX = xOffset() + SONIC_X - 128;
             int screenY = sonicScreenY - 128;
+            enableSpriteLimiterScissor(gm);
             sonicSpriteRenderer.drawFrameIndex(sonicAnimFrame, screenX, screenY);
+            // Pattern draws are queued commands: they only reach GL in
+            // flushScreenSpace(), so the scissor must still be active here.
+            gm.flushPatternBatch();
+            gm.flushScreenSpace();
+            gm.disableScissor();
         }
         gm.flushPatternBatch();
 

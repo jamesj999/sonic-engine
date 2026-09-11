@@ -60,6 +60,10 @@ public abstract class AbstractLevelInitProfile implements LevelInitProfile {
         return List.of();
     }
 
+    protected boolean isPreviewCapture(LevelLoadContext ctx) {
+        return ctx != null && ctx.getLoadMode() == LevelLoadMode.PREVIEW_CAPTURE;
+    }
+
     // ── IOException helper ───────────────────────────────────────────────
 
     /** Runnable that may throw {@link IOException}. */
@@ -80,61 +84,127 @@ public abstract class AbstractLevelInitProfile implements LevelInitProfile {
 
     // ── Shared core level-load steps ─────────────────────────────────────
 
+    /** Resets runtime-owned managers only when a runtime is active. */
+    private static void resetParallaxIfAvailable() {
+        ParallaxManager manager = GameServices.parallaxOrNull();
+        if (manager != null) manager.resetState();
+    }
+
+    private static void resetLevelManagerIfAvailable() {
+        LevelManager manager = GameServices.levelOrNull();
+        if (manager != null) manager.resetState();
+    }
+
+    private static void resetSpritesIfAvailable() {
+        SpriteManager manager = GameServices.spritesOrNull();
+        if (manager != null) manager.resetState();
+    }
+
+    private static void resetCollisionIfAvailable() {
+        CollisionSystem manager = GameServices.collisionOrNull();
+        if (manager != null) manager.resetState();
+    }
+
+    private static void resetCameraIfAvailable() {
+        Camera manager = GameServices.cameraOrNull();
+        if (manager != null) manager.resetState();
+    }
+
+    private static void resetFadeIfAvailable() {
+        FadeManager manager = GameServices.fadeOrNull();
+        if (manager != null) manager.resetState();
+    }
+
+    private static void resetGameStateIfAvailable() {
+        GameStateManager manager = GameServices.gameStateOrNull();
+        if (manager != null) manager.resetState();
+    }
+
+    private static void resetTimersIfAvailable() {
+        TimerManager manager = GameServices.timersOrNull();
+        if (manager != null) manager.resetState();
+    }
+
+    private static void resetWaterIfAvailable() {
+        WaterSystem manager = GameServices.waterOrNull();
+        if (manager != null) manager.reset();
+    }
+
+    /**
+     * Re-derives the {@link WaterSystem} config from the already-loaded level.
+     * <p>
+     * The per-test reset clears {@code WaterSystem.waterConfigs} via
+     * {@link #resetWaterIfAvailable()} but, unlike the full level-reload path,
+     * does not re-run the {@code InitWater} load step. This restores the water
+     * config exactly as the production level-load profile populates it (via
+     * {@link LevelManager#initWater()}), so the engine evolves its water state
+     * natively rather than running with water permanently disabled. No-op when
+     * no level is loaded yet (e.g. the first reset before any level load).
+     */
+    private static void reloadWaterIfLevelLoaded() {
+        LevelManager levelManager = GameServices.levelOrNull();
+        if (levelManager == null || levelManager.getCurrentLevel() == null) {
+            return;
+        }
+        try {
+            levelManager.initWater();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
     /**
      * Builds the 13 core level-load steps that are identical across all
-     * three game profiles.  Each step delegates to the corresponding
+     * three game profiles. Each step delegates to the corresponding
      * {@link LevelManager} method.
      * <p>
-     * Order matches the ROM's {@code Level:} routine (game-agnostic
-     * sequence): module init → audio → geometry → animation → objects →
-     * camera bounds → gameplay state → rings → zone features → art →
-     * player/checkpoint → water → background renderer.
+     * Order matches the ROM's {@code Level:} routine: module init, audio,
+     * geometry, animation, objects, camera bounds, gameplay state, rings,
+     * zone features, art, player/checkpoint, water, then background renderer.
      *
      * @param ctx the level-load context accumulated across steps
-     * @return mutable list — callers may append post-load assembly steps
+     * @return mutable list for callers to append post-load assembly steps
      */
     protected List<InitStep> buildCoreSteps(LevelLoadContext ctx) {
-        LevelManager lm = GameServices.level();
         List<InitStep> steps = new ArrayList<>(20);
         steps.add(ioStep("InitGameModule",
                 "Create Game instance, fade out, clear PLC",
-                () -> lm.initGameModule(ctx.getLevelIndex())));
-        steps.add(ioStep("InitAudio",
-                "Play level music from zone playlist",
-                () -> lm.initAudio(ctx.getLevelIndex())));
+                () -> GameServices.level().initGameModule(ctx.getLevelIndex())));
+        if (!isPreviewCapture(ctx)) {
+            steps.add(ioStep("InitAudio",
+                    "Play level music from zone playlist",
+                    () -> GameServices.level().initAudio(ctx.getLevelIndex())));
+        }
         steps.add(ioStep("LoadLevelData",
                 "Load level geometry, tiles, collision indices",
-                () -> ctx.setLevel(lm.loadLevelData(ctx.getLevelIndex()))));
+                () -> ctx.setLevel(GameServices.level().loadLevelData(ctx.getLevelIndex()))));
         steps.add(new InitStep("InitAnimatedContent",
                 "Pattern animation scripts and palette cycling",
-                lm::initAnimatedContent));
-        steps.add(ioStep("InitObjectManager",
-                "Spawn players, create ObjectManager, wire CollisionSystem",
-                lm::initObjectManager));
-        steps.add(new InitStep("InitCameraBounds",
-                "Reset camera bounds from level geometry",
-                lm::initCameraBounds));
+                () -> GameServices.level().initAnimatedContent()));
+        steps.add(ioStep("InitObjectSystem",
+                "Create ObjectManager, wire CollisionSystem, reset camera bounds, register rewind adapters",
+                () -> GameServices.level().initObjectSystem()));
         steps.add(new InitStep("InitGameplayState",
                 "OscillateNumInit, clear game state, HUD update flags",
-                lm::initGameplayState));
+                () -> GameServices.level().initGameplayState()));
         steps.add(new InitStep("InitRings",
                 "Initial ring placement and pattern caching",
-                lm::initRings));
+                () -> GameServices.level().initRings()));
         steps.add(ioStep("InitZoneFeatures",
                 "Zone-specific features (water surface, bumpers, etc.)",
-                lm::initZoneFeatures));
+                () -> GameServices.level().initZoneFeatures()));
         steps.add(new InitStep("InitArt",
                 "Zone PLC, character art, shared HUD/ring/monitor patterns",
-                lm::initArt));
+                () -> GameServices.level().initArt()));
         steps.add(new InitStep("InitPlayerAndCheckpoint",
                 "Player spawn state and checkpoint clear",
-                lm::initPlayerAndCheckpoint));
+                () -> GameServices.level().initPlayerAndCheckpoint()));
         steps.add(ioStep("InitWater",
                 "Water system loading for water zones",
-                lm::initWater));
+                () -> GameServices.level().initWater()));
         steps.add(new InitStep("InitBackgroundRenderer",
                 "Engine-specific: pre-allocate BG FBO",
-                lm::initBackgroundRenderer));
+                () -> GameServices.level().initBackgroundRenderer()));
         return steps;
     }
 
@@ -188,7 +258,10 @@ public abstract class AbstractLevelInitProfile implements LevelInitProfile {
     protected InitStep spawnSidekickStep() {
         return new InitStep("SpawnSidekick",
             "S2: InitPlayers multi-char, S3K: SpawnLevelMainSprites_SpawnPlayers",
-            () -> GameServices.level().spawnSidekicks(-40, 0));
+            () -> {
+                SidekickSpawnOffset offset = sidekickSpawnOffset();
+                GameServices.level().spawnSidekicks(offset.xOffset(), offset.yOffset());
+            });
     }
 
     /** Step 20: Request title card display. */
@@ -203,15 +276,17 @@ public abstract class AbstractLevelInitProfile implements LevelInitProfile {
      * Subclasses can call this and filter/modify as needed.
      */
     protected List<InitStep> postLoadAssemblySteps(LevelLoadContext ctx) {
-        return List.of(
-            restoreCheckpointStep(ctx),
-            spawnPlayerStep(ctx),
-            resetPlayerStateStep(ctx),
-            initCameraStep(),
-            initLevelEventsStep(),
-            spawnSidekickStep(),
-            requestTitleCardStep(ctx)
-        );
+        List<InitStep> steps = new ArrayList<>(7);
+        steps.add(restoreCheckpointStep(ctx));
+        steps.add(spawnPlayerStep(ctx));
+        steps.add(resetPlayerStateStep(ctx));
+        steps.add(initCameraStep());
+        steps.add(initLevelEventsStep());
+        steps.add(spawnSidekickStep());
+        if (!isPreviewCapture(ctx)) {
+            steps.add(requestTitleCardStep(ctx));
+        }
+        return List.copyOf(steps);
     }
 
     @Override
@@ -222,45 +297,45 @@ public abstract class AbstractLevelInitProfile implements LevelInitProfile {
                 () -> GameServices.audio().resetState()),
 
             new InitStep("ResetCrossGameFeatures", "Undoes CrossGameFeatureProvider.initialize()",
-                () -> CrossGameFeatureProvider.getInstance().resetState()),
+                () -> GameServices.crossGameFeatures().resetState()),
 
             // Game-specific: undoes zone event handlers, boss arena state
             levelEventTeardownStep(),
 
             // Undoes S1:Phase G / S2:Phase E / S3K:Phase H (DeformBgLayer/DeformLayers)
             new InitStep("ResetParallax", "Undoes DeformBgLayer init",
-                () -> ParallaxManager.getInstance().resetState()),
+                AbstractLevelInitProfile::resetParallaxIfAvailable),
             // Undoes S1:Phase G / S2:Phase E / S3K:Phase I (LevelDataLoad/LoadZoneTiles)
             new InitStep("ResetLevelManager", "Undoes LevelDataLoad / LoadZoneTiles / LoadLevelLoadBlock",
-                () -> LevelManager.getInstance().resetState()),
+                AbstractLevelInitProfile::resetLevelManagerIfAvailable),
 
             // Undoes S1:Phase I-J / S2:Phase G / S3K:Phase O (InitPlayers/SpawnLevelMainSprites)
             new InitStep("ResetSprites", "Undoes InitPlayers / SpawnLevelMainSprites",
-                () -> SpriteManager.getInstance().resetState()),
+                AbstractLevelInitProfile::resetSpritesIfAvailable),
 
             // Undoes S1:Phase H / S2:Phase F / S3K:Phase K (ConvertCollisionArray/LoadSolids)
             new InitStep("ResetCollision", "Undoes ConvertCollisionArray / LoadCollisionIndexes / LoadSolids",
-                () -> CollisionSystem.getInstance().resetState()),
+                AbstractLevelInitProfile::resetCollisionIfAvailable),
 
             // Undoes S1:Phase G / S2:Phase E / S3K:Phase H (LevelSizeLoad/Get_LevelSizeStart)
             new InitStep("ResetCamera", "Undoes LevelSizeLoad / Get_LevelSizeStart",
-                () -> Camera.getInstance().resetState()),
+                AbstractLevelInitProfile::resetCameraIfAvailable),
             // Undoes S1:Phase B / S2:Phase B / S3K:Phase D (VDP register config)
             new InitStep("ResetGraphics", "Undoes VDP register / ClearScreen / Clear_DisplayData",
-                () -> com.openggf.graphics.GraphicsManager.getInstance().resetState()),
+                () -> GameServices.graphics().resetState()),
             // Undoes S1:Phase A / S2:Phase A / S3K:Phase A (PaletteFadeOut/Pal_FadeToBlack)
             new InitStep("ResetFade", "Undoes PaletteFadeOut / Pal_FadeToBlack",
-                () -> FadeManager.getInstance().resetState()),
+                AbstractLevelInitProfile::resetFadeIfAvailable),
 
             // Undoes S1:Phase K / S2:Phase H / S3K:Phase N (game state clear)
             new InitStep("ResetGameState", "Undoes ring/timer/lives init from Level:",
-                () -> GameStateManager.getInstance().resetState()),
+                AbstractLevelInitProfile::resetGameStateIfAvailable),
             // Undoes S1:Phase J / S2:Phase I / S3K:Phase P (first frame timing)
             new InitStep("ResetTimers", "Undoes Level_frame_counter / demo timer",
-                () -> TimerManager.getInstance().resetState()),
+                AbstractLevelInitProfile::resetTimersIfAvailable),
             // Undoes S1:Phase C / S2:Phase B / S3K:Phase E,L (water init)
             new InitStep("ResetWater", "Undoes LZWaterFeatures / WaterEffects / Handle_Onscreen_Water_Height",
-                () -> WaterSystem.getInstance().reset()),
+                AbstractLevelInitProfile::resetWaterIfAvailable),
 
             new InitStep("ResetDebugOverlay", "Clears overlay toggle states and pending debug text",
                 () -> GameServices.debugOverlay().resetState())
@@ -273,24 +348,37 @@ public abstract class AbstractLevelInitProfile implements LevelInitProfile {
             perTestLeadStep(),
 
             new InitStep("ResetCrossGameFeatures", "Undoes CrossGameFeatureProvider.initialize()",
-                () -> CrossGameFeatureProvider.getInstance().resetState()),
+                () -> GameServices.crossGameFeatures().resetState()),
 
             new InitStep("ResetParallax", "Undoes DeformBgLayer init",
-                () -> ParallaxManager.getInstance().resetState()),
+                AbstractLevelInitProfile::resetParallaxIfAvailable),
             new InitStep("ResetSprites", "Undoes InitPlayers / SpawnLevelMainSprites",
-                () -> SpriteManager.getInstance().resetState()),
+                AbstractLevelInitProfile::resetSpritesIfAvailable),
             new InitStep("ResetCollision", "Undoes ConvertCollisionArray / LoadSolids",
-                () -> CollisionSystem.getInstance().resetState()),
+                AbstractLevelInitProfile::resetCollisionIfAvailable),
             new InitStep("ResetCamera", "Undoes LevelSizeLoad / Get_LevelSizeStart",
-                () -> Camera.getInstance().resetState()),
+                AbstractLevelInitProfile::resetCameraIfAvailable),
             new InitStep("ResetFade", "Undoes PaletteFadeOut / Pal_FadeToBlack",
-                () -> FadeManager.getInstance().resetState()),
+                AbstractLevelInitProfile::resetFadeIfAvailable),
             new InitStep("ResetGameState", "Undoes ring/timer/lives init from Level:",
-                () -> GameStateManager.getInstance().resetState()),
+                AbstractLevelInitProfile::resetGameStateIfAvailable),
             new InitStep("ResetTimers", "Undoes Level_frame_counter / demo timer",
-                () -> TimerManager.getInstance().resetState()),
+                AbstractLevelInitProfile::resetTimersIfAvailable),
             new InitStep("ResetWater", "Undoes LZWaterFeatures / WaterEffects / Handle_Onscreen_Water_Height",
-                () -> WaterSystem.getInstance().reset()),
+                AbstractLevelInitProfile::resetWaterIfAvailable),
+            // ResetWater clears WaterSystem.waterConfigs (the level-load-time water
+            // config), but unlike levelTeardownSteps (which is followed by a full
+            // level reload), the per-test reset reuses the already-loaded Level
+            // without re-running the InitWater load step. Without this reload the
+            // water config stays empty, so WaterSystem.hasWater() returns false and
+            // the per-frame Sonic_Water / Tails_Water path (ROM Obj01_InWater /
+            // Obj02_InWater, docs/s2disasm/s2.asm:36369-36393, 39528-39556) never
+            // fires. That silently disabled the ARZ2 sidekick water-entry velocity
+            // reduction (asr x_vel once / y_vel twice) in trace replay. Re-derive the
+            // water config from the loaded level here, exactly as the production
+            // level-load profile does, so the engine evolves natively.
+            new InitStep("ReloadWater", "Re-derives WaterSystem config from the loaded level (mirrors InitWater)",
+                AbstractLevelInitProfile::reloadWaterIfLevelLoaded),
             new InitStep("ResetDebugOverlay", "Clears overlay toggle states and pending debug text",
                 () -> GameServices.debugOverlay().resetState())
         );

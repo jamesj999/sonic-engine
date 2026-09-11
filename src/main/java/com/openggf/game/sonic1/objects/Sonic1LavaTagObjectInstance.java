@@ -6,6 +6,7 @@ import com.openggf.game.PlayableEntity;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -44,7 +45,8 @@ import java.util.List;
  *
  * @see LavaMarkerObjectInstance S2 equivalent (Obj31)
  */
-public class Sonic1LavaTagObjectInstance extends AbstractObjectInstance implements TouchResponseProvider {
+public class Sonic1LavaTagObjectInstance extends AbstractObjectInstance
+        implements TouchResponseProvider, SpawnRewindRecreatable {
 
     // ========================================================================
     // ROM Constants - Collision Flags by Subtype
@@ -87,10 +89,10 @@ public class Sonic1LavaTagObjectInstance extends AbstractObjectInstance implemen
     // ========================================================================
 
     /** Cached collision flags based on subtype. */
-    private final int collisionFlags;
+    private int collisionFlags;
 
     /** Subtype index (0, 1, or 2), clamped to valid range. */
-    private final int subtypeIndex;
+    private int subtypeIndex;
 
     public Sonic1LavaTagObjectInstance(ObjectSpawn spawn) {
         super(spawn, "LavaTag");
@@ -106,7 +108,7 @@ public class Sonic1LavaTagObjectInstance extends AbstractObjectInstance implemen
     // ========================================================================
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // ROM LTag_ChkDel (Routine 2) only performs off-screen culling via MarkObjGone.
         // The ObjectManager.Placement system handles this automatically,

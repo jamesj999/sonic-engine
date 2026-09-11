@@ -2,6 +2,7 @@ package com.openggf.game.sonic1.scroll;
 
 import com.openggf.camera.Camera;
 import com.openggf.level.scroll.AbstractZoneScrollHandler;
+import com.openggf.level.scroll.compose.ScrollEffectComposer;
 import static com.openggf.level.scroll.M68KMath.*;
 import com.openggf.game.GameServices;
 
@@ -29,6 +30,8 @@ public class SwScrlLz extends AbstractZoneScrollHandler {
     private int lastCameraY;
     private boolean initialized = false;
 
+    private final ScrollEffectComposer composer = new ScrollEffectComposer();
+
     /**
      * Initialize BG camera positions.
      * BgScrollSpeed sets bgscreenposx = screenposx, then BgScroll_LZ
@@ -54,6 +57,7 @@ public class SwScrlLz extends AbstractZoneScrollHandler {
         }
 
         resetScrollTracking();
+        composer.reset();
 
         // Compute deltas
         int deltaX = cameraX - lastCameraX;
@@ -64,11 +68,11 @@ public class SwScrlLz extends AbstractZoneScrollHandler {
         // by checking if |deltaY| exceeds half the wrap range.
         Camera camera = GameServices.camera();
         if (camera.isVerticalWrapEnabled()) {
-            int halfRange = Camera.getVerticalWrapRange() / 2; // 0x400
+            int halfRange = camera.getVerticalWrapRange() / 2;
             if (deltaY > halfRange) {
-                deltaY -= Camera.getVerticalWrapRange();
+                deltaY -= camera.getVerticalWrapRange();
             } else if (deltaY < -halfRange) {
-                deltaY += Camera.getVerticalWrapRange();
+                deltaY += camera.getVerticalWrapRange();
             }
         }
 
@@ -90,19 +94,19 @@ public class SwScrlLz extends AbstractZoneScrollHandler {
             bgYPos = (long) bgY << 16 | (bgYPos & 0xFFFF);
         }
 
-        vscrollFactorBG = (short) bgY;
+        composer.setVscrollFactorBG((short) bgY);
 
         // FG and BG scroll values (constant for all lines)
         short fgScroll = negWord(cameraX);
         short bgScroll = negWord(bgX);
 
-        int packed = packScrollWords(fgScroll, bgScroll);
-        trackOffset(fgScroll, bgScroll);
-
         // Uniform: all 224 lines have the same value
-        for (int i = 0; i < VISIBLE_LINES; i++) {
-            horizScrollBuf[i] = packed;
-        }
+        composer.fillPackedScrollWords(0, VISIBLE_LINES, fgScroll, bgScroll);
+
+        composer.copyPackedScrollWordsTo(horizScrollBuf);
+        vscrollFactorBG = composer.getVscrollFactorBG();
+        minScrollOffset = composer.getMinScrollOffset();
+        maxScrollOffset = composer.getMaxScrollOffset();
     }
 
 }

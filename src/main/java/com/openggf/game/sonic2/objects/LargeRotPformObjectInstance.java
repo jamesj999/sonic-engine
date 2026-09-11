@@ -13,6 +13,8 @@ import com.openggf.level.PatternDesc;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
@@ -51,7 +53,7 @@ import java.util.logging.Logger;
  * </ul>
  */
 public class LargeRotPformObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
 
     private static final Logger LOGGER = Logger.getLogger(LargeRotPformObjectInstance.class.getName());
 
@@ -82,15 +84,15 @@ public class LargeRotPformObjectInstance extends AbstractObjectInstance
     private static final LazyMappingHolder MAPPINGS = new LazyMappingHolder();
 
     // Instance state
-    private final int baseX;       // objoff_34 - original X position
-    private final int baseY;       // objoff_30 - original Y position
-    private final int widthPixels;
-    private final int yRadius;
-    private final int mappingFrame;
-    private final boolean isIndent; // Subtype 3 (routine 4) - no solid collision, half amplitude
-    private final boolean mirrorMotion;  // Bit 0 of subtype
-    private final boolean rotateMotion;  // Bit 1 of subtype
-    private final int priority;
+    private int baseX;       // objoff_34 - original X position
+    private int baseY;       // objoff_30 - original Y position
+    private int widthPixels;
+    private int yRadius;
+    private int mappingFrame;
+    private boolean isIndent; // Subtype 3 (routine 4) - no solid collision, half amplitude
+    private boolean mirrorMotion;  // Bit 0 of subtype
+    private boolean rotateMotion;  // Bit 1 of subtype
+    private int priority;
 
     // Current position (updated each frame from oscillation)
     private int x;
@@ -129,13 +131,18 @@ public class LargeRotPformObjectInstance extends AbstractObjectInstance
         // From disassembly: d1 = width_pixels + $0B, d2 = y_radius, d3 = y_radius + 1
         if (!isIndent) {
             int halfWidth = widthPixels + 0x0B;
-            solidParams = new SolidObjectParams(halfWidth, yRadius, yRadius + 1);
+            solidParams = SolidObjectParams.of(halfWidth, yRadius, yRadius + 1);
         } else {
             solidParams = null;
         }
 
         // Calculate initial position
         updatePosition();
+    }
+
+    @Override
+    public LargeRotPformObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new LargeRotPformObjectInstance(ctx.spawn(), getName());
     }
 
     @Override
@@ -147,13 +154,24 @@ public class LargeRotPformObjectInstance extends AbstractObjectInstance
     public int getY() {
         return y;
     }
+
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public int getOutOfRangeReferenceX() {
+        // Obj6E loc_28466/loc_284EA checks objoff_34, not the moving x_pos(a0),
+        // before DeleteObject (docs/s2disasm/s2.asm:54526-54543,54572-54589).
+        return baseX;
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) {
             return;
         }
         updatePosition();
+        // ROM Obj6E (loc_28466/loc_284EA, s2.asm) marks the object gone via
+        // objoff_34; getOutOfRangeReferenceX exposes that anchor to the shared
+        // ObjectManager out_of_range path.
     }
 
     /**
@@ -273,7 +291,8 @@ public class LargeRotPformObjectInstance extends AbstractObjectInstance
                 frame.pieces(),
                 x, y,
                 0,  // Base pattern index (level art starts at tile 0)
-                -1, // Use palette from piece
+                3,  // Palette line 3: make_art_tile(ArtTile_ArtKos_LevelArt,3,0) (s2.asm:54482).
+                    // Obj6E pieces declare palette 0; the ROM art_tile forces line 3.
                 false, false,
                 (patternIndex, pieceHFlip, pieceVFlip, paletteIndex, px, py) -> {
                     int descIndex = patternIndex & 0x7FF;

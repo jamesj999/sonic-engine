@@ -34,7 +34,13 @@ public class Rom implements AutoCloseable {
     // Cached file size for bounds checking (set on open)
     private long fileSize = -1;
 
-    public boolean open(String spath) {
+    // Immutable ROM assets are shared by all decoders for this open ROM.
+    // Keep ownership here rather than in a static cache so closing/replacing
+    // a ROM releases the cache and cannot mix assets from different games.
+    private RomByteReader byteReader;
+
+    public synchronized boolean open(String spath) {
+        byteReader = null;
         try {
             Path path = Path.of(spath);
             // Resolve relative paths against user.dir. In GraalVM native images
@@ -63,7 +69,8 @@ public class Rom implements AutoCloseable {
      * Closes the ROM file channel and releases resources.
      */
     @Override
-    public void close() {
+    public synchronized void close() {
+        byteReader = null;
         if (fileChannel != null) {
             try {
                 fileChannel.close();
@@ -80,6 +87,16 @@ public class Rom implements AutoCloseable {
      */
     public boolean isOpen() {
         return fileChannel != null && fileChannel.isOpen();
+    }
+
+    synchronized RomByteReader byteReader() throws IOException {
+        if (!isOpen()) {
+            throw new IOException("Cannot buffer a closed ROM");
+        }
+        if (byteReader == null) {
+            byteReader = new RomByteReader(readAllBytes());
+        }
+        return byteReader;
     }
 
     public FileChannel getFileChannel() {
@@ -99,10 +116,16 @@ public class Rom implements AutoCloseable {
             throw new IOException("ROM too large to buffer in memory: " + size + " bytes");
         }
         ByteBuffer buffer = ByteBuffer.allocate((int) size);
-        fileChannel.position(0);
-        int read = fileChannel.read(buffer);
-        if (read < size) {
-            throw new IOException("Unable to read entire ROM (read " + read + " of " + size + " bytes)");
+        long offset = 0;
+        while (buffer.hasRemaining()) {
+            int read = fileChannel.read(buffer, offset);
+            if (read < 0) {
+                break;
+            }
+            offset += read;
+        }
+        if (offset < size) {
+            throw new IOException("Unable to read entire ROM (read " + offset + " of " + size + " bytes)");
         }
         return buffer.array();
     }
@@ -116,12 +139,21 @@ public class Rom implements AutoCloseable {
         fileChannel.force(true); // Ensure the changes are written to the file
     }
 
+    /**
+     * Sums the ROM the way the Mega Drive header checksum is defined.
+     *
+     * <p>Positional reads, for the same reason as {@link #readString}: this
+     * walks the whole file, and a concurrent reader moving the shared channel
+     * position would make it skip or repeat a block.
+     */
     public int calculateChecksum() throws IOException {
         ByteBuffer buffer = ByteBuffer.allocate(CHECKSUM_BUFFER_SIZE);
-        fileChannel.position(512); // Skip the first 512 bytes
+        long position = 512; // Skip the first 512 bytes
         int count = 0;
 
-        while (fileChannel.read(buffer) != -1) {
+        int read;
+        while ((read = fileChannel.read(buffer, position)) != -1) {
+            position += read;
             buffer.flip();
             for (int i = 0; i < buffer.limit(); i += 2) {
                 int num = Byte.toUnsignedInt(buffer.get(i)) << 8;
@@ -215,7 +247,8 @@ public class Rom implements AutoCloseable {
         }
     }
 
-    public void write16BitAddr(int addr, long offset) throws IOException {
+    public synchronized void write16BitAddr(int addr, long offset) throws IOException {
+        byteReader = null;
         ByteBuffer buffer = ByteBuffer.allocate(2);
         buffer.put((byte) ((addr >> 8) & 0xFF));
         buffer.put((byte) (addr & 0xFF));
@@ -224,7 +257,8 @@ public class Rom implements AutoCloseable {
         fileChannel.write(buffer);
     }
 
-    public void write32BitAddr(int addr, long offset) throws IOException {
+    public synchronized void write32BitAddr(int addr, long offset) throws IOException {
+        byteReader = null;
         ByteBuffer buffer = ByteBuffer.allocate(4);
         buffer.put((byte) ((addr >> 24) & 0xFF));
         buffer.put((byte) ((addr >> 16) & 0xFF));
@@ -235,13 +269,39 @@ public class Rom implements AutoCloseable {
         fileChannel.write(buffer);
     }
 
+    /**
+     * Reads a fixed-length header string.
+     *
+     * <p>Uses positional reads. Every other reader here brackets
+     * {@code position()} plus {@code read()} in {@code synchronized (this)},
+     * because a {@link FileChannel}'s position is shared mutable state; this
+     * method did the same pair without the lock. The engine reads the ROM from
+     * more than one thread -- {@code level-load-preparer} runs concurrently
+     * with the caller -- so a read here could be repositioned between the two
+     * calls and return the window starting a few bytes late.
+     *
+     * <p>That is not a cosmetic misread. The only callers are
+     * {@link #readDomesticName()} and {@link #readInternationalName()}, which
+     * feed ROM detection: a header returned as "C &amp; KNUCKLES ... SONI"
+     * instead of "SONIC &amp; KNUCKLES" matches no detector, so
+     * GameModuleRegistry falls back to its Sonic 2 default and the wrong game
+     * module then reads the loaded ROM at the wrong offsets. Positional reads
+     * neither use nor mutate the channel position, so this is now immune
+     * whatever else holds the lock.
+     */
     private String readString(long offset, int length) throws IOException {
         if (offset < 0 || offset + length > fileSize) {
             throw new IOException("ROM read out of bounds: offset=0x" + Long.toHexString(offset) + " + " + length + " > size=" + fileSize);
         }
         ByteBuffer buffer = ByteBuffer.allocate(length);
-        fileChannel.position(offset);
-        fileChannel.read(buffer);
+        long position = offset;
+        while (buffer.hasRemaining()) {
+            int read = fileChannel.read(buffer, position);
+            if (read < 0) {
+                break;
+            }
+            position += read;
+        }
         return new String(buffer.array()).trim();
     }
 }

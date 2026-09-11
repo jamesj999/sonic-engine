@@ -4,7 +4,12 @@ import com.openggf.game.DemoLamppostState;
 import com.openggf.game.EndingPhase;
 import com.openggf.game.EndingProvider;
 import com.openggf.graphics.FadeManager;
+import com.openggf.game.resources.NativeFadeLifecycle;
+import com.openggf.game.resources.NativeFadeLifecycleAware;
+import com.openggf.game.resources.NoOpNativeFadeLifecycle;
+import com.openggf.game.resources.PlcLifecyclePhase;
 
+import java.util.Optional;
 import java.util.logging.Logger;
 import com.openggf.game.GameServices;
 
@@ -24,13 +29,30 @@ import com.openggf.game.GameServices;
  *   <li>FINISHED &rarr; {@link EndingPhase#POST_CREDITS} (triggers TryAgainEnd)</li>
  * </ul>
  */
-public class Sonic1EndingProvider implements EndingProvider {
+public class Sonic1EndingProvider implements EndingProvider, NativeFadeLifecycleAware {
     private static final Logger LOGGER = Logger.getLogger(Sonic1EndingProvider.class.getName());
 
     private Sonic1CreditsManager creditsManager;
     private TryAgainEndManager tryAgainEndManager;
     private EndingPhase currentPhase = EndingPhase.CREDITS_TEXT;
     private boolean complete;
+    private NativeFadeLifecycle nativeFadeLifecycle = NoOpNativeFadeLifecycle.INSTANCE;
+    private final FadeManager injectedFadeManager;
+    private final Runnable injectedPostCreditsInitializer;
+
+    public Sonic1EndingProvider() {
+        this(null, null);
+    }
+
+    Sonic1EndingProvider(FadeManager fadeManager, Runnable postCreditsInitializer) {
+        injectedFadeManager = fadeManager;
+        injectedPostCreditsInitializer = postCreditsInitializer;
+    }
+
+    @Override
+    public void bindNativeFadeLifecycle(NativeFadeLifecycle lifecycle) {
+        nativeFadeLifecycle = java.util.Objects.requireNonNull(lifecycle, "lifecycle");
+    }
 
     // ========================================================================
     // EndingProvider lifecycle
@@ -38,7 +60,7 @@ public class Sonic1EndingProvider implements EndingProvider {
 
     @Override
     public void initialize() {
-        creditsManager = new Sonic1CreditsManager();
+        creditsManager = new Sonic1CreditsManager(nativeFadeLifecycle);
         creditsManager.initialize();
         currentPhase = EndingPhase.CREDITS_TEXT;
         complete = false;
@@ -64,6 +86,11 @@ public class Sonic1EndingProvider implements EndingProvider {
         }
     }
 
+    void bindCreditsManagerForLifecycleTest(Sonic1CreditsManager manager) {
+        creditsManager = java.util.Objects.requireNonNull(manager, "manager");
+        currentPhase = EndingPhase.CREDITS_DEMO;
+    }
+
     @Override
     public void draw() {
         if (currentPhase == EndingPhase.CREDITS_TEXT && creditsManager != null) {
@@ -77,6 +104,15 @@ public class Sonic1EndingProvider implements EndingProvider {
     @Override
     public EndingPhase getCurrentPhase() {
         return currentPhase;
+    }
+
+    @Override
+    public Optional<PlcLifecyclePhase> plcLifecyclePhaseOverride() {
+        if (creditsManager != null
+                && creditsManager.getState() == Sonic1CreditsManager.State.DEMO_FADING_OUT) {
+            return Optional.of(PlcLifecyclePhase.CREDITS_DEMO_FADE);
+        }
+        return Optional.empty();
     }
 
     @Override
@@ -258,19 +294,33 @@ public class Sonic1EndingProvider implements EndingProvider {
         // Fade out credits music before entering TRY AGAIN
         GameServices.audio().fadeOutMusic();
 
-        FadeManager fadeManager = GameServices.fade();
+        FadeManager fadeManager = fadeManager();
         if (!fadeManager.isActive()) {
-            fadeManager.startFadeToBlack(this::initTryAgainEnd);
+            fadeManager.startFadeToBlack(nativeFadeLifecycle.beginNativeBlockingFade()
+                    .wrapCompletion(this::initTryAgainEnd));
         } else {
             initTryAgainEnd();
         }
     }
 
     private void initTryAgainEnd() {
-        tryAgainEndManager = new TryAgainEndManager();
-        tryAgainEndManager.initialize();
-        GameServices.fade().startFadeFromBlack(null);
+        if (injectedPostCreditsInitializer != null) {
+            injectedPostCreditsInitializer.run();
+        } else {
+            tryAgainEndManager = new TryAgainEndManager();
+            tryAgainEndManager.initialize();
+        }
+        fadeManager().startFadeFromBlack(nativeFadeLifecycle.beginNativeBlockingFade()
+                .wrapCompletion(() -> { }));
         LOGGER.info("Sonic1EndingProvider: transitioned to POST_CREDITS (TRY AGAIN / END)");
+    }
+
+    private FadeManager fadeManager() {
+        return injectedFadeManager != null ? injectedFadeManager : GameServices.fade();
+    }
+
+    void transitionToPostCreditsForLifecycleTest() {
+        transitionToPostCredits();
     }
 
     /**

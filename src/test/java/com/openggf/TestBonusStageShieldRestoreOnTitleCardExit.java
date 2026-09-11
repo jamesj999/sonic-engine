@@ -1,6 +1,8 @@
 package com.openggf;
 
 import com.openggf.game.ShieldType;
+import com.openggf.game.session.EngineContext;
+import com.openggf.game.session.EngineServices;
 import com.openggf.tests.TestablePlayableSprite;
 import org.junit.jupiter.api.Test;
 
@@ -12,6 +14,7 @@ class TestBonusStageShieldRestoreOnTitleCardExit {
 
     @Test
     void applyPendingBonusStageShieldRestore_grantsAndClearsPendingShield() {
+        EngineServices.configure(EngineContext.fromLegacySingletonsForBootstrap());
         GameLoop loop = new GameLoop();
         TestablePlayableSprite player = new TestablePlayableSprite("sonic", (short) 0, (short) 0);
 
@@ -23,3 +26,5 @@ class TestBonusStageShieldRestoreOnTitleCardExit {
         assertFalse(loop.hasPendingBonusStageShieldRestoreForTest());
     }
 }
+
+

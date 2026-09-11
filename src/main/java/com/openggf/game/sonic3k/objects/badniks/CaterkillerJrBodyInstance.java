@@ -6,6 +6,9 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.TouchResponseProfile;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.SwingMotion;
@@ -27,8 +30,8 @@ import java.util.List;
  *   <li>4-5: MonkeyDude art, frame 3 (coconut), collision 0x98, no projectiles</li>
  * </ul>
  */
-final class CaterkillerJrBodyInstance extends AbstractObjectInstance
-        implements TouchResponseProvider {
+public final class CaterkillerJrBodyInstance extends AbstractObjectInstance
+        implements TouchResponseProvider, RewindRecreatable {
 
     private static final int COLLISION_BODY = 0x97;
     private static final int COLLISION_TAIL = 0x98;
@@ -38,17 +41,32 @@ final class CaterkillerJrBodyInstance extends AbstractObjectInstance
     private static final int FAST_MAX_VEL = 0x100;
     private static final int SWING_ACCEL = 8;
     private static final int SLOW_PEAK_COUNT = 3;
+    private static final TouchResponseProfile TOUCH_RESPONSE_PROFILE = TouchResponseProfile.fromCanonical(
+            new com.openggf.game.profiles.touchresponse.TouchResponseProfile(
+                    com.openggf.game.profiles.touchresponse.TouchCategoryDecodeMode.NORMAL,
+                    false,
+                    false,
+                    false,
+                    com.openggf.game.profiles.touchresponse.TouchShieldDeflectCapability.NONE,
+                    0,
+                    com.openggf.game.profiles.touchresponse.TouchAttackBouncePolicy.STANDARD_ENEMY_KILL,
+                    com.openggf.game.profiles.touchresponse.TouchActorContextPolicy.MAIN_FULL_SIDEKICK_HURT_ONLY,
+                    com.openggf.game.profiles.touchresponse.TouchOverlapStopPolicy
+                            .STOP_AFTER_FIRST_OVERLAP_FOR_ALL_ACTORS));
 
     // Projectile animation from byte_878A8: (delay, frame) pairs, $F4 loop
     private static final int[] PROJ_ANIM_DELAYS = {3, 3, 4, 5};
     private static final int[] PROJ_ANIM_FRAMES = {2, 2, 3, 4};
     private static final int PROJ_FIRE_COOLDOWN = 0x1A;
 
-    private final int segmentIndex;
-    private final String rendererKey;
-    private final int mappingFrame;
-    private final int collisionFlags;
-    private final boolean canFire;
+    // Non-final so the generic field capturer reapplies them after a rewind
+    // recreate. segmentIndex (and the art/collision/fire flags it derives) is not
+    // recoverable from the body's own spawn, which carries only position.
+    private int segmentIndex;
+    private String rendererKey;
+    private int mappingFrame;
+    private int collisionFlags;
+    private boolean canFire;
 
     private int currentX;
     private int currentY;
@@ -99,11 +117,46 @@ final class CaterkillerJrBodyInstance extends AbstractObjectInstance
             this.canFire = false;
         }
 
-        this.waitTimer = waitDelay;
+        // The constructor folds loc_877AC (routine 0) into object creation. A
+        // child allocated after the head executes that setup later in the same
+        // object pass, but does not enter loc_877D8's routine-2 decrement until
+        // the next pass. Preserve that init-only dispatch with one extra tick.
+        this.waitTimer = waitDelay + 1;
+    }
+
+    public CaterkillerJrBodyInstance(ObjectSpawn spawn) {
+        this(spawn, 0, 0);
+    }
+
+    /**
+     * Rewind recreate factory. The body holds no live parent reference, so a
+     * structurally-valid instance positioned at the captured spawn is enough; the
+     * non-final differentiator fields (segmentIndex, rendererKey, mappingFrame,
+     * collisionFlags, canFire) and the in-flight motion/animation scalars are
+     * reapplied by the generic field capturer immediately after recreate, so
+     * placeholders are passed here. Exposed publicly so {@code Sonic3kObjectRegistry}
+     * (in the parent package) can reach the package-private constructor.
+     */
+    public static CaterkillerJrBodyInstance forRewindRecreate(ObjectSpawn spawn) {
+        return new CaterkillerJrBodyInstance(spawn, 0, 0);
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        ObjectSpawn capturedSpawn = ctx.spawn();
+        if (capturedSpawn == null) {
+            capturedSpawn = new ObjectSpawn(0, 0, 0, 0, 0, false, 0);
+        }
+        CaterkillerJrBodyInstance restored = forRewindRecreate(capturedSpawn);
+        CaterkillerJrHeadInstance liveHead = CaterkillerJrHeadInstance.findLiveHeadForRewind(ctx);
+        if (liveHead != null) {
+            liveHead.attachBodySegmentForRewind(restored);
+        }
+        return restored;
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (destroyed) return;
 
@@ -236,6 +289,16 @@ final class CaterkillerJrBodyInstance extends AbstractObjectInstance
     @Override
     public int getCollisionProperty() {
         return 0;
+    }
+
+    @Override
+    public TouchResponseProfile getTouchResponseProfile() {
+        return TOUCH_RESPONSE_PROFILE;
+    }
+
+    @Override
+    public TouchResponseProfile getTouchResponseProfile(boolean multiRegionSource) {
+        return TOUCH_RESPONSE_PROFILE;
     }
 
     @Override

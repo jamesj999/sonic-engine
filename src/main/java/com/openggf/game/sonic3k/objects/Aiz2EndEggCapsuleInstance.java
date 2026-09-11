@@ -1,316 +1,200 @@
 package com.openggf.game.sonic3k.objects;
 
-import com.openggf.game.PlayableEntity;
-import com.openggf.game.PlayerCharacter;
-import com.openggf.game.sonic3k.Sonic3kLevelEventManager;
-import com.openggf.game.sonic3k.constants.Sonic3kAnimationIds;
-import com.openggf.game.sonic3k.Sonic3kObjectArtKeys;
-import com.openggf.game.sonic3k.audio.Sonic3kSfx;
-import com.openggf.graphics.GLCommand;
-import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.EggPrisonAnimalInstance;
+import com.openggf.level.objects.ObjectConstructionContext;
+import com.openggf.level.objects.ObjectPlayerParticipationPolicy;
 import com.openggf.level.objects.ObjectSpawn;
-import com.openggf.level.objects.SolidObjectParams;
-import com.openggf.level.objects.SolidObjectProvider;
-import com.openggf.level.render.PatternSpriteRenderer;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.SpawnCoordinateRewindRecreatable;
+import com.openggf.game.PlayerCharacter;
+import com.openggf.game.sonic3k.constants.Sonic3kAnimationIds;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
-
-import java.util.List;
-import java.util.logging.Logger;
+import com.openggf.sprites.playable.ObjectControlState;
 
 /**
  * Floating upside-down egg prison used by the AIZ2 post-boss cutscene.
- *
- * <p>ROM reference: Obj_EggCapsule routine 8 (camera-relative descent/hover).
- * The capsule floats and bobs while panning left-right. The player must
- * jump up from below to hit the button, which opens the capsule and
- * triggers an explosion sequence with animals. After the explosions
- * finish, the results screen is shown.
- *
- * <p>ROM collision: SolidObjectFull with d1=$2B, d2=$18, d3=$18.
- * ROM open trigger: Check_PlayerInRange on button child (word_867C2).
- * ROM opening: sub_865DE — mapping_frame=1, spawn 5 flicker + 9 animal +
- * boss explosion (subtype 8).
  */
-public class Aiz2EndEggCapsuleInstance extends AbstractObjectInstance
-        implements SolidObjectProvider {
-    private static final Logger LOG = Logger.getLogger(Aiz2EndEggCapsuleInstance.class.getName());
+public class Aiz2EndEggCapsuleInstance extends AbstractS3kFloatingEndEggCapsuleInstance
+        implements SpawnCoordinateRewindRecreatable {
+    private static final int RESULTS_OWNER_TAILS_ENDING_POSE_ENTRY = 1;
 
-    private static final int OBJECT_ID = 0x81;
-    private static final int X_OFFSET = 0xA0;
-    private static final int Y_START_OFFSET = -0x40;
-    private static final int Y_TARGET_OFFSET = 0x40;
-    private static final int LEFT_BOUND_OFFSET = 0x30;
-    private static final int RIGHT_BOUND_OFFSET = 0x110;
-    private static final int PRIORITY = 5;
-
-    // ROM: SolidObjectFull parameters (sonic3k.asm:181502-181506)
-    private static final int SOLID_HALF_WIDTH = 0x2B;
-    private static final int SOLID_HALF_HEIGHT = 0x18;
-
-    // ROM: Check_PlayerInRange bounds for the button child (word_867C2).
-    // word_867C2: dc.w -$1A, $34, -$1C, $38
-    // Check_PlayerInRange interprets these as (offset, size) pairs, NOT (min, max):
-    //   X: left = obj_x + (-$1A), right = left + $34 → obj_x - $1A to obj_x + $1A
-    //   Y: top  = obj_y + (-$1C), bottom = top + $38 → obj_y - $1C to obj_y + $1C
-    private static final int BUTTON_X_LEFT = -0x1A;
-    private static final int BUTTON_X_RIGHT = -0x1A + 0x34;  // = +$1A
-    private static final int BUTTON_Y_TOP = -0x1C;
-    private static final int BUTTON_Y_BOTTOM = -0x1C + 0x38;  // = +$1C
-
-    // Button offset from capsule centre (ROM: ChildObjDat_86B64, child_dy=+$24)
-    private static final int BUTTON_Y_OFFSET = 0x24;
-
-    // Post-open delay before results (frames to let explosions play out)
-    private static final int POST_OPEN_DELAY = 60;
-
-    // Animal spawn count (ROM: ChildObjDat_86B9A has 9 entries)
-    private static final int ANIMAL_COUNT = 8;
-
-    private int currentX;
-    private int currentY;
-    private int verticalAccumulator;
-    private int bobAngle;
-    private int xDirection = 1;
-    private int mappingFrame;
-    private boolean opened;
-    private boolean resultsStarted;
-    private boolean releaseTriggered;
-    private int postOpenTimer;
-
-    // Explosion controller (spawned when capsule opens)
-    private S3kBossExplosionController explosionController;
+    private boolean tailsEndingPoseApplied;
+    private boolean tailsEndingPoseObjectControlLocked;
+    private int tailsOpenControllerLockDelay;
+    private int resultsActiveWaitEntries;
 
     public Aiz2EndEggCapsuleInstance(int initialX, int initialY) {
-        super(new ObjectSpawn(initialX, initialY, OBJECT_ID, 0, 0, false, 0), "AIZ2EndEggCapsule");
-        this.currentX = initialX;
-        this.currentY = initialY;
+        super(initialX, initialY, "AIZ2EndEggCapsule");
+    }
+
+    private Aiz2EndEggCapsuleInstance(int initialX, int initialY, boolean routeInitPending) {
+        super(initialX, initialY, "AIZ2EndEggCapsule", routeInitPending);
+    }
+
+    private Aiz2EndEggCapsuleInstance() {
+        this(0, 0);
     }
 
     public static Aiz2EndEggCapsuleInstance createForCamera(int cameraX, int cameraY) {
-        return new Aiz2EndEggCapsuleInstance(cameraX + X_OFFSET, cameraY + Y_START_OFFSET);
-    }
-
-    // ===== Position / lifecycle =====
-
-    @Override
-    public int getX() {
-        return currentX;
+        return new Aiz2EndEggCapsuleInstance(cameraX + X_OFFSET, cameraY + Y_START_OFFSET, true);
     }
 
     @Override
-    public int getY() {
-        return currentY;
+    protected AbstractObjectInstance createCapsuleAnimal(ObjectSpawn spawn, int delay, int artVariant, int index) {
+        return new HighPriorityAnimal(spawn, delay, artVariant);
     }
 
     @Override
-    public boolean isPersistent() {
-        return true;
+    protected void onParentOpen() {
+        // sub_865DE runs from the parent slot after the current player/CPU
+        // dispatch. Publish its signed Ctrl_2 lock on the next capsule entry.
+        tailsOpenControllerLockDelay = 1;
     }
 
     @Override
-    public int getPriorityBucket() {
-        return RenderPriority.clamp(PRIORITY);
-    }
-
-    @Override
-    public boolean isHighPriority() {
-        return true;
-    }
-
-    // ===== Solid collision (ROM: SolidObjectFull d1=$2B, d2=$18, d3=$18) =====
-
-    @Override
-    public SolidObjectParams getSolidParams() {
-        return new SolidObjectParams(SOLID_HALF_WIDTH, SOLID_HALF_HEIGHT, SOLID_HALF_HEIGHT);
-    }
-
-    @Override
-    public boolean isSolidFor(PlayableEntity player) {
-        return !opened;  // Capsule loses solidity once opened
-    }
-
-    // ===== Update =====
-
-    @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
-        // ROM: Once opened, the capsule stops all movement (no panning, no
-        // camera tracking). It stays at its current position and only the
-        // bob animation continues. The camera scrolls past it naturally.
-        if (!opened) {
-            updateMovement();
+    protected void onBeforeCapsuleUpdate() {
+        if (Aiz2BossEndSequenceState.tickTailsControlRelease()) {
+            releaseTailsControlNow();
         }
-
-        if (!opened) {
-            // Check if player hits the button from below
-            if (playerEntity instanceof AbstractPlayableSprite player && shouldHitButton(player)) {
-                openCapsule();
-            }
-            for (PlayableEntity sidekickEntity : services().sidekicks()) {
-                if (sidekickEntity instanceof AbstractPlayableSprite sidekick && shouldHitButton(sidekick)) {
-                    openCapsule();
-                    break;
-                }
-            }
-        } else if (!resultsStarted) {
-            // Tick explosion controller
-            if (explosionController != null && !explosionController.isFinished()) {
-                explosionController.tick();
-                spawnPendingExplosions();
-            }
-
-            // Wait for post-open delay (explosion sequence) then start results
-            if (postOpenTimer > 0) {
-                postOpenTimer--;
-            }
-            if (postOpenTimer == 0
-                    && playerEntity instanceof AbstractPlayableSprite player
-                    && !player.getAir()) {
-                startResults(player);
-            }
-        } else if (!releaseTriggered && services().gameState().isEndOfLevelFlag()) {
-            releaseTriggered = true;
-            Aiz2BossEndSequenceState.releaseEggCapsule();
-            // ROM: The capsule stays visible — it doesn't disappear.
-            // It remains on screen while Sonic walks right and Knuckles
-            // does his cutscene. It only leaves when the camera scrolls
-            // past it or the zone transitions.
-        }
-
-        bobAngle = (bobAngle + 3) & 0xFF;
-    }
-
-    /**
-     * Camera-relative panning and descent. Only runs while the capsule is
-     * still closed (pre-open phase).
-     */
-    private void updateMovement() {
-        int cameraX = services().camera().getX();
-        int cameraY = services().camera().getY();
-
-        // Horizontal panning within camera bounds
-        int leftBound = cameraX + LEFT_BOUND_OFFSET;
-        int rightBound = cameraX + RIGHT_BOUND_OFFSET;
-        currentX += xDirection;
-        if (currentX <= leftBound || currentX >= rightBound) {
-            currentX = Math.max(leftBound, Math.min(rightBound, currentX));
-            xDirection = -xDirection;
-        }
-
-        // Vertical descent toward target
-        int targetY = cameraY + Y_TARGET_OFFSET;
-        if (currentY != targetY) {
-            verticalAccumulator += 0x4000;
-            int step = verticalAccumulator >> 16;
-            verticalAccumulator &= 0xFFFF;
-            if (step > 0) {
-                if (currentY < targetY) {
-                    currentY = Math.min(targetY, currentY + step);
-                } else {
-                    currentY = Math.max(targetY, currentY - step);
-                }
-            }
-        }
-    }
-
-    /**
-     * ROM: Check_PlayerInRange on the button child (loc_86770 / word_867C2).
-     * Player must be jumping upward (y_vel < 0) within the button's
-     * collision box, which is offset below the capsule body.
-     */
-    private boolean shouldHitButton(AbstractPlayableSprite player) {
-        // ROM: loc_86770 — Check_PlayerInRange (word_867C2) bounds relative to
-        // the button child at child_dy=+$24 below the capsule centre.
-        // ROM checks: in range + y_vel < 0 + (anim==2 OR character_id==1).
-        // In S3K a normal jump always sets anim=2 (ball/rolling), so the
-        // anim check effectively just confirms the player is jumping.
-        int buttonY = currentY + BUTTON_Y_OFFSET;
-        int dx = player.getCentreX() - currentX;
-        int dy = player.getCentreY() - buttonY;
-        return player.getYSpeed() < 0
-                && dx >= BUTTON_X_LEFT
-                && dx < BUTTON_X_RIGHT
-                && dy >= BUTTON_Y_TOP
-                && dy < BUTTON_Y_BOTTOM;
-    }
-
-    // ===== Capsule opening =====
-
-    /**
-     * ROM: sub_865DE — capsule opens, spawns explosions, animals, and visual effects.
-     */
-    private void openCapsule() {
-        if (opened) {
+        if (tailsOpenControllerLockDelay <= 0) {
             return;
         }
-        opened = true;
-        mappingFrame = 1;  // ROM: move.b #1,mapping_frame(a0) — open lid
-        postOpenTimer = POST_OPEN_DELAY;
-
-        // Play explosion SFX
-        try {
-            services().playSfx(Sonic3kSfx.EXPLODE.id);
-        } catch (Exception e) {
-            // Ignore audio errors
+        tailsOpenControllerLockDelay--;
+        if (tailsOpenControllerLockDelay > 0) {
+            return;
         }
-
-        // Spawn boss explosion controller (compact type for capsule, subtype 3)
-        explosionController = new S3kBossExplosionController(currentX, currentY, 3, services().rng());
-
-        // Spawn animals (ROM: ChildObjDat_86B9A creates 9 animal children)
-        spawnAnimals();
+        if (services().playerQuery().nativeP2OrNull() instanceof AbstractPlayableSprite sidekick
+                && sidekick.getCpuController() != null) {
+            sidekick.getCpuController().setController2SignedLocked(true);
+        }
     }
 
-    /**
-     * Drains pending explosions from the controller into dynamic children.
-     */
-    private void spawnPendingExplosions() {
-        if (explosionController == null) return;
-        var pending = explosionController.drainPendingExplosions();
-        for (var entry : pending) {
-            if (entry.playSfx()) {
-                try {
-                    services().playSfx(Sonic3kSfx.EXPLODE.id);
-                } catch (Exception e) {
-                    // Ignore audio errors
-                }
+    @Override
+    protected void onResultsComplete() {
+        Aiz2BossEndSequenceState.releaseEggCapsule();
+        // ROM: The capsule stays visible while Sonic walks right and Knuckles
+        // does his cutscene. It leaves only when camera scroll or zone transition
+        // removes it from the active scene.
+    }
+
+    @Override
+    protected ObjectPlayerParticipationPolicy resultsLockParticipationPolicy() {
+        // AIZ route 0 sub_868F8 applies Set_PlayerEndingPose to Player_1 when
+        // results start; Player_2 is handled later by Check_TailsEndPose after
+        // its own eligibility gate (sonic3k.asm:181900-181939).
+        return ObjectPlayerParticipationPolicy.MAIN_ONLY_NATIVE;
+    }
+
+    @Override
+    protected boolean defersButtonEligibilityCreatedByParentMotion() {
+        // The route-8 parent and button child are distinct native dispatches.
+        // Preserve that boundary when the parent's horizontal step is what
+        // first moves the button range over a player.
+        return true;
+    }
+
+    @Override
+    protected boolean shouldStartResults(AbstractPlayableSprite player) {
+        // sub_868F8 only rejects a dead/airborne/non-playable routine. It then
+        // calls Set_PlayerEndingPose, which owns the velocity clears itself.
+        return !player.getAir() && !player.getDead();
+    }
+
+    @Override
+    protected AbstractObjectInstance createResultsScreen() {
+        return new Aiz2ResultsScreenObjectInstance(getPlayerCharacter(), services().currentAct());
+    }
+
+    @Override
+    protected void onResultsActiveWait() {
+        resultsActiveWaitEntries++;
+        advanceTailsEndingPoseCheck(false);
+    }
+
+    @Override
+    protected void onEndingPoseLockClear() {
+        advanceTailsEndingPoseCheck(true);
+    }
+
+    private void restoreNativePlayerControls() {
+        for (var candidate : services().playerQuery().playersFor(
+                ObjectPlayerParticipationPolicy.NATIVE_P1_P2)) {
+            if (!(candidate instanceof AbstractPlayableSprite player)) {
+                continue;
             }
-            spawnChild(() -> new S3kBossExplosionChild(entry.x(), entry.y()));
+            // ROM loc_7D078 calls Restore_PlayerControl/2 from this capsule
+            // owner after both player animation slots have run. The routine
+            // writes anim and prev_anim together as $0505, then clears the
+            // animation frame/timer while leaving the displayed mapping intact
+            // for this frame (sonic3k.asm:166696-166703,180361-180370).
+            ObjectControlState.none().applyTo(player);
+            player.setAir(false);
+            player.setForcedAnimationId(-1);
+            player.setAnimationId(Sonic3kAnimationIds.WAIT);
+            player.getAnimationManager().publishPreviousAnimationId(
+                    Sonic3kAnimationIds.WAIT.id());
+            player.setAnimationFrameIndex(0);
+            player.setAnimationTick(0);
         }
     }
 
-    /**
-     * ROM: ChildObjDat_86B9A — spawn animals that burst out of the capsule.
-     * Each animal gets a staggered delay so they pop out in sequence.
-     *
-     * <p>Uses {@code addDynamicObject()} rather than {@code spawnChild()} because
-     * {@link EggPrisonAnimalInstance}'s constructor calls {@code getRenderManager()}
-     * via static access (to obtain the animal renderer and zone-specific animal
-     * types). This static pattern is safe with {@code addDynamicObject()} but
-     * would conflict with the ThreadLocal context set by {@code spawnChild()}.
-     */
-    private void spawnAnimals() {
-        var objectManager = services().objectManager();
-        if (objectManager == null) return;
-        for (int i = 0; i < ANIMAL_COUNT; i++) {
-            int animalX = currentX + (i % 2 == 0 ? -(8 + i * 4) : (8 + i * 4));
-            int animalY = currentY - 8;
-            int delay = i * 4;  // Staggered: 0, 4, 8, 12, ...
-            ObjectSpawn spawn = new ObjectSpawn(animalX, animalY, 0x28, 0, 0, false, 0);
-            objectManager.addDynamicObject(new HighPriorityAnimal(
-                    spawn, delay, services().rng().nextBits(1)));
+    private void advanceTailsEndingPoseCheck(boolean force) {
+        if (tailsEndingPoseApplied) {
+            return;
+        }
+        if (!force && resultsActiveWaitEntries < RESULTS_OWNER_TAILS_ENDING_POSE_ENTRY) {
+            return;
+        }
+        // ROM Check_TailsEndPose clears Ctrl_2_locked when Tails is eligible for
+        // the ending pose, then latches parent $38 bit 7 so it runs once
+        // (sonic3k.asm:181919-181939). Obj_EggCapsule routine $0C calls this
+        // while Obj_LevelResults/_unkFAA8 is still active, before End_of_level_flag
+        // is set on results exit (sonic3k.asm:181670-181672,62693-62705).
+        if (services().playerQuery().nativeP2OrNull() instanceof AbstractPlayableSprite sidekick
+                && sidekick.getCpuController() != null) {
+            if (sidekick.isPreventTailsRespawn()
+                    || sidekick.getAir()
+                    || sidekick.getDead()) {
+                return;
+            }
+            tailsEndingPoseApplied = true;
+            tailsEndingPoseObjectControlLocked = true;
+            boolean wasAir = sidekick.getAir();
+            boolean wasOnObject = sidekick.isOnObject();
+            sidekick.getCpuController().setController2SignedLocked(false);
+            // Check_TailsEndPose runs from the capsule's later SST slot. It
+            // clears Ctrl_2_locked and tail-calls Set_PlayerEndingPose, but
+            // neither routine writes Ctrl_2_logical; retain the word already
+            // published by Player_2 this frame. The following Tails_Control
+            // dispatch copies raw Ctrl_2 before object_control=$81 blocks CPU
+            // steering (sonic3k.asm:181924-181944,181982-181992,
+            // 26195-26212).
+            lockForResults(sidekick);
+            sidekick.setAir(wasAir);
+            sidekick.setOnObject(wasOnObject);
         }
     }
 
-    /**
-     * Animal subclass that renders in front of high-priority foreground tiles.
-     * The AIZ2 post-boss area has waterfall foreground tiles; without high
-     * priority the animals would appear behind them.
-     */
+    private void releaseTailsControlNow() {
+        restoreNativePlayerControls();
+        if (services().playerQuery().nativeP2OrNull() instanceof AbstractPlayableSprite sidekick) {
+            if (sidekick.getCpuController() != null) {
+                sidekick.getCpuController().setController2SignedLocked(false);
+                sidekick.getCpuController().mirrorRawController2LogicalForEndingPose();
+            }
+            sidekick.setControlLocked(false);
+        }
+        tailsEndingPoseObjectControlLocked = false;
+    }
+
     private static final class HighPriorityAnimal extends EggPrisonAnimalInstance {
         HighPriorityAnimal(ObjectSpawn spawn, int delay, int artVariant) {
             super(spawn, delay, artVariant);
+        }
+
+        private HighPriorityAnimal(ObjectSpawn spawn) {
+            this(spawn, 0, 0);
         }
 
         @Override
@@ -319,58 +203,52 @@ public class Aiz2EndEggCapsuleInstance extends AbstractObjectInstance
         }
     }
 
-    // ===== Results =====
-
-    private void startResults(AbstractPlayableSprite player) {
-        if (resultsStarted) {
-            return;
+    private static final class Aiz2ResultsScreenObjectInstance extends S3kResultsScreenObjectInstance {
+        Aiz2ResultsScreenObjectInstance(PlayerCharacter character, int act) {
+            super(character, act);
         }
-        resultsStarted = true;
-        services().gameState().setEndOfLevelActive(true);
-        lockForResults(player);
-        for (PlayableEntity sidekickEntity : services().sidekicks()) {
-            if (sidekickEntity instanceof AbstractPlayableSprite sidekick) {
-                lockForResults(sidekick);
-            }
+
+        private Aiz2ResultsScreenObjectInstance() {
+            super(true);
         }
-        spawnChild(() -> new S3kResultsScreenObjectInstance(getPlayerCharacter(), services().currentAct()));
-    }
 
-    private void lockForResults(AbstractPlayableSprite sprite) {
-        sprite.setObjectControlled(true);
-        sprite.setControlLocked(true);
-        sprite.setXSpeed((short) 0);
-        sprite.setYSpeed((short) 0);
-        sprite.setGSpeed((short) 0);
-        sprite.setAnimationId(Sonic3kAnimationIds.VICTORY);
-    }
-
-    private PlayerCharacter getPlayerCharacter() {
-        try {
-            return ((Sonic3kLevelEventManager) services().levelEventProvider()).getPlayerCharacter();
-        } catch (Exception e) {
-            return PlayerCharacter.SONIC_AND_TAILS;
+        @Override
+        public Aiz2ResultsScreenObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+            return ObjectConstructionContext.construct(ctx.objectServices(),
+                    Aiz2ResultsScreenObjectInstance::new);
         }
-    }
 
-    // ===== Rendering =====
-
-    @Override
-    public void appendRenderCommands(List<GLCommand> commands) {
-        PatternSpriteRenderer renderer = getRenderer(Sonic3kObjectArtKeys.EGG_CAPSULE);
-        if (renderer == null || !renderer.isReady()) {
-            return;
+        @Override
+        protected boolean shouldRestorePlayerControlsOnExit() {
+            // ROM Obj_LevelResultsWait2 clears _unkFAA8 and deletes itself
+            // (sonic3k.asm:62693-62705). The AIZ2 owner at loc_7D078 performs
+            // Restore_PlayerControl/2 after Check_TailsEndPose observes that
+            // flag clear (sonic3k.asm:166696-166703).
+            return false;
         }
-        int bobY = currentY + (int) Math.round(Math.sin((bobAngle * Math.PI * 2.0) / 256.0) * 3.0);
 
-        // ROM: loc_86592 sets bset #1,render_flags(a0) for the floating capsule.
-        // Draw body vFlip=true to hang upside-down.
-        renderer.drawFrameIndex(mappingFrame, currentX, bobY, false, true);
+        @Override
+        protected boolean skipsSameFrameUpdateAfterSpawn() {
+            // AIZ2's sub_868F8 publishes Obj_LevelResults through the general
+            // AllocateObject path, so its first Obj_LevelResultsInit dispatch
+            // remains on the following ExecuteObjects pass (sonic3k.asm:
+            // 181976-181996). The signpost-owned results path uses the
+            // after-current allocation contract instead.
+            return true;
+        }
 
-        // ROM: The button child sits at child_dy=+$24 below the capsule centre.
-        // It hangs below the upside-down capsule body, facing the ground.
-        int buttonFrame = opened ? 0xC : 0x5;
-        int buttonY = bobY + BUTTON_Y_OFFSET;
-        renderer.drawFrameIndex(buttonFrame, currentX, buttonY, false, true);
+        @Override
+        protected void onResultsChildrenRetired() {
+            // Obj_LevelResultsWait2 clears _unkFAA8 as soon as the final
+            // results child has left the screen.  The AIZ2 controller is an
+            // earlier SST slot, so it consumes this release on the following
+            // object pass while the results owner performs its final delete.
+            Aiz2BossEndSequenceState.releaseEggCapsule();
+        }
+
+        @Override
+        protected void onExitReady() {
+            super.onExitReady();
+        }
     }
 }

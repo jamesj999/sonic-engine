@@ -3,11 +3,13 @@ package com.openggf.game.sonic3k.titlescreen;
 import com.openggf.data.Rom;
 import com.openggf.data.RomManager;
 import com.openggf.game.GameServices;
+import com.openggf.game.sonic3k.S3kFrontendPaletteUploader;
 import com.openggf.game.sonic3k.constants.Sonic3kConstants;
 import com.openggf.graphics.GraphicsManager;
+import com.openggf.graphics.PatternAtlasRange;
 import com.openggf.level.Palette;
 import com.openggf.level.Pattern;
-import com.openggf.tools.EnigmaReader;
+import com.openggf.data.compression.EnigmaReader;
 import com.openggf.util.PatternDecompressor;
 
 import java.io.ByteArrayInputStream;
@@ -58,10 +60,10 @@ public class Sonic3kTitleScreenDataLoader {
     private static final int MAP_HEIGHT = 28;
 
     /** Virtual pattern ID base for animation frame art. */
-    static final int ANIM_PATTERN_BASE = 0xE0000;
+    static final int ANIM_PATTERN_BASE = PatternAtlasRange.S3K_TITLE_SCREEN_ANIMATION.base();
 
     /** Virtual pattern ID base for combined sprite art (Sonic sprites + &Knuckles + banner + menu). */
-    static final int SPRITE_PATTERN_BASE = 0xE8000;
+    static final int SPRITE_PATTERN_BASE = PatternAtlasRange.S3K_TITLE_SCREEN_SPRITES.base();
 
     // ---- Loaded animation data (indexed 0-12, representing frames 1-D) ----
 
@@ -375,7 +377,7 @@ public class Sonic3kTitleScreenDataLoader {
             return;
         }
 
-        GraphicsManager gm = GraphicsManager.getInstance();
+        GraphicsManager gm = GameServices.graphics();
         if (gm == null || gm.isHeadlessMode()) {
             return;
         }
@@ -408,7 +410,7 @@ public class Sonic3kTitleScreenDataLoader {
             return;
         }
 
-        GraphicsManager gm = GraphicsManager.getInstance();
+        GraphicsManager gm = GameServices.graphics();
         if (gm == null || gm.isHeadlessMode()) {
             return;
         }
@@ -434,9 +436,7 @@ public class Sonic3kTitleScreenDataLoader {
                     byte[] lineData = new byte[Palette.PALETTE_SIZE_IN_ROM];
                     System.arraycopy(palData, line * Palette.PALETTE_SIZE_IN_ROM, lineData, 0,
                             Palette.PALETTE_SIZE_IN_ROM);
-                    Palette palette = new Palette();
-                    palette.fromSegaFormat(lineData);
-                    gm.cachePaletteTexture(palette, line);
+                    S3kFrontendPaletteUploader.cacheLineFromBytes(gm, lineData, line);
                 }
             } else {
                 // Frames 1-C: 64 bytes = 2 palette lines (lines 0 and 1)
@@ -444,9 +444,7 @@ public class Sonic3kTitleScreenDataLoader {
                     byte[] lineData = new byte[Palette.PALETTE_SIZE_IN_ROM];
                     System.arraycopy(palData, line * Palette.PALETTE_SIZE_IN_ROM, lineData, 0,
                             Palette.PALETTE_SIZE_IN_ROM);
-                    Palette palette = new Palette();
-                    palette.fromSegaFormat(lineData);
-                    gm.cachePaletteTexture(palette, line);
+                    S3kFrontendPaletteUploader.cacheLineFromBytes(gm, lineData, line);
                 }
             }
         }
@@ -463,7 +461,7 @@ public class Sonic3kTitleScreenDataLoader {
             return;
         }
 
-        GraphicsManager gm = GraphicsManager.getInstance();
+        GraphicsManager gm = GameServices.graphics();
         if (gm == null || gm.isHeadlessMode()) {
             return;
         }
@@ -487,9 +485,7 @@ public class Sonic3kTitleScreenDataLoader {
                 byte[] lineData = new byte[Palette.PALETTE_SIZE_IN_ROM];
                 System.arraycopy(palData, line * Palette.PALETTE_SIZE_IN_ROM, lineData, 0,
                         Palette.PALETTE_SIZE_IN_ROM);
-                Palette palette = new Palette();
-                palette.fromSegaFormat(lineData);
-                gm.cachePaletteTexture(palette, line);
+                S3kFrontendPaletteUploader.cacheLineFromBytes(gm, lineData, line);
             }
         }
 
@@ -581,6 +577,20 @@ public class Sonic3kTitleScreenDataLoader {
             return null;
         }
         return animPaletteData[FRAME_COUNT - 1]; // Frame D is the last entry
+    }
+
+    /**
+     * Returns the frame-D (final scene) pattern array — the same patterns the
+     * interactive Plane B background indexes into. Used to sample a representative
+     * background colour for the widescreen side bands.
+     *
+     * @return frame D patterns, or null if not loaded
+     */
+    public Pattern[] getFrameDPatterns() {
+        if (animPatterns == null || FRAME_COUNT < 1) {
+            return null;
+        }
+        return animPatterns[FRAME_COUNT - 1]; // Frame D is the last entry
     }
 
     /**

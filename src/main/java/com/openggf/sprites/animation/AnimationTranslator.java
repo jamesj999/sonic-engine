@@ -40,8 +40,24 @@ public final class AnimationTranslator {
         // Copy non-animation properties
         result.setAnglePreAdjust(donorProfile.isAnglePreAdjust());
         result.setCompactSuperRunSlope(donorProfile.isCompactSuperRunSlope());
+        result.setSuperAlternateFrameStep(
+                donorProfile.getSuperAlternateFrameMask(),
+                donorProfile.getSuperAlternateFrameStep(),
+                donorProfile.getSuperAlternateFrameCeiling());
+        result.setWalkRunPublishesFrameBeforeTimerAdvance(
+                donorProfile.isWalkRunPublishesFrameBeforeTimerAdvance());
+        int highSpeedAnimId = donorProfile.getHighSpeedWalkRunAnimId();
+        result.setHighSpeedWalkRunAnimId(highSpeedAnimId >= 0
+                && donorAnimSet.getScript(highSpeedAnimId) != null ? highSpeedAnimId : -1);
+        result.setHighSpeedWalkRunThreshold(donorProfile.getHighSpeedWalkRunThreshold());
+        result.setWalkSlopeFrameStride(donorProfile.getWalkSlopeFrameStride());
+        result.setRunSlopeFrameStride(donorProfile.getRunSlopeFrameStride());
+        result.setHighSpeedSlopeFrameStride(donorProfile.getHighSpeedSlopeFrameStride());
+        result.setDoubleWalkRunAnimationSpeedWhenSliding(
+                donorProfile.isDoubleWalkRunAnimationSpeedWhenSliding());
         result.setWalkSpeedThreshold(donorProfile.getWalkSpeedThreshold());
         result.setRunSpeedThreshold(donorProfile.getRunSpeedThreshold());
+        result.setRunFramesUseWalkAnimationId(donorProfile.isRunFramesUseWalkAnimationId());
         result.setFallbackFrame(donorProfile.getFallbackFrame());
 
         // Translate each animation field

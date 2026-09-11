@@ -2,7 +2,6 @@ package com.openggf.sprites.playable;
 
 import com.openggf.camera.Camera;
 import com.openggf.game.CanonicalAnimation;
-import com.openggf.game.GameModuleRegistry;
 import com.openggf.physics.Direction;
 
 /**
@@ -25,9 +24,8 @@ public class KnucklesRespawnStrategy implements SidekickRespawnStrategy {
 
     public KnucklesRespawnStrategy(SidekickCpuController controller) {
         // controller not currently used; accepted for API consistency with other strategies
-        var module = GameModuleRegistry.getCurrent();
-        this.glideAnimId = (module != null)
-                ? module.resolveAnimationId(CanonicalAnimation.GLIDE_DROP)
+        this.glideAnimId = controller != null
+                ? controller.resolveAnimationId(CanonicalAnimation.GLIDE_DROP)
                 : -1;
     }
 
@@ -71,7 +69,7 @@ public class KnucklesRespawnStrategy implements SidekickRespawnStrategy {
         }
 
         sidekick.setControlLocked(true);
-        sidekick.setObjectControlled(true);
+        ObjectControlState.nativeBit7FullControl().applyTo(sidekick);
         sidekick.setXSpeed((short) 0);
         sidekick.setYSpeed((short) 0);
         sidekick.setGSpeed((short) 0);
@@ -87,7 +85,7 @@ public class KnucklesRespawnStrategy implements SidekickRespawnStrategy {
 
         if (!dropping) {
             sidekick.setControlLocked(true);
-            sidekick.setObjectControlled(true);
+            ObjectControlState.nativeBit7FullControl().applyTo(sidekick);
             sidekick.setForcedAnimationId(glideAnimId);
 
             // Horizontal movement toward leader
@@ -113,7 +111,7 @@ public class KnucklesRespawnStrategy implements SidekickRespawnStrategy {
             if (xAligned || timedOut) {
                 dropping = true;
                 sidekick.setControlLocked(false);
-                sidekick.setObjectControlled(false);
+                ObjectControlState.none().applyTo(sidekick);
                 sidekick.setForcedAnimationId(-1);
                 sidekick.setXSpeed((short) 0);
             }

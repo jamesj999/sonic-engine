@@ -1,6 +1,6 @@
 package com.openggf.tests;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.nio.file.*;
@@ -9,7 +9,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
-import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.fail;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * Guards against calling {@code services()} before {@code ObjectServices}
@@ -34,12 +35,7 @@ import static org.junit.Assert.fail;
 public class TestNoServicesInObjectConstructors {
 
     /** Packages containing object instance classes to scan. */
-    private static final String[] OBJECT_PACKAGES = {
-            "com/openggf/game/sonic1/objects",
-            "com/openggf/game/sonic2/objects",
-            "com/openggf/game/sonic3k/objects",
-            "com/openggf/level/objects",
-    };
+    private static final String[] OBJECT_PACKAGES = ObjectGuardSourceScanner.OBJECT_PACKAGE_PATHS;
 
     /**
      * Objects whose constructors do NOT call services(), so
@@ -56,7 +52,17 @@ public class TestNoServicesInObjectConstructors {
             "S3kSignpostSparkleChild",
             "S3kResultsScreenObjectInstance",
             "Sonic3kSSEntryFlashObjectInstance",
-            "AizTreeRevealControlObjectInstance"
+            "AizTreeRevealControlObjectInstance",
+            // Constructor only initializes scalar camera-boundary state; the raw
+            // spawn preserves AllocateObjectAfterCurrent slot ordering.
+            "AizAct2CameraResizeController"
+    );
+
+    private static final Set<String> LEGACY_CONSTRUCTOR_RAW_CHILD_REGISTRATION = Set.of(
+            // Phase 2 cleanup: boss scrap setup still uses spawnDynamicObject during construction.
+            "Sonic1ScrapEggmanInstance",
+            // Phase 2 cleanup: bridge zone config path still reaches raw child registration.
+            "CollapsingBridgeObjectInstance"
     );
 
     /**
@@ -66,6 +72,9 @@ public class TestNoServicesInObjectConstructors {
      */
     @Test
     public void spawnDynamicObject_shouldNotConstructInlineUnlessConstructorIsSafe() throws IOException {
+        assertEquals(Object.class,
+                com.openggf.level.objects.TestNoServicesInObjectConstructors.class.getSuperclass(),
+                "legacy FQN must remain loadable without inheriting and re-running this suite");
         Path srcMain = Path.of("src/main/java");
         if (!Files.isDirectory(srcMain)) {
             return;
@@ -92,7 +101,7 @@ public class TestNoServicesInObjectConstructors {
                                     if (!SAFE_FOR_SPAWN_DYNAMIC.contains(className)) {
                                         String fileName = path.getFileName().toString();
                                         violations.add(fileName + ": spawnDynamicObject(new "
-                                                + className + "(...)) — use spawnChild() instead, "
+                                                + className + "(...)) â€” use spawnChild()/spawnFreeChild() instead, "
                                                 + "or add to SAFE_FOR_SPAWN_DYNAMIC if constructor "
                                                 + "does not call services()");
                                     }
@@ -107,7 +116,7 @@ public class TestNoServicesInObjectConstructors {
             fail("Unsafe spawnDynamicObject(new ...) patterns found.\n"
                     + "If the constructor calls services(), this will throw "
                     + "IllegalStateException at runtime.\n"
-                    + "Use spawnChild(() -> new X(...)) instead:\n\n  "
+                    + "Use spawnChild(() -> new X(...)) or spawnFreeChild(() -> new X(...)) instead:\n\n  "
                     + String.join("\n  ", violations));
         }
     }
@@ -117,7 +126,7 @@ public class TestNoServicesInObjectConstructors {
      * <p>
      * Constructors run BEFORE {@code addDynamicObject()} or
      * {@code spawnDynamicObject()} can inject {@code ObjectServices}.
-     * The only safe patterns are {@code spawnChild()} or
+     * The only safe patterns are {@code spawnChild()}, {@code spawnFreeChild()}, or
      * {@code setConstructionContext()}, but both are easy to forget at
      * call sites. The simplest universal rule: defer {@code services()}
      * to lazy init or the first {@code update()} call.
@@ -187,6 +196,41 @@ public class TestNoServicesInObjectConstructors {
         }
     }
 
+    @Test
+    public void constructors_mustNotRegisterChildObjectsThroughRawObjectManagerCalls() throws IOException {
+        Path srcMain = Path.of("src/main/java");
+        if (!Files.isDirectory(srcMain)) {
+            return;
+        }
+
+        Map<String, ClassSource> classes = loadObjectClassSources(srcMain);
+        List<String> violations = new ArrayList<>();
+
+        for (ClassSource source : classes.values()) {
+            if (LEGACY_CONSTRUCTOR_RAW_CHILD_REGISTRATION.contains(source.className())) {
+                continue;
+            }
+            Set<String> rawRegistrationMethods = findMethodsCallingRawObjectRegistration(
+                    source.content(), source.className());
+            for (ConstructorCall call : findConstructorCalls(source)) {
+                if ("addDynamicObject".equals(call.methodName())
+                        || "spawnDynamicObject".equals(call.methodName())
+                        || rawRegistrationMethods.contains(call.methodName())) {
+                    violations.add(source.fileName() + ": " + source.className()
+                            + " constructor reaches " + call.methodName()
+                            + "(), which registers children before the parent is fully manager-owned");
+                }
+            }
+        }
+
+        if (!violations.isEmpty()) {
+            fail("Object constructors must not register child objects through raw ObjectManager paths. "
+                    + "Defer child creation until after parent registration and use spawnChild()/spawnFreeChild() "
+                    + "so construction context and child lifecycle ownership are preserved.\n\n  "
+                    + String.join("\n  ", violations));
+        }
+    }
+
     /**
      * Scans ALL source for {@code addDynamicObject(new X(...))} where X's
      * constructor calls {@code services()}. This catches call sites outside
@@ -245,10 +289,10 @@ public class TestNoServicesInObjectConstructors {
                                 if (classesCallingServicesInCtor.contains(className)) {
                                     String fileName = path.getFileName().toString();
                                     violations.add(fileName + ": addDynamicObject(new "
-                                            + className + "(...)) — " + className
+                                            + className + "(...)) â€” " + className
                                             + " calls services() in constructor. "
                                             + "Remove services() from the constructor "
-                                            + "(use lazy init) or use spawnChild()");
+                                            + "(use lazy init) or use spawnChild()/spawnFreeChild()");
                                 }
                             }
                         } catch (IOException ignored) {
@@ -272,7 +316,7 @@ public class TestNoServicesInObjectConstructors {
      * Example of the dangerous pattern:
      * <pre>
      *   X obj = new X(...);
-     *   obj.initialize();              // CRASH — services not injected yet
+     *   obj.initialize();              // CRASH â€” services not injected yet
      *   manager.addDynamicObject(obj);
      * </pre>
      * <p>
@@ -349,7 +393,7 @@ public class TestNoServicesInObjectConstructors {
                                     pending.put(ctorMatch.group(1), ctorMatch.group(2));
                                 }
 
-                                // Check for registration — removes from pending
+                                // Check for registration â€” removes from pending
                                 Matcher regMatch = registration.matcher(line);
                                 while (regMatch.find()) {
                                     pending.remove(regMatch.group(1));
@@ -366,7 +410,7 @@ public class TestNoServicesInObjectConstructors {
                                         if (dangerous != null && dangerous.contains(method)) {
                                             violations.add(fileName + ":" + (i + 1)
                                                     + ": " + varName + "." + method
-                                                    + "() called before addDynamicObject — "
+                                                    + "() called before addDynamicObject â€” "
                                                     + method + "() calls services() in "
                                                     + className);
                                         }
@@ -420,7 +464,7 @@ public class TestNoServicesInObjectConstructors {
         }
 
         // Seed: methods that directly call services()
-        Pattern servicesCall = Pattern.compile("(?<![.\\w])services\\(\\)");
+        Pattern servicesCall = Pattern.compile("(?<![\\w])(?:\\w+\\.)?services\\(\\)");
         Set<String> callers = new HashSet<>();
         for (var entry : methodBodies.entrySet()) {
             if (servicesCall.matcher(entry.getValue()).find()) {
@@ -436,6 +480,59 @@ public class TestNoServicesInObjectConstructors {
                 if (callers.contains(entry.getKey())) continue;
                 for (String caller : callers) {
                     // Check if this method's body calls a known services-calling method
+                    if (Pattern.compile("(?<![.\\w])" + Pattern.quote(caller) + "\\s*\\(")
+                            .matcher(entry.getValue()).find()) {
+                        callers.add(entry.getKey());
+                        changed = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        return callers;
+    }
+
+    private static Set<String> findMethodsCallingRawObjectRegistration(String content, String className) {
+        Map<String, String> methodBodies = new HashMap<>();
+        Pattern methodDecl = Pattern.compile(
+                "(?:public|protected|private|)\\s+"
+                        + "(?:static\\s+)?(?:final\\s+)?(?:synchronized\\s+)?"
+                        + "\\S+\\s+(\\w+)\\s*\\([^)]*\\)\\s*"
+                        + "(?:throws\\s+[^{]+)?\\{");
+
+        Matcher m = methodDecl.matcher(content);
+        while (m.find()) {
+            String methodName = m.group(1);
+            if (methodName.equals(className)) continue;
+
+            int start = m.end();
+            int braceDepth = 1;
+            int end = start;
+            while (end < content.length() && braceDepth > 0) {
+                char c = content.charAt(end);
+                if (c == '{') braceDepth++;
+                else if (c == '}') braceDepth--;
+                end++;
+            }
+            methodBodies.put(methodName, content.substring(start, end));
+        }
+
+        Pattern rawRegistration = Pattern.compile(
+                "(?<![\\w])(?:\\w+\\.)?(?:addDynamicObject|spawnDynamicObject)\\s*\\(");
+        Set<String> callers = new HashSet<>();
+        for (var entry : methodBodies.entrySet()) {
+            if (rawRegistration.matcher(entry.getValue()).find()) {
+                callers.add(entry.getKey());
+            }
+        }
+
+        boolean changed = true;
+        while (changed) {
+            changed = false;
+            for (var entry : methodBodies.entrySet()) {
+                if (callers.contains(entry.getKey())) continue;
+                for (String caller : callers) {
                     if (Pattern.compile("(?<![.\\w])" + Pattern.quote(caller) + "\\s*\\(")
                             .matcher(entry.getValue()).find()) {
                         callers.add(entry.getKey());
@@ -543,8 +640,71 @@ public class TestNoServicesInObjectConstructors {
         }
     }
 
+    /**
+     * Whether a {@code new X(...)} at {@code lineIndex} is deferred into a factory
+     * (a {@code Supplier} lambda or a factory method referenced with {@code this::})
+     * that a construction-context wrapper later invokes.
+     *
+     * <p>This is the codebase's normal shape for the wrappers that take a supplier:
+     * the {@code new} is written before the {@code spawnChild(...)} /
+     * {@code spawnFreeChild(...)} call that runs it, so a backwards-only scan for the
+     * wrapper cannot see it. The construction context is established by the wrapper
+     * when it invokes the factory, so these sites do get a context — the deferral is
+     * exactly what makes them safe.
+     */
+    private static boolean isDeferredFactoryConstruction(String[] lines, int lineIndex) {
+        Pattern wrapper = Pattern.compile(
+                "\\b(?:spawnChild|spawnFreeChild|spawnObject|createDynamicObject)\\s*\\(");
+        int searchEnd = Math.min(lines.length, lineIndex + 20);
+
+        // Supplier-lambda form: `... = () -> new X(...)` (possibly wrapped over lines),
+        // with the wrapper call following within the same window.
+        boolean lambda = false;
+        for (int i = lineIndex; i >= Math.max(0, lineIndex - 3) && !lambda; i--) {
+            lambda = lines[i].contains("->");
+        }
+        if (lambda) {
+            for (int i = lineIndex + 1; i < searchEnd; i++) {
+                if (wrapper.matcher(lines[i]).find()) {
+                    return true;
+                }
+            }
+        }
+
+        // Factory-method form: `return new X(...)` inside a method that some wrapper
+        // call in this file passes as a `this::name` method reference.
+        if (!lines[lineIndex].trim().startsWith("return new ")) {
+            return false;
+        }
+        Pattern declaration = Pattern.compile(
+                "\\b(?:public|private|protected)\\b[^;{}()]*\\b(\\w+)\\s*\\(");
+        for (int i = lineIndex; i >= 0; i--) {
+            Matcher declared = declaration.matcher(lines[i]);
+            if (!declared.find()) {
+                continue;
+            }
+            Pattern reference = Pattern.compile(
+                    "\\b(?:spawnChild|spawnFreeChild|spawnObject|createDynamicObject)\\s*\\("
+                            + "\\s*this\\s*::\\s*" + Pattern.quote(declared.group(1)) + "\\b");
+            for (String line : lines) {
+                if (reference.matcher(line).find()) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        return false;
+    }
+
     private static boolean isContextWrapped(String[] lines, int lineIndex) {
-        if (Pattern.compile("\\b(?:setConstructionContext|spawnChild|spawnObject|createDynamicObject)\\s*\\(")
+        if (isDeferredFactoryConstruction(lines, lineIndex)) {
+            return true;
+        }
+        if (Pattern.compile("\\b(?:setConstructionContext|spawnChild|spawnFreeChild|spawnObject|createDynamicObject)\\s*\\(")
+                .matcher(lines[lineIndex]).find()) {
+            return true;
+        }
+        if (Pattern.compile("\\bObjectConstructionContext\\s*\\.\\s*construct\\s*\\(")
                 .matcher(lines[lineIndex]).find()) {
             return true;
         }
@@ -552,7 +712,11 @@ public class TestNoServicesInObjectConstructors {
         int searchStart = Math.max(0, lineIndex - 20);
         int searchEnd = Math.min(lines.length, lineIndex + 20);
         for (int i = lineIndex - 1; i >= searchStart; i--) {
-            if (Pattern.compile("\\b(?:spawnChild|spawnObject|createDynamicObject)\\s*\\(")
+            if (Pattern.compile("\\b(?:spawnChild|spawnFreeChild|spawnObject|createDynamicObject)\\s*\\(")
+                    .matcher(lines[i]).find()) {
+                return true;
+            }
+            if (Pattern.compile("\\bObjectConstructionContext\\s*\\.\\s*construct\\s*\\(")
                     .matcher(lines[i]).find()) {
                 return true;
             }
@@ -576,7 +740,7 @@ public class TestNoServicesInObjectConstructors {
     private static List<ConstructorCall> findConstructorCalls(ClassSource source) {
         List<ConstructorCall> calls = new ArrayList<>();
         Pattern ctorPattern = Pattern.compile(
-                "(?:public|protected|private)\\s+" + Pattern.quote(source.className())
+                "(?:public\\s+|protected\\s+|private\\s+)?" + Pattern.quote(source.className())
                         + "\\s*\\([^)]*\\)\\s*\\{");
         Matcher ctorMatcher = ctorPattern.matcher(source.content());
 
@@ -657,7 +821,7 @@ public class TestNoServicesInObjectConstructors {
             String content, String className, String fileName,
             List<String> violations) {
         Pattern ctorPattern = Pattern.compile(
-                "(?:public|protected|private)\\s+" + Pattern.quote(className)
+                "(?:public\\s+|protected\\s+|private\\s+)?" + Pattern.quote(className)
                         + "\\s*\\([^)]*\\)\\s*\\{");
         Matcher ctorMatcher = ctorPattern.matcher(content);
 
@@ -673,8 +837,8 @@ public class TestNoServicesInObjectConstructors {
             }
 
             String ctorBody = content.substring(start, end);
-            // Match unqualified services() — not obj.services()
-            if (Pattern.compile("(?<![.\\w])services\\(\\)").matcher(ctorBody).find()) {
+            // Match unqualified services() â€” not obj.services()
+            if (Pattern.compile("(?<![\\w])(?:\\w+\\.)?services\\(\\)").matcher(ctorBody).find()) {
                 violations.add(fileName + ": " + className
                         + " calls services() in constructor");
             }

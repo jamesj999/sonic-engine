@@ -31,11 +31,13 @@ public final class Sonic1ObjectIds {
     public static final int MISSILE_DISSOLVE = 0x24;
     public static final int RING            = 0x25;
     public static final int MONITOR         = 0x26;
+    public static final int EXPLOSION_ITEM  = 0x27;
     public static final int ANIMALS         = 0x28; // id_Animals - escaped animals (badnik/capsule + ending)
     public static final int SBZ_SMALL_DOOR  = 0x2A; // id_AutoDoor - small vertical door (SBZ)
     public static final int CHOPPER         = 0x2B;
     public static final int JAWS            = 0x2C;
     public static final int BURROBOT        = 0x2D;
+    public static final int POWER_UP        = 0x2E;
     public static final int MZ_LARGE_GRASSY_PLATFORM = 0x2F;
     public static final int MZ_GLASS_BLOCK  = 0x30;
     public static final int CHAINED_STOMPER = 0x31;
@@ -47,6 +49,7 @@ public final class Sonic1ObjectIds {
     public static final int BREAKABLE_WALL  = 0x3C;
     public static final int GHZ_BOSS        = 0x3D;
     public static final int EGG_PRISON      = 0x3E;
+    public static final int EXPLOSION       = 0x3F;
     public static final int MOTOBUG         = 0x40;
     public static final int SPRING          = 0x41;
     public static final int EDGE_WALLS      = 0x44;

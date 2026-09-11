@@ -1,7 +1,12 @@
 package com.openggf.game.sonic2.scroll;
 
+import com.openggf.game.GameServices;
+import com.openggf.game.sonic2.runtime.WfzRuntimeState;
 import com.openggf.level.scroll.AbstractZoneScrollHandler;
+import com.openggf.level.scroll.BgTilemapUpdateMode;
+import com.openggf.level.scroll.FrameScrollAccumulator;
 import com.openggf.level.scroll.M68KMath;
+import com.openggf.level.scroll.compose.ScrollEffectComposer;
 
 import java.util.Arrays;
 
@@ -18,6 +23,18 @@ import java.util.Arrays;
  * Offset 0x0C: Medium cloud accumulator (+0x4000/frame, ~0.25 px/frame)
  * Offset 0x10: Small cloud accumulator (+0x2000/frame, ~0.125 px/frame)
  *
+ * fixBugs (s2.asm:27 `fixBugs = 0`): two conditionals live in this routine and the
+ * engine implements the SHIPPED (fixBugs=0) branch of both.
+ * 1. s2.asm:15654-15672 — the cloud accumulators are advanced by a bare
+ *    `addi.l #$8000/$4000/$2000` with no camera term. The fixBugs=1 branch first adds
+ *    `Camera_X_pos_diff` sign-extended and shifted left 5 into each accumulator, so the
+ *    clouds move relative to the camera instead of against it.
+ * 2. s2.asm:15804-15808 — SwScrl_WFZ_Normal_Array is short by three (lineCount,
+ *    layerIndex) pairs relative to the transition array, so an exhausted segment reader
+ *    would run on into SwScrl_HTZ's code bytes. fixBugs=1 appends $20/$08, $30/$0C,
+ *    $30/$10. The table is read from the ROM at its shipped size (ParallaxTables
+ *    SWSCRL_WFZ_NORMAL_SIZE), so the shipped layout is what the engine sees.
+ *
  * Note: The cloud accumulators are bugged in the original ROM - they only
  * tally cloud speeds without subtracting camera movement. This makes clouds
  * move faster when going right and slower when going left, opposite to what
@@ -31,10 +48,11 @@ import java.util.Arrays;
  * skips entries based on Camera_BG_Y_pos to find the first visible segment,
  * then fills 224 scanlines from the active segments.
  *
- * The normal array is missing data for the last $80 lines compared to the
- * transition array. In the original ROM, this causes the lower clouds to
- * read data from the start of SwScrl_HTZ. We reproduce this behavior by
- * falling through to a default layer (0) when the array runs out.
+ * The normal array differs from the transition array and the disassembly notes
+ * that the ROM would continue into SwScrl_HTZ if the segment reader exhausted
+ * it. With the ROM's masked BG Y range and 224 visible lines, the shipped
+ * normal table still covers every reachable visible span, so the guard path below
+ * is only a malformed-table guard.
  */
 public class SwScrlWfz extends AbstractZoneScrollHandler {
 
@@ -47,9 +65,17 @@ public class SwScrlWfz extends AbstractZoneScrollHandler {
     // Layer 2: large clouds (accumulator)
     // Layer 3: medium clouds (accumulator)
     // Layer 4: small clouds (accumulator)
-    private int largeCloudAccum;   // Offset 0x08: accumulates +0x8000/frame
-    private int mediumCloudAccum;  // Offset 0x0C: accumulates +0x4000/frame
-    private int smallCloudAccum;   // Offset 0x10: accumulates +0x2000/frame
+    //
+    // The three cloud accumulators are pure per-frame accumulators (ROM adds a
+    // fixed amount to each every frame). They are derived from the frame counter
+    // rather than free-accumulated on the update-call count so they rewind
+    // correctly — see FrameScrollAccumulator. Offset 1 = increment-then-read.
+    private final FrameScrollAccumulator largeCloudAccum =
+            new FrameScrollAccumulator(0x8000, 1);  // Offset 0x08: +0x8000/frame
+    private final FrameScrollAccumulator mediumCloudAccum =
+            new FrameScrollAccumulator(0x4000, 1);  // Offset 0x0C: +0x4000/frame
+    private final FrameScrollAccumulator smallCloudAccum =
+            new FrameScrollAccumulator(0x2000, 1);  // Offset 0x10: +0x2000/frame
 
     // Byte offset to layer index mapping (byteOffset / 4)
     private static final int LAYER_STATIC_BG = 0;    // byte offset 0x00
@@ -64,6 +90,8 @@ public class SwScrlWfz extends AbstractZoneScrollHandler {
     // Pre-allocated array for per-frame layer scroll values
     private final int[] layerScrollWord = new int[5];
 
+    private final ScrollEffectComposer composer = new ScrollEffectComposer();
+
     public SwScrlWfz(ParallaxTables tables, BackgroundCamera bgCamera) {
         this.tables = tables;
         this.bgCamera = bgCamera;
@@ -77,27 +105,30 @@ public class SwScrlWfz extends AbstractZoneScrollHandler {
                        int actId) {
 
         resetScrollTracking();
+        composer.reset();
+
+        WfzRuntimeState runtimeState = currentRuntimeState();
+        int bgYPos = runtimeState != null ? runtimeState.bgVscrollFactor() : bgCamera.getBgYPos();
+        int bgXPos = runtimeState != null ? runtimeState.bgXPos() : bgCamera.getBgXPos();
 
         // ==================== Step 1: Update VScroll factor ====================
         // move.w (Camera_BG_Y_pos).w,(Vscroll_Factor_BG).w
-        vscrollFactorBG = (short) bgCamera.getBgYPos();
+        composer.setVscrollFactorBG((short) bgYPos);
 
         // ==================== Step 2: Build TempArray_LayerDef ====================
         // move.l (Camera_BG_X_pos).w,d0  -- reads 32-bit (integer.subpixel)
         // The bgCamera stores the integer part; we treat it as the high word of a 32-bit value
-        int bgXPosLong = bgCamera.getBgXPos() << 16;
+        int bgXPosLong = bgXPos << 16;
 
         // Layer 0 and 1: Camera_BG_X_pos (static BG and ship)
         // move.l d0,(a2)+  ; offset 0x00
         // move.l d0,(a2)+  ; offset 0x04 (originally d1 = d0)
 
         // Layer 2-4: Cloud accumulators (bugged: only accumulate, don't subtract camera)
-        // addi.l #$8000,(a2)+
-        largeCloudAccum += 0x8000;
-        // addi.l #$4000,(a2)+
-        mediumCloudAccum += 0x4000;
-        // addi.l #$2000,(a2)+
-        smallCloudAccum += 0x2000;
+        // addi.l #$8000,(a2)+ / #$4000 / #$2000 — derived from the frame counter.
+        int largeCloud = largeCloudAccum.valueAt(frameCounter);
+        int mediumCloud = mediumCloudAccum.valueAt(frameCounter);
+        int smallCloud = smallCloudAccum.valueAt(frameCounter);
 
         // Build the 5 scroll word values (high word of each 32-bit longword)
         // The original reads with: move.w (a2,d3.w),d0 where d3 is the byte offset
@@ -105,9 +136,9 @@ public class SwScrlWfz extends AbstractZoneScrollHandler {
         Arrays.fill(layerScrollWord, 0);
         layerScrollWord[LAYER_STATIC_BG] = (bgXPosLong >> 16) & 0xFFFF;
         layerScrollWord[LAYER_SHIP] = (bgXPosLong >> 16) & 0xFFFF;
-        layerScrollWord[LAYER_LARGE_CLOUD] = (largeCloudAccum >> 16) & 0xFFFF;
-        layerScrollWord[LAYER_MEDIUM_CLOUD] = (mediumCloudAccum >> 16) & 0xFFFF;
-        layerScrollWord[LAYER_SMALL_CLOUD] = (smallCloudAccum >> 16) & 0xFFFF;
+        layerScrollWord[LAYER_LARGE_CLOUD] = (largeCloud >> 16) & 0xFFFF;
+        layerScrollWord[LAYER_MEDIUM_CLOUD] = (mediumCloud >> 16) & 0xFFFF;
+        layerScrollWord[LAYER_SMALL_CLOUD] = (smallCloud >> 16) & 0xFFFF;
 
         // ==================== Step 3: Select array ====================
         // cmpi.w #$2700,(Camera_X_pos).w; bhs.s .got_array
@@ -126,7 +157,7 @@ public class SwScrlWfz extends AbstractZoneScrollHandler {
         // ==================== Step 4: Find first visible segment ====================
         // move.w (Camera_BG_Y_pos).w,d1
         // andi.w #$7FF,d1
-        int bgY = bgCamera.getBgYPos() & 0x7FF;
+        int bgY = bgYPos & 0x7FF;
 
         // .seg_loop:
         //   move.b (a3)+,d0      ; number of lines in segment
@@ -178,8 +209,7 @@ public class SwScrlWfz extends AbstractZoneScrollHandler {
         // .next_row:
         //   dbf d2,.row_loop
         for (int screenLine = 0; screenLine < M68KMath.VISIBLE_LINES; screenLine++) {
-            horizScrollBuf[screenLine] = M68KMath.packScrollWords(fgScroll, bgScroll);
-            trackOffset(fgScroll, bgScroll);
+            composer.writePackedScrollWord(screenLine, fgScroll, bgScroll);
 
             linesInCurrentSeg--;
             if (linesInCurrentSeg == 0) {
@@ -192,24 +222,49 @@ public class SwScrlWfz extends AbstractZoneScrollHandler {
                     bgScroll = M68KMath.negWord(layerScrollWord[layerIndex]);
                     arrayPos += 2;
                 } else {
-                    // Array exhausted - in original ROM this reads past the array into
-                    // SwScrl_HTZ code bytes. We fall back to the static BG layer.
+                    // Malformed table guard. The ROM-backed WFZ arrays cover all
+                    // reachable 224-line spans selected by BG Y & $7FF.
                     linesInCurrentSeg = M68KMath.VISIBLE_LINES; // Won't run out again
                     bgScroll = M68KMath.negWord(layerScrollWord[LAYER_STATIC_BG]);
                 }
             }
         }
+
+        composer.copyPackedScrollWordsTo(horizScrollBuf);
+        vscrollFactorBG = composer.getVscrollFactorBG();
+        minScrollOffset = composer.getMinScrollOffset();
+        maxScrollOffset = composer.getMaxScrollOffset();
+    }
+
+    private WfzRuntimeState currentRuntimeState() {
+        return GameServices.hasRuntime()
+                ? GameServices.zoneRuntimeRegistry().currentAs(WfzRuntimeState.class).orElse(null)
+                : null;
+    }
+
+    private int currentBgXPos() {
+        WfzRuntimeState runtimeState = currentRuntimeState();
+        return runtimeState != null ? runtimeState.bgXPos() : bgCamera.getBgXPos();
+    }
+
+    @Override
+    public int getBgCameraX() {
+        return currentBgXPos();
+    }
+
+    @Override
+    public BgTilemapUpdateMode getBgTilemapUpdateMode() {
+        return BgTilemapUpdateMode.PERSISTENT_NAMETABLE_64X32;
     }
 
     private void fillFallback(int[] horizScrollBuf, int cameraX) {
         short fgScroll = M68KMath.negWord(cameraX);
         short bgScroll = M68KMath.negWord(cameraX >> 4);
-        int packed = M68KMath.packScrollWords(fgScroll, bgScroll);
-        for (int i = 0; i < M68KMath.VISIBLE_LINES; i++) {
-            horizScrollBuf[i] = packed;
-        }
-        minScrollOffset = bgScroll - fgScroll;
-        maxScrollOffset = minScrollOffset;
+        composer.fillPackedScrollWords(0, M68KMath.VISIBLE_LINES, fgScroll, bgScroll);
+        composer.copyPackedScrollWordsTo(horizScrollBuf);
+        vscrollFactorBG = composer.getVscrollFactorBG();
+        minScrollOffset = composer.getMinScrollOffset();
+        maxScrollOffset = composer.getMaxScrollOffset();
     }
 
 }

@@ -96,4 +96,17 @@ public class Sonic3kSpecialStageTailsAI {
         // ROM: cmpi.b #-$7F,d2 (0x81 = spring jump) / tst.b d1
         return currentJump == 0x81 && prevJump >= 0;
     }
+
+    Sonic3kSpecialStageSnapshot.TailsAiSnapshot captureRewindSnapshot() {
+        return new Sonic3kSpecialStageSnapshot.TailsAiSnapshot(
+                posTableInput, posTableJump, posTableIndex, cpuIdleTimer, lastP2Input);
+    }
+
+    void restoreRewindSnapshot(Sonic3kSpecialStageSnapshot.TailsAiSnapshot snapshot) {
+        Sonic3kSpecialStageSnapshot.copyInto(snapshot.posTableInput(), posTableInput);
+        Sonic3kSpecialStageSnapshot.copyInto(snapshot.posTableJump(), posTableJump);
+        posTableIndex = snapshot.posTableIndex();
+        cpuIdleTimer = snapshot.cpuIdleTimer();
+        lastP2Input = snapshot.lastP2Input();
+    }
 }

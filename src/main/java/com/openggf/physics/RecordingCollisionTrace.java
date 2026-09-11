@@ -4,6 +4,7 @@ import com.openggf.level.objects.SolidContact;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * CollisionTrace implementation that records all events for later comparison.
@@ -62,6 +63,24 @@ public class RecordingCollisionTrace implements CollisionTrace {
     }
 
     @Override
+    public void onSolidCheckpointStart(String objectType, int objectX, int objectY) {
+        events.add(CollisionEvent.position(
+                CollisionEvent.EventType.SOLID_CHECKPOINT_START,
+                objectType,
+                objectX,
+                objectY));
+    }
+
+    @Override
+    public void onSolidCheckpointResult(String objectType, String playerLabel, String kind,
+            boolean standingNow, boolean standingLastFrame) {
+        events.add(new CollisionEvent(
+                CollisionEvent.EventType.SOLID_CHECKPOINT_RESULT,
+                objectType + ":" + playerLabel + ":" + kind,
+                0, 0, 0, (byte) 0, standingNow, standingLastFrame));
+    }
+
+    @Override
     public void onSolidContactsComplete(boolean ridingObject, int adjustedX, int adjustedY) {
         events.add(new CollisionEvent(
             CollisionEvent.EventType.SOLID_CONTACTS_COMPLETE,
@@ -109,6 +128,7 @@ public class RecordingCollisionTrace implements CollisionTrace {
 
     private boolean eventsMatch(CollisionEvent a, CollisionEvent b) {
         if (a.type() != b.type()) return false;
+        if (!Objects.equals(a.description(), b.description())) return false;
         // Allow small position differences (1 pixel tolerance)
         if (Math.abs(a.x() - b.x()) > 1) return false;
         if (Math.abs(a.y() - b.y()) > 1) return false;

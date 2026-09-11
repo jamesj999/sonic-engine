@@ -3,7 +3,6 @@ package com.openggf.tests;
 import com.openggf.Engine;
 import com.openggf.camera.Camera;
 import com.openggf.game.GameServices;
-import com.openggf.game.RuntimeManager;
 import com.openggf.configuration.SonicConfiguration;
 import com.openggf.configuration.SonicConfigurationService;
 import com.openggf.data.Rom;
@@ -14,6 +13,7 @@ import com.openggf.game.sonic3k.events.FireCurtainRenderState;
 import com.openggf.game.sonic3k.events.Sonic3kAIZEvents;
 import com.openggf.game.sonic3k.objects.AizHollowTreeObjectInstance;
 import com.openggf.graphics.GraphicsManager;
+import com.openggf.graphics.RgbaImage;
 import com.openggf.graphics.ScreenshotCapture;
 import com.openggf.level.LevelManager;
 import com.openggf.level.ParallaxManager;
@@ -22,21 +22,22 @@ import com.openggf.sprites.playable.AbstractPlayableSprite;
 import com.openggf.game.GroundMode;
 import com.openggf.sprites.playable.Sonic;
 import org.joml.Matrix4f;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.Test;
 import org.lwjgl.glfw.GLFWErrorCallback;
 import org.lwjgl.opengl.GL;
 
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
-import static org.junit.Assert.*;
-import static org.junit.Assume.assumeTrue;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.lwjgl.glfw.GLFW.*;
 import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.system.MemoryUtil.NULL;
@@ -50,20 +51,20 @@ import static org.lwjgl.system.MemoryUtil.NULL;
  * <pre>
  * mvn test -Dtest=TestAizFireCurtainGpuDiag -Ds3k.rom.path="Sonic and Knuckles &amp; Sonic 3 (W) [!].gen"
  * </pre>
- * Output PNGs go to {@code target/fire-curtain-gpu/}.
+ * Output PNGs go to the session diagnostics {@code fire-curtain-gpu/} namespace.
  */
 public class TestAizFireCurtainGpuDiag {
 
     private static final int W = 320;
     private static final int H = 224;
-    private static final Path OUT_DIR = Paths.get("target", "fire-curtain-gpu");
+    private static final Path OUT_DIR = TestSessionOutputPaths.diagnostics("fire-curtain-gpu");
 
     private static long window;
     private static boolean initialized;
     private static final Matrix4f projectionMatrix = new Matrix4f();
     private static final float[] matrixBuffer = new float[16];
 
-    @BeforeClass
+    @BeforeAll
     public static void setUpClass() {
         try {
             SonicConfigurationService config = SonicConfigurationService.getInstance();
@@ -111,7 +112,7 @@ public class TestAizFireCurtainGpuDiag {
 
             // Load S3K ROM
             String romPath = System.getProperty("s3k.rom.path",
-                    "Sonic and Knuckles & Sonic 3 (W) [!].gen");
+                    "s3k.gen");
             File romFile = new File(romPath);
             if (!romFile.exists()) {
                 System.err.println("S3K ROM not found at " + romFile.getAbsolutePath());
@@ -119,7 +120,7 @@ public class TestAizFireCurtainGpuDiag {
                 return;
             }
             Rom rom = new Rom();
-            assertTrue("Failed to open S3K ROM", rom.open(romFile.getAbsolutePath()));
+            assertTrue(rom.open(romFile.getAbsolutePath()), "Failed to open S3K ROM");
             GameModuleRegistry.detectAndSetModule(rom);
             RomManager.getInstance().setRom(rom);
 
@@ -151,21 +152,21 @@ public class TestAizFireCurtainGpuDiag {
         }
     }
 
-    @AfterClass
+    @AfterAll
     public static void tearDown() {
         if (window != NULL) {
             glfwDestroyWindow(window);
         }
         glfwTerminate();
         GraphicsManager.getInstance().resetState();
-        if (RuntimeManager.getCurrent() != null) {
+        if (TestEnvironment.activeGameplayMode() != null) {
             GameServices.camera().resetState();
         }
     }
 
     @Test
     public void captureFireCurtainFrames() throws Exception {
-        assumeTrue("GPU init failed or ROM not available", initialized);
+        assumeTrue(initialized, "GPU init failed or ROM not available");
         Files.createDirectories(OUT_DIR);
 
         LevelManager lm = GameServices.level();
@@ -174,10 +175,11 @@ public class TestAizFireCurtainGpuDiag {
         AbstractPlayableSprite player = camera.getFocusedSprite();
 
         // Trigger fire transition
-        Sonic3kLevelEventManager lem = Sonic3kLevelEventManager.getInstance();
-        assertNotNull("LevelEventManager not initialized", lem);
+        Sonic3kLevelEventManager lem =
+                (Sonic3kLevelEventManager) GameServices.module().getLevelEventProvider();
+        assertNotNull(lem, "LevelEventManager not initialized");
         Sonic3kAIZEvents events = lem.getAizEvents();
-        assertNotNull("AIZ events not initialized", events);
+        assertNotNull(events, "AIZ events not initialized");
 
         events.setEventsFg5(true);
 
@@ -227,14 +229,14 @@ public class TestAizFireCurtainGpuDiag {
                 glFinish();
 
                 // Capture
-                BufferedImage img = ScreenshotCapture.captureFramebuffer(W, H);
-                assertNotNull("Framebuffer capture returned null", img);
+                RgbaImage img = ScreenshotCapture.captureFramebuffer(W, H);
+                assertNotNull(img, "Framebuffer capture returned null");
 
                 // Count non-black pixels in bottom third (fire region)
                 int firePixels = countFirePixels(img);
                 String filename = String.format("fire_gpu_frame_%03d.png", frame);
                 Path outPath = OUT_DIR.resolve(filename);
-                ImageIO.write(img, "PNG", outPath.toFile());
+                ScreenshotCapture.savePNG(img, outPath);
 
                 System.out.println("Frame " + frame + ": " + filename
                         + " firePixels=" + firePixels
@@ -256,21 +258,20 @@ public class TestAizFireCurtainGpuDiag {
 
         // Basic assertion: at frame 150+ there should be significant fire content
         // (at least 10% of the screen should be non-black in the fire region)
-        assertTrue("No fire pixels detected in BG rendering at frame 150+. "
+        assertTrue(firePixelsDetected > (W * H / 10), "No fire pixels detected in BG rendering at frame 150+. "
                         + "The BG tilemap renderer is not showing fire tiles. "
-                        + "Max fire pixels: " + firePixelsDetected,
-                firePixelsDetected > (W * H / 10));
+                        + "Max fire pixels: " + firePixelsDetected);
     }
 
     /**
      * Count pixels that look like fire (warm colors: red/orange/yellow).
      * Fire palette uses reds, oranges, and yellows.
      */
-    private static int countFirePixels(BufferedImage img) {
+    private static int countFirePixels(RgbaImage img) {
         int count = 0;
-        for (int y = 0; y < img.getHeight(); y++) {
-            for (int x = 0; x < img.getWidth(); x++) {
-                int rgb = img.getRGB(x, y);
+        for (int y = 0; y < img.height(); y++) {
+            for (int x = 0; x < img.width(); x++) {
+                int rgb = img.argb(x, y);
                 int r = (rgb >> 16) & 0xFF;
                 int g = (rgb >> 8) & 0xFF;
                 int b = rgb & 0xFF;

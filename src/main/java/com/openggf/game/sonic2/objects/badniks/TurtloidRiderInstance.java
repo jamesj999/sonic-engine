@@ -6,10 +6,20 @@ import com.openggf.game.PlayableEntity;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
+import com.openggf.level.objects.ObjectInstance;
+import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.TouchActorContextPolicy;
+import com.openggf.level.objects.TouchAttackBouncePolicy;
+import com.openggf.level.objects.TouchCategoryDecodeMode;
+import com.openggf.level.objects.TouchOverlapStopPolicy;
 import com.openggf.level.objects.TouchResponseAttackable;
 import com.openggf.level.objects.TouchResponseProvider;
+import com.openggf.level.objects.TouchResponseProfile;
 import com.openggf.level.objects.TouchResponseResult;
+import com.openggf.level.objects.TouchShieldDeflectCapability;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -23,7 +33,7 @@ import java.util.List;
  * Based on disassembly Obj9B (s2.asm:74420-74477).
  */
 public class TurtloidRiderInstance extends AbstractObjectInstance
-        implements TouchResponseProvider, TouchResponseAttackable {
+        implements TouchResponseProvider, TouchResponseAttackable, RewindRecreatable {
 
     // Offset from parent: word_37A2C = dc.w 4, dc.w -$18
     private static final int X_OFFSET = 4;
@@ -31,6 +41,16 @@ public class TurtloidRiderInstance extends AbstractObjectInstance
 
     // Collision: Obj9B_SubObjData collision=$1A -> enemy (0x00) + size 0x1A
     private static final int COLLISION_SIZE_INDEX = 0x1A;
+    private static final TouchResponseProfile TOUCH_RESPONSE_PROFILE = new TouchResponseProfile(
+            TouchCategoryDecodeMode.NORMAL,
+            false,
+            false,
+            false,
+            TouchShieldDeflectCapability.NONE,
+            0,
+            TouchAttackBouncePolicy.STANDARD_ENEMY_KILL,
+            TouchActorContextPolicy.MAIN_FULL_SIDEKICK_HURT_ONLY,
+            TouchOverlapStopPolicy.STOP_AFTER_FIRST_OVERLAP_FOR_ALL_ACTORS);
 
     private final TurtloidBadnikInstance parent;
     private int currentX;
@@ -48,7 +68,40 @@ public class TurtloidRiderInstance extends AbstractObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        if (ctx == null || ctx.spawn() == null || ctx.objectServices() == null) {
+            return null;
+        }
+        TurtloidBadnikInstance liveParent =
+                findNearestLiveParentForRewind(ctx.objectServices().objectManager(), ctx.spawn());
+        return liveParent == null ? null : new TurtloidRiderInstance(ctx.spawn(), liveParent);
+    }
+
+    private static TurtloidBadnikInstance findNearestLiveParentForRewind(
+            ObjectManager objectManager,
+            ObjectSpawn spawn) {
+        if (objectManager == null || spawn == null) {
+            return null;
+        }
+        TurtloidBadnikInstance best = null;
+        long bestDistance = Long.MAX_VALUE;
+        for (ObjectInstance instance : objectManager.getActiveObjects()) {
+            if (!(instance instanceof TurtloidBadnikInstance turtloid) || turtloid.isDestroyed()) {
+                continue;
+            }
+            long dx = turtloid.getX() - spawn.x();
+            long dy = turtloid.getY() - spawn.y();
+            long distance = dx * dx + dy * dy;
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = turtloid;
+            }
+        }
+        return best;
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (destroyed || parent.isParentDestroyed()) {
             setDestroyed(true);
@@ -78,15 +131,32 @@ public class TurtloidRiderInstance extends AbstractObjectInstance
     }
 
     @Override
+    public TouchResponseProfile getTouchResponseProfile() {
+        return TOUCH_RESPONSE_PROFILE;
+    }
+
+    @Override
+    public TouchResponseProfile getTouchResponseProfile(boolean multiRegionSource) {
+        return TOUCH_RESPONSE_PROFILE;
+    }
+
+    @Override
+    public boolean requiresRenderFlagForTouch() {
+        return TOUCH_RESPONSE_PROFILE.requiresRenderFlagForTouch();
+    }
+
+    @Override
     public void onPlayerAttack(PlayableEntity playerEntity, TouchResponseResult result) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (destroyed) {
             return;
         }
         // ROM parity: destroying the rider should not destroy the turtle base.
+        int hitX = getPreUpdateX();
+        int hitY = getPreUpdateY();
         destroyed = true;
         setDestroyed(true);
-        parent.onRiderDestroyed(currentX, currentY, player);
+        parent.onRiderDestroyed(hitX, hitY, player);
     }
 
     @Override

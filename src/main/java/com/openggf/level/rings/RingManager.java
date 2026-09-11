@@ -2,33 +2,42 @@ package com.openggf.level.rings;
 
 import com.openggf.audio.AudioManager;
 import com.openggf.audio.GameSound;
+import com.openggf.game.GameModule;
 import com.openggf.game.GameServices;
 import com.openggf.graphics.GraphicsManager;
 import com.openggf.level.LevelManager;
 import com.openggf.level.SolidTile;
+import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.level.spawn.AbstractPlacementManager;
+import com.openggf.level.spawn.PlacementViewportWidth;
 import com.openggf.level.ChunkDesc;
 import com.openggf.level.objects.TouchResponseTable;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 import com.openggf.game.ShieldType;
 import com.openggf.camera.Camera;
-import com.openggf.game.GameModuleRegistry;
 import com.openggf.game.GameStateManager;
-import com.openggf.game.PhysicsFeatureSet;
-import com.openggf.game.PhysicsProvider;
+import com.openggf.game.rules.GameRules;
+import com.openggf.game.rules.ObjectInteractionRules;
+import com.openggf.game.rules.PlayerCapabilityRules;
+import com.openggf.game.rules.RingRules;
 import com.openggf.physics.TrigLookupTable;
 
+import com.openggf.game.rewind.RewindSnapshottable;
+import com.openggf.game.rewind.snapshot.RingSnapshot;
+
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collection;
-import java.util.Iterator;
+import java.util.Comparator;
 import java.util.List;
 
 /**
  * Handles ring collection state, sparkle animation, rendering, and lost-ring behavior.
  */
-public class RingManager {
+public class RingManager implements RewindSnapshottable<RingSnapshot> {
+    private static final System.Logger LOG = System.getLogger(RingManager.class.getName());
     private static final int MAX_ATTRACTED_RINGS = 32;
     // ROM: AttractedRing_Move — base acceleration is $30 subpixels/frame²
     private static final int ATTRACT_ACCEL = 0x30;
@@ -36,21 +45,47 @@ public class RingManager {
     private static final int ATTRACT_BOX_HALF = 0x40;
     // ROM: ring collision half-width (d1=6 in Test_Ring_Collisions)
     private static final int RING_COLLISION_HALF = 6;
+    // ROM: ReactToItem/Test_Ring_Collisions skip ring pickup while flashtime >= 90.
+    private static final int RING_INVULNERABLE_BLOCK_THRESHOLD = 90;
+    // ROM: Obj_Attracted_Ring collision_flags $47 -> Touch_Sizes index 7 = 6x6.
+    private static final int ATTRACT_TOUCH_RADIUS = 6;
 
     private final RingPlacement placement;
     private final RingRenderer renderer;
     private final LostRingPool lostRings;
+    private final LevelManager levelManager;
+    private final AudioManager audioManager;
+    private final boolean stageRingsUseObjectTouchCollection;
     private PatternSpriteRenderer.FrameBounds spinBounds;
     private final AttractedRing[] attractedRings;
+    private int attractedRingTargetX;
+    private int attractedRingTargetY;
+    private boolean attractedRingTargetCaptured;
 
 
     public RingManager(List<RingSpawn> spawns, RingSpriteSheet spriteSheet,
                        LevelManager levelManager, TouchResponseTable touchResponseTable) {
-        this.placement = new RingPlacement(spawns);
+        this(spawns, spriteSheet, levelManager, touchResponseTable, GameServices.audio());
+    }
+
+    public RingManager(List<RingSpawn> spawns, RingSpriteSheet spriteSheet,
+                       LevelManager levelManager, TouchResponseTable touchResponseTable,
+                       AudioManager audioManager) {
+        // Feature-flag: ROM parity sources this from the current game's ring rules.
+        // S1 routes stage rings through Obj25's touch-response pipeline (Touch_Rings);
+        // S2/S3K collect them via the bounding-box sweep (Touch_Rings_Test).
+        GameModule module = GameServices.currentOrBootstrapGameModule();
+        RingRules ringRules = moduleRingRules(module);
+        this.placement = new RingPlacement(spawns,
+                ringRules != null && ringRules.stageRingSweepUsesRawCameraWindow());
         this.renderer = (spriteSheet != null && spriteSheet.getFrameCount() > 0)
                 ? new RingRenderer(spriteSheet)
                 : null;
-        this.lostRings = new LostRingPool(levelManager, this.renderer, touchResponseTable);
+        this.levelManager = levelManager;
+        this.audioManager = audioManager;
+        this.lostRings = new LostRingPool(levelManager, this.renderer, touchResponseTable, audioManager);
+        this.stageRingsUseObjectTouchCollection =
+                ringRules != null && ringRules.stageRingsUseObjectTouchCollection();
         this.attractedRings = new AttractedRing[MAX_ATTRACTED_RINGS];
         for (int i = 0; i < MAX_ATTRACTED_RINGS; i++) {
             attractedRings[i] = new AttractedRing();
@@ -61,9 +96,8 @@ public class RingManager {
         placement.reset(cameraX);
         lostRings.reset();
         spinBounds = null;
-        for (AttractedRing ar : attractedRings) {
-            ar.active = false;
-        }
+        releaseAttractedRingSlots();
+        attractedRingTargetCaptured = false;
     }
 
     /**
@@ -74,6 +108,8 @@ public class RingManager {
     public void resyncSpawnList(List<RingSpawn> newSpawns) {
         placement.replaceSpawnsAndReset(newSpawns);
         lostRings.reset();
+        releaseAttractedRingSlots();
+        attractedRingTargetCaptured = false;
     }
 
     public void ensurePatternsCached(GraphicsManager graphicsManager, int basePatternIndex) {
@@ -83,109 +119,373 @@ public class RingManager {
     }
 
     public void update(int cameraX, AbstractPlayableSprite player, int frameCounter) {
+        update(cameraX, player, frameCounter, true);
+    }
+
+    public void update(int cameraX, AbstractPlayableSprite player, int frameCounter,
+                       boolean collectStageRingsInUpdate) {
         placement.update(cameraX);
-        if (player == null || player.getDead() || renderer == null) {
+        if (player == null || player.getDead()) {
             return;
         }
 
-        PatternSpriteRenderer.FrameBounds bounds = getSpinBounds();
-        if (bounds.width() <= 0 || bounds.height() <= 0) {
-            return;
+        if (collectStageRingsInUpdate && !stageRingsUseObjectTouchCollection) {
+            collectStageRings(player, frameCounter);
         }
 
-        Collection<RingSpawn> active = placement.getActiveSpawns();
-        if (active.isEmpty()) {
-            return;
-        }
-
-        int playerLeft = player.getX();
-        int playerTop = player.getY();
-        int playerRight = playerLeft + player.getWidth();
-        int playerBottom = playerTop + player.getHeight();
-
-        for (RingSpawn ring : active) {
-            int index = placement.getSpawnIndex(ring);
-            if (index < 0 || placement.isCollected(index)) {
-                continue;
-            }
-
-            int ringLeft = ring.x() + bounds.minX();
-            int ringRight = ring.x() + bounds.maxX();
-            int ringTop = ring.y() + bounds.minY();
-            int ringBottom = ring.y() + bounds.maxY();
-
-            if (playerRight < ringLeft || playerLeft > ringRight || playerBottom < ringTop || playerTop > ringBottom) {
-                continue;
-            }
-
-            placement.markCollected(index);
-            if (renderer.getSparkleFrameCount() > 0) {
-                placement.setSparkleStartFrame(index, frameCounter);
-            }
-            AudioManager.getInstance().playSfx(GameSound.RING);
-            player.addRings(1);
+        // Retain the self-contained update contract used by editor/headless callers.
+        // The gameplay loop passes false and performs this at the native player touch point.
+        if (collectStageRingsInUpdate) {
+            attractStageRings(player);
         }
 
         // Lightning shield ring attraction — S3K only
-        PhysicsFeatureSet featureSet = null;
-        PhysicsProvider physProvider = GameModuleRegistry.getCurrent() != null
-                ? GameModuleRegistry.getCurrent().getPhysicsProvider() : null;
-        if (physProvider != null) {
-            featureSet = physProvider.getFeatureSet();
+        RingRules ringRules = playerRingRules(player);
+        boolean lightningAttractionActive = lightningShieldEnabled(player)
+                && player.getShieldType() == ShieldType.LIGHTNING;
+        if (lightningAttractionActive || hasActiveAttractedRings()) {
+            updateAttractedRings(player, frameCounter, cameraX);
         }
-        if (featureSet != null && featureSet.lightningShieldEnabled()
-                && player.getShieldType() == ShieldType.LIGHTNING) {
-            int pcx = player.getCentreX();
-            int pcy = player.getCentreY();
-            for (RingSpawn ring : active) {
-                int index = placement.getSpawnIndex(ring);
-                if (index < 0 || placement.isCollected(index)) {
-                    continue;
-                }
-                int dx = pcx - ring.x();
-                int dy = pcy - ring.y();
-                // ROM: box check — ±$40 from player centre, extended by ring half-width
-                int ringHalf = featureSet != null ? featureSet.ringCollisionWidth() : RING_COLLISION_HALF;
-                int effectiveHalf = ATTRACT_BOX_HALF + ringHalf;
-                if (Math.abs(dx) <= effectiveHalf && Math.abs(dy) <= effectiveHalf) {
-                    placement.markCollected(index);
-                    addAttractedRing(index, ring.x(), ring.y());
-                }
+    }
+
+    /**
+     * Runs S3K's lightning-shield branch of {@code Test_Ring_Collisions}.
+     * The player calls this after its own movement but before later object slots
+     * can carry or reposition it.
+     */
+    public void attractStageRings(AbstractPlayableSprite player) {
+        if (player != null && !player.isCpuControlled()) {
+            // Obj_Attracted_Ring can execute before later platform slots carry
+            // Player 1. Capture the post-physics player-slot coordinates here
+            // so the subsystem-backed late update sees the native target phase.
+            attractedRingTargetX = player.getCentreX();
+            attractedRingTargetY = player.getCentreY();
+            attractedRingTargetCaptured = true;
+        }
+        if (player == null || player.getDead() || !lightningShieldEnabled(player)
+                || player.getShieldType() != ShieldType.LIGHTNING) {
+            return;
+        }
+        RingRules ringRules = playerRingRules(player);
+        int pcx = player.getCentreX();
+        int pcy = player.getCentreY();
+        int activeCount = placement.activeIndexCount();
+        for (int i = 0; i < activeCount; i++) {
+            int index = placement.activeIndexAt(i);
+            if (index < 0 || placement.isCollected(index)) {
+                continue;
             }
-            updateAttractedRings(player, frameCounter);
+            RingSpawn ring = placement.getSpawn(index);
+            int dx = pcx - ring.x();
+            int dy = pcy - ring.y();
+            int ringHalf = ringRules != null ? ringRules.ringCollisionWidth() : RING_COLLISION_HALF;
+            int effectiveHalf = ATTRACT_BOX_HALF + ringHalf;
+            if (Math.abs(dx) <= effectiveHalf && Math.abs(dy) <= effectiveHalf
+                    && addAttractedRing(index, ring.x(), ring.y())) {
+                placement.markCollected(index);
+                // ROM Test_Ring_Collisions_AttractRing returns immediately after
+                // allocating one Obj_Attracted_Ring. The remaining placement
+                // records are not considered until the next player touch pass.
+                return;
+            }
         }
     }
 
+    /**
+     * Captures the attracted rings published to the prior frame's collision-response list.
+     *
+     * <p>ROM {@code Obj_Attracted_Ring} moves in its object slot and then calls
+     * {@code Add_SpriteToCollisionResponseList}; the player consumes that retained list at
+     * its next {@code ReactToItem}. A ring created by the current player slot has not run an
+     * object slot yet and therefore must not be visible to a later player in the same frame.
+     */
+    public void prepareAttractedRingTouchSnapshot() {
+        attractedRingTargetCaptured = false;
+        for (AttractedRing ring : attractedRings) {
+            ring.listedForTouchThisFrame = ring.active && !ring.collected;
+        }
+    }
+
+    /**
+     * Runs the attracted-ring portion of one player's retained collision-response pass.
+     * ROM touch handling returns after the first matching response entry, so each player can
+     * receive at most one attracted ring per object tick.
+     */
+    public void collectAttractedRing(AbstractPlayableSprite player, int frameCounter) {
+        if (player == null || player.getDead() || cannotCollectRings(player)) {
+            return;
+        }
+        for (AttractedRing ring : activeAttractedRingsInSlotOrder()) {
+            if (!ring.listedForTouchThisFrame || ring.collected
+                    || !attractedRingOverlapsPlayerTouchBox(ring, player)) {
+                continue;
+            }
+            player.addRings(1);
+            playRingAcquisitionSound();
+            ring.collected = true;
+            ring.sparkleStartFrame = frameCounter;
+            return;
+        }
+    }
+
+    /**
+     * Touch-phase collection for placed rings.
+     * <p>
+     * ROM parity: normal ring pickup is part of the player/object touch pass
+     * (ReactToItem/Test_Ring_Collisions), not a late end-of-frame sweep. Calling
+     * this from the touch phase keeps ring routine transitions and SST slot
+     * lifetimes aligned with the disassembly. {@link #update(int,
+     * AbstractPlayableSprite, int, boolean)} keeps the legacy collection path
+     * only for callers that explicitly request it.
+     */
+    public void collectStageRings(AbstractPlayableSprite player, int frameCounter) {
+        if (cannotCollectRings(player)) {
+            return;
+        }
+        if (!stageRingsUseObjectTouchCollection
+                && player.getInvulnerableFrames() >= RING_INVULNERABLE_BLOCK_THRESHOLD) {
+            return;
+        }
+        int activeCount = placement.activeIndexCount();
+        if (activeCount == 0) {
+            return;
+        }
+
+        RingRules ringRules = playerRingRules(player);
+        int playerLeft = player.getCentreX() - 8;
+        // ROM ReactToItem/Test_Ring_Collisions uses obHeight-3 for Sonic's
+        // touch box before the ducking special-case; this is not limited to
+        // rolling frames. Using the full standing radius makes airborne ring
+        // pickups happen one frame too early in MZ1 trace replay.
+        int playerYRadius = Math.max(1, player.getYRadius() - 3);
+        int playerTop = player.getCentreY() - playerYRadius;
+        int playerHeight = playerYRadius * 2;
+        // ASSEMBLY FLAG: fixBugs (docs/s2disasm/s2.asm:27) / FixBugs
+        // (docs/s1disasm/sonic.asm:20), both 0 in the shipped ROMs. THE ENGINE
+        // IMPLEMENTS THE SHIPPED (UN-FIXED) BRANCH: Touch_Rings tests the mapping
+        // frame (`cmpi.b #$4D,mapping_frame(a0)`, s2.asm:31956; `cmpi.b
+        // #fr_Duck,obFrame(a0)` with fr_Duck = $39, S1 ReactToItem.asm:34), so the
+        // 12px-down / 20px-tall box applies on exactly one frame of the duck
+        // animation and never to Tails. With fixBugs = 1 the test would be the
+        // animation id (AniIDSonAni_Duck), applying for the whole duck and to both
+        // characters. S3K dropped the adjustment entirely
+        // (Test_Ring_Collisions_NoAttraction, sonic3k.asm:18465-18476), which is
+        // NO_DUCK_TOUCH_BOX. See ObjectInteractionRules#duckTouchBoxMappingFrame.
+        ObjectInteractionRules interactionRules = playerObjectInteractionRules(player);
+        if (interactionRules != null
+                && interactionRules.isDuckTouchBoxMappingFrame(player.getMappingFrame())) {
+            playerTop += ObjectInteractionRules.DUCK_TOUCH_BOX_TOP_SHIFT;
+            playerHeight = ObjectInteractionRules.DUCK_TOUCH_BOX_HEIGHT;
+        }
+        int ringWidth = ringRules != null ? ringRules.ringCollisionWidth() : RING_COLLISION_HALF;
+        int ringHeight = ringRules != null ? ringRules.ringCollisionHeight() : RING_COLLISION_HALF;
+
+        for (int i = 0; i < activeCount; i++) {
+            int index = placement.activeIndexAt(i);
+            if (index < 0 || placement.isCollected(index)) {
+                continue;
+            }
+            RingSpawn ring = placement.getSpawn(index);
+
+            if (!ringOverlapsPlayer(playerLeft, playerTop, playerHeight, 0x10,
+                    ring.x(), ring.y(), ringWidth, ringHeight)) {
+                continue;
+            }
+
+            collectPlacedRingAtIndex(index, player, frameCounter);
+        }
+    }
+
+    public boolean usesObjectTouchCollection() {
+        return stageRingsUseObjectTouchCollection;
+    }
+
+    private static RingRules moduleRingRules(GameModule module) {
+        GameRules rules = moduleGameRules(module);
+        return rules != null ? rules.ring() : null;
+    }
+
+    private static PlayerCapabilityRules modulePlayerCapabilityRules(GameModule module) {
+        GameRules rules = moduleGameRules(module);
+        return rules != null ? rules.playerCapability() : null;
+    }
+
+    private static GameRules moduleGameRules(GameModule module) {
+        if (module == null) {
+            return null;
+        }
+        try {
+            GameRules rules = module.getRules();
+            if (rules != null) {
+                return rules;
+            }
+        } catch (IllegalArgumentException | IllegalStateException ignored) {
+        }
+        return null;
+    }
+
+    private static RingRules playerRingRules(AbstractPlayableSprite player) {
+        if (player == null) {
+            return moduleRingRules(GameServices.currentOrBootstrapGameModule());
+        }
+        GameRules rules = player.getGameRules();
+        if (rules != null && rules.ring() != null) {
+            return rules.ring();
+        }
+        return moduleRingRules(GameServices.currentOrBootstrapGameModule());
+    }
+
+    private static ObjectInteractionRules playerObjectInteractionRules(AbstractPlayableSprite player) {
+        GameRules rules = player != null ? player.getGameRules() : null;
+        if (rules == null) {
+            rules = moduleGameRules(GameServices.currentOrBootstrapGameModule());
+        }
+        return rules != null ? rules.objectInteraction() : null;
+    }
+
+    private static boolean lightningShieldEnabled(AbstractPlayableSprite player) {
+        PlayerCapabilityRules rules = playerCapabilityRules(player);
+        return rules != null && rules.lightningShieldEnabled();
+    }
+
+    private static PlayerCapabilityRules playerCapabilityRules(AbstractPlayableSprite player) {
+        if (player == null) {
+            return modulePlayerCapabilityRules(GameServices.currentOrBootstrapGameModule());
+        }
+        GameRules rules = player.getGameRules();
+        if (rules != null && rules.playerCapability() != null) {
+            return rules.playerCapability();
+        }
+        return modulePlayerCapabilityRules(GameServices.currentOrBootstrapGameModule());
+    }
+
+    public boolean collectPlacedRing(RingSpawn ring, AbstractPlayableSprite player, int frameCounter) {
+        if (ring == null || cannotCollectRings(player)) {
+            return false;
+        }
+        if (player.getInvulnerableFrames() >= RING_INVULNERABLE_BLOCK_THRESHOLD) {
+            return false;
+        }
+        int index = placement.getSpawnIndex(ring);
+        if (index < 0 || placement.isCollected(index)) {
+            return false;
+        }
+        // S1 Obj25 collection is triggered from Sonic's ReactToItem slot, after
+        // this engine has already run the ring object's update for the frame.
+        // Start the Obj25 Ring_Sparkle/DeleteObject cadence on the next object
+        // execution, matching the ROM routine that owns the slot lifetime.
+        collectPlacedRingAtIndex(index, player, frameCounter + 1);
+        return true;
+    }
+
+    private void collectPlacedRingAtIndex(int index, AbstractPlayableSprite player, int frameCounter) {
+        placement.markCollected(index);
+        if (renderer != null && renderer.getSparkleFrameCount() > 0) {
+            placement.setSparkleStartFrame(index, frameCounter);
+        }
+        playRingAcquisitionSound();
+        player.addRings(1);
+    }
+
+    private void playRingAcquisitionSound() {
+        // Sonic 2 CollectRing's original and REV01 gameRevision branches converge on
+        // PlaySound2/SFX1; shipped World REV01 takes the else branch
+        // (docs/s2disasm/s2.asm:25034-25063). No fixBugs conditional owns this call.
+        audioManager.playSecondarySfx(GameSound.RING);
+    }
+
+    /**
+     * Captures the engine's model of ROM {@code Ring_status_table}: which
+     * layout rings are already collected.
+     *
+     * <p>Used only to carry that state across a level reload the ROM performs
+     * with {@code Respawn_table_keep} set, where {@code sub_EB1A} skips its
+     * {@code Ring_status_table} wipe
+     * (docs/skdisasm/sonic3k.asm:18561-18570, reached from :18232-18238).
+     */
+    public long[] captureRingStatusTable() {
+        return placement.collected.toLongArray();
+    }
+
+    /**
+     * Re-establishes a captured {@code Ring_status_table} on a freshly built
+     * ring manager, for a reload the ROM performed without clearing it.
+     *
+     * <p>This only marks rings collected; it never un-collects one, because the
+     * ROM's skipped branch leaves the table exactly as it stood and the fresh
+     * table is all-zero. No window surgery is needed: both the touch scan and
+     * the draw pass already skip an active index whose collected bit is set.
+     *
+     * @see #captureRingStatusTable()
+     */
+    public void restoreRingStatusTable(long[] bits) {
+        if (bits == null || bits.length == 0) {
+            return;
+        }
+        placement.collected.or(BitSet.valueOf(bits));
+    }
+
+    private static boolean cannotCollectRings(AbstractPlayableSprite player) {
+        if (player == null || player.getDead()) {
+            return true;
+        }
+        if (player.isTouchResponseSuppressedByObjectControl()) {
+            return true;
+        }
+        return player.isCpuControlled() && player.isObjectControlled();
+    }
+
+    private static boolean ringOverlapsPlayer(int playerX, int playerY, int playerHeight,
+                                              int playerWidth, int ringX, int ringY,
+                                              int ringWidth, int ringHeight) {
+        int dx = ringX - ringWidth - playerX;
+        if (dx < 0) {
+            int sum = (dx & 0xFFFF) + ((ringWidth * 2) & 0xFFFF);
+            if (sum <= 0xFFFF) {
+                return false;
+            }
+        } else if (dx > playerWidth) {
+            return false;
+        }
+
+        int dy = ringY - ringHeight - playerY;
+        if (dy < 0) {
+            int sum = (dy & 0xFFFF) + ((ringHeight * 2) & 0xFFFF);
+            if (sum <= 0xFFFF) {
+                return false;
+            }
+        } else if (dy > playerHeight) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Advance the shared spilled-ring spin one frame (ROM ChangeRingFrame,
+     * s2.asm Obj37 / Ring_spill_anim_*). Per-ring physics now runs in the object
+     * exec loop ({@link LostRingObjectInstance#updateMovement}); this call only
+     * ticks the global spin owner once per frame.
+     */
     public void updateLostRingPhysics(int frameCounter) {
-        lostRings.updatePhysics(frameCounter);
-    }
-
-    public void checkLostRingCollection(AbstractPlayableSprite player) {
-        lostRings.checkCollection(player);
-    }
-
-    /** @deprecated Use {@link #updateLostRingPhysics} + {@link #checkLostRingCollection} instead. */
-    @Deprecated
-    public void updateLostRings(AbstractPlayableSprite player, int frameCounter) {
-        lostRings.updatePhysics(frameCounter);
-        lostRings.checkCollection(player);
+        lostRings.tickSpillAnimation();
+        lostRings.retireEntriesWhoseObjectTwinIsGone(
+                levelManager != null ? levelManager.getObjectManager() : null);
     }
 
     public void draw(int frameCounter) {
         if (renderer == null) {
             return;
         }
-        Collection<RingSpawn> active = placement.getActiveSpawns();
-        if (active == null || active.isEmpty()) {
-            return;
-        }
 
         int spinFrameIndex = renderer.getSpinFrameIndex(frameCounter);
-        for (RingSpawn ring : active) {
-            int index = placement.getSpawnIndex(ring);
+        int activeCount = placement.activeIndexCount();
+        for (int i = 0; i < activeCount; i++) {
+            int index = placement.activeIndexAt(i);
             if (index < 0) {
                 continue;
             }
+            RingSpawn ring = placement.getSpawn(index);
             if (!placement.isCollected(index)) {
                 renderer.drawFrameIndex(spinFrameIndex, ring.x(), ring.y());
                 continue;
@@ -202,24 +502,36 @@ public class RingManager {
             }
             int sparkleFrameOffset = elapsed / renderer.getSparkleFrameDelay();
             if (sparkleFrameOffset >= renderer.getSparkleFrameCount()) {
-                placement.clearSparkle(index);
+                if (isCollectedAndSparkleDone(index, frameCounter)) {
+                    placement.clearSparkle(index);
+                }
                 continue;
             }
             int sparkleFrameIndex = renderer.getSparkleStartIndex() + sparkleFrameOffset;
             renderer.drawFrameIndex(sparkleFrameIndex, ring.x(), ring.y());
         }
 
-        // Draw attracted rings (being pulled toward player)
-        int attractSpinFrame = renderer.getSpinFrameIndex(frameCounter);
+        // Draw attracted rings and their collected sparkle phase.
         for (AttractedRing ar : attractedRings) {
-            if (ar.active) {
-                renderer.drawFrameIndex(attractSpinFrame, ar.x, ar.y);
+            if (!ar.active) {
+                continue;
+            }
+            if (ar.collected) {
+                int sparkleFrame = attractedSparkleFrame(ar, frameCounter);
+                if (sparkleFrame >= 0) {
+                    renderer.drawFrameIndex(sparkleFrame, ar.x, ar.y);
+                }
+            } else {
+                renderer.drawFrameIndex(ar.mappingFrame, ar.x, ar.y);
             }
         }
     }
 
     public void drawLostRings(int frameCounter) {
-        lostRings.draw(frameCounter);
+        // Per-ring Obj37 rendering now belongs to LostRingObjectInstance, the
+        // same owner that advances per-ring physics. The legacy pool still owns
+        // allocation/spawn bookkeeping during the cutover, but drawing it here
+        // would render stale spawn-point positions.
     }
 
     /**
@@ -236,6 +548,22 @@ public class RingManager {
         }
         int spinFrameIndex = renderer.getSpinFrameIndex(frameCounter);
         renderer.drawFrameIndex(spinFrameIndex, x, y);
+    }
+
+    /**
+     * Draw a ring sprite using an exact spin-frame index.
+     * Used by spilled rings, whose display frame is driven by the shared
+     * decelerating Ring_spill_anim_* state rather than a constant frame timer.
+     */
+    public void drawRingFrameAt(int x, int y, int spinFrameIndex) {
+        if (renderer == null) {
+            return;
+        }
+        int spinCount = renderer.getSpinFrameCount();
+        if (spinCount <= 0) {
+            return;
+        }
+        renderer.drawFrameIndex(Math.floorMod(spinFrameIndex, spinCount), x, y);
     }
 
     /**
@@ -263,7 +591,61 @@ public class RingManager {
     }
 
     public void spawnLostRings(AbstractPlayableSprite player, int ringCount, int frameCounter) {
-        lostRings.spawnLostRings(player, ringCount, frameCounter);
+        lostRings.spawnLostRings(player, ringCount, frameCounter,
+                player.getCentreX(), player.getCentreY(), -1);
+    }
+
+    public void spawnLostRings(AbstractPlayableSprite player, int ringCount, int frameCounter, int x, int y) {
+        lostRings.spawnLostRings(player, ringCount, frameCounter, x, y, -1);
+    }
+
+    public void spawnLostRings(AbstractPlayableSprite player, int ringCount, int frameCounter,
+                               int x, int y, int preallocatedFirstSlot) {
+        lostRings.spawnLostRings(player, ringCount, frameCounter, x, y, preallocatedFirstSlot);
+    }
+
+    /**
+     * S3K delayed-hurt bridge: the engine materializes pending Obj37 rings from
+     * the post-player frame phase, after the normal object loop has already run.
+     * ROM S3K allocates the Obj_Bouncing_Ring owner during the player slot and
+     * then reaches the new Obj37 slots later in the same ExecuteObjects pass
+     * (docs/skdisasm/sonic3k.asm:21065-21088, 35490-35616), so apply that first
+     * Obj37 movement step immediately when the delayed spawn is flushed.
+     */
+    public void spawnLostRingsWithInitialObjectStep(AbstractPlayableSprite player, int ringCount,
+                                                    int frameCounter, int x, int y,
+                                                    int preallocatedFirstSlot) {
+        int[] slots = preallocatedFirstSlot >= 0
+                ? new int[] {preallocatedFirstSlot}
+                : new int[0];
+        lostRings.spawnLostRings(player, ringCount, frameCounter, x, y, slots,
+                false, true);
+    }
+
+    public void spawnLostRingsWithInitialObjectStep(AbstractPlayableSprite player, int ringCount,
+                                                    int frameCounter, int x, int y,
+                                                    int[] preallocatedSlots,
+                                                    boolean slotsFullyReserved) {
+        spawnLostRingsWithInitialObjectStep(player, ringCount, frameCounter, x, y,
+                preallocatedSlots, slotsFullyReserved, false);
+    }
+
+    public void spawnLostRingsWithInitialObjectStep(AbstractPlayableSprite player, int ringCount,
+                                                    int frameCounter, int x, int y,
+                                                    int[] preallocatedSlots,
+                                                    boolean slotsFullyReserved,
+                                                    boolean forceDeferredOwnerRingClear) {
+        lostRings.spawnLostRings(player, ringCount, frameCounter, x, y,
+                preallocatedSlots, slotsFullyReserved, true, forceDeferredOwnerRingClear);
+    }
+
+    /** Shared spilled-ring spin owner feeding the LostRingObjectInstance object path. */
+    public SpillAnimationState getSpillAnimationState() {
+        return lostRings.spillAnimation;
+    }
+
+    public List<LostRing> getActiveLostRings() {
+        return lostRings.getActiveRingsSnapshot();
     }
 
     public boolean areAllCollected() {
@@ -291,7 +673,9 @@ public class RingManager {
         }
         int sparkleFrameOffset = elapsed / renderer.getSparkleFrameDelay();
         if (sparkleFrameOffset >= renderer.getSparkleFrameCount()) {
-            placement.clearSparkle(index);
+            if (isCollectedAndSparkleDone(index, frameCounter)) {
+                placement.clearSparkle(index);
+            }
             return false;
         }
         return true;
@@ -311,8 +695,7 @@ public class RingManager {
      * without any frame counter dependency.
      */
     public boolean isRingCollected(int x, int y) {
-        RingSpawn probe = new RingSpawn(x, y);
-        int index = placement.getSpawnIndex(probe);
+        int index = placement.findSpawnIndex(x, y);
         return index >= 0 && placement.isCollected(index);
     }
 
@@ -339,8 +722,19 @@ public class RingManager {
      * @return true if the ring was collected and sparkle has finished
      */
     public boolean isCollectedAndSparkleDone(int x, int y, int frameCounter) {
-        RingSpawn probe = new RingSpawn(x, y);
-        int index = placement.getSpawnIndex(probe);
+        int index = placement.findSpawnIndex(x, y);
+        return isCollectedAndSparkleDone(index, frameCounter);
+    }
+
+    public boolean isCollectedAndSparkleDone(RingSpawn ring, int frameCounter) {
+        if (ring == null) {
+            return false;
+        }
+        int index = placement.getSpawnIndex(ring);
+        return isCollectedAndSparkleDone(index, frameCounter);
+    }
+
+    private boolean isCollectedAndSparkleDone(int index, int frameCounter) {
         if (index < 0 || !placement.isCollected(index)) {
             return false;
         }
@@ -355,10 +749,9 @@ public class RingManager {
         int elapsed = frameCounter - sparkleStart;
         // ROM parity: Ani_Ring sparkle uses its own delay byte (5 in S1 = 6 VBlanks/frame
         // via AnimateSprite), distinct from SynchroAnimate's spin rate (8 VBlanks/frame).
-        // After sparkleFrameCount frames × sparkleDelay VBlanks, the afRoutine command
-        // fires but the ring still displays for one more frame (DisplaySprite runs).
-        // Ring_Delete runs on the NEXT frame, calling DeleteObject to free the SST slot.
-        // Total duration: sparkleFrameCount * sparkleDelay + 1.
+        // sparkleStart is the first Ring_Sparkle execution, rather than the
+        // ReactToItem collection frame. At frameCount × delay executions the
+        // next Ring_Delete dispatch frees the SST slot on this update.
         int sparkleDelay = renderer.getSparkleFrameDelay();
         int totalDuration = renderer.getSparkleFrameCount() * sparkleDelay + 1;
         return elapsed >= totalDuration;
@@ -408,9 +801,30 @@ public class RingManager {
         return placement.getActiveSpawns();
     }
 
-    private void addAttractedRing(int sourceIndex, int x, int y) {
+    /**
+     * Resolves the canonical {@link RingSpawn} reference tracked by this manager for
+     * the given coordinates, or {@code null} if no ring spawn exists there.
+     * <p>
+     * Recreate paths (e.g. rewind/checkpoint restore) must reuse this reference
+     * rather than constructing a fresh {@code new RingSpawn(x, y)}: {@link
+     * AbstractPlacementManager#getSpawnIndex} keys spawns by identity ({@code
+     * IdentityHashMap}), so an equal-but-different instance always misses that
+     * fast path and permanently falls back to the equals-based linear scan
+     * (logging a warning on every lookup for the rest of the ring's lifetime).
+     */
+    public RingSpawn resolveCanonicalSpawn(int x, int y) {
+        int index = placement.findSpawnIndex(x, y);
+        return index >= 0 ? placement.getAllSpawns().get(index) : null;
+    }
+
+    private boolean addAttractedRing(int sourceIndex, int x, int y) {
         for (AttractedRing ar : attractedRings) {
             if (!ar.active) {
+                ObjectManager objectManager = levelManager != null ? levelManager.getObjectManager() : null;
+                int objectSlotIndex = objectManager != null ? objectManager.allocateDynamicSlot() : -1;
+                if (objectManager != null && objectSlotIndex < 0) {
+                    return false;
+                }
                 ar.sourceIndex = sourceIndex;
                 ar.x = x;
                 ar.y = y;
@@ -418,10 +832,17 @@ public class RingManager {
                 ar.ySub = 0;
                 ar.xVel = 0;
                 ar.yVel = 0;
+                ar.objectSlotIndex = objectSlotIndex;
+                ar.collected = false;
+                ar.sparkleStartFrame = -1;
+                ar.mappingFrame = 0;
+                ar.animationFrameTimer = 0;
+                ar.sparkleAnimationFrame = 0;
                 ar.active = true;
-                return;
+                return true;
             }
         }
+        return false;
     }
 
     /**
@@ -430,15 +851,32 @@ public class RingManager {
      * opposes the direction to the player, acceleration is 4× stronger to
      * reverse quickly. Position updated via MoveSprite2 (velocity→subpixel).
      */
-    private void updateAttractedRings(AbstractPlayableSprite player, int frameCounter) {
-        int pcx = player.getCentreX();
-        int pcy = player.getCentreY();
-        for (AttractedRing ar : attractedRings) {
+    private void updateAttractedRings(AbstractPlayableSprite player, int frameCounter, int cameraX) {
+        ObjectManager objectManager = levelManager != null ? levelManager.getObjectManager() : null;
+        boolean lightningShieldActive = lightningShieldEnabled(player)
+                && player.getShieldType() == ShieldType.LIGHTNING;
+        for (AttractedRing ar : activeAttractedRingsInSlotOrder()) {
             if (!ar.active) continue;
+
+            if (ar.collected) {
+                if (advanceAttractedRingSparkle(ar)) {
+                    deactivateAttractedRing(ar);
+                }
+                continue;
+            }
+
+            boolean hasSlotTarget = objectManager != null
+                    && objectManager.hasPlayerCentreAtObjectSlotStart(ar.objectSlotIndex);
+            int pcx = hasSlotTarget
+                    ? objectManager.getPlayerCentreXAtObjectSlotStart(ar.objectSlotIndex)
+                    : attractedRingTargetCaptured ? attractedRingTargetX : player.getCentreX();
+            int pcy = hasSlotTarget
+                    ? objectManager.getPlayerCentreYAtObjectSlotStart(ar.objectSlotIndex)
+                    : attractedRingTargetCaptured ? attractedRingTargetY : player.getCentreY();
 
             // --- X axis acceleration (AttractedRing_Move) ---
             int accelX = ATTRACT_ACCEL;
-            if (pcx >= ar.x) {
+            if (Integer.compareUnsigned(pcx & 0xFFFF, ar.x & 0xFFFF) >= 0) {
                 // Player is right of ring: accelerate right (+)
                 if (ar.xVel < 0) {
                     // Moving wrong way: 4× to reverse
@@ -455,7 +893,7 @@ public class RingManager {
 
             // --- Y axis acceleration ---
             int accelY = ATTRACT_ACCEL;
-            if (pcy >= ar.y) {
+            if (Integer.compareUnsigned(pcy & 0xFFFF, ar.y & 0xFFFF) >= 0) {
                 if (ar.yVel < 0) {
                     accelY *= 4;
                 }
@@ -470,24 +908,292 @@ public class RingManager {
             // --- MoveSprite2: apply velocity to position (subpixel precision) ---
             int xLong = (ar.x << 16) | (ar.xSub & 0xFFFF);
             xLong += ar.xVel << 8;
-            ar.x = xLong >> 16;
+            ar.x = (short) (xLong >> 16);
             ar.xSub = xLong & 0xFFFF;
 
             int yLong = (ar.y << 16) | (ar.ySub & 0xFFFF);
             yLong += ar.yVel << 8;
-            ar.y = yLong >> 16;
+            ar.y = (short) (yLong >> 16);
             ar.ySub = yLong & 0xFFFF;
 
-            // --- Collection: ROM uses collision_flags $47 (touch response) ---
-            // Check overlap between ring (8×8) and player hitbox
-            int dx = Math.abs(pcx - ar.x);
-            int dy = Math.abs(pcy - ar.y);
-            if (dx < 8 + player.getXRadius() && dy < 8 + player.getYRadius()) {
-                player.addRings(1);
-                AudioManager.getInstance().playSfx(GameSound.RING);
-                ar.active = false;
+            advanceAttractedRingSpin(ar);
+
+            if (attractedRingOutsideObjectWindow(ar, cameraX)) {
+                deactivateAttractedRing(ar);
+            } else if (!lightningShieldActive) {
+                convertAttractedRingToBouncingRing(ar);
             }
         }
+    }
+
+    /**
+     * ROM loc_1A88C changes an active Obj_Attracted_Ring into
+     * Obj_Bouncing_Ring routine 2 after movement when Player 1 no longer has a
+     * lightning shield. The same SST slot and full motion state are retained.
+     */
+    private void convertAttractedRingToBouncingRing(AttractedRing ar) {
+        ObjectManager objectManager = levelManager != null ? levelManager.getObjectManager() : null;
+        if (objectManager == null || ar.objectSlotIndex < 0) {
+            deactivateAttractedRing(ar);
+            return;
+        }
+
+        int slotIndex = ar.objectSlotIndex;
+        int phaseOffset = LostRingPool.phaseOffsetForSlot(objectManager, slotIndex);
+        lostRings.spillAnimation.restartCounter();
+        LostRingObjectInstance bouncingRing = LostRingObjectInstance.fromAttractedRing(
+                ar.x, ar.y, ar.xSub, ar.ySub, ar.xVel, ar.yVel,
+                phaseOffset, lostRings.spillAnimation);
+
+        // The native object changes code pointer in place; keep the reservation
+        // while transferring ownership from the subsystem-backed attracted ring
+        // to the dynamic Obj37 object.
+        clearAttractedRing(ar);
+        objectManager.spawnLostRingObjectAtSlot(bouncingRing, slotIndex);
+    }
+
+    private static boolean attractedRingOutsideObjectWindow(AttractedRing ring, int cameraX) {
+        int coarseBack = (cameraX - 0x80) & 0xFF80;
+        int coarseRingX = ring.x & 0xFF80;
+        int unsignedDelta = (coarseRingX - coarseBack) & 0xFFFF;
+        return unsignedDelta > 0x280;
+    }
+
+    private List<AttractedRing> activeAttractedRingsInSlotOrder() {
+        List<AttractedRing> active = new ArrayList<>();
+        for (AttractedRing ring : attractedRings) {
+            if (ring.active) {
+                active.add(ring);
+            }
+        }
+        active.sort(Comparator.comparingInt(
+                ring -> ring.objectSlotIndex >= 0 ? ring.objectSlotIndex : Integer.MAX_VALUE));
+        return active;
+    }
+
+    private boolean attractedRingOverlapsPlayerTouchBox(AttractedRing ar, AbstractPlayableSprite player) {
+        int playerLeft = player.getCentreX() - 8;
+        int playerTopHalf = Math.max(0, player.getYRadius() - 3);
+        int playerTop = player.getCentreY() - playerTopHalf;
+        return ringOverlapsPlayer(
+                playerLeft,
+                playerTop,
+                playerTopHalf * 2,
+                0x10,
+                ar.x,
+                ar.y,
+                ATTRACT_TOUCH_RADIUS,
+                ATTRACT_TOUCH_RADIUS);
+    }
+
+    private boolean hasActiveAttractedRings() {
+        for (AttractedRing ar : attractedRings) {
+            if (ar.active) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private int attractedSparkleFrame(AttractedRing ar, int frameCounter) {
+        if (!ar.collected || renderer == null) {
+            return -1;
+        }
+        return ar.mappingFrame;
+    }
+
+    private static void advanceAttractedRingSpin(AttractedRing ar) {
+        ar.animationFrameTimer = (ar.animationFrameTimer - 1) & 0xFF;
+        if ((byte) ar.animationFrameTimer < 0) {
+            ar.animationFrameTimer = 3;
+            ar.mappingFrame = (ar.mappingFrame + 1) & 3;
+        }
+    }
+
+    /**
+     * Runs one pass of {@code Animate_Sprite(Ani_RingSparkle)} for the attracted
+     * ring's in-place routine transition. The preceding attract routine owns the
+     * same SST bytes, so its custom {@code anim_frame_timer} value must carry into
+     * the sparkle instead of starting a fresh elapsed-time animation.
+     */
+    private boolean advanceAttractedRingSparkle(AttractedRing ar) {
+        if (renderer == null || renderer.getSparkleFrameCount() <= 0) {
+            return true;
+        }
+        if (ar.sparkleAnimationFrame > renderer.getSparkleFrameCount()) {
+            // loc_1A934 runs on the object slot pass after $FC increments routine.
+            return true;
+        }
+        int previousTimer = ar.animationFrameTimer & 0xFF;
+        ar.animationFrameTimer = (previousTimer - 1) & 0xFF;
+        if (previousTimer != 0) {
+            return false;
+        }
+
+        ar.animationFrameTimer = renderer.getSparkleFrameDelay();
+        if (ar.sparkleAnimationFrame >= renderer.getSparkleFrameCount()) {
+            ar.sparkleAnimationFrame++;
+            return false; // $FC advances routine; the next object pass deletes.
+        }
+        ar.mappingFrame = renderer.getSparkleStartIndex() + ar.sparkleAnimationFrame;
+        ar.sparkleAnimationFrame++;
+        return false;
+    }
+
+    private void releaseAttractedRingSlots() {
+        for (AttractedRing ar : attractedRings) {
+            deactivateAttractedRing(ar);
+        }
+    }
+
+    private void deactivateAttractedRing(AttractedRing ar) {
+        if (ar == null) {
+            return;
+        }
+        ObjectManager objectManager = levelManager != null ? levelManager.getObjectManager() : null;
+        if (objectManager != null && ar.objectSlotIndex >= 0) {
+            objectManager.releaseDynamicSlot(ar.objectSlotIndex);
+        }
+        clearAttractedRing(ar);
+    }
+
+    private static void clearAttractedRing(AttractedRing ar) {
+        ar.active = false;
+        ar.sourceIndex = 0;
+        ar.x = 0;
+        ar.y = 0;
+        ar.xSub = 0;
+        ar.ySub = 0;
+        ar.xVel = 0;
+        ar.yVel = 0;
+        ar.objectSlotIndex = -1;
+        ar.collected = false;
+        ar.sparkleStartFrame = -1;
+        ar.mappingFrame = 0;
+        ar.animationFrameTimer = 0;
+        ar.sparkleAnimationFrame = 0;
+        ar.listedForTouchThisFrame = false;
+    }
+
+    // --- RewindSnapshottable<RingSnapshot> ---
+
+    @Override
+    public String key() {
+        return "rings";
+    }
+
+    @Override
+    public RingSnapshot capture() {
+        // --- RingPlacement state ---
+        long[] collectedWords = placement.collected.toLongArray();
+        List<RingSnapshot.SparkleEntry> sparkleTimers = new ArrayList<>();
+        for (int i = 0; i < placement.sparkleStartFrames.length; i++) {
+            int startFrame = placement.sparkleStartFrames[i];
+            if (startFrame != RingPlacement.NO_SPARKLE) {
+                sparkleTimers.add(new RingSnapshot.SparkleEntry(i, startFrame));
+            }
+        }
+        int cursorIndex = placement.cursorIndex;
+        int lastCameraX = placement.lastCameraX;
+        int[] activeSpawnIndices = placement.snapshotActiveSpawnIndices();
+
+        // --- Shared spilled-ring spin owner ---
+        // Per-ring lost-ring state is no longer snapshotted here: physics runs in the
+        // object exec loop and each LostRingObjectInstance round-trips via the generic
+        // field capture + LostRingObjectInstance generic recreate. Only the small GLOBAL spin
+        // (Ring_spill_anim_counter/accum/frame) is captured, via SpillAnimationState.
+        int[] spin = lostRings.spillAnimation.snapshot();
+
+        // --- AttractedRing state ---
+        List<RingSnapshot.AttractedRingEntry> atEntries = new ArrayList<>();
+        for (int i = 0; i < MAX_ATTRACTED_RINGS; i++) {
+            AttractedRing ar = attractedRings[i];
+            if (!ar.active) {
+                continue;
+            }
+            atEntries.add(new RingSnapshot.AttractedRingEntry(
+                    true, ar.sourceIndex, ar.x, ar.y,
+                    ar.xSub, ar.ySub, ar.xVel, ar.yVel, i,
+                    ar.objectSlotIndex, ar.collected, ar.sparkleStartFrame,
+                    ar.mappingFrame, ar.animationFrameTimer, ar.sparkleAnimationFrame));
+        }
+
+        return new RingSnapshot(
+                collectedWords,
+                sparkleTimers.toArray(RingSnapshot.SparkleEntry[]::new),
+                cursorIndex,
+                lastCameraX,
+                activeSpawnIndices,
+                0,                // lostRingActiveCount: per-ring pool retired (object loop owns rings)
+                spin[0],          // spillAnimCounter
+                spin[1],          // spillAnimAccum
+                spin[2],          // spillAnimFrame
+                0,                // lostRingFrameCounter: retired with per-ring physics
+                new RingSnapshot.LostRingEntry[0],
+                atEntries.toArray(RingSnapshot.AttractedRingEntry[]::new));
+    }
+
+    @Override
+    public void restore(RingSnapshot snap) {
+        // --- RingPlacement ---
+        placement.collected.clear();
+        placement.collected.or(snap.collected());
+        Arrays.fill(placement.sparkleStartFrames, RingPlacement.NO_SPARKLE);
+        RingSnapshot.SparkleEntry[] snapSparkles = snap.sparkleTimers();
+        for (RingSnapshot.SparkleEntry entry : snapSparkles) {
+            int ringIndex = entry.ringIndex();
+            if (ringIndex >= 0 && ringIndex < placement.sparkleStartFrames.length) {
+                placement.sparkleStartFrames[ringIndex] = entry.startFrame();
+            }
+        }
+        placement.cursorIndex = snap.placementCursorIndex();
+        placement.lastCameraX = snap.placementLastCameraX();
+        placement.restoreActiveSpawnIndices(snap.activeSpawnIndices());
+
+        // --- Shared spilled-ring spin owner ---
+        // Only the GLOBAL spin is restored here; the spilled rings themselves are
+        // dynamic objects recreated via LostRingObjectInstance generic recreate. The legacy
+        // per-ring ringPool restore is retired with the per-ring physics loop.
+        lostRings.spillAnimation.restore(new int[] {
+                snap.spillAnimCounter(), snap.spillAnimAccum(), snap.spillAnimFrame() });
+
+        // --- AttractedRings ---
+        releaseAttractedRingSlots();
+        RingSnapshot.AttractedRingEntry[] snapAt = snap.attractedRings();
+        for (int i = 0; i < snapAt.length; i++) {
+            RingSnapshot.AttractedRingEntry entry = snapAt[i];
+            int slotIndex = entry.slotIndex();
+            if (slotIndex < 0 || slotIndex >= MAX_ATTRACTED_RINGS) {
+                continue;
+            }
+            AttractedRing ar = attractedRings[slotIndex];
+            int objectSlotIndex = restoreAttractedRingObjectSlot(entry);
+            ar.active = entry.active() && (entry.objectSlotIndex() < 0 || objectSlotIndex >= 0);
+            ar.sourceIndex = entry.sourceIndex();
+            ar.x = (short) entry.x();
+            ar.y = (short) entry.y();
+            ar.xSub = entry.xSub() & 0xFFFF;
+            ar.ySub = entry.ySub() & 0xFFFF;
+            ar.xVel = (short) entry.xVel();
+            ar.yVel = (short) entry.yVel();
+            ar.objectSlotIndex = objectSlotIndex;
+            ar.collected = ar.active && entry.collected();
+            ar.sparkleStartFrame = entry.sparkleStartFrame();
+            ar.mappingFrame = entry.mappingFrame();
+            ar.animationFrameTimer = entry.animationFrameTimer();
+            ar.sparkleAnimationFrame = entry.sparkleAnimationFrame();
+        }
+    }
+
+    private int restoreAttractedRingObjectSlot(RingSnapshot.AttractedRingEntry entry) {
+        if (!entry.active() || entry.objectSlotIndex() < 0) {
+            return entry.objectSlotIndex();
+        }
+        ObjectManager objectManager = levelManager != null ? levelManager.getObjectManager() : null;
+        if (objectManager == null) {
+            return entry.objectSlotIndex();
+        }
+        return objectManager.reserveDynamicSlot(entry.objectSlotIndex()) ? entry.objectSlotIndex() : -1;
     }
 
     private static final class AttractedRing {
@@ -495,23 +1201,42 @@ public class RingManager {
         int x, y;
         int xSub, ySub;    // subpixel fraction (ROM: x_sub/y_sub, lower word of position long)
         int xVel, yVel;    // velocity in subpixels/frame (ROM: x_vel/y_vel, 16-bit signed)
+        int objectSlotIndex = -1;
+        boolean collected;
+        int sparkleStartFrame = -1;
+        int mappingFrame;
+        int animationFrameTimer;
+        int sparkleAnimationFrame;
+        boolean listedForTouchThisFrame;
         boolean active;
     }
 
     private static final class RingPlacement extends AbstractPlacementManager<RingSpawn> {
-        private static final int LOAD_AHEAD = 0x280;
+        private static final int EXTRA_AHEAD = 0x140; // 320; native -> 0x280 window
         private static final int UNLOAD_BEHIND = 0x300;
+        private static final int RAW_WINDOW_BEHIND = 0x08;
+        private static final int RAW_WINDOW_AHEAD_MARGIN = 0x10;
         private static final int NO_SPARKLE = -1;
 
+        private final boolean useRawCameraWindow;
         private final BitSet collected = new BitSet();
+        private int[] activeIndices = new int[256];
+        private int activeIndexCount;
+        private final BitSet activeIndexMembership = new BitSet();
         private int[] sparkleStartFrames;
         private int cursorIndex = 0;
         private int lastCameraX = Integer.MIN_VALUE;
+        private long[] coordinateKeys;
+        private int[] coordinateIndices;
+        private boolean[] coordinateOccupied;
 
-        private RingPlacement(List<RingSpawn> spawns) {
-            super(spawns, LOAD_AHEAD, UNLOAD_BEHIND);
+        private RingPlacement(List<RingSpawn> spawns, boolean useRawCameraWindow) {
+            super(spawns, EXTRA_AHEAD, UNLOAD_BEHIND,
+                    PlacementViewportWidth::current);
+            this.useRawCameraWindow = useRawCameraWindow;
             this.sparkleStartFrames = new int[this.spawns.size()];
             Arrays.fill(this.sparkleStartFrames, NO_SPARKLE);
+            rebuildCoordinateIndex();
         }
 
         /** Replaces spawns and resets all collection/sparkle state. */
@@ -520,12 +1245,58 @@ public class RingManager {
             collected.clear();
             sparkleStartFrames = new int[this.spawns.size()];
             Arrays.fill(sparkleStartFrames, NO_SPARKLE);
+            rebuildCoordinateIndex();
             cursorIndex = 0;
             lastCameraX = Integer.MIN_VALUE;
         }
 
+        private void rebuildCoordinateIndex() {
+            int capacity = 8;
+            while (capacity < spawns.size() * 2) capacity <<= 1;
+            coordinateKeys = new long[capacity];
+            coordinateIndices = new int[capacity];
+            coordinateOccupied = new boolean[capacity];
+            int mask = capacity - 1;
+            for (int index = 0; index < spawns.size(); index++) {
+                RingSpawn spawn = spawns.get(index);
+                long key = coordinateKey(spawn.x(), spawn.y());
+                int slot = hashCoordinate(key) & mask;
+                while (coordinateOccupied[slot]) {
+                    if (coordinateKeys[slot] == key) break; // first duplicate is canonical
+                    slot = (slot + 1) & mask;
+                }
+                if (!coordinateOccupied[slot]) {
+                    coordinateOccupied[slot] = true;
+                    coordinateKeys[slot] = key;
+                    coordinateIndices[slot] = index;
+                }
+            }
+        }
+
+        private int findSpawnIndex(int x, int y) {
+            long key = coordinateKey(x, y);
+            int mask = coordinateKeys.length - 1;
+            int slot = hashCoordinate(key) & mask;
+            while (coordinateOccupied[slot]) {
+                if (coordinateKeys[slot] == key) return coordinateIndices[slot];
+                slot = (slot + 1) & mask;
+            }
+            return -1;
+        }
+
+        private static long coordinateKey(int x, int y) {
+            return ((long) x << 32) ^ (y & 0xFFFF_FFFFL);
+        }
+
+        private static int hashCoordinate(long key) {
+            key ^= key >>> 33;
+            key *= 0xff51afd7ed558ccdl;
+            key ^= key >>> 33;
+            return (int) key;
+        }
+
         private void reset(int cameraX) {
-            active.clear();
+            clearActiveIndices();
             collected.clear();
             Arrays.fill(sparkleStartFrames, NO_SPARKLE);
             cursorIndex = 0;
@@ -585,35 +1356,125 @@ public class RingManager {
         }
 
         private void spawnForward(int cameraX) {
-            int spawnLimit = getWindowEnd(cameraX);
+            int spawnLimit = ringWindowEnd(cameraX);
             while (cursorIndex < spawns.size() && spawns.get(cursorIndex).x() <= spawnLimit) {
-                active.add(spawns.get(cursorIndex));
+                addActiveIndex(cursorIndex);
                 cursorIndex++;
             }
         }
 
         private void trimActive(int cameraX) {
-            int windowStart = getWindowStart(cameraX);
-            int windowEnd = getWindowEnd(cameraX);
-            Iterator<RingSpawn> iterator = active.iterator();
-            while (iterator.hasNext()) {
-                RingSpawn spawn = iterator.next();
+            int windowStart = ringWindowStart(cameraX);
+            int windowEnd = ringWindowEnd(cameraX);
+            // Order-preserving compaction: active-ring order feeds collection
+            // and draw order, so removals must not reorder survivors.
+            int write = 0;
+            for (int read = 0; read < activeIndexCount; read++) {
+                int index = activeIndices[read];
+                RingSpawn spawn = spawns.get(index);
                 if (spawn.x() < windowStart || spawn.x() > windowEnd) {
-                    iterator.remove();
+                    activeIndexMembership.clear(index);
+                } else {
+                    activeIndices[write++] = index;
+                }
+            }
+            activeIndexCount = write;
+        }
+
+        private void refreshWindow(int cameraX) {
+            int windowStart = ringWindowStart(cameraX);
+            int windowEnd = ringWindowEnd(cameraX);
+            int start = lowerBound(windowStart);
+            int end = upperBound(windowEnd);
+            cursorIndex = end;
+            clearActiveIndices();
+            for (int i = start; i < end; i++) {
+                addActiveIndex(i);
+            }
+        }
+
+        private int[] snapshotActiveSpawnIndices() {
+            return Arrays.copyOf(activeIndices, activeIndexCount);
+        }
+
+        private void restoreActiveSpawnIndices(int[] activeSpawnIndices) {
+            clearActiveIndices();
+            if (activeSpawnIndices == null) {
+                return;
+            }
+            for (int index : activeSpawnIndices) {
+                if (index >= 0 && index < spawns.size()) {
+                    addActiveIndex(index);
                 }
             }
         }
 
-        private void refreshWindow(int cameraX) {
-            int windowStart = getWindowStart(cameraX);
-            int windowEnd = getWindowEnd(cameraX);
-            int start = lowerBound(windowStart);
-            int end = upperBound(windowEnd);
-            cursorIndex = end;
-            active.clear();
-            for (int i = start; i < end; i++) {
-                active.add(spawns.get(i));
+        @Override
+        public Collection<RingSpawn> getActiveSpawns() {
+            if (activeIndexCount == 0) {
+                return List.of();
             }
+            List<RingSpawn> activeSpawns = new ArrayList<>(activeIndexCount);
+            for (int i = 0; i < activeIndexCount; i++) {
+                activeSpawns.add(spawns.get(activeIndices[i]));
+            }
+            return List.copyOf(activeSpawns);
+        }
+
+        private int activeIndexCount() {
+            return activeIndexCount;
+        }
+
+        private int activeIndexAt(int position) {
+            return activeIndices[position];
+        }
+
+        private RingSpawn getSpawn(int index) {
+            return spawns.get(index);
+        }
+
+        private void addActiveIndex(int index) {
+            if (activeIndexMembership.get(index)) {
+                return;
+            }
+            activeIndexMembership.set(index);
+            if (activeIndexCount == activeIndices.length) {
+                activeIndices = Arrays.copyOf(activeIndices, activeIndices.length * 2);
+            }
+            activeIndices[activeIndexCount++] = index;
+        }
+
+        private void clearActiveIndices() {
+            activeIndexCount = 0;
+            activeIndexMembership.clear();
+        }
+
+        // The consolidated ring array is windowed off the raw camera, not off
+        // the chunk-aligned object spawn range: S2 RingsManager_Main walks
+        // Ring_start_addr/Ring_end_addr out to camera_x-8 and camera_x-8 +
+        // screen_width+$10, and S3K Load_Rings uses the same pair of bounds.
+        // Touch_Rings, Test_Ring_Collisions and the ring draw routine all read
+        // those two pointers, so a ring outside them is neither collectable nor
+        // drawn even with a character standing on it.
+        private int ringWindowStart(int cameraX) {
+            if (!useRawCameraWindow) {
+                return getWindowStart(cameraX);
+            }
+            return Math.max(0, cameraX - RAW_WINDOW_BEHIND);
+        }
+
+        private int ringWindowEnd(int cameraX) {
+            if (!useRawCameraWindow) {
+                return getWindowEnd(cameraX);
+            }
+            // Ring_end_addr points at the first record whose X reaches
+            // camera_x-$8 + screen_width+$10; the render and collision walks
+            // treat that pointer as exclusive, so the integer-coordinate window
+            // ends one pixel before it. The ROM's screen_width is the viewport
+            // width, which is 320 (giving the native $148 lead) unless a wider
+            // aspect preset is configured.
+            return cameraX - RAW_WINDOW_BEHIND
+                    + PlacementViewportWidth.current() + RAW_WINDOW_AHEAD_MARGIN - 1;
         }
 
         private boolean areAllCollected() {
@@ -727,51 +1588,110 @@ public class RingManager {
         private final LevelManager levelManager;
         private final RingRenderer renderer;
         private final TouchResponseTable touchResponseTable;
-        private final AudioManager audioManager = AudioManager.getInstance();
-        private final Camera camera = Camera.getInstance();
+        private final AudioManager audioManager;
         private final LostRing[] ringPool = new LostRing[MAX_LOST_RINGS];
         private int activeRingCount = 0;
-        private int nextId;
-        // ROM-accurate shared animation state (Ring_spill_anim_counter/accum/frame).
-        // The counter doubles as both lifetime and animation speed input:
-        // accumulator increases by counter each frame, producing a decelerating spin.
-        private int spillAnimCounter;
-        private int spillAnimAccum;
-        private int spillAnimFrame;
-        private int frameCounter;
+        // Shared spilled-ring spin owner (ROM Ring_spill_anim_counter/accum/frame,
+        // s2.asm Obj37 ChangeRingFrame). The counter doubles as both lifetime and
+        // animation-speed input: the accumulator increases by counter each frame,
+        // producing a decelerating spin. This is the SOLE owner of the spin now —
+        // per-ring physics runs in the object exec loop (LostRingObjectInstance),
+        // and this owner feeds every live ring's displayed mapping frame.
+        private final SpillAnimationState spillAnimation = new SpillAnimationState();
 
-        private LostRingPool(LevelManager levelManager, RingRenderer renderer, TouchResponseTable touchResponseTable) {
+        private LostRingPool(LevelManager levelManager, RingRenderer renderer, TouchResponseTable touchResponseTable,
+                             AudioManager audioManager) {
             this.levelManager = levelManager;
             this.renderer = renderer;
             this.touchResponseTable = touchResponseTable;
+            this.audioManager = audioManager;
             for (int i = 0; i < MAX_LOST_RINGS; i++) {
                 ringPool[i] = new LostRing();
             }
         }
 
         private void reset() {
+            // Obj37 slots are owned by LostRingObjectInstance now. S1 RingLoss
+            // creates new spilled rings with FindFreeObj and resets the shared
+            // v_ani3_time, but it does not sweep existing Obj37 slots first
+            // (docs/s1disasm/_incObj/25 & 37 Rings.asm:199-219,284-313).
+            // Releasing the legacy LostRing slot here can mark a still-live or
+            // later-reused SST slot free, corrupting the allocator before the
+            // next ObjPosLoad.
+            for (LostRing ring : ringPool) {
+                ring.deactivate();
+                ring.setSlotIndex(-1);
+            }
             activeRingCount = 0;
         }
 
-        private void spawnLostRings(AbstractPlayableSprite player, int ringCount, int frameCounter) {
+        private void spawnLostRings(AbstractPlayableSprite player, int ringCount, int frameCounter,
+                                    int x, int y, int preallocatedFirstSlot) {
+            spawnLostRings(player, ringCount, frameCounter, x, y, preallocatedFirstSlot, false);
+        }
+
+        private void spawnLostRings(AbstractPlayableSprite player, int ringCount, int frameCounter,
+                                    int x, int y, int preallocatedFirstSlot,
+                                    boolean applyInitialObjectStep) {
+            int[] slots = preallocatedFirstSlot >= 0
+                    ? new int[] {preallocatedFirstSlot}
+                    : new int[0];
+            spawnLostRings(player, ringCount, frameCounter, x, y, slots,
+                    false, applyInitialObjectStep, false);
+        }
+
+        private void spawnLostRings(AbstractPlayableSprite player, int ringCount, int frameCounter,
+                                    int x, int y, int[] preallocatedSlots,
+                                    boolean slotsFullyReserved,
+                                    boolean applyInitialObjectStep) {
+            spawnLostRings(player, ringCount, frameCounter, x, y, preallocatedSlots,
+                    slotsFullyReserved, applyInitialObjectStep, false);
+        }
+
+        private void spawnLostRings(AbstractPlayableSprite player, int ringCount, int frameCounter,
+                                    int x, int y, int[] preallocatedSlots,
+                                    boolean slotsFullyReserved,
+                                    boolean applyInitialObjectStep,
+                                    boolean forceDeferredOwnerRingClear) {
             if (player == null || renderer == null) {
                 return;
             }
             if (ringCount <= 0) {
                 return;
             }
-            int count = Math.min(ringCount, MAX_LOST_RINGS);
+            // ROM Obj37_Init (s2.asm:25127-25130): cap spilled rings at $20 (32).
+            int toSpawn = Math.min(ringCount, MAX_LOST_RINGS);
             int angle = 0x288;
             int xVel = 0;
             int yVel = 0;
-
-            activeRingCount = 0;
-            // ROM: Ring_spill_anim_counter = $FF, accumulator reset
-            spillAnimCounter = LIFETIME_FRAMES;
-            spillAnimAccum = 0;
-            spillAnimFrame = 0;
-
-            for (int i = 0; i < count; i++) {
+            reset();
+            // ROM: Ring_spill_anim_counter = $FF, accumulator reset (s2.asm Obj37_Init).
+            // Reset the shared spin owner that feeds every live ring's render frame.
+            spillAnimation.reset();
+            ObjectManager objectManager = levelManager != null ? levelManager.getObjectManager() : null;
+            // Atomic stop-on-(-1) slot-allocation contract (ROM Obj37_Init s2.asm:25143-25144:
+            // `bsr.w AllocateObject; bne.w +++` — a failed AllocateObject branches PAST the
+            // spill loop, truncating the spill). S1 allocates every Obj37 from the loop. S2
+            // HurtCharacter preallocates ring 0 with AllocateObject, then Obj37_Init uses
+            // plain AllocateObject for the remainder (s2.asm:85444-85461,25125-25146). S3K
+            // uses the owner slot and AllocateObjectAfterCurrent for the rest
+            // (sonic3k.asm:21065-21088,35549-35591).
+            boolean preallocateOwnerSlot = objectManager != null && objectManager.preallocatesLostRingOwnerSlot();
+            boolean allocateRemainderAfterOwner = objectManager != null
+                    && objectManager.lostRingRemainderAllocatesAfterOwnerSlot();
+            int firstReservedSlot = preallocatedSlots.length > 0 ? preallocatedSlots[0] : -1;
+            if (preallocateOwnerSlot && firstReservedSlot < 0) {
+                firstReservedSlot = objectManager.allocateDynamicSlot();
+            }
+            boolean deferRingCountClear = forceDeferredOwnerRingClear || (objectManager != null
+                    && firstReservedSlot >= 0
+                    && objectManager.reservedSlotWaitsForNextObjectPass(firstReservedSlot));
+            boolean ownerWaitsForNextPass = objectManager != null
+                    && firstReservedSlot >= 0
+                    && objectManager.reservedSlotWaitsForNextObjectPass(firstReservedSlot);
+            int previousSlot = firstReservedSlot;
+            int spawned = 0;
+            for (int i = 0; i < toSpawn; i++) {
                 if (angle >= 0) {
                     int sin = calcSine(angle & 0xFF);
                     int cos = calcCosine(angle & 0xFF);
@@ -792,130 +1712,205 @@ public class RingManager {
                     }
                 }
 
-                ringPool[activeRingCount].reset(nextId++, player.getCentreX(), player.getCentreY(),
+                int slotIndex = -1;
+                if (i < preallocatedSlots.length) {
+                    slotIndex = preallocatedSlots[i];
+                } else if (slotsFullyReserved) {
+                    break;
+                } else if (i == 0 && preallocateOwnerSlot) {
+                    slotIndex = firstReservedSlot;
+                } else if (objectManager != null) {
+                    slotIndex = allocateRemainderAfterOwner
+                            ? objectManager.allocateSlotAfter(previousSlot)
+                            : objectManager.allocateDynamicSlot();
+                }
+                // S3K's Obj37 chain uses AllocateObjectAfterCurrent. Preserve the
+                // remaining logical entries when the engine's consolidated object
+                // model exhausts its physical slot projection; S1/S2 retain native
+                // stop-on-allocation-failure behavior.
+                boolean logicalOverflow = slotIndex < 0 && allocateRemainderAfterOwner;
+                if (slotIndex < 0 && !logicalOverflow) {
+                    // ROM: no free slot → stop spilling (truncate the remainder).
+                    int truncated = toSpawn - spawned;
+                    LOG.log(System.Logger.Level.DEBUG, () -> "spawnLostRings: dynamic slot pool "
+                            + "exhausted; " + truncated + " of " + toSpawn + " rings truncated");
+                    break;
+                }
+
+                // Process_Sprites' d7 countdown supplies both animation phase and
+                // floor-probe cadence. Continue that countdown across virtual entries;
+                // using -1 would collapse every overflow ring onto the same phase.
+                int phaseSlotIndex = logicalOverflow ? previousSlot + 1 : slotIndex;
+                int phase = phaseOffsetForSlot(objectManager, phaseSlotIndex);
+                LostRing ring = ringPool[activeRingCount];
+                ring.reset(phase, x, y,
                         xVel, yVel, LIFETIME_FRAMES);
+                ring.setSlotIndex(slotIndex);
+                // Parallel object path: register a LostRingObjectInstance twin onto the
+                // SAME reserved slot (no second allocation). The legacy LostRing remains
+                // the OWNER of collection/rewind during this stage; the object is exec-only.
+                if (objectManager != null) {
+                    LostRingObjectInstance ringObject = LostRingObjectInstance.spawn(
+                            x, y, xVel, yVel,
+                            phase, LIFETIME_FRAMES, spillAnimation);
+                    if (i == 0 && deferRingCountClear) {
+                        // Obj37_Init clears Ring_count when the owner SST runs.
+                        // An owner allocated behind the live Process_Sprites
+                        // cursor remains routine 0 until the following pass
+                        // (docs/skdisasm/sonic3k.asm:21065-21088,35549-35616).
+                        ringObject.clearMainPlayerRingsOnFirstUpdate();
+                    }
+                    if (i > 0 && ownerWaitsForNextPass
+                            && !objectManager.reservedSlotWaitsForNextObjectPass(slotIndex)) {
+                        // Native AllocateObjectAfterCurrent does not create the
+                        // remainder until the behind-cursor owner initializes on
+                        // its next pass. Eager engine allocation preserves slot
+                        // ownership, but these ahead-cursor children must not
+                        // receive an extra movement step in the allocation pass.
+                        ringObject.deferFirstUpdateUntilOwnerPass();
+                    }
+                    if (logicalOverflow) {
+                        objectManager.spawnLogicalLostRingOverflow(ringObject);
+                    } else {
+                        objectManager.spawnLostRingObjectAtSlot(ringObject, slotIndex);
+                    }
+                    if (applyInitialObjectStep
+                            && (logicalOverflow || appliesInitialObj37Step(slotIndex, firstReservedSlot))) {
+                        ringObject.updateMovement();
+                        // This deferred materialization has already consumed the
+                        // same-pass Obj37_Main movement represented by its live
+                        // x_pos/y_pos. S3K's previous collision-response list
+                        // holds the SST pointer, so the following player pass must
+                        // read that post-movement position rather than the ordinary
+                        // pre-update snapshot used by an immediate spill.
+                        if (!forceDeferredOwnerRingClear) {
+                            ringObject.markTouchStateAlreadyPostMovement();
+                        }
+                    }
+                    // S3K's Obj37 chain is published through live SST pointers.
+                    // That remains true when an after-current owner lands behind
+                    // the Process_Sprites cursor and therefore skips the explicit
+                    // same-pass movement step above: the following player pass
+                    // must still read the ring's live x_pos/y_pos, not the
+                    // engine's older pre-update cache. The forced deferred-owner
+                    // path deliberately retains its previously published state.
+                    if (allocateRemainderAfterOwner && !forceDeferredOwnerRingClear) {
+                        ringObject.markTouchStateAlreadyPostMovement();
+                    }
+                    if (objectManager.hasInheritedRingCounterPhase()) {
+                        ringObject.markTouchStateAlreadyPostMovement();
+                    }
+                }
                 activeRingCount++;
+                previousSlot = phaseSlotIndex;
+                spawned++;
                 xVel = -xVel;
                 angle = -angle;
             }
 
-            player.setRingCount(0);
+            if (!deferRingCountClear) {
+                player.setRingCount(0);
+            }
             audioManager.playSfx(GameSound.RING_SPILL);
         }
 
-        private void updatePhysics(int frameCounter) {
-            this.frameCounter = frameCounter;
-            if (renderer == null || activeRingCount == 0) {
+        private static boolean appliesInitialObj37Step(int slotIndex, int ownerSlot) {
+            // S2 ARZ2 PC probe: HurtCharacter reserves the owner Obj37 slot (56)
+            // before same-pass lower slots (48,49,54,55) free. Obj37_Init then
+            // allocates child rings into those lower slots, but ExecuteObjects has
+            // already passed them, so only owner-or-later slots run Obj37_Main in
+            // that frame (docs/s2disasm/s2.asm:85444-85461, 25125-25245).
+            return ownerSlot < 0 || slotIndex >= ownerSlot;
+        }
+
+        private static int phaseOffsetForSlot(ObjectManager objectManager, int slotIndex) {
+            // Obj37 adds Process_Sprites' live d7 countdown to V_int_run_count.
+            // S3K walks all 110 Object_RAM slots, including the fixed tail after
+            // Dynamic_object_RAM (sonic3k.asm:35965-35980).
+            int lastSlotExclusive = objectManager != null
+                    ? objectManager.getLastProcessSlotExclusive()
+                    : 128;
+            return lastSlotExclusive - 1 - slotIndex;
+        }
+
+        /**
+         * Advance the shared decelerating spin one frame (ROM ChangeRingFrame,
+         * s2.asm Obj37: accumulator += counter; frame = bits 10:9; counter--).
+         * <p>
+         * The per-ring physics loop (velocity integrate, gravity, per-game floor/
+         * ceiling probe, lifetime/off-bottom deletion) has been retired from the
+         * legacy pool — it now runs in the object exec loop via
+         * {@link LostRingObjectInstance#updateMovement}. This call only ticks the
+         * global spin owner shared by every live spilled ring.
+         */
+        private void tickSpillAnimation() {
+            spillAnimation.tick();
+        }
+
+        private void deactivateRing(LostRing ring, ObjectManager objectManager) {
+            if (ring == null || !ring.isActive()) {
                 return;
             }
+            releaseReservedSlot(ring, objectManager);
+            ring.deactivate();
+        }
 
-            PatternSpriteRenderer.FrameBounds bounds = renderer.getSpinBounds();
-            if (bounds.width() <= 0 || bounds.height() <= 0) {
+        /**
+         * Clears pool entries whose {@link LostRingObjectInstance} twin has gone.
+         *
+         * <p>A spilled ring is created as a pair sharing ONE reserved slot: the object
+         * owns physics, collection and rendering, while the pool entry survives only as
+         * bookkeeping. The object retires itself (ROM Obj37 deletes on the shared spill
+         * timer or below the bottom boundary) but nothing retired its twin, so
+         * {@link #getActiveRingsSnapshot} over-reported every ring ever spilled in the
+         * act -- which matters because the slot-occupancy diagnostics read it.
+         *
+         * <p>Deliberately NOT via {@link #deactivateRing}: that also calls
+         * {@code releaseReservedSlot}, and the slot is the OBJECT's to release. Freeing
+         * it a second time here hands back a slot another object may already have taken
+         * -- measured as a regression in TestS1Mz3CompleteRunTraceReplay. This clears
+         * the mirror flag only and cannot change what the engine simulates.
+         */
+        private void retireEntriesWhoseObjectTwinIsGone(ObjectManager objectManager) {
+            if (objectManager == null || activeRingCount == 0) {
                 return;
             }
-
-            // ROM: ChangeRingFrame — shared animation driven by countdown counter.
-            // Accumulator adds the counter value each frame, producing a decelerating
-            // spin (fast when counter is high, slow as it approaches 0).
-            if (spillAnimCounter > 0) {
-                spillAnimAccum = (spillAnimAccum + spillAnimCounter) & 0xFFFF;
-                // ROM: rol.w #7,d0 / andi.w #3,d0 → extracts bits 10:9
-                spillAnimFrame = (spillAnimAccum >> 9) & 3;
-                spillAnimCounter--;
-            }
-
-            // Per-game floor check frequency: S1 every 4 frames (#3), S2/S3K every 8 (#7).
-            int floorCheckMask = PhysicsFeatureSet.RING_FLOOR_CHECK_MASK_S2; // default S2
-            PhysicsProvider physProvider = GameModuleRegistry.getCurrent() != null
-                    ? GameModuleRegistry.getCurrent().getPhysicsProvider() : null;
-            PhysicsFeatureSet featureSet = physProvider != null ? physProvider.getFeatureSet() : null;
-            if (featureSet != null) {
-                floorCheckMask = featureSet.ringFloorCheckMask();
-            }
-
-            // S3K: Reverse_gravity_flag gates Obj_Bouncing_Ring_Reverse_Gravity variant.
-            boolean reverseGravity = GameServices.gameState().isReverseGravityActive();
-            int gravity = reverseGravity ? -GRAVITY : GRAVITY;
-
-            int cameraBottom = camera.getMaxY() + 224;
-
             for (int i = 0; i < activeRingCount; i++) {
                 LostRing ring = ringPool[i];
-                if (!ring.isActive()) {
+                if (ring == null || !ring.isActive() || ring.getSlotIndex() < 0) {
                     continue;
                 }
-
-                if (!ring.isCollected()) {
-                    ring.addXSubpixel(ring.getXVel());
-                    ring.addYSubpixel(ring.getYVel());
-                    ring.addYVel(gravity);
-
-                    if (((frameCounter + ring.getId()) & floorCheckMask) == 0) {
-                        if (reverseGravity) {
-                            // S3K reverse gravity: check ceiling (probe from top edge, y - y_radius).
-                            // ROM: RingCheckFloorDist_ReverseGravity subtracts y_radius, probes upward.
-                            if (ring.getYVel() <= 0) {
-                                int dist = ringCheckCeilingDist(ring.getX(), ring.getY() - RING_Y_RADIUS);
-                                if (dist < 0) {
-                                    ring.addYSubpixel(-dist << 8);
-                                    int yVel = ring.getYVel();
-                                    yVel -= (yVel >> 2);
-                                    ring.setYVel(-yVel);
-                                }
-                            }
-                        } else {
-                            // Normal gravity: check floor (probe from bottom edge, y + y_radius).
-                            if (ring.getYVel() >= 0) {
-                                int dist = ringCheckFloorDist(ring.getX(), ring.getY() + RING_Y_RADIUS);
-                                if (dist < 0) {
-                                    ring.addYSubpixel(dist << 8);
-                                    int yVel = ring.getYVel();
-                                    yVel -= (yVel >> 2);
-                                    ring.setYVel(-yVel);
-                                }
-                            }
-                        }
-                    }
-                }
-
-                ring.decLifetime();
-                // ROM: tst.b (Ring_spill_anim_counter).w / beq.s Obj37_Delete
-                if (ring.getLifetime() <= 0 || ring.getY() > cameraBottom) {
+                if (!objectManager.hasLiveLostRingAtSlot(ring.getSlotIndex())) {
                     ring.deactivate();
                 }
             }
         }
 
-        private void checkCollection(AbstractPlayableSprite player) {
-            if (activeRingCount == 0 || player == null || player.getDead()) {
+        private void releaseReservedSlots() {
+            ObjectManager objectManager = levelManager != null ? levelManager.getObjectManager() : null;
+            for (LostRing ring : ringPool) {
+                releaseReservedSlot(ring, objectManager);
+                ring.deactivate();
+            }
+        }
+
+        private void releaseReservedSlot(LostRing ring, ObjectManager objectManager) {
+            if (ring == null || ring.getSlotIndex() < 0 || objectManager == null) {
                 return;
             }
+            objectManager.releaseDynamicSlot(ring.getSlotIndex());
+            ring.setSlotIndex(-1);
+        }
 
-            int baseYRadius = Math.max(1, player.getYRadius() - 3);
-            int playerX = player.getCentreX() - 8;
-            // ROM: d3 = y_pos - (y_radius - 3) (s2.asm:84487-84493)
-            int playerY = player.getCentreY() - baseYRadius;
-            int playerHeight = baseYRadius * 2;
-            if (player.getCrouching()) {
-                playerY += 12;
-                playerHeight = 20;
-            }
-
+        private List<LostRing> getActiveRingsSnapshot() {
+            List<LostRing> active = new ArrayList<>();
             for (int i = 0; i < activeRingCount; i++) {
                 LostRing ring = ringPool[i];
-                if (!ring.isActive() || ring.isCollected()) {
-                    continue;
-                }
-
-                // ROM: Touch_ChkValue (s2.asm:84750-84756) — collection gated only
-                // by invulnerable_time >= 90 (0x5A). No per-ring age delay exists.
-                if (player.getInvulnerableFrames() < 90
-                        && ringOverlapsPlayer(playerX, playerY, playerHeight, ring)) {
-                    ring.markCollected(frameCounter);
-                    player.addRings(1);
-                    audioManager.playSfx(GameSound.RING);
+                if (ring.isActive()) {
+                    active.add(ring);
                 }
             }
+            return List.copyOf(active);
         }
 
         private void draw(int frameCounter) {
@@ -927,7 +1922,7 @@ public class RingManager {
             // decelerating accumulator, NOT the constant-speed placed-ring animation.
             // Clamp to available spin frames in case sprite sheet differs.
             int spinCount = renderer.getSpinFrameCount();
-            int spinFrameIndex = (spinCount > 0) ? (spillAnimFrame % spinCount) : 0;
+            int spinFrameIndex = (spinCount > 0) ? (spillAnimation.frame() % spinCount) : 0;
 
             for (int i = 0; i < activeRingCount; i++) {
                 LostRing ring = ringPool[i];
@@ -953,7 +1948,6 @@ public class RingManager {
                 }
                 int sparkleFrameOffset = elapsed / renderer.getSparkleFrameDelay();
                 if (sparkleFrameOffset >= renderer.getSparkleFrameCount()) {
-                    ring.deactivate();
                     continue;
                 }
                 int sparkleFrameIndex = renderer.getSparkleStartIndex() + sparkleFrameOffset;
@@ -961,30 +1955,20 @@ public class RingManager {
             }
         }
 
-        private boolean ringOverlapsPlayer(int playerX, int playerY, int playerHeight, LostRing ring) {
-            int width = touchResponseTable != null ? touchResponseTable.getWidthRadius(RING_TOUCH_SIZE_INDEX) : 6;
-            int height = touchResponseTable != null ? touchResponseTable.getHeightRadius(RING_TOUCH_SIZE_INDEX) : 6;
-            int dx = ring.getX() - width - playerX;
-            if (dx < 0) {
-                int sum = (dx & 0xFFFF) + ((width * 2) & 0xFFFF);
-                if (sum <= 0xFFFF) {
-                    return false;
-                }
-            } else if (dx > 0x10) {
+        private boolean collectedSparkleFinished(LostRing ring, int frameCounter) {
+            if (ring == null || !ring.isCollected()) {
                 return false;
             }
-
-            int dy = ring.getY() - height - playerY;
-            if (dy < 0) {
-                int sum = (dy & 0xFFFF) + ((height * 2) & 0xFFFF);
-                if (sum <= 0xFFFF) {
-                    return false;
-                }
-            } else if (dy > playerHeight) {
-                return false;
+            if (renderer == null || renderer.getSparkleFrameCount() <= 0) {
+                return true;
             }
-
-            return true;
+            int sparkleStartFrame = ring.getSparkleStartFrame();
+            if (sparkleStartFrame < 0) {
+                return true;
+            }
+            int elapsed = Math.max(0, frameCounter - sparkleStartFrame);
+            int sparkleFrameOffset = elapsed / renderer.getSparkleFrameDelay();
+            return sparkleFrameOffset >= renderer.getSparkleFrameCount();
         }
 
         private int ringCheckFloorDist(int x, int y) {

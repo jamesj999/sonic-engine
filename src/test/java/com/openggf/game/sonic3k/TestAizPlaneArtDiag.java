@@ -1,9 +1,8 @@
 package com.openggf.game.sonic3k;
 
 import com.openggf.game.GameServices;
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import com.openggf.camera.Camera;
 import com.openggf.configuration.SonicConfiguration;
 import com.openggf.configuration.SonicConfigurationService;
@@ -20,9 +19,8 @@ import com.openggf.level.render.SpriteMappingPiece;
 import com.openggf.physics.GroundSensor;
 import com.openggf.sprites.managers.SpriteManager;
 import com.openggf.sprites.playable.Sonic;
-import com.openggf.tools.KosinskiReader;
+import com.openggf.data.compression.KosinskiReader;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
 
 import java.lang.reflect.Field;
@@ -30,7 +28,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Diagnostic test for the AIZ intro Tornado plane sprite art.
@@ -44,11 +42,7 @@ import static org.junit.Assert.*;
  */
 @RequiresRom(SonicGame.SONIC_3K)
 public class TestAizPlaneArtDiag {
-
-    @Rule
-    public RequiresRomRule romRule = new RequiresRomRule();
-
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         SonicConfigurationService config = SonicConfigurationService.getInstance();
         config.setConfigValue(SonicConfiguration.S3K_SKIP_INTROS, false);
@@ -63,7 +57,7 @@ public class TestAizPlaneArtDiag {
         byte[] data = decompressPlaneArt();
         System.out.println("Plane art decompressed size: " + data.length + " bytes ("
                 + (data.length / 32) + " tiles)");
-        assertEquals("Plane art should be 136 tiles (4352 bytes)", 4352, data.length);
+        assertEquals(4352, data.length, "Plane art should be 136 tiles (4352 bytes)");
     }
 
     /**
@@ -87,7 +81,7 @@ public class TestAizPlaneArtDiag {
                 emptyCount++;
             }
         }
-        assertEquals("No face tiles should be empty", 0, emptyCount);
+        assertEquals(0, emptyCount, "No face tiles should be empty");
     }
 
     /**
@@ -162,7 +156,7 @@ public class TestAizPlaneArtDiag {
         List<SpriteMappingFrame> frames = AizIntroArtLoader.loadS3kMappingFrames(
                 reader, Sonic3kConstants.MAP_AIZ_INTRO_PLANE_ADDR);
 
-        assertFalse("Should have at least 1 mapping frame", frames.isEmpty());
+        assertFalse(frames.isEmpty(), "Should have at least 1 mapping frame");
         SpriteMappingFrame frame0 = frames.get(0);
 
         System.out.println("=== PLANE FRAME 0: " + frame0.pieces().size() + " pieces ===");
@@ -186,7 +180,7 @@ public class TestAizPlaneArtDiag {
                     oob ? " *** OUT OF BOUNDS ***" : ""));
         }
         System.out.println("Max tile index used: " + maxTileUsed + " (total patterns: " + totalPatterns + ")");
-        assertFalse("No tile indices should exceed pattern count", anyOob);
+        assertFalse(anyOob, "No tile indices should exceed pattern count");
     }
 
     /**
@@ -214,7 +208,7 @@ public class TestAizPlaneArtDiag {
         // Get the atlas via reflection to check entries
         GraphicsManager gm = GraphicsManager.getInstance();
         PatternAtlas atlas = getPatternAtlas(gm);
-        assertNotNull("Pattern atlas should exist", atlas);
+        assertNotNull(atlas, "Pattern atlas should exist");
 
         // Check that intro pattern IDs (0x40000+) don't collide with level IDs
         Pattern[] planePatterns = AizIntroArtLoader.getPlanePatterns();
@@ -237,7 +231,7 @@ public class TestAizPlaneArtDiag {
         }
 
         System.out.println("Checked " + planePatterns.length + " intro patterns for collisions: " + collisions + " found");
-        assertEquals("No atlas slot collisions between level and intro patterns", 0, collisions);
+        assertEquals(0, collisions, "No atlas slot collisions between level and intro patterns");
     }
 
     /**
@@ -267,9 +261,8 @@ public class TestAizPlaneArtDiag {
             sb.append("] nonzero=").append(nonZero).append("/32");
             System.out.println(sb);
         }
-        assertTrue("At least some module boundary tiles should contain non-zero data",
-                nonZeroTileCount > 0);
-        assertTrue("Should have checked boundary tiles", totalBoundaryTiles > 0);
+        assertTrue(nonZeroTileCount > 0, "At least some module boundary tiles should contain non-zero data");
+        assertTrue(totalBoundaryTiles > 0, "Should have checked boundary tiles");
     }
 
     /**
@@ -280,7 +273,7 @@ public class TestAizPlaneArtDiag {
     public void decompressionIsDeterministic() throws Exception {
         byte[] first = decompressPlaneArt();
         byte[] second = decompressPlaneArt();
-        assertArrayEquals("Two decompressions should produce identical results", first, second);
+        assertArrayEquals(first, second, "Two decompressions should produce identical results");
     }
 
     /**
@@ -310,8 +303,7 @@ public class TestAizPlaneArtDiag {
             }
             if (hasNonZero) tilesWithPixelData++;
         }
-        assertTrue("At least some face tiles should contain non-zero pixel data",
-                tilesWithPixelData > 0);
+        assertTrue(tilesWithPixelData > 0, "At least some face tiles should contain non-zero pixel data");
     }
 
     /**
@@ -333,7 +325,7 @@ public class TestAizPlaneArtDiag {
         }
 
         PatternAtlas atlas = getPatternAtlas(gm);
-        assertNotNull("Atlas should exist", atlas);
+        assertNotNull(atlas, "Atlas should exist");
 
         // Check that face tiles 26-41 each have unique atlas slots
         Set<Integer> slots = new HashSet<>();
@@ -341,12 +333,12 @@ public class TestAizPlaneArtDiag {
         for (int t = 26; t <= 41; t++) {
             int patternId = introBase + t;
             PatternAtlas.Entry entry = atlas.getEntry(patternId);
-            assertNotNull("Face tile " + t + " should have atlas entry", entry);
+            assertNotNull(entry, "Face tile " + t + " should have atlas entry");
             boolean unique = slots.add(entry.slot());
             System.out.println(String.format("  Tile %d: patternId=0x%05X slot=%d tileXY=(%d,%d)%s",
                     t, patternId, entry.slot(), entry.tileX(), entry.tileY(),
                     unique ? "" : " *** DUPLICATE SLOT ***"));
-            assertTrue("Each face tile should have a unique atlas slot", unique);
+            assertTrue(unique, "Each face tile should have a unique atlas slot");
         }
     }
 
@@ -383,3 +375,5 @@ public class TestAizPlaneArtDiag {
         }
     }
 }
+
+

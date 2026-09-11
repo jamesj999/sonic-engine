@@ -8,11 +8,10 @@ import com.openggf.level.SeamlessLevelTransitionRequest.TransitionType;
 import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.rings.RingManager;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
-import org.junit.*;
+import org.junit.jupiter.api.*;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Integration tests for nonstandard level entry/return paths.
@@ -22,39 +21,36 @@ import static org.junit.Assert.*;
  * level lifecycle entry points that manipulate zone/act counters and route
  * through {@code loadCurrentLevel()} or the seamless transition dispatcher:
  * <ul>
- *   <li>{@code nextAct()} — act increment with wrap</li>
- *   <li>{@code nextZone()} — zone increment with wrap</li>
- *   <li>{@code advanceToNextLevel()} — progression (act then zone)</li>
- *   <li>{@code advanceZoneActOnly()} — counter-only advance for special stage entry</li>
- *   <li>{@code consumeSpecialStageReturnLevelReloadRequest()} — flag set by above</li>
- *   <li>{@code applySeamlessTransition()} — dispatcher routing RELOAD_SAME_LEVEL and
+ *   <li>{@code nextAct()} â€” act increment with wrap</li>
+ *   <li>{@code nextZone()} â€” zone increment with wrap</li>
+ *   <li>{@code advanceToNextLevel()} â€” progression (act then zone)</li>
+ *   <li>{@code advanceZoneActOnly()} â€” counter-only advance for special stage entry</li>
+ *   <li>{@code consumeSpecialStageReturnLevelReloadRequest()} â€” flag set by above</li>
+ *   <li>{@code applySeamlessTransition()} â€” dispatcher routing RELOAD_SAME_LEVEL and
  *       RELOAD_TARGET_LEVEL through executeActTransition</li>
- *   <li>{@code respawnPlayer()} — death respawn through loadCurrentLevel(false)</li>
+ *   <li>{@code respawnPlayer()} â€” death respawn through loadCurrentLevel(false)</li>
  * </ul>
  */
 @RequiresRom(SonicGame.SONIC_2)
 public class TestLevelEntryPathsHeadless {
-
-    @ClassRule public static RequiresRomRule romRule = new RequiresRomRule();
-
     private static final int ZONE_EHZ = 0;
     private static final int ACT_1 = 0;
     private static final int ACT_2 = 1;
     private static SharedLevel sharedLevel;
 
-    @BeforeClass
+    @BeforeAll
     public static void loadLevel() throws Exception {
         sharedLevel = SharedLevel.load(SonicGame.SONIC_2, ZONE_EHZ, ACT_1);
     }
 
-    @AfterClass
+    @AfterAll
     public static void cleanup() {
         if (sharedLevel != null) sharedLevel.dispose();
     }
 
     private HeadlessTestFixture fixture;
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         fixture = HeadlessTestFixture.builder()
                 .withSharedLevel(sharedLevel)
@@ -80,11 +76,11 @@ public class TestLevelEntryPathsHeadless {
     @Test
     public void nextActAdvancesActCounter() throws Exception {
         LevelManager lm = GameServices.level();
-        assertEquals("Should start at act 0", ACT_1, lm.getCurrentAct());
+        assertEquals(ACT_1, lm.getCurrentAct(), "Should start at act 0");
 
         lm.nextAct();
 
-        assertEquals("Act should advance to 1 after nextAct()", ACT_2, lm.getCurrentAct());
+        assertEquals(ACT_2, lm.getCurrentAct(), "Act should advance to 1 after nextAct()");
     }
 
     @Test
@@ -95,22 +91,19 @@ public class TestLevelEntryPathsHeadless {
 
         lm.nextAct();
 
-        assertNotSame("ObjectManager should be rebuilt after nextAct()",
-                beforeOM, lm.getObjectManager());
-        assertNotSame("RingManager should be rebuilt after nextAct()",
-                beforeRM, lm.getRingManager());
+        assertNotSame(beforeOM, lm.getObjectManager(), "ObjectManager should be rebuilt after nextAct()");
+        assertNotSame(beforeRM, lm.getRingManager(), "RingManager should be rebuilt after nextAct()");
     }
 
     @Test
     public void nextActWrapsToZeroWhenExhausted() throws Exception {
         LevelManager lm = GameServices.level();
 
-        // EHZ has 2 acts — two nextAct() calls should wrap back to 0
-        lm.nextAct(); // act 0 → 1
-        lm.nextAct(); // act 1 → 0 (wrap)
+        // EHZ has 2 acts â€” two nextAct() calls should wrap back to 0
+        lm.nextAct(); // act 0 â†’ 1
+        lm.nextAct(); // act 1 â†’ 0 (wrap)
 
-        assertEquals("Act should wrap to 0 after exhausting all acts",
-                ACT_1, lm.getCurrentAct());
+        assertEquals(ACT_1, lm.getCurrentAct(), "Act should wrap to 0 after exhausting all acts");
     }
 
     // ========== nextZone() ==========
@@ -121,8 +114,8 @@ public class TestLevelEntryPathsHeadless {
 
         lm.nextZone();
 
-        assertEquals("Zone should advance by 1", ZONE_EHZ + 1, lm.getCurrentZone());
-        assertEquals("Act should reset to 0 on zone change", ACT_1, lm.getCurrentAct());
+        assertEquals(ZONE_EHZ + 1, lm.getCurrentZone(), "Zone should advance by 1");
+        assertEquals(ACT_1, lm.getCurrentAct(), "Act should reset to 0 on zone change");
     }
 
     @Test
@@ -132,8 +125,7 @@ public class TestLevelEntryPathsHeadless {
 
         lm.nextZone();
 
-        assertNotSame("ObjectManager should be rebuilt after nextZone()",
-                beforeOM, lm.getObjectManager());
+        assertNotSame(beforeOM, lm.getObjectManager(), "ObjectManager should be rebuilt after nextZone()");
     }
 
     // ========== advanceToNextLevel() ==========
@@ -144,22 +136,20 @@ public class TestLevelEntryPathsHeadless {
 
         lm.advanceToNextLevel();
 
-        assertEquals("Should still be in same zone", ZONE_EHZ, lm.getCurrentZone());
-        assertEquals("Should advance to act 1", ACT_2, lm.getCurrentAct());
+        assertEquals(ZONE_EHZ, lm.getCurrentZone(), "Should still be in same zone");
+        assertEquals(ACT_2, lm.getCurrentAct(), "Should advance to act 1");
     }
 
     @Test
     public void advanceToNextLevelAdvancesZoneWhenActsExhausted() throws Exception {
         LevelManager lm = GameServices.level();
 
-        // EHZ has 2 acts — two advanceToNextLevel() calls should move to next zone
-        lm.advanceToNextLevel(); // EHZ act 0 → EHZ act 1
-        lm.advanceToNextLevel(); // EHZ act 1 → next zone act 0
+        // EHZ has 2 acts â€” two advanceToNextLevel() calls should move to next zone
+        lm.advanceToNextLevel(); // EHZ act 0 â†’ EHZ act 1
+        lm.advanceToNextLevel(); // EHZ act 1 â†’ next zone act 0
 
-        assertEquals("Should advance to next zone when acts exhausted",
-                ZONE_EHZ + 1, lm.getCurrentZone());
-        assertEquals("Act should reset to 0 on zone advance",
-                ACT_1, lm.getCurrentAct());
+        assertEquals(ZONE_EHZ + 1, lm.getCurrentZone(), "Should advance to next zone when acts exhausted");
+        assertEquals(ACT_1, lm.getCurrentAct(), "Act should reset to 0 on zone advance");
     }
 
     // ========== advanceZoneActOnly() ==========
@@ -172,11 +162,10 @@ public class TestLevelEntryPathsHeadless {
         lm.advanceZoneActOnly();
 
         // Counters advance
-        assertEquals("Act should advance to 1", ACT_2, lm.getCurrentAct());
+        assertEquals(ACT_2, lm.getCurrentAct(), "Act should advance to 1");
 
         // But managers are NOT rebuilt (no level load happened)
-        assertSame("ObjectManager should NOT change — no level load occurred",
-                beforeOM, lm.getObjectManager());
+        assertSame(beforeOM, lm.getObjectManager(), "ObjectManager should NOT change â€” no level load occurred");
     }
 
     @Test
@@ -187,8 +176,7 @@ public class TestLevelEntryPathsHeadless {
 
         lm.advanceZoneActOnly();
 
-        assertTrue("Flag should be true after advanceZoneActOnly",
-                lm.consumeSpecialStageReturnLevelReloadRequest());
+        assertTrue(lm.consumeSpecialStageReturnLevelReloadRequest(), "Flag should be true after advanceZoneActOnly");
     }
 
     @Test
@@ -199,19 +187,17 @@ public class TestLevelEntryPathsHeadless {
         // First consume returns true
         assertTrue(lm.consumeSpecialStageReturnLevelReloadRequest());
         // Second consume returns false (consumed)
-        assertFalse("Flag should be cleared after consumption",
-                lm.consumeSpecialStageReturnLevelReloadRequest());
+        assertFalse(lm.consumeSpecialStageReturnLevelReloadRequest(), "Flag should be cleared after consumption");
     }
 
     @Test
     public void advanceZoneActOnlyClearsCheckpoint() {
         LevelManager lm = GameServices.level();
-        assertNotNull("Checkpoint state should exist", lm.getCheckpointState());
+        assertNotNull(lm.getCheckpointState(), "Checkpoint state should exist");
 
         lm.advanceZoneActOnly();
 
-        assertFalse("Checkpoint should be cleared after advanceZoneActOnly",
-                lm.getCheckpointState().isActive());
+        assertFalse(lm.getCheckpointState().isActive(), "Checkpoint should be cleared after advanceZoneActOnly");
     }
 
     // ========== applySeamlessTransition() dispatcher ==========
@@ -230,10 +216,9 @@ public class TestLevelEntryPathsHeadless {
         lm.applySeamlessTransition(request);
 
         // Verify it routed through executeActTransition (managers rebuilt, zone/act updated)
-        assertEquals("Zone should be EHZ", ZONE_EHZ, lm.getCurrentZone());
-        assertEquals("Act should be 2", ACT_2, lm.getCurrentAct());
-        assertNotSame("ObjectManager should be rebuilt via executeActTransition",
-                beforeOM, lm.getObjectManager());
+        assertEquals(ZONE_EHZ, lm.getCurrentZone(), "Zone should be EHZ");
+        assertEquals(ACT_2, lm.getCurrentAct(), "Act should be 2");
+        assertNotSame(beforeOM, lm.getObjectManager(), "ObjectManager should be rebuilt via executeActTransition");
     }
 
     @Test
@@ -251,10 +236,9 @@ public class TestLevelEntryPathsHeadless {
         lm.applySeamlessTransition(request);
 
         // RELOAD_SAME_LEVEL builds an adjusted request targeting current zone/act
-        assertEquals("Zone should remain unchanged", zoneBefore, lm.getCurrentZone());
-        assertEquals("Act should remain unchanged", actBefore, lm.getCurrentAct());
-        assertNotSame("ObjectManager should be rebuilt even for same-level reload",
-                beforeOM, lm.getObjectManager());
+        assertEquals(zoneBefore, lm.getCurrentZone(), "Zone should remain unchanged");
+        assertEquals(actBefore, lm.getCurrentAct(), "Act should remain unchanged");
+        assertNotSame(beforeOM, lm.getObjectManager(), "ObjectManager should be rebuilt even for same-level reload");
     }
 
     @Test
@@ -264,8 +248,26 @@ public class TestLevelEntryPathsHeadless {
 
         lm.applySeamlessTransition(null);
 
-        assertSame("Null request should be a no-op",
-                beforeOM, lm.getObjectManager());
+        assertSame(beforeOM, lm.getObjectManager(), "Null request should be a no-op");
+    }
+
+    @Test
+    public void headlessRunnerConsumesPendingSeamlessTransitionBeforeFrameTick() {
+        LevelManager lm = GameServices.level();
+        ObjectManager beforeOM = lm.getObjectManager();
+
+        lm.requestSeamlessTransition(SeamlessLevelTransitionRequest
+                .builder(TransitionType.RELOAD_TARGET_LEVEL)
+                .targetZoneAct(ZONE_EHZ, ACT_2)
+                .preserveMusic(true)
+                .build());
+
+        fixture.stepIdleFrames(1);
+
+        assertEquals(ZONE_EHZ, lm.getCurrentZone(), "Zone should remain EHZ after transition");
+        assertEquals(ACT_2, lm.getCurrentAct(), "Headless runner should apply pending seamless transition");
+        assertNotSame(beforeOM, lm.getObjectManager(),
+                "Headless runner should rebuild managers when consuming seamless transitions");
     }
 
     // ========== respawnPlayer() ==========
@@ -278,10 +280,8 @@ public class TestLevelEntryPathsHeadless {
 
         lm.respawnPlayer();
 
-        assertNotSame("ObjectManager should be rebuilt after respawn",
-                beforeOM, lm.getObjectManager());
-        assertNotSame("RingManager should be rebuilt after respawn",
-                beforeRM, lm.getRingManager());
+        assertNotSame(beforeOM, lm.getObjectManager(), "ObjectManager should be rebuilt after respawn");
+        assertNotSame(beforeRM, lm.getRingManager(), "RingManager should be rebuilt after respawn");
     }
 
     @Test
@@ -292,8 +292,8 @@ public class TestLevelEntryPathsHeadless {
 
         lm.respawnPlayer();
 
-        assertEquals("Zone should not change on respawn", zoneBefore, lm.getCurrentZone());
-        assertEquals("Act should not change on respawn", actBefore, lm.getCurrentAct());
+        assertEquals(zoneBefore, lm.getCurrentZone(), "Zone should not change on respawn");
+        assertEquals(actBefore, lm.getCurrentAct(), "Act should not change on respawn");
     }
 
     // ========== loadZoneAndAct() ==========
@@ -305,9 +305,11 @@ public class TestLevelEntryPathsHeadless {
 
         lm.loadZoneAndAct(ZONE_EHZ, ACT_2);
 
-        assertEquals("Zone should be set to target", ZONE_EHZ, lm.getCurrentZone());
-        assertEquals("Act should be set to target", ACT_2, lm.getCurrentAct());
-        assertNotSame("Managers should be rebuilt after loadZoneAndAct",
-                beforeOM, lm.getObjectManager());
+        assertEquals(ZONE_EHZ, lm.getCurrentZone(), "Zone should be set to target");
+        assertEquals(ACT_2, lm.getCurrentAct(), "Act should be set to target");
+        assertNotSame(beforeOM, lm.getObjectManager(), "Managers should be rebuilt after loadZoneAndAct");
     }
 }
+
+
+

@@ -3,9 +3,20 @@ import com.openggf.level.objects.BoxObjectInstance;
 
 import com.openggf.game.sonic2.Sonic2ObjectArtKeys;
 import com.openggf.game.PlayableEntity;
+import com.openggf.game.solid.PlayerSolidContactResult;
+import com.openggf.game.solid.SolidCheckpointBatch;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
-import com.openggf.level.objects.*;
+import com.openggf.level.objects.BoxObjectInstance;
+import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.SlopedSolidProvider;
+import com.openggf.level.objects.SolidContact;
+import com.openggf.level.objects.SolidExecutionMode;
+import com.openggf.level.objects.SolidObjectListener;
+import com.openggf.level.objects.SolidObjectParams;
+import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -23,7 +34,7 @@ import java.util.List;
  * Subtype 0xFF: Seesaw without ball (ball not spawned).
  */
 public class SeesawObjectInstance extends BoxObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, SlopedSolidProvider {
+        implements SolidObjectProvider, SolidObjectListener, SlopedSolidProvider, RewindRecreatable {
 
     /**
      * Slope data for tilted state (frame 0 or 2).
@@ -87,6 +98,19 @@ public class SeesawObjectInstance extends BoxObjectInstance
         }
     }
 
+    @Override
+    public SeesawObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new SeesawObjectInstance(ctx.spawn(), "Seesaw");
+    }
+
+    @Override
+    public int getBalanceWidthPixels() {
+        // Obj14_Init writes width_pixels=$30; Sonic_Move/Tails_Move read that
+        // SST byte directly for object-edge balance (docs/s2disasm/s2.asm:
+        // 47402-47409, 36586, 39707).
+        return COLLISION_HALF_WIDTH;
+    }
+
     /**
      * Spawn ball on first update if not already spawned.
      * This deferred spawning ensures ObjectManager is available.
@@ -115,20 +139,21 @@ public class SeesawObjectInstance extends BoxObjectInstance
         if (isFlippedHorizontal()) {
             ballX = spawn.x() - 0x28;
         }
+        final int childBallX = ballX;
+        final int childBallY = ballY;
 
-        ball = new SeesawBallObjectInstance(
-                spawn.x(), // Seesaw center X for reference
-                spawn.y() + 0x10, // Bottom of seesaw Y
-                ballX,
-                ballY,
-                this,
-                isFlippedHorizontal()
-        );
-
-        // Register the ball with ObjectManager
-        ObjectManager objectManager = services().objectManager();
-        if (objectManager != null) {
-            objectManager.addDynamicObject(ball);
+        if (services().objectManager() != null) {
+            // ROM Obj14_Init uses AllocateObjectAfterCurrent for the ball child
+            // (docs/s2disasm/s2.asm:47020), so the child executes after the
+            // parent in the same object pass when a higher slot is available.
+            ball = spawnChild(() -> new SeesawBallObjectInstance(
+                    spawn.x(), // Seesaw center X for reference
+                    spawn.y() + 0x10, // Bottom of seesaw Y
+                    childBallX,
+                    childBallY,
+                    this,
+                    isFlippedHorizontal()
+            ));
         }
     }
 
@@ -137,51 +162,12 @@ public class SeesawObjectInstance extends BoxObjectInstance
      */
     @Override
     public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        if (player == null) {
-            return;
-        }
-
-        // Determine if this is player 1 or player 2
-        boolean isPlayer1 = isMainCharacter(player);
-
-        if (!contact.standing()) {
-            // Player left the seesaw - clear standing tracking
-            // ROM: bclr #p1_standing_bit,status(a0) / bclr #p2_standing_bit,status(a0)
-            if (isPlayer1) {
-                standingPlayer1 = null;
-            } else {
-                standingPlayer2 = null;
-            }
-            return;
-        }
-
-        // Track this player as standing on the seesaw
-        // ROM: bset #p1_standing_bit,status(a0) / bset #p2_standing_bit,status(a0)
-        if (isPlayer1) {
-            standingPlayer1 = player;
-        } else {
-            standingPlayer2 = player;
-        }
-
-        // Note: Y velocity storage is handled in update() when NEITHER player is standing,
-        // capturing the approaching velocity BEFORE landing (ROM: loc_21A38).
-        // We do NOT store Y velocity on contact since ROM only stores when neither is standing.
-
-        // Calculate angles for standing players and average if both standing
-        // ROM: loc_21A28 through loc_21A4C
-        int targetAngle = calculateCombinedTargetAngle();
-
-        // Update current angle toward target (gradual transition)
-        updateAngle(targetAngle);
+        // Manual checkpoints drive seesaw standing state from update().
     }
 
-    /**
-     * Determines if the given player is the main character (player 1).
-     */
-    private boolean isMainCharacter(AbstractPlayableSprite player) {
-        // If player is not any sidekick, they're the main character
-        return !services().sidekicks().contains(player);
+    @Override
+    public SolidExecutionMode solidExecutionMode() {
+        return SolidExecutionMode.MANUAL_CHECKPOINT;
     }
 
     /**
@@ -263,10 +249,42 @@ public class SeesawObjectInstance extends BoxObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // Spawn ball on first update
         ensureBallSpawned();
+
+        // ROM Obj14_Main (s2.asm:47037-47115) order:
+        //   1. Read previous-frame p1_standing_bit / p2_standing_bit on the
+        //      seesaw object (status(a0)).
+        //   2. If any standing bit is set, recompute target d1 from the
+        //      standing player's current x_pos.
+        //   3. Obj14_UpdateMappingAndCollision -> Obj14_SetMapping FIRST
+        //      (updates mapping_frame BEFORE collision).
+        //   4. THEN SlopedPlatform runs with the freshly-updated
+        //      mapping_frame / slope table / x_flip.
+        //
+        // Engine equivalent: compute target from PREVIOUS-frame
+        // standingPlayer1/2 (which were latched at the end of the prior
+        // frame's update), call updateAngle() to step mapping_frame, then
+        // resolve solid contacts so getSlopeData() / isSlopeFlipped() see
+        // the new mapping_frame. The earlier ordering (resolve -> update)
+        // sampled the slope a frame behind: HTZ1 trace f1017 ROM
+        // transitioned mapping_frame 2 -> 1 and sampled SLOPE_FLAT (5),
+        // landing Sonic at y=0x03D0; the engine sampled mapping_frame=2
+        // SLOPE_TILTED xFlip (sample 2), landing him at y=0x03D3.
+        int targetAngle = (standingPlayer1 != null || standingPlayer2 != null)
+                ? calculateCombinedTargetAngle()
+                : currentAngle;
+        updateAngle(targetAngle);
+
+        SolidCheckpointBatch batch = services().solidExecution().resolveSolidNowAll();
+        PlayerSolidContactResult mainResult = player != null ? batch.perPlayer().get(player) : null;
+        standingPlayer1 = mainResult != null && mainResult.standingNow() ? player : null;
+
+        AbstractPlayableSprite sidekickSprite = nativeP2SpriteOrNull();
+        PlayerSolidContactResult sidekickResult = sidekickSprite != null ? batch.perPlayer().get(sidekickSprite) : null;
+        standingPlayer2 = sidekickResult != null && sidekickResult.standingNow() ? sidekickSprite : null;
 
         // ROM: SlopedPlatform_SingleCharacter runs every frame to validate standing players.
         // Checks in_air status and X bounds, clearing standing bit if either fails.
@@ -276,23 +294,19 @@ public class SeesawObjectInstance extends BoxObjectInstance
         // ROM: loc_21A38 - Store max Y velocity when NEITHER player is standing
         // This prepares for heavy landing detection before the player actually lands
         if (standingPlayer1 == null && standingPlayer2 == null) {
-            // player parameter is always the main character
-            int p1Vel = (player != null) ? player.getYSpeed() : 0;
-            int p2Vel = 0;
-            for (PlayableEntity sidekick : services().sidekicks()) {
-                p2Vel = Math.max(p2Vel, sidekick.getYSpeed());
-            }
+            int p1Vel = mainResult != null ? mainResult.preContact().ySpeed() : 0;
+            int p2Vel = sidekickResult != null ? sidekickResult.preContact().ySpeed() : 0;
 
             // Bug fix #4: ROM always overwrites with max of both players.
             // Java incorrectly only updated if new value was higher.
             // ROM: cmp.w d0,d2 / blt.s + / move.w d2,d0 then move.w d0,objoff_38(a1)
             storedPlayerYVel = Math.max(p1Vel, p2Vel);
         }
+    }
 
-        // ROM: Obj14_SetMapping is called every frame to animate visual transition
-        // Bug fix: Without this, seesaw doesn't tilt after ball lands because
-        // setCurrentAngle() only updates currentAngle, not mappingFrame
-        updateAngle(currentAngle);
+    private AbstractPlayableSprite nativeP2SpriteOrNull() {
+        PlayableEntity nativeP2 = services().playerQuery().nativeP2OrNull();
+        return nativeP2 instanceof AbstractPlayableSprite sprite ? sprite : null;
     }
 
     /**
@@ -373,8 +387,22 @@ public class SeesawObjectInstance extends BoxObjectInstance
         this.standingPlayer2 = null;
     }
 
-    private boolean isFlippedHorizontal() {
+    public boolean isFlippedHorizontal() {
         return (spawn.renderFlags() & 0x1) != 0;
+    }
+
+    /**
+     * Whether this seesaw currently has a live (non-destroyed) ball child.
+     * Used by rewind graph restore to relink a recreated ball to the one seesaw
+     * still missing its ball (one ball per subtype-0 seesaw).
+     */
+    public boolean hasLiveBall() {
+        return ball != null && !ball.isDestroyed();
+    }
+
+    void adoptBallForRewind(SeesawBallObjectInstance restoredBall) {
+        ball = restoredBall;
+        ballSpawned = true;
     }
 
     /**
@@ -413,7 +441,7 @@ public class SeesawObjectInstance extends BoxObjectInstance
 
     @Override
     public SolidObjectParams getSolidParams() {
-        return new SolidObjectParams(COLLISION_HALF_WIDTH, COLLISION_HEIGHT, COLLISION_HEIGHT);
+        return SolidObjectParams.of(COLLISION_HALF_WIDTH, COLLISION_HEIGHT, COLLISION_HEIGHT);
     }
 
     @Override
@@ -425,11 +453,15 @@ public class SeesawObjectInstance extends BoxObjectInstance
 
     @Override
     public int getSlopeBaseline() {
-        // ROM's SlopedPlatform overwrites d3 (height param) with the slope sample,
-        // so the surface is at object_y - slopeSample. But the Java framework bakes
-        // halfHeight into the landing snap via maxTop, so slopeBase must equal
-        // halfHeight to compensate: baseY - halfHeight = anchorY - slopeSample.
-        return COLLISION_HEIGHT;
+        // ROM SlopedPlatform (s2.asm:35787-35793) overwrites d3 with the slope
+        // sample (move.b (a2,d0.w),d3 / ext.w d3), then computes the surface as
+        // y_pos(a0) - d3 directly — no baseline subtraction. S2's slope tables
+        // (byte_21C8E / byte_21CBF) already encode absolute pixel offsets from
+        // object_y, with positive values lifting the surface above object_y and
+        // negative values dropping below. Subtracting COLLISION_HEIGHT would
+        // shift the apparent surface 8 px lower than ROM, causing the engine to
+        // miss the f988 HTZ1 landing where Sonic falls onto a tilted seesaw.
+        return 0;
     }
 
     @Override
@@ -465,5 +497,15 @@ public class SeesawObjectInstance extends BoxObjectInstance
     @Override
     public int getPriorityBucket() {
         return RenderPriority.clamp(PRIORITY);
+    }
+
+    @Override
+    public String traceDebugDetails() {
+        return String.format("angle=%d frame=%d storedY=%04X p1=%s p2=%s",
+                currentAngle,
+                mappingFrame,
+                storedPlayerYVel & 0xFFFF,
+                standingPlayer1 != null,
+                standingPlayer2 != null);
     }
 }

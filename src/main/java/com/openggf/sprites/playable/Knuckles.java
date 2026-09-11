@@ -22,7 +22,7 @@ public class Knuckles extends AbstractPlayableSprite {
 		}
 		// ROM: During hurt bounce (routine 4), DisplaySprite is called directly
 		// (always visible). Flashing only occurs after landing (routine 2).
-		if (!isHurt() && getInvulnerableFrames() > 0 && (getInvulnerableFrames() & 0x04) == 0) {
+		if (!shouldRefreshRenderFlagThisFrame()) {
 			if (getSpindashDustController() != null) {
 				getSpindashDustController().draw();
 			}

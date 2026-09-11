@@ -5,8 +5,13 @@ import com.openggf.debug.DebugRenderContext;
 import com.openggf.game.PlayableEntity;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
+import com.openggf.level.objects.ObjectPlayerParticipationPolicy;
+import com.openggf.level.objects.ObjectPlayerQuery;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
+import com.openggf.sprites.NativePositionOps;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
+import com.openggf.sprites.playable.ObjectControlState;
 
 import java.util.List;
 
@@ -33,7 +38,8 @@ import java.util.List;
  * the data table ({@code word_31124}). Each entry defines left/right X boundaries.
  * Status bit 0 (render_flags bit 0) controls orientation: 0 = rightward, 1 = leftward.
  */
-public class HCZConveyorBeltObjectInstance extends AbstractObjectInstance {
+public class HCZConveyorBeltObjectInstance extends AbstractObjectInstance
+        implements SpawnRewindRecreatable {
 
     // ===== Conveyor belt boundary data table (word_31124, sonic3k.asm:66287-66303) =====
     // Each entry: { leftX, rightX } defining the horizontal bounds of a belt.
@@ -144,14 +150,14 @@ public class HCZConveyorBeltObjectInstance extends AbstractObjectInstance {
     private final PlayerBeltState p2State = new PlayerBeltState();
 
     // ===== Instance fields =====
-    private final int objY;               // Object Y position
-    private final boolean flipped;        // status bit 0: 0=rightward, 1=leftward
-    private final int leftBound;          // $3C(a0): left X from table
-    private final int rightBound;         // $3E(a0): right X from table
-    private final int activeLeftBound;    // $40(a0): adjusted left X for detection
-    private final int activeRightBound;   // $42(a0): adjusted right X for detection
-    private final int rawSubtype;         // Full subtype byte for load-array indexing
-    private final int subtypeIndex;       // Low nibble used by the bounds table
+    private int objY;                     // Object Y position
+    private boolean flipped;              // status bit 0: 0=rightward, 1=leftward
+    private int leftBound;                // $3C(a0): left X from table
+    private int rightBound;               // $3E(a0): right X from table
+    private int activeLeftBound;          // $40(a0): adjusted left X for detection
+    private int activeRightBound;         // $42(a0): adjusted right X for detection
+    private int rawSubtype;               // Full subtype byte for load-array indexing
+    private int subtypeIndex;             // Low nibble used by the bounds table
     private boolean initialized = false;
 
     public HCZConveyorBeltObjectInstance(ObjectSpawn spawn) {
@@ -177,41 +183,50 @@ public class HCZConveyorBeltObjectInstance extends AbstractObjectInstance {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Self-contained: all state (including the {@code final} bound fields) is
+     * derived deterministically from the captured spawn, so re-running the constructor
+     * reproduces it exactly. Replaces the former explicit dynamic restore path
+     * (Phase-2 codec-deletion batch 2).
+     */
+
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         // ROM: First-frame initialization (sonic3k.asm:66306-66342)
         if (!initialized) {
             initialized = true;
             // ROM: tst.b (a1,d0.w) / beq.s loc_31186 — check if already loaded
             if (loadArray[rawSubtype]) {
                 // Another instance is already loaded — delete self
-                // ROM: loc_31180 (sonic3k.asm:66317-66318)
-                setDestroyed(true);
+                // ROM: loc_31180 clears respawn_addr bit 7 before
+                // Delete_Current_Sprite (sonic3k.asm:66317-66323).
+                setDestroyedByOffscreen();
                 return;
             }
             // ROM: move.b #1,(a1,d0.w) — mark as loaded
             loadArray[rawSubtype] = true;
         }
 
-        AbstractPlayableSprite player = (playerEntity instanceof AbstractPlayableSprite)
-                ? (AbstractPlayableSprite) playerEntity : null;
+        NativePlayerSlots slots = nativePlayerSlots(playerEntity);
 
         // ROM: loc_311C4 (sonic3k.asm:66344-66365)
         // Process Player 1
-        if (player != null) {
-            processPlayer(player, p1State, frameCounter);
+        if (slots.p1 != null) {
+            processPlayer(slots.p1, p1State, vIntRunCount);
         }
 
-        // Process sidekicks (Player 2)
-        for (PlayableEntity sidekick : services().sidekicks()) {
-            if (sidekick instanceof AbstractPlayableSprite sk) {
-                processPlayer(sk, p2State, frameCounter);
-            }
+        // Process native Player 2 only. Extended engine sidekicks need their own
+        // per-sidekick state before they can safely participate in this object.
+        if (slots.p2 != null) {
+            processPlayer(slots.p2, p2State, vIntRunCount);
         }
 
         // Camera culling (sonic3k.asm:66355-66364)
-        // ROM: move.w (Camera_X_pos_coarse_back).w,d1 — camera X rounded to 128px boundary
-        int cameraX = services().camera().getX() & 0xFF80;
+        // ROM reads Camera_X_pos_coarse_back, which Load_Sprites recomputes as
+        // (Camera_X_pos - $80) & $FF80 before Process_Sprites.
+        int cameraX = ((services().camera().getX() & 0xFFFF) - 0x80) & 0xFF80;
         int leftCheck = (leftBound & 0xFF80) - CAMERA_MARGIN;
         if (cameraX < leftCheck) {
             unloadBelt();
@@ -223,19 +238,44 @@ public class HCZConveyorBeltObjectInstance extends AbstractObjectInstance {
         }
     }
 
+    private NativePlayerSlots nativePlayerSlots(PlayableEntity updatePlayer) {
+        ObjectPlayerQuery query = services().playerQuery();
+        PlayableEntity main = query.mainPlayerOrNull();
+        if (!(main instanceof AbstractPlayableSprite) && updatePlayer instanceof AbstractPlayableSprite) {
+            main = updatePlayer;
+        }
+
+        AbstractPlayableSprite p1 = (main instanceof AbstractPlayableSprite sprite) ? sprite : null;
+        AbstractPlayableSprite p2 = null;
+        for (PlayableEntity candidate : query.playersFor(ObjectPlayerParticipationPolicy.NATIVE_P1_P2)) {
+            if (candidate == main || !(candidate instanceof AbstractPlayableSprite sprite)) {
+                continue;
+            }
+            p2 = sprite;
+            break;
+        }
+        if (p2 == p1) {
+            p2 = null;
+        }
+        return new NativePlayerSlots(p1, p2);
+    }
+
+    private record NativePlayerSlots(AbstractPlayableSprite p1, AbstractPlayableSprite p2) {
+    }
+
     /**
      * Processes interaction for a single player against this conveyor belt.
      * <p>
      * ROM: sub_31226 (sonic3k.asm:66384-66547).
      */
     private void processPlayer(AbstractPlayableSprite player, PlayerBeltState state,
-                               int frameCounter) {
+                               int vIntRunCount) {
         if (state.active) {
             // Player is currently on the belt — handle input and movement
-            processOnBelt(player, state, frameCounter);
+            processOnBelt(player, state, vIntRunCount);
         } else {
             // Player is not on the belt — check for capture
-            processOffBelt(player, state, frameCounter);
+            processOffBelt(player, state, vIntRunCount);
         }
     }
 
@@ -245,47 +285,45 @@ public class HCZConveyorBeltObjectInstance extends AbstractObjectInstance {
      * ROM: sub_31226, active path (sonic3k.asm:66384-66457).
      */
     private void processOnBelt(AbstractPlayableSprite player, PlayerBeltState state,
-                               int frameCounter) {
+                               int vIntRunCount) {
         // ROM: tst.w (Debug_placement_mode).w (sonic3k.asm:66387-66388)
         if (player.isDebugMode()) {
-            releaseBelt(player, state, frameCounter);
+            releaseBelt(player, state, vIntRunCount);
             return;
         }
         // ROM: cmpi.b #4,routine(a1) (sonic3k.asm:66389-66390)
         if (player.isHurt() || player.getDead()) {
-            releaseBelt(player, state, frameCounter);
+            releaseBelt(player, state, vIntRunCount);
             return;
         }
 
         // ROM: Left input (sonic3k.asm:66391-66399)
         if (player.isLeftPressed()) {
             // ROM: subq.w #1,x_pos(a1)
-            player.setCentreX((short) (player.getCentreX() - 1));
+            NativePositionOps.addXPosPreserveSubpixel(player, -1);
             advanceAnimOnInput(state);
         }
 
         // ROM: Right input (sonic3k.asm:66400-66408)
         if (player.isRightPressed()) {
             // ROM: addq.w #1,x_pos(a1)
-            player.setCentreX((short) (player.getCentreX() + 1));
+            NativePositionOps.addXPosPreserveSubpixel(player, 1);
             advanceAnimOnInput(state);
         }
 
-        // ROM: Jump check (A/B/C buttons) (sonic3k.asm:66411-66412)
-        // ROM uses andi.w #button_A_mask|button_B_mask|button_C_mask,d1 which tests the
-        // LOW byte of Ctrl_1_logical = newly pressed buttons only, NOT held state.
-        // We track previous frame's held state to detect new presses.
-        boolean jumpHeld = player.isJumpPressed();
-        boolean jumpNewPress = jumpHeld && !state.lastJumpHeld;
-        state.lastJumpHeld = jumpHeld;
-        if (jumpNewPress) {
+        // ROM: loc_311C4 loads Ctrl_1_logical / Ctrl_2_logical into d1, then
+        // sub_31226 tests the low-byte A/B/C press bits (sonic3k.asm:66344-66354,
+        // 66411-66412). Object execution happens after player movement in the
+        // engine, so the transient raw edge may already be consumed; retain the
+        // ROM-visible logical word published for this update instead.
+        if (player.isLogicalJumpPressActive()) {
             // ROM: loc_312C0 (sonic3k.asm:66434-66438)
             if (player.isInWater()) {
                 player.setYSpeed(JUMP_VELOCITY_UNDERWATER);
             } else {
                 player.setYSpeed(JUMP_VELOCITY);
             }
-            releaseBelt(player, state, frameCounter);
+            releaseBelt(player, state, vIntRunCount);
             return;
         }
 
@@ -295,13 +333,13 @@ public class HCZConveyorBeltObjectInstance extends AbstractObjectInstance {
             // ROM: btst #0,status(a0) / beq.s / neg.w d0 (sonic3k.asm:66414-66416)
             autoMove = -autoMove;
         }
-        player.setCentreX((short) (player.getCentreX() + autoMove));
+        NativePositionOps.addXPosPreserveSubpixel(player, autoMove);
 
         // ROM: Bounds check (sonic3k.asm:66420-66424)
         int playerX = player.getCentreX() & 0xFFFF;
         if (playerX < activeLeftBound || playerX >= activeRightBound) {
             // Player has moved off the belt
-            releaseBelt(player, state, frameCounter);
+            releaseBelt(player, state, vIntRunCount);
             return;
         }
 
@@ -315,7 +353,7 @@ public class HCZConveyorBeltObjectInstance extends AbstractObjectInstance {
      * ROM: loc_31322 (sonic3k.asm:66460-66547).
      */
     private void processOffBelt(AbstractPlayableSprite player, PlayerBeltState state,
-                                int frameCounter) {
+                                int vIntRunCount) {
         // ROM: tst.b 2(a2) / beq.s loc_3132E (sonic3k.asm:66460-66464)
         if (state.cooldownTimer > 0) {
             state.cooldownTimer--;
@@ -330,12 +368,12 @@ public class HCZConveyorBeltObjectInstance extends AbstractObjectInstance {
 
         // ROM: cmpi.w #1,ground_vel(a1) / beq.w loc_313D6 (sonic3k.asm:66473-66474)
         if (player.getGSpeed() == 1) {
-            tryCapturHanging(player, state, frameCounter);
+            tryCapturHanging(player, state, vIntRunCount);
             return;
         }
 
         // ROM: Standing-on-top detection (sonic3k.asm:66475-66511)
-        tryCapturStanding(player, state, frameCounter);
+        tryCapturStanding(player, state, vIntRunCount);
     }
 
     /**
@@ -344,7 +382,7 @@ public class HCZConveyorBeltObjectInstance extends AbstractObjectInstance {
      * ROM: loc_3132E, standing path (sonic3k.asm:66475-66511).
      */
     private void tryCapturStanding(AbstractPlayableSprite player, PlayerBeltState state,
-                                   int frameCounter) {
+                                   int vIntRunCount) {
         int playerY = player.getCentreY() & 0xFFFF;
 
         // ROM: Y range check for standing on top
@@ -377,7 +415,7 @@ public class HCZConveyorBeltObjectInstance extends AbstractObjectInstance {
      * Entered when {@code ground_vel == 1} (set by fan push).
      */
     private void tryCapturHanging(AbstractPlayableSprite player, PlayerBeltState state,
-                                  int frameCounter) {
+                                  int vIntRunCount) {
         int playerY = player.getCentreY() & 0xFFFF;
 
         // ROM: Y range check for hanging below
@@ -417,23 +455,14 @@ public class HCZConveyorBeltObjectInstance extends AbstractObjectInstance {
         // ROM: andi.b #$FC,render_flags(a1) — clear facing and V-flip
         player.setRenderFlips(false, false);
 
-        // Clear rolling state so the player is vulnerable to enemy touch responses
-        // while on the belt (e.g. Chopper can grab and hurt the player). The ROM
-        // capture sequence doesn't have an explicit bclr #Status_Roll, but observed
-        // gameplay confirms the player is NOT in an attacking state on the belt.
-        // Must clear BEFORE setCentreY so the snap uses standing-height coordinates.
-        if (player.getRolling()) {
-            player.setRolling(false);
-        }
-
         // ROM: move.w d0,y_pos(a1) — snap to belt surface
-        player.setCentreY((short) snapY);
+        NativePositionOps.writeYPosPreserveSubpixel(player, snapY);
 
         // ROM: move.b #0,anim(a1) — idle animation base
         player.setAnimationId(0);
 
-        // ROM: move.b #3,object_control(a1) — full object control
-        player.setObjectControlled(true);
+        // ROM: move.b #3,object_control(a1) — bits 0-6, movement suppressed but CPU/touch remain allowed.
+        ObjectControlState.nativeBits0To6CpuAllowedMovementSuppressed().applyTo(player);
 
         // ROM: move.b #$63/$65,mapping_frame(a1) — initial frame
         player.setObjectMappingFrameControl(true);
@@ -453,7 +482,8 @@ public class HCZConveyorBeltObjectInstance extends AbstractObjectInstance {
      * ROM: loc_312D4 (sonic3k.asm:66440-66457).
      */
     private void releaseBelt(AbstractPlayableSprite player, PlayerBeltState state,
-                             int frameCounter) {
+                             int vIntRunCount) {
+        int releaseCentreY = player.getCentreY() & 0xFFFF;
         // ROM: loc_312D4 does NOT modify ground_vel on release. The alternation
         // between top/bottom surfaces is driven by external forces (the HCZ fan)
         // setting ground_vel=1 each frame while the player is in its push column.
@@ -464,7 +494,7 @@ public class HCZConveyorBeltObjectInstance extends AbstractObjectInstance {
         state.cooldownTimer = player.isInWater() ? COOLDOWN_UNDERWATER : COOLDOWN_NORMAL;
 
         // ROM: andi.b #$FC,object_control(a1) — clear object control
-        player.releaseFromObjectControl(frameCounter);
+        player.releaseFromObjectControl(vIntRunCount);
 
         // ROM: bset #Status_InAir,status(a1) (sonic3k.asm:66449)
         player.setAir(true);
@@ -480,6 +510,9 @@ public class HCZConveyorBeltObjectInstance extends AbstractObjectInstance {
 
         // ROM: bset #Status_Roll,status(a1) (sonic3k.asm:66454)
         player.setRolling(true);
+        // Engine setRolling(true) shrinks top-left-based sprite dimensions, but
+        // ROM loc_312D4 only writes radii/status/anim and leaves y_pos unchanged.
+        NativePositionOps.writeYPosPreserveSubpixel(player, releaseCentreY);
 
         // ROM: bclr #Status_RollJump,status(a1) (sonic3k.asm:66455)
         player.setRollingJump(false);
@@ -595,7 +628,7 @@ public class HCZConveyorBeltObjectInstance extends AbstractObjectInstance {
         int yOffset = Y_OFFSET_TABLE[yIndex];
 
         // ROM: ext.w d1 / add.w y_pos(a0),d1 / move.w d1,y_pos(a1)
-        player.setCentreY((short) (objY + yOffset));
+        NativePositionOps.writeYPosPreserveSubpixel(player, objY + yOffset);
     }
 
     /**
@@ -610,19 +643,23 @@ public class HCZConveyorBeltObjectInstance extends AbstractObjectInstance {
         // Release any captured players
         // (In the original, players are released by the state checks in processOnBelt
         //  on the next frame. We proactively release here for safety.)
-        setDestroyed(true);
+        // ROM: loc_31204 clears respawn_addr bit 7 before Delete_Current_Sprite
+        // (sonic3k.asm:66656-66665), so the placement remains re-spawnable.
+        setDestroyedByOffscreen();
     }
 
     /**
      * Prevents the ObjectManager's standard out-of-range check from unloading this
-     * belt while a player is captured. The belt is very wide (leftBound to rightBound)
-     * but {@link #getX()} returns leftBound, so the standard check may see it as
-     * "off-screen" even though the player is still on it. The belt handles its own
-     * camera culling with a wider margin in {@link #update}.
+     * belt. The belt can be very wide (leftBound to rightBound, up to 688px) but
+     * {@link #getX()} returns leftBound, so the ObjectManager's isOutOfRangeS1
+     * check (which uses a 640px window from getX()) may kill the belt when the
+     * camera is near the right edge. The belt handles its own camera culling
+     * correctly using both leftBound and rightBound with a 0x280 margin in
+     * {@link #update}, so the external check must be bypassed entirely.
      */
     @Override
     public boolean isPersistent() {
-        return p1State.active || p2State.active;
+        return true;
     }
 
     /**
@@ -660,7 +697,7 @@ public class HCZConveyorBeltObjectInstance extends AbstractObjectInstance {
      */
     private void safeReleaseCapturedPlayer(PlayerBeltState state) {
         if (state.active && state.capturedPlayer != null) {
-            state.capturedPlayer.setObjectControlled(false);
+            ObjectControlState.none().applyTo(state.capturedPlayer);
             state.capturedPlayer.setObjectMappingFrameControl(false);
             state.capturedPlayer.setAir(true);
             state.active = false;
@@ -738,6 +775,5 @@ public class HCZConveyorBeltObjectInstance extends AbstractObjectInstance {
         int animCounter;      // byte 6(a2): frame animation counter
         int frameSetOffset;   // byte 8(a2): 0 or $10
         AbstractPlayableSprite capturedPlayer;  // reference for safe cleanup
-        boolean lastJumpHeld; // previous frame's jump button state for new-press detection
     }
 }

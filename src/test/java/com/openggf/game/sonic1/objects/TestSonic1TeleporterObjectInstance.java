@@ -1,12 +1,12 @@
 package com.openggf.game.sonic1.objects;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import com.openggf.game.sonic1.constants.Sonic1AnimationIds;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.TestObjectServices;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TestSonic1TeleporterObjectInstance {
 
@@ -20,6 +20,9 @@ public class TestSonic1TeleporterObjectInstance {
         // Capture on first update.
         teleporter.update(1, player);
         assertTrue(player.isObjectControlled());
+        assertFalse(player.isObjectControlAllowsCpu());
+        assertTrue(player.isObjectControlSuppressesMovement());
+        assertTrue(player.isTouchResponseSuppressedByObjectControl());
         assertTrue(player.isControlLocked());
         assertEquals(Sonic1AnimationIds.ROLL.id(), player.getForcedAnimationId());
 
@@ -33,7 +36,10 @@ public class TestSonic1TeleporterObjectInstance {
             frame++;
         }
 
-        assertFalse("teleporter should release within expected frame budget", player.isObjectControlled());
+        assertFalse(player.isObjectControlled(), "teleporter should release within expected frame budget");
+        assertFalse(player.isObjectControlAllowsCpu());
+        assertFalse(player.isObjectControlSuppressesMovement());
+        assertFalse(player.isTouchResponseSuppressedByObjectControl());
         assertFalse(player.isControlLocked());
         assertEquals(-1, player.getForcedAnimationId());
     }
@@ -47,11 +53,15 @@ public class TestSonic1TeleporterObjectInstance {
 
         teleporter.update(1, player);
         assertTrue(player.isObjectControlled());
+        assertTrue(player.isTouchResponseSuppressedByObjectControl());
         assertEquals(Sonic1AnimationIds.ROLL.id(), player.getForcedAnimationId());
 
         teleporter.onUnload();
 
         assertFalse(player.isObjectControlled());
+        assertFalse(player.isObjectControlAllowsCpu());
+        assertFalse(player.isObjectControlSuppressesMovement());
+        assertFalse(player.isTouchResponseSuppressedByObjectControl());
         assertFalse(player.isControlLocked());
         assertEquals(-1, player.getForcedAnimationId());
     }
@@ -64,3 +74,5 @@ public class TestSonic1TeleporterObjectInstance {
     }
 
 }
+
+

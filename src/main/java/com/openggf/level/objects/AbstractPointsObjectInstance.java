@@ -17,7 +17,8 @@ import java.util.List;
  * </ul>
  * Subclasses provide game-specific score-to-frame mapping via {@link #getFrameForScore(int)}.
  */
-public abstract class AbstractPointsObjectInstance extends AbstractObjectInstance {
+public abstract class AbstractPointsObjectInstance extends AbstractObjectInstance
+        implements SpawnServicesDefaultArgsRewindRecreatable {
     /** ROM: move.w #-$300,y_vel(a0) */
     protected static final int INITIAL_Y_VEL = -0x300;
     /** ROM: addi.w #$18,y_vel(a0) */
@@ -53,10 +54,10 @@ public abstract class AbstractPointsObjectInstance extends AbstractObjectInstanc
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity player) {
+    public void update(int vIntRunCount, PlayableEntity player) {
         // ROM: tst.w y_vel(a0) / bpl.w DeleteObject
         if (yVel >= 0) {
-            setDestroyed(true);
+            ObjectLifetimeOps.expireDynamic(this);
             return;
         }
         // ROM: bsr.w ObjectMove - apply velocity to position

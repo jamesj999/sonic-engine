@@ -7,17 +7,15 @@ import com.openggf.game.GameServices;
 import com.openggf.game.GroundMode;
 import com.openggf.sprites.playable.Sonic;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * Headless integration test verifying that the S3K big ring (Obj_SSEntryRing)
@@ -42,9 +40,6 @@ import static org.junit.Assert.fail;
  */
 @RequiresRom(SonicGame.SONIC_3K)
 public class TestS3kAiz2BigRingCollision {
-
-    @ClassRule public static RequiresRomRule romRule = new RequiresRomRule();
-
     private static final int ZONE_AIZ = 0;
     private static final int ACT_2 = 1;
 
@@ -53,7 +48,7 @@ public class TestS3kAiz2BigRingCollision {
     private static final short START_Y = 839;
     private static final short START_GSPEED = 2000;
 
-    // Minimum X threshold — Sonic must advance past here to prove he traversed the section
+    // Minimum X threshold â€” Sonic must advance past here to prove he traversed the section
     private static final int MIN_PROGRESS_X = 6400;
 
     // Timeout for traversal (rock walls + pipes)
@@ -68,7 +63,7 @@ public class TestS3kAiz2BigRingCollision {
     private static Object oldSkipIntros;
     private static SharedLevel sharedLevel;
 
-    @BeforeClass
+    @BeforeAll
     public static void loadLevel() throws Exception {
         SonicConfigurationService config = SonicConfigurationService.getInstance();
         oldSkipIntros = config.getConfigValue(SonicConfiguration.S3K_SKIP_INTROS);
@@ -77,7 +72,7 @@ public class TestS3kAiz2BigRingCollision {
         sharedLevel = SharedLevel.load(SonicGame.SONIC_3K, ZONE_AIZ, ACT_2);
     }
 
-    @AfterClass
+    @AfterAll
     public static void cleanup() {
         SonicConfigurationService.getInstance().setConfigValue(
                 SonicConfiguration.S3K_SKIP_INTROS,
@@ -88,7 +83,7 @@ public class TestS3kAiz2BigRingCollision {
     private HeadlessTestFixture fixture;
     private Sonic sprite;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         fixture = HeadlessTestFixture.builder()
                 .withSharedLevel(sharedLevel)
@@ -119,7 +114,7 @@ public class TestS3kAiz2BigRingCollision {
                 fail("Sonic entered the special stage at frame " + frame
                         + " pos=(" + sprite.getX() + "," + sprite.getY() + ")"
                         + " centre=(" + sprite.getCentreX() + "," + sprite.getCentreY() + ")"
-                        + " — collision box is too large");
+                        + " -- collision box is too large");
             }
 
             if (sprite.getDead()) {
@@ -142,13 +137,12 @@ public class TestS3kAiz2BigRingCollision {
             }
         }
 
-        assertTrue("Sonic should advance past X=" + MIN_PROGRESS_X
-                        + " and stop — maxX=" + maxX
+        assertTrue(stoppedAtFrame >= 0, "Sonic should advance past X=" + MIN_PROGRESS_X
+                        + " and stop -- maxX=" + maxX
                         + " actual pos=(" + sprite.getX() + "," + sprite.getY() + ")"
-                        + " gspeed=" + sprite.getGSpeed(),
-                stoppedAtFrame >= 0);
+                        + " gspeed=" + sprite.getGSpeed());
 
-        // Phase 2: Idle at the stop position for 120 frames — should NOT trigger big ring
+        // Phase 2: Idle at the stop position for 120 frames -- should NOT trigger big ring
         for (int frame = 0; frame < IDLE_FRAMES_AT_STOP; frame++) {
             fixture.stepIdleFrames(1);
 
@@ -157,14 +151,14 @@ public class TestS3kAiz2BigRingCollision {
                         + (stoppedAtFrame + frame)
                         + " pos=(" + sprite.getX() + "," + sprite.getY() + ")"
                         + " centre=(" + sprite.getCentreX() + "," + sprite.getCentreY() + ")"
-                        + " — collision box is too large");
+                        + " -- collision box is too large");
             }
         }
 
         // Confirm Sonic is still alive and in normal gameplay state
-        assertFalse("Sonic should not be object-controlled", sprite.isObjectControlled());
-        assertFalse("Sonic should not be hidden", sprite.isHidden());
-        assertFalse("Sonic should not be dead", sprite.getDead());
+        assertFalse(sprite.isObjectControlled(), "Sonic should not be object-controlled");
+        assertFalse(sprite.isHidden(), "Sonic should not be hidden");
+        assertFalse(sprite.getDead(), "Sonic should not be dead");
     }
 
     private void applyStartState() {
@@ -190,3 +184,5 @@ public class TestS3kAiz2BigRingCollision {
         sprite.updateSensors(sprite.getX(), sprite.getY());
     }
 }
+
+

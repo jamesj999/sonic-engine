@@ -5,6 +5,8 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -24,7 +26,7 @@ import java.util.List;
  * <p>Each animation frame displays for 2 game frames (anim_frame_duration=1, counts down).
  * 6-frame cycle: small-medium-large-medium-small-empty.
  */
-public class SuperSonicStarsObjectInstance extends AbstractObjectInstance {
+public class SuperSonicStarsObjectInstance extends AbstractObjectInstance implements RewindRecreatable {
     private final AbstractPlayableSprite player;
     private PatternSpriteRenderer renderer;
 
@@ -48,6 +50,11 @@ public class SuperSonicStarsObjectInstance extends AbstractObjectInstance {
     /** Snapshotted render position. */
     private int snapX, snapY;
 
+    @SuppressWarnings("unused")
+    private SuperSonicStarsObjectInstance() {
+        this(null);
+    }
+
     public SuperSonicStarsObjectInstance(AbstractPlayableSprite player) {
         super(null, "SuperSonicStars");
         this.player = player;
@@ -56,7 +63,16 @@ public class SuperSonicStarsObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public SuperSonicStarsObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        AbstractPlayableSprite focusedPlayer = null;
+        if (ctx.objectServices() != null && ctx.objectServices().camera() != null) {
+            focusedPlayer = ctx.objectServices().camera().getFocusedSprite();
+        }
+        return new SuperSonicStarsObjectInstance(focusedPlayer);
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (animActive) {
             frameTimer--;

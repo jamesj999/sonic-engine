@@ -1,11 +1,9 @@
 package com.openggf.game.sonic1.objects;
 
-import com.openggf.game.GameRuntime;
 import com.openggf.game.ObjectArtProvider;
-import com.openggf.game.RuntimeManager;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import com.openggf.game.sonic1.constants.Sonic1ObjectIds;
 import com.openggf.graphics.GraphicsManager;
 import com.openggf.level.Pattern;
@@ -14,40 +12,31 @@ import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectSpriteSheet;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.TestObjectServices;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.level.render.SpriteMappingFrame;
 import com.openggf.level.render.SpriteMappingPiece;
 import com.openggf.sprites.animation.SpriteAnimationSet;
 
-import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class TestSonic1ChainedStomperObjectInstanceRender {
-    private Field levelManagerField;
-    private LevelManager originalLevelManager;
-    private GameRuntime originalRuntime;
-
-    @Before
-    public void setUp() throws Exception {
-        originalRuntime = RuntimeManager.getCurrent();
-        RuntimeManager.setCurrent(null);
-        levelManagerField = LevelManager.class.getDeclaredField("levelManager");
-        levelManagerField.setAccessible(true);
-        originalLevelManager = (LevelManager) levelManagerField.get(null);
+    @BeforeEach
+    public void setUp() {
     }
 
-    @After
-    public void tearDown() throws Exception {
-        levelManagerField.set(null, originalLevelManager);
-        RuntimeManager.setCurrent(originalRuntime);
+    @AfterEach
+    public void tearDown() {
     }
 
     @Test
@@ -56,10 +45,12 @@ public class TestSonic1ChainedStomperObjectInstanceRender {
         RecordingRenderer spikeRenderer = new RecordingRenderer();
         ObjectRenderManager renderManager = new ObjectRenderManager(
                 new StubObjectArtProvider(stomperRenderer, spikeRenderer));
-        levelManagerField.set(null, new TestLevelManager(renderManager));
+        LevelManager levelManager = mock(LevelManager.class);
+        when(levelManager.getObjectRenderManager()).thenReturn(renderManager);
 
         Sonic1ChainedStomperObjectInstance stomper = new Sonic1ChainedStomperObjectInstance(
                 new ObjectSpawn(100, 100, Sonic1ObjectIds.CHAINED_STOMPER, 0x00, 0, false, 0));
+        stomper.setServices(new TestObjectServices().withLevelManager(levelManager));
         stomper.appendRenderCommands(new ArrayList<>());
 
         assertEquals(5, spikeRenderer.drawCount);
@@ -97,17 +88,24 @@ public class TestSonic1ChainedStomperObjectInstanceRender {
         assertEquals(0, stomper.getCollisionFlags());
     }
 
-    private static final class TestLevelManager extends LevelManager {
-        private final ObjectRenderManager renderManager;
+    @Test
+    public void chainedStomperBalanceWidthUsesNativeActiveWidthNotSolidExtension() {
+        Sonic1ChainedStomperObjectInstance wide = new Sonic1ChainedStomperObjectInstance(
+                new ObjectSpawn(100, 100, Sonic1ObjectIds.CHAINED_STOMPER, 0x00, 0, false, 0));
+        Sonic1ChainedStomperObjectInstance medium = new Sonic1ChainedStomperObjectInstance(
+                new ObjectSpawn(100, 100, Sonic1ObjectIds.CHAINED_STOMPER, 0x10, 0, false, 0));
+        Sonic1ChainedStomperObjectInstance small = new Sonic1ChainedStomperObjectInstance(
+                new ObjectSpawn(100, 100, Sonic1ObjectIds.CHAINED_STOMPER, 0x20, 0, false, 0));
 
-        private TestLevelManager(ObjectRenderManager renderManager) {
-            this.renderManager = renderManager;
-        }
-
-        @Override
-        public ObjectRenderManager getObjectRenderManager() {
-            return renderManager;
-        }
+        assertEquals(0x38, wide.getBalanceWidthPixels());
+        assertEquals(0x30, medium.getBalanceWidthPixels());
+        assertEquals(0x10, small.getBalanceWidthPixels());
+        assertEquals(0x38 + 0x0B, wide.getSolidParams().halfWidth(),
+                "CStom's SolidObject-only $B extension must remain collision-local");
+        assertTrue(wide.getSolidRoutineProfile().inclusiveRightEdge(),
+                "CStom's SolidObject BHI must retain exact-edge side contact");
+        assertTrue(wide.usesInstanceSolidStateLatchKey(),
+                "CStom status bits belong to its live SST while its Y changes");
     }
 
     private static final class StubObjectArtProvider implements ObjectArtProvider {

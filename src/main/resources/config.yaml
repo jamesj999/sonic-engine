@@ -1,0 +1,251 @@
+# OpenGGF configuration — every setting with its default, grouped and documented.
+# This is the reference copy published as config.yaml.example. Your own
+# config.yaml holds only the settings you change; copy a line into it to set
+# one. Indentation is significant (YAML).
+
+# ── Display ──
+display:
+  aspect: "NATIVE_4_3"   # Display aspect preset; resolves screen pixel width, height stays 224
+  windowAutosize: true   # Derive the window size from the aspect preset at the 2x baseline
+  shaderLibraryRoot: shaders   # Root directory scanned for user display shaders
+  shaderSelection: "OFF"   # Last selected display shader: OFF or a root-relative forward-slash path
+  shaderNextKey: RIGHT_BRACKET   # Runtime key to advance to the next display shader
+  shaderPreviousKey: LEFT_BRACKET   # Runtime key to move to the previous display shader
+  shaderPickerKey: BACKSLASH   # Runtime key to open the searchable display shader picker
+  shaderDefaultPhase: PRESENTATION   # Fallback render phase for standalone display shaders
+  deadzoneMode: "PROPORTIONAL"   # Camera horizontal deadzone behaviour on wide screens
+  colorProfile: "RAW_RGB"   # Display-only color profile for Mega Drive palette presentation
+  colorProfileToggleKey: V   # Runtime key to cycle the display color profile
+  fps: 60   # Frames per second to render (changes game speed)
+
+# ── Gameplay ──
+gameplay:
+  loadTimeSimulation: "FAST"   # FAST (hand-tuned copy of the measured profile), PROFILED, NONE, or REALISTIC (warns; uses PROFILED)
+
+# ── Configuration ──
+config:
+  preserveExplicitDefaults: false   # Keep explicitly listed default-valued settings when converting an older full config
+
+# ── Input ──
+input:
+  pause: ENTER   # Toggle pause; the gamepad Start button also toggles it
+  controller:
+    enabled: true   # Enable gamepad/controller input
+    deadzone: 0.35   # Analog controller deadzone
+    player1: "auto"   # Controller assignment for Player 1
+    player2: "auto"   # Controller assignment for Player 2
+  player1:
+    up: UP   # Player 1: look up
+    down: DOWN   # Player 1: crouch/roll
+    left: LEFT   # Player 1: move left
+    right: RIGHT   # Player 1: move right
+    a: SPACE   # Player 1: action button A
+    b: ""   # Player 1: action button B
+    c: ""   # Player 1: action button C
+    start: BACKSPACE   # Player 1: start (in-game pause); keyboard-only, gamepad Start toggles input.pause instead
+  player2:
+    # Player 2 bindings feed the configured sidekick/manual-input path; they do
+    # not enable Sonic 2's native Two_player_mode/competition gameplay.
+    up: I   # Player 2: look up
+    down: K   # Player 2: crouch/roll
+    left: J   # Player 2: move left
+    right: L   # Player 2: move right
+    a: RIGHT_SHIFT   # Player 2: action button A
+    b: ""   # Player 2: action button B
+    c: ""   # Player 2: action button C
+    start: RIGHT_CONTROL   # Player 2: start
+
+# ── Audio ──
+audio:
+  enabled: true   # Enable music and SFX
+  region: "NTSC"   # Region for audio timing
+  dacInterpolate: false   # Optional DAC smoothing (no hardware counterpart); true interpolates between PCM samples
+  fmCore: fast   # FM core: accurate (cycle-exact Nuked-OPN2) or fast (register-level clean-room core)
+  internalRateOutput: false   # Output audio at the internal YM2612 rate (~53kHz)
+  fm6DacOff: true   # Mute FM6 when a note plays on it while DAC is enabled (SMPSPlay parity hack)
+
+# ── Characters ──
+characters:
+  main: "sonic"   # Sprite code of the main playable character
+  sidekick: "tails"   # Sprite code of the CPU sidekick; empty string disables the sidekick
+  dataSelectExtraCombos: ""   # Semicolon-separated extra player combos for the data select screen
+
+# ── ROMs ──
+roms:
+  sonic1: "s1.gen"   # Filename of the Sonic 1 ROM
+  sonic2: "s2.gen"   # Filename of the Sonic 2 ROM
+  sonic3k: "s3k.gen"   # Filename of the Sonic 3&K ROM
+  default: "s2"   # Which game to load by default
+
+# ── Startup ──
+startup:
+  titleScreen: true   # Show the title screen on startup
+  masterTitleScreen: true   # Show the master (game-selection) title screen on startup
+  legalDisclaimer: true   # Show the legal disclaimer screen before the master title screen
+
+# ── Rewind (live) ──
+rewind:
+  liveEnabled: false   # Enable held-key rewind during ordinary live play
+  liveKey: R   # Key held to rewind during live play; the gamepad left bumper (L1/LB) also holds rewind
+  tapeCoastEnabled: false   # Continue rewinding with a decelerating tape-coast after key release
+  tapeCoastAcceleration: 0.25   # Per-tick speed increase while tape-coast is held
+  tapeCoastDeceleration: 0.5   # Per-tick speed decrease after release
+  tapeCoastMaxSteps: 4.0   # Maximum rewind steps per tick
+  tapeCoastMinSteps: 0.25   # Minimum rewind steps per tick; below 1.0 gives slow-motion rewind
+  historySeconds: 60   # Seconds of live rewind keyframe and input history to retain
+  audioHistoryLimitType: "time"   # How the rewind audio PCM history ring is sized
+  audioHistorySeconds: 60   # Seconds of PCM history kept when audioHistoryLimitType=time
+  audioHistorySizeMb: 10   # Megabytes of PCM history kept when audioHistoryLimitType=size
+  liveHalfSpeedKey: LEFT_CONTROL   # Modifier held with the rewind key for half-speed rewind
+  liveDoubleSpeedKey: LEFT_SHIFT   # Modifier held with the rewind key for double-speed rewind
+  vhsEffect: true   # VHS picture-search effect while live rewind is active
+  vhsTearBands: true   # Include the scrolling tear bands in the VHS rewind effect
+
+# ── Cross-Game ──
+crossGame:
+  enabled: false   # Enable cross-game feature donation (e.g. S2 sprites in S1)
+  source: "s2"   # Donor game for cross-game features
+
+# ── Launch Profiles ──
+# Per-game launch defaults edited from the master title screen.
+launch:
+  s1:
+    rewind: false   # Default Sonic 1 launch profile: enable live rewind
+    crossGameSource: "off"   # Default Sonic 1 launch profile: cross-game donor
+    debugTools: false   # Default Sonic 1 launch profile: enable debug tools
+    aspect: "global"   # Default Sonic 1 launch profile: display aspect override
+    mainCharacter: "sonic"   # Default Sonic 1 launch profile: main character
+    sidekick: "none"   # Default Sonic 1 launch profile: sidekick character
+  s2:
+    rewind: false   # Default Sonic 2 launch profile: enable live rewind
+    crossGameSource: "off"   # Default Sonic 2 launch profile: cross-game donor
+    debugTools: false   # Default Sonic 2 launch profile: engine debug tools; native Debug_placement_mode is unavailable
+    aspect: "global"   # Default Sonic 2 launch profile: display aspect override
+    mainCharacter: "sonic"   # Default Sonic 2 launch profile: main character
+    sidekick: "tails"   # Default Sonic 2 launch profile: sidekick character
+  s3k:
+    rewind: false   # Default Sonic 3&K launch profile: enable live rewind
+    crossGameSource: "off"   # Default Sonic 3&K launch profile: cross-game donor
+    debugTools: false   # Default Sonic 3&K launch profile: enable debug tools
+    aspect: "global"   # Default Sonic 3&K launch profile: display aspect override
+    mainCharacter: "sonic"   # Default Sonic 3&K launch profile: main character
+    sidekick: "tails"   # Default Sonic 3&K launch profile: sidekick character
+
+# ── Discord Rich Presence ──
+discord:
+  enabled: false   # Enable Discord Rich Presence updates
+  showTimer: true   # Show the level timer in Rich Presence
+  showZone: true   # Show the zone and act in Rich Presence
+
+# ── Trace Capture ──
+capture:
+  outputDir: "target/trace-videos"   # Output directory for trace capture videos
+  # TRACE CAPTURE ONLY. Live viewport recording (Shift+O) records the game
+  # viewport at its current on-screen size instead, so the recording includes
+  # menu and debug-overlay elements that scale outside the game's pixel space.
+  # That is why resizing the window ends a live recording: the frame size is
+  # fixed for the life of an encode.
+  scale: 4   # Integer nearest-neighbor upscale factor for trace capture output
+  fps: 60   # Output frame rate for trace capture
+  codec: "ffv1"   # Video codec: ffv1, h264 or h265 (all lossless)
+  audioCodec: "flac"   # Audio codec: flac (lossless), or aac / mp3 (LOSSY)
+  container: "mkv"   # Recording file extension; mp4 is portable only with h264/h265 + aac
+  encoderPreset: "fast"   # x264/x265 speed preset (ultrafast..placebo); blank = encoder default; ignored by ffv1/dnxhr
+  encoderThreads: 0   # ffmpeg -threads for the encode pass; 0 lets ffmpeg choose
+  queueBudgetMb: 192   # Live recording only: memory budget for the encoder frame queue (clamped to 8..120 frames)
+  # ── ADVANCED: full ffmpeg argument lists ───────────────────────────────
+  # "default" = the engine's own command. Empty = skip that pass (pass 2 only,
+  # which publishes the video with no audio). Anything else is used literally.
+  # Pass 1 placeholders: {width} {height} {fps} {scale} {scaledWidth}
+  #                      {scaledHeight} {videoCodecArgs} {videoOut}
+  # Pass 2 placeholders: {videoIn} {audioIn} {sampleRate} {audioCodecArgs}
+  #                      {output}
+  # Frames always arrive as rawvideo/rgba on pipe:0.
+  #
+  # Example - small, portable, LOSSY (CRF 24 h264 + aac):
+  #   audioCodec: "aac"
+  #   ffmpegPass1Args: >-
+  #     -y -f rawvideo -pix_fmt rgba -s {width}x{height} -r {fps} -i pipe:0
+  #     -vf vflip,scale={scaledWidth}:{scaledHeight}:flags=neighbor
+  #     -c:v libx264 -crf 24 -preset veryfast -pix_fmt yuv420p -an {videoOut}
+  #
+  # Example - web-ready MP4 with faststart:
+  #   container: "mp4"
+  #   audioCodec: "aac"
+  #   ffmpegPass2Args: >-
+  #     -y -i {videoIn} -f s16le -ar {sampleRate} -ac 2 -i {audioIn}
+  #     -c:v copy {audioCodecArgs} -movflags +faststart {output}
+  #
+  # Example - video only, no audio, no mux pass (fastest):
+  #   ffmpegPass2Args: ""
+  #
+  # Example - smooth upscale instead of nearest-neighbour:
+  #   ffmpegPass1Args: >-
+  #     -y -f rawvideo -pix_fmt rgba -s {width}x{height} -r {fps} -i pipe:0
+  #     -vf vflip,scale={scaledWidth}:{scaledHeight}:flags=lanczos
+  #     {videoCodecArgs} -an {videoOut}
+  #
+  # Full reference: CONFIGURATION.md "Overriding the ffmpeg commands".
+  ffmpegPass1Args: "default"
+  ffmpegPass2Args: "default"
+  toggleKey: SHIFT+O   # Toggles live viewport audio/video recording. Modifiers go in the value: CTRL+SHIFT+O, or a bare key such as SCROLL_LOCK for no modifier (P, O, K, backtick, = and the F-keys are hardcoded debug-overlay toggles). A bare O is reserved -- the compatibility migration rewrites it back to SHIFT+O on every launch.
+  codec: "ffv1"   # Capture video codec (e.g. ffv1)
+
+# ════════════════════════════════════════════
+#  DEBUG  (developer tooling — safe to ignore for normal play)
+# ════════════════════════════════════════════
+debug:
+  flags:
+    debugView: false   # Enable the debug overlay subsystem; visible HUD starts hidden until toggled
+    editor: false   # Allow entering the level editor from gameplay
+  keys:
+    test: T   # Debug-only test button
+    nextAct: PAGE_UP   # Advance to the next act
+    nextZone: PAGE_DOWN   # Advance to the next zone
+    debugMode: D   # Toggle debug movement mode; the gamepad north face button (Y/Triangle) also toggles it when debug tools are enabled
+    frameStep: Q   # Step forward one frame while paused; the gamepad right bumper (RB/R1) also steps a frame
+    lastCheckpoint: C   # Teleport to the last checkpoint
+    levelSelect: F9   # Open the level select screen
+    superSonic: U   # Toggle Super Sonic debug mode
+    giveEmeralds: E   # Give all chaos emeralds
+    specialStage: TAB   # Toggle special stage mode
+    specialStageComplete: END   # Complete the special stage with an emerald
+    specialStageFail: DELETE   # Fail the special stage
+    specialStageSpriteDebug: F12   # Toggle the S2 special stage sprite debug viewer (unavailable in S1/S3K)
+    specialStagePlaneDebug: F3   # Cycle S2 special stage plane visibility debug modes (unavailable in S1/S3K)
+  startup:
+    levelSelectOnStartup: false   # Open Level Select on startup instead of loading the first zone
+    s3kSkipIntros: false   # Skip S3K zone intro sequences (AIZ biplane, etc.)
+  playback:
+    moviePath: ""   # Path to a BizHawk BK2 movie for playback debugging
+    toggleKey: ""   # Toggle playback mode
+    loadKey: ""   # Load/reload the BK2 movie
+    playPauseKey: ""   # Toggle playback play/pause
+    stepBackKey: ""   # Step the cursor back one frame
+    stepForwardKey: ""   # Step the cursor forward one frame
+    jumpBackKey: ""   # Jump the cursor back by a larger interval
+    jumpForwardKey: ""   # Jump the cursor forward by a larger interval
+    fastRateKey: ""   # Cycle playback rate (1x/2x/4x/8x)
+    resetToStartKey: ""   # Reset the cursor to the start offset
+    startOffsetFrame: 0   # Starting frame offset for BK2 playback
+  recording:
+    recordKey: F9   # Shift+key starts/opens recordings; key alone stops active recording
+  traceRewind:
+    key: R   # Key held in Trace Test Mode to rewind deterministic engine state
+  traceRender:
+    showDesyncGhosts: true   # Render desync ghosts in Trace Test Mode and trace capture
+    showGameHud: true   # Render the game HUD during trace replay/capture
+    showDebugHud: false   # Render the debug HUD during trace replay/capture
+  rewind:
+    determinismAudit: false   # Re-simulate each completed live-rewind keyframe segment and log the first divergence
+  testMode:
+    enabled: false   # Replace the master title with the trace picker (dev-only)
+    catalogDir: "src/test/resources/traces"   # Directory scanned for traces when test mode is enabled
+  crossGame:
+    s1DataSelectImageGenOverride: false   # Force regeneration of the S1 data-select image cache
+    s2DataSelectImageGenOverride: false   # Force regeneration of the S2 data-select image cache
+    s1DataSelectImageCoordLogKey: APOSTROPHE   # Log the current camera position as an S1 data-select preview override
+  window:
+    width: 640   # DEPRECATED manual window width; used only when display.windowAutosize=false
+    height: 448   # DEPRECATED manual window height; used only when display.windowAutosize=false
+    scale: 1.0   # DEPRECATED AWT debug-viewer scale factor

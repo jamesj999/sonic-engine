@@ -17,6 +17,8 @@ public class ShaderProgram {
     private int indexedColorTextureLocation = -1;
     private int paletteLineLocation = -1;
     private int totalPaletteLinesLocation = -1;
+    private int ghostModeLocation = -1;
+    private int ghostAlphaLocation = -1;
     protected boolean uniformsCached = false;
 
     public int getProgramId() {
@@ -41,6 +43,8 @@ public class ShaderProgram {
         indexedColorTextureLocation = glGetUniformLocation(programId, "IndexedColorTexture");
         paletteLineLocation = glGetUniformLocation(programId, "PaletteLine");
         totalPaletteLinesLocation = glGetUniformLocation(programId, "TotalPaletteLines");
+        ghostModeLocation = glGetUniformLocation(programId, "GhostMode");
+        ghostAlphaLocation = glGetUniformLocation(programId, "GhostAlpha");
         uniformsCached = true;
     }
 
@@ -71,6 +75,15 @@ public class ShaderProgram {
     public void setTotalPaletteLines(float n) {
         if (totalPaletteLinesLocation >= 0) {
             glUniform1f(totalPaletteLinesLocation, n);
+        }
+    }
+
+    public void setGhostEffect(boolean enabled, float alpha) {
+        if (ghostModeLocation >= 0) {
+            glUniform1i(ghostModeLocation, enabled ? 1 : 0);
+        }
+        if (ghostAlphaLocation >= 0) {
+            glUniform1f(ghostAlphaLocation, Math.max(0.0f, Math.min(1.0f, alpha)));
         }
     }
 

@@ -1,0 +1,25 @@
+{
+  "game": "s1",
+  "run_id": "s1-ghz-maze-roundtrip",
+  "source_bk2": "s1-ghz-maze-roundtrip.bk2",
+  "rom_checksum": "AFE05EEE",
+  "recorder": "native-bizhawk-headless",
+  "recorder_version": "3.0",
+  "trace_schema": 5,
+  "expected_movie_end_mode": "level",
+  "segments": [
+    {"dir": "ghz1", "kind": "level", "trace_profile": "complete_run", "bk2_frame_offset": 774, "trace_frame_count": 4182, "zone_id": 0, "act": 1},
+    {"dir": "ss", "kind": "special_stage", "trace_profile": "s1_special_stage", "bk2_frame_offset": 4957, "trace_frame_count": 3091, "zone_id": 0, "act": 0, "special_stage_index": 0},
+    {"dir": "ghz2", "kind": "level", "trace_profile": "complete_run", "bk2_frame_offset": 8049, "trace_frame_count": 812, "zone_id": 0, "act": 2}
+  ],
+  "transitions": [
+    {"from_segment": 0, "to_segment": 1, "entry_kind": "giant_ring", "mode_change_bk2_frame": 4957, "rings_before": 85, "emeralds_before": 0},
+    {"from_segment": 1, "to_segment": 2, "entry_kind": "stage_exit", "mode_change_bk2_frame": 8049, "rings_after": 67, "emeralds_after": 1}
+  ],
+  "dynamic_art_gap_transitions": [
+    {"dynamic_art_gap_edge":{"edge_ordinal":0,"transfer_id":0,"phase":"submitted","owner":"sonic","submission_origin":"run_gap","mapping_frame":1,"movie_logical_frame":748,"gap_edge_index":0,"rom_callback_pc":3360,"requests":[{"rom_source_address":140816,"source_tile_index":0,"ram_source_address":-1,"vram_destination":61440,"byte_length":96},{"rom_source_address":140912,"source_tile_index":3,"ram_source_address":-1,"vram_destination":61536,"byte_length":256},{"rom_source_address":141168,"source_tile_index":11,"ram_source_address":-1,"vram_destination":61792,"byte_length":96},{"rom_source_address":141264,"source_tile_index":14,"ram_source_address":-1,"vram_destination":61888,"byte_length":96}]},"before_ledger_hash":"sha256:42f87419ea3765ece5e0a63ffa9f9ebe5e60d91c115090adf9133c0bd0aca3c9","after_ledger_descriptors":[{"transfer_id":0,"owner":"sonic","mapping_frame":1,"submission_origin":"run_gap","requests":[{"rom_source_address":140816,"source_tile_index":0,"ram_source_address":-1,"vram_destination":61440,"byte_length":96},{"rom_source_address":140912,"source_tile_index":3,"ram_source_address":-1,"vram_destination":61536,"byte_length":256},{"rom_source_address":141168,"source_tile_index":11,"ram_source_address":-1,"vram_destination":61792,"byte_length":96},{"rom_source_address":141264,"source_tile_index":14,"ram_source_address":-1,"vram_destination":61888,"byte_length":96}],"fingerprint":"sha256:794dd9a8a845be26ffa8d03574229489629760f97aa6d158e48e43927b8cb558"}]},
+    {"dynamic_art_gap_edge":{"edge_ordinal":1,"transfer_id":0,"phase":"completed","owner":"sonic","submission_origin":"run_gap","mapping_frame":1,"movie_logical_frame":748,"gap_edge_index":1,"rom_callback_pc":3408,"requests":[{"rom_source_address":-1,"source_tile_index":-1,"ram_source_address":51200,"vram_destination":61440,"byte_length":736}]},"before_ledger_hash":"sha256:8c34c4be850cf18e03c9eede41729f533796d5c93359b787f8f9c633ae6798f4","after_ledger_descriptors":[]},
+    {"dynamic_art_gap_edge":{"edge_ordinal":4698,"transfer_id":2349,"phase":"submitted","owner":"sonic","submission_origin":"run_gap","mapping_frame":1,"movie_logical_frame":9071,"gap_edge_index":0,"rom_callback_pc":3360,"requests":[{"rom_source_address":140816,"source_tile_index":0,"ram_source_address":-1,"vram_destination":61440,"byte_length":96},{"rom_source_address":140912,"source_tile_index":3,"ram_source_address":-1,"vram_destination":61536,"byte_length":256},{"rom_source_address":141168,"source_tile_index":11,"ram_source_address":-1,"vram_destination":61792,"byte_length":96},{"rom_source_address":141264,"source_tile_index":14,"ram_source_address":-1,"vram_destination":61888,"byte_length":96}]},"before_ledger_hash":"sha256:42f87419ea3765ece5e0a63ffa9f9ebe5e60d91c115090adf9133c0bd0aca3c9","after_ledger_descriptors":[{"transfer_id":2349,"owner":"sonic","mapping_frame":1,"submission_origin":"run_gap","requests":[{"rom_source_address":140816,"source_tile_index":0,"ram_source_address":-1,"vram_destination":61440,"byte_length":96},{"rom_source_address":140912,"source_tile_index":3,"ram_source_address":-1,"vram_destination":61536,"byte_length":256},{"rom_source_address":141168,"source_tile_index":11,"ram_source_address":-1,"vram_destination":61792,"byte_length":96},{"rom_source_address":141264,"source_tile_index":14,"ram_source_address":-1,"vram_destination":61888,"byte_length":96}],"fingerprint":"sha256:cef56dab7891361458e91974fa8439a45f90b548b0db577e67c0e970418dc760"}]},
+    {"dynamic_art_gap_edge":{"edge_ordinal":4699,"transfer_id":2349,"phase":"completed","owner":"sonic","submission_origin":"run_gap","mapping_frame":1,"movie_logical_frame":9071,"gap_edge_index":1,"rom_callback_pc":3408,"requests":[{"rom_source_address":-1,"source_tile_index":-1,"ram_source_address":51200,"vram_destination":61440,"byte_length":736}]},"before_ledger_hash":"sha256:f0f378c95b69d51a93aac8674f2ddd8aecc91f5255bc4791d51a052ead7fdc94","after_ledger_descriptors":[]}
+  ]
+}

@@ -8,6 +8,7 @@ import com.openggf.game.PlayableEntity;
 import com.openggf.level.objects.DestructionEffects.DestructionConfig;
 import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.ObjectTerrainUtils;
 import com.openggf.physics.TerrainCheckResult;
@@ -21,7 +22,7 @@ import java.util.List;
  * <p>
  * ROM reference: docs/s1disasm/_incObj/2D Burrobot.asm
  */
-public class Sonic1BurrobotBadnikInstance extends AbstractBadnikInstance {
+public class Sonic1BurrobotBadnikInstance extends AbstractBadnikInstance implements SpawnRewindRecreatable {
 
     private static final int COLLISION_SIZE_INDEX = 0x05;
     private static final int Y_RADIUS = 0x13;
@@ -70,11 +71,11 @@ public class Sonic1BurrobotBadnikInstance extends AbstractBadnikInstance {
     }
 
     @Override
-    protected void updateMovement(int frameCounter, PlayableEntity playerEntity) {
+    protected void updateMovement(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         switch (state) {
             case STATE_CHANGEDIR -> updateChangeDir();
-            case STATE_MOVE -> updateMove(frameCounter);
+            case STATE_MOVE -> updateMove(vIntRunCount);
             case STATE_JUMP -> updateJump(player);
             case STATE_CHECK_SONIC -> updateCheckSonic(player);
             default -> {
@@ -96,34 +97,60 @@ public class Sonic1BurrobotBadnikInstance extends AbstractBadnikInstance {
         xVelocity = facingLeft ? -WALK_SPEED : WALK_SPEED;
     }
 
-    private void updateMove(int frameCounter) {
+    private void updateMove(int vIntRunCount) {
         stateTimer--;
         if (stateTimer < 0) {
-            enterMoveEndBranch(frameCounter);
+            enterMoveEndBranch(vIntRunCount);
             return;
         }
 
         applySpeedToPos();
 
+        // Burro_Move uses bchg #0,objoff_32(a0); bne branches on the old bit state.
+        boolean oldFloorProbeToggle = floorProbeToggle;
         floorProbeToggle = !floorProbeToggle;
         int probeX = currentX + (facingLeft ? -0x0C : 0x0C);
 
-        if (!floorProbeToggle) {
-            TerrainCheckResult aheadFloor = ObjectTerrainUtils.checkFloorDist(probeX, currentY, Y_RADIUS);
-            if (!aheadFloor.foundSurface() || aheadFloor.distance() >= 0x0C) {
-                enterMoveEndBranch(frameCounter);
+        if (!oldFloorProbeToggle) {
+            // Burro_Move .checkLedgeAhead: ObjFloorDist2 then cmpi.w #$C,d1 / bge NextAction.
+            // docs/s1disasm/_incObj/2D Badnik - Burrobot.asm:75-85
+            if (objFloorDist(probeX) >= 0x0C) {
+                enterMoveEndBranch(vIntRunCount);
             }
             return;
         }
 
-        TerrainCheckResult floor = ObjectTerrainUtils.checkFloorDist(currentX, currentY, Y_RADIUS);
-        if (floor.foundSurface()) {
-            currentY += floor.distance();
-        }
+        // Burro_Move .alignToFloor: ObjFloorDist then add.w d1,obY (unconditional).
+        // docs/s1disasm/_incObj/2D Badnik - Burrobot.asm:88-91
+        currentY += objFloorDist(currentX);
     }
 
-    private void enterMoveEndBranch(int frameCounter) {
-        if ((frameCounter & 0x04) != 0) {
+    /**
+     * ROM {@code ObjFloorDist} ({@code FindFloor}): always returns a floor distance,
+     * never a "no surface" sentinel. When neither the sensor tile nor the tile below
+     * is solid (the Burrobot has walked off a ledge), {@code FindFloor2.isblank2}
+     * returns {@code $F - (sensorY & $F)} and {@code FindFloor.isblank} adds {@code $10},
+     * yielding {@code $1F - (sensorY & $F)} (a small positive fall distance). The
+     * Burrobot's {@code add.w d1,obY} then walks it off the edge / starts its fall,
+     * which is what subsequently drives the random Burro jump. The engine's
+     * {@link ObjectTerrainUtils#checkFloorDist} reports the both-blank case as
+     * no-collision, so substitute the ROM blank-tile return here.
+     *
+     * <p>docs/s1disasm/_incObj/sub ObjFloorDist.asm:17-39<br>
+     * docs/s1disasm/_incObj/sub FindNearestTile &amp; FindFloor &amp; FindWall.asm
+     * (FindFloor.isblank, FindFloor2.isblank2)
+     */
+    private int objFloorDist(int probeX) {
+        TerrainCheckResult floor = ObjectTerrainUtils.checkFloorDist(probeX, currentY, Y_RADIUS);
+        if (floor.foundSurface()) {
+            return floor.distance();
+        }
+        int sensorY = currentY + Y_RADIUS;
+        return 0x1F - (sensorY & 0x0F);
+    }
+
+    private void enterMoveEndBranch(int vIntRunCount) {
+        if ((vIntRunCount & 0x04) != 0) {
             state = STATE_CHANGEDIR;
             stateTimer = 59;
             xVelocity = 0;
@@ -220,13 +247,16 @@ public class Sonic1BurrobotBadnikInstance extends AbstractBadnikInstance {
         motionState.y = currentY;
         motionState.xVel = xVelocity;
         motionState.yVel = yVelocity;
-        SubpixelMotion.moveSprite2(motionState);
+        // Burro_Move/Burro_Jump call SpeedToPos, which updates 16.16 obX/obY.
+        // docs/s1disasm/_incObj/2D Burrobot.asm:63,103
+        // docs/s1disasm/_incObj/sub SpeedToPos.asm:5-18
+        SubpixelMotion.speedToPos(motionState);
         currentX = motionState.x;
         currentY = motionState.y;
     }
 
     @Override
-    protected void updateAnimation(int frameCounter) {
+    protected void updateAnimation(int vIntRunCount) {
         animationTick++;
     }
 
@@ -253,7 +283,9 @@ public class Sonic1BurrobotBadnikInstance extends AbstractBadnikInstance {
 
     @Override
     public boolean isPersistent() {
-        return !isDestroyed() && isOnScreenX(192);
+        // Burro_Action ends with RememberState, which uses the S1 chunk-rounded
+        // out_of_range macro rather than a pixel-margin on-screen test.
+        return !isDestroyed() && isInRange();
     }
 
     @Override
@@ -272,5 +304,12 @@ public class Sonic1BurrobotBadnikInstance extends AbstractBadnikInstance {
 
         int frame = getMappingFrame();
         renderer.drawFrameIndex(frame, currentX, currentY, !facingLeft, false);
+    }
+
+    @Override
+    public String traceDebugDetails() {
+        return String.format("state=%d timer=%d vel=(%04X,%04X) sub=(%04X,%04X)",
+                state, stateTimer, xVelocity & 0xFFFF, yVelocity & 0xFFFF,
+                motionState.xSub & 0xFFFF, motionState.ySub & 0xFFFF);
     }
 }

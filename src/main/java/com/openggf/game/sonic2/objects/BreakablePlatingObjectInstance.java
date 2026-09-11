@@ -1,24 +1,30 @@
 package com.openggf.game.sonic2.objects;
 
 import com.openggf.configuration.SonicConfiguration;
-import com.openggf.configuration.SonicConfigurationService;
 import com.openggf.debug.DebugRenderContext;
 import com.openggf.game.sonic2.Sonic2ObjectArtKeys;
 import com.openggf.game.PlayableEntity;
 import com.openggf.game.sonic2.constants.Sonic2AnimationIds;
+import com.openggf.game.sonic2.Sonic2ZoneFeatureProvider;
 import com.openggf.game.sonic2.constants.Sonic2AudioConstants;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectRenderManager;
+import com.openggf.level.objects.ObjectServices;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.TouchResponseListener;
+import com.openggf.level.objects.TouchResponseProfile;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.objects.TouchResponseResult;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.Direction;
+import com.openggf.sprites.NativePositionOps;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
+import com.openggf.sprites.playable.ObjectControlState;
 
 import com.openggf.debug.DebugColor;
 import java.util.List;
@@ -78,7 +84,7 @@ import java.util.List;
  * Anim 0: delay 3, frames {2, 3, 4, 5, 1}, $FF (loop to frame 1)
  */
 public class BreakablePlatingObjectInstance extends AbstractObjectInstance
-        implements TouchResponseProvider, TouchResponseListener {
+        implements TouchResponseProvider, TouchResponseListener, RewindRecreatable {
 
     // ========================================================================
     // ROM Constants
@@ -93,6 +99,8 @@ public class BreakablePlatingObjectInstance extends AbstractObjectInstance
     // In our engine, we use SPECIAL category ($40) to let the listener handle it,
     // keeping the same size index $21 for accurate touch distance.
     private static final int COLLISION_FLAGS = 0x40 | 0x21; // SPECIAL category + size index $21
+    private static final TouchResponseProfile TOUCH_RESPONSE_PROFILE = TouchResponseProfile.fromCanonical(
+            com.openggf.game.profiles.touchresponse.TouchResponseProfile.singleRegionContinuousCallbacks());
 
     // Grab position offset: player placed at objX - $14 (20 pixels left of center)
     // ROM: subi.w #$14,d0 (line 80452, 80462)
@@ -140,15 +148,17 @@ public class BreakablePlatingObjectInstance extends AbstractObjectInstance
         BREAKUP   // routine 4: fragment falling with gravity + animation
     }
 
-    private final int x;
-    private final int y;
+    private int x;
+    private int y;
     private Routine routine;
 
     // Grab state (objoff_30: timer, objoff_32: grabbed flag)
     private int delayTimer;          // objoff_30: frames until forced breakup
     private boolean playerGrabbed;   // objoff_32: true when player is hanging on
+    private boolean collisionProperty; // ROM collision_property signal set by Touch_Special
     private boolean playerWasJumpPressed; // Track edge-trigger for A/B/C release
     private int collisionFlags;      // Current collision flags (cleared on grab/breakup)
+    private transient AbstractPlayableSprite lastNativeMainPlayer;
 
     // Fragment state (only used when routine == BREAKUP)
     private boolean isFragment;
@@ -181,6 +191,11 @@ public class BreakablePlatingObjectInstance extends AbstractObjectInstance
 
         // Mapping frame 0 = full intact plating
         this.mappingFrame = 0;
+    }
+
+    @Override
+    public BreakablePlatingObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new BreakablePlatingObjectInstance(ctx.spawn(), getName());
     }
 
     /**
@@ -216,8 +231,9 @@ public class BreakablePlatingObjectInstance extends AbstractObjectInstance
     // ========================================================================
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
+        AbstractPlayableSprite player = nativeMainPlayer(playerEntity);
+        lastNativeMainPlayer = player;
         switch (routine) {
             case MAIN -> updateMain(player);
             case BREAKUP -> updateBreakup();
@@ -238,6 +254,9 @@ public class BreakablePlatingObjectInstance extends AbstractObjectInstance
     private void updateMain(AbstractPlayableSprite player) {
         if (playerGrabbed) {
             updateHanging(player);
+        } else if (collisionProperty) {
+            collisionProperty = false;
+            tryGrabPlayer(player);
         }
         // Touch detection is handled by onTouchResponse callback
     }
@@ -275,7 +294,7 @@ public class BreakablePlatingObjectInstance extends AbstractObjectInstance
             if (newY < minY) {
                 newY = minY;
             }
-            player.setCentreY((short) newY);
+            NativePositionOps.writeYPosPreserveSubpixel(player, newY);
         }
 
         // ROM: btst #button_down,(Ctrl_1_Held).w / addq.w #1,y_pos(a1) / cmp...
@@ -286,7 +305,7 @@ public class BreakablePlatingObjectInstance extends AbstractObjectInstance
             if (newY > maxY) {
                 newY = maxY;
             }
-            player.setCentreY((short) newY);
+            NativePositionOps.writeYPosPreserveSubpixel(player, newY);
         }
 
         // ROM: move.b (Ctrl_1_Press_Logical).w,d0
@@ -312,7 +331,7 @@ public class BreakablePlatingObjectInstance extends AbstractObjectInstance
         player.setYSpeed((short) 0);
 
         // ROM: move.w x_pos(a0),d0 / subi.w #$14,d0 / move.w d0,x_pos(a1)
-        player.setCentreX((short) (x - GRAB_X_OFFSET));
+        NativePositionOps.writeXPosPreserveSubpixel(player, x - GRAB_X_OFFSET);
 
         // ROM: bset #status.player.x_flip,status(a1)
         // x_flip set = facing left (s2.constants.asm: status.player.x_flip = render_flags.x_flip)
@@ -322,14 +341,34 @@ public class BreakablePlatingObjectInstance extends AbstractObjectInstance
         player.setAnimationId(Sonic2AnimationIds.HANG);
 
         // ROM: move.b #1,(MainCharacter+obj_control).w
-        player.setObjectControlled(true);
+        ObjectControlState.nativeBits0To6CpuAllowedMovementSuppressed().applyTo(player);
 
         // ROM: move.b #1,(WindTunnel_holding_flag).w
-        // This prevents wind tunnel from interfering - handled by objectControlled in our engine
+        setWindTunnelHolding(true);
 
         // ROM: move.b #1,objoff_32(a0)
         playerGrabbed = true;
         playerWasJumpPressed = player.isJumpPressed(); // Initialize edge-trigger tracking
+    }
+
+    private void tryGrabPlayer(AbstractPlayableSprite player) {
+        if (player == null) {
+            return;
+        }
+
+        // ROM: move.w x_pos(a0),d0 / subi.w #$14,d0 / cmp.w x_pos(a1),d0
+        // bhs.s BranchTo16_JmpTo39_MarkObjGone
+        int grabThresholdX = x - GRAB_X_OFFSET;
+        if (grabThresholdX >= player.getCentreX()) {
+            return;
+        }
+
+        // ROM: cmpi.b #4,routine(a1) / bhs.s BranchTo16_JmpTo39_MarkObjGone
+        if (player.isHurt() || player.getDead()) {
+            return;
+        }
+
+        grabPlayer(player);
     }
 
     /**
@@ -342,13 +381,21 @@ public class BreakablePlatingObjectInstance extends AbstractObjectInstance
             collisionFlags = 0;
 
             // ROM: clr.b (MainCharacter+obj_control).w
-            player.setObjectControlled(false);
+            ObjectControlState.none().applyTo(player);
 
             // ROM: clr.b (WindTunnel_holding_flag).w
-            // Handled by clearing objectControlled
+            setWindTunnelHolding(false);
 
             // ROM: clr.b objoff_32(a0)
             playerGrabbed = false;
+        }
+    }
+
+    private void setWindTunnelHolding(boolean holding) {
+        ObjectServices objectServices = tryServices();
+        if (objectServices != null
+                && objectServices.zoneFeatureProvider() instanceof Sonic2ZoneFeatureProvider sonic2) {
+            sonic2.setWfzWindTunnelHolding(holding);
         }
     }
 
@@ -380,10 +427,10 @@ public class BreakablePlatingObjectInstance extends AbstractObjectInstance
             int fragX = x + FRAGMENT_OFFSETS[i][0];
             int fragY = y + FRAGMENT_OFFSETS[i][1];
 
-            BreakablePlatingObjectInstance fragment = new BreakablePlatingObjectInstance(
+            final int delay = FRAGMENT_DELAYS[i];
+            spawnChild(() -> new BreakablePlatingObjectInstance(
                     spawn, fragX, fragY, FRAGMENT_X_VEL, FRAGMENT_Y_VEL,
-                    FRAGMENT_DELAYS[i], fragPriority);
-            objectManager.addDynamicObject(fragment);
+                    delay, fragPriority));
         }
 
         // ROM: move.w #SndID_SlowSmash,d0 / jmp (PlaySound).l
@@ -477,6 +524,23 @@ public class BreakablePlatingObjectInstance extends AbstractObjectInstance
         return 0;
     }
 
+    @Override
+    public TouchResponseProfile getTouchResponseProfile() {
+        return TOUCH_RESPONSE_PROFILE;
+    }
+
+    @Override
+    public TouchResponseProfile getTouchResponseProfile(boolean multiRegionSource) {
+        return TOUCH_RESPONSE_PROFILE;
+    }
+
+    @Override
+    public boolean requiresContinuousTouchCallbacks() {
+        // Touch_Special refreshes collision_property on every overlapping frame;
+        // ObjC1 may reject an early overlap and accept it later without separation.
+        return TOUCH_RESPONSE_PROFILE.continuousCallbacks();
+    }
+
     /**
      * Called by the touch response system when the player overlaps this object.
      * ROM: collision_property is set by Touch_Special, then ObjC1_Main checks it.
@@ -489,35 +553,24 @@ public class BreakablePlatingObjectInstance extends AbstractObjectInstance
      */
     @Override
     public void onTouchResponse(PlayableEntity playerEntity, TouchResponseResult result, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (playerGrabbed) {
             return; // Already grabbed
         }
-        if (player == null) {
-            return;
+        // ROM ObjC1 consumes Touch_Special's collision_property through a
+        // MainCharacter-only branch; Sidekick never reaches the grab routine.
+        PlayableEntity nativeMain = services().playerQuery().mainPlayerOrNull();
+        if (nativeMain == null) {
+            nativeMain = lastNativeMainPlayer;
         }
+        collisionProperty = playerEntity != null && playerEntity == nativeMain;
+    }
 
-        // ROM: move.w x_pos(a0),d0 / subi.w #$14,d0 / cmp.w x_pos(a1),d0
-        // bhs.s BranchTo16_JmpTo39_MarkObjGone
-        // Player must be to the left of (objX - $14) ... actually the ROM checks
-        // if (objX - $14) >= playerX, branching to skip if true.
-        // So the grab succeeds when playerX > (objX - $14), i.e. player is close enough.
-        // Wait, re-reading: bhs = branch if higher or same (unsigned). So if d0 >= playerX, skip.
-        // That means grab happens when playerX > d0, i.e. playerX > objX - $14.
-        // But then the player is placed AT objX - $14. So the player must be between
-        // (objX - $14) and the touch response overlap area.
-        int grabThresholdX = x - GRAB_X_OFFSET;
-        if (grabThresholdX >= player.getCentreX()) {
-            return; // Player too far left
+    private AbstractPlayableSprite nativeMainPlayer(PlayableEntity updatePlayer) {
+        PlayableEntity main = services().playerQuery().mainPlayerOrNull();
+        if (main instanceof AbstractPlayableSprite sprite) {
+            return sprite;
         }
-
-        // ROM: cmpi.b #4,routine(a1) / bhs.s BranchTo16_JmpTo39_MarkObjGone
-        // Player must not be hurt or dying (routine < 4)
-        if (player.isHurt() || player.getDead()) {
-            return;
-        }
-
-        grabPlayer(player);
+        return updatePlayer instanceof AbstractPlayableSprite sprite ? sprite : null;
     }
 
     // ========================================================================
@@ -600,7 +653,7 @@ public class BreakablePlatingObjectInstance extends AbstractObjectInstance
 
     @Override
     public void appendDebugRenderCommands(DebugRenderContext ctx) {
-        if (!SonicConfigurationService.getInstance().getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED)) {
+        if (!services().configuration().getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED)) {
             return;
         }
 

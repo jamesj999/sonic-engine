@@ -8,14 +8,16 @@ import static org.lwjgl.opengl.GL30.glBindVertexArray;
 import static org.lwjgl.opengl.GL30.glDeleteVertexArrays;
 import static org.lwjgl.opengl.GL30.glGenVertexArrays;
 
-import org.lwjgl.system.MemoryUtil;
 import com.openggf.Engine;
+import org.lwjgl.system.MemoryUtil;
 import com.openggf.configuration.SonicConfiguration;
 import com.openggf.configuration.SonicConfigurationService;
+import com.openggf.game.GameServices;
 import com.openggf.level.PatternDesc;
 
 import java.nio.FloatBuffer;
 import java.util.ArrayDeque;
+import java.util.Objects;
 import java.util.logging.Logger;
 
 /**
@@ -37,23 +39,6 @@ public class BatchedPatternRenderer {
 
     private static final Logger LOGGER = Logger.getLogger(BatchedPatternRenderer.class.getName());
 
-    private static GraphicsManager cachedGm;
-    private static Engine cachedEngine;
-
-    private static GraphicsManager getGm() {
-        if (cachedGm == null) {
-            cachedGm = GraphicsManager.getInstance();
-        }
-        return cachedGm;
-    }
-
-    private static Engine getEngine() {
-        if (cachedEngine == null) {
-            cachedEngine = Engine.getInstance();
-        }
-        return cachedEngine;
-    }
-
     // Maximum patterns per batch
     private static final int MAX_PATTERNS_PER_BATCH = 4096;
     private static final int COMMAND_POOL_LIMIT = 8;
@@ -62,6 +47,8 @@ public class BatchedPatternRenderer {
     private static final int FLOATS_PER_PATTERN_VERTS = 6 * 2;
     // 6 vertices per pattern (2 triangles), 2 floats (u,v) per vertex
     private static final int FLOATS_PER_PATTERN_TEXCOORDS = 6 * 2;
+    private static BatchedPatternRenderer instance;
+    private final GraphicsManager graphicsManager;
 
     // Pre-allocated buffers - reused each frame
     private final float[] vertexData;
@@ -77,9 +64,7 @@ public class BatchedPatternRenderer {
 
     // Track whether a shadow batch is active (uses different shader and blend mode)
     private boolean shadowBatchActive = false;
-
-    // Singleton instance
-    private static BatchedPatternRenderer instance;
+    private int shadowAtlasIndex;
 
     public static synchronized BatchedPatternRenderer getInstance() {
         if (instance == null) {
@@ -92,20 +77,33 @@ public class BatchedPatternRenderer {
         return instance;
     }
 
-    private BatchedPatternRenderer() {
-        this.screenHeight = SonicConfigurationService.getInstance().getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS);
+    public BatchedPatternRenderer() {
+        this(GameServices.graphics(), GameServices.configuration());
+    }
+
+    public BatchedPatternRenderer(GraphicsManager graphicsManager, SonicConfigurationService configService) {
+        this.graphicsManager = Objects.requireNonNull(graphicsManager, "graphicsManager");
+        Objects.requireNonNull(configService, "configService");
+        this.screenHeight = configService.getInt(SonicConfiguration.SCREEN_HEIGHT_PIXELS);
         this.vertexData = new float[MAX_PATTERNS_PER_BATCH * FLOATS_PER_PATTERN_VERTS];
         this.texCoordData = new float[MAX_PATTERNS_PER_BATCH * FLOATS_PER_PATTERN_TEXCOORDS];
         this.paletteCoordData = new float[MAX_PATTERNS_PER_BATCH * 6];
     }
 
+    // Display height resolved once per batch in beginBatch()/beginShadowBatch()
+    // and reused by every addPattern call (thousands per frame). Safe because FBO
+    // projection state never changes between batch begin and end: call sites
+    // (e.g. special-stage background renderers) set up FBO projection BEFORE
+    // creating the batch and restore it after the batch is flushed.
+    private int batchDisplayHeight;
+
     /**
-     * Gets the current display height for Y coordinate calculations.
+     * Resolves the current display height for Y coordinate calculations.
      * When rendering to an FBO, this returns the FBO height.
      * Otherwise returns the normal screen height.
      */
-    private int getCurrentDisplayHeight() {
-        Engine engine = getEngine();
+    private int resolveDisplayHeight() {
+        Engine engine = graphicsManager.getEngine();
         if (engine != null && engine.isFBOProjectionActive()) {
             return engine.getCurrentDisplayHeight();
         }
@@ -120,6 +118,7 @@ public class BatchedPatternRenderer {
      */
     public void beginBatch() {
         patternCount = 0;
+        batchDisplayHeight = resolveDisplayHeight();
         batchActive = true;
     }
 
@@ -181,9 +180,8 @@ public class BatchedPatternRenderer {
         // Genesis Y refers to the TOP of the pattern, so we subtract the pattern height
         // (8)
         // to get the OpenGL Y coordinate for the bottom of the quad
-        // Use dynamic display height for FBO rendering support
-        int currentHeight = getCurrentDisplayHeight();
-        int screenY = currentHeight - y - 8;
+        // Display height resolved once per batch in beginBatch() (FBO-aware)
+        int screenY = batchDisplayHeight - y - 8;
 
         // Compute the 4 corners of the quad
         float x0 = x;
@@ -252,9 +250,8 @@ public class BatchedPatternRenderer {
         // For a 2-pixel strip at Genesis Y, the OpenGL bottom should be:
         // currentHeight - y - stripHeight
         // This ensures Genesis Y=0 maps to OpenGL Y at top of screen
-        // Use dynamic display height for FBO rendering support
-        int currentHeight = getCurrentDisplayHeight();
-        int screenY = currentHeight - y - 2;
+        // Display height resolved once per batch in beginBatch() (FBO-aware)
+        int screenY = batchDisplayHeight - y - 2;
 
         // Compute the 4 corners of the quad (8 wide × 2 high)
         float x0 = x;
@@ -351,11 +348,14 @@ public class BatchedPatternRenderer {
             return null;
         }
 
-        GraphicsManager gm = getGm();
+        GraphicsManager gm = graphicsManager;
         boolean usePriority = gm.isUseSpritePriorityShader();
-        boolean highPri = gm.getCurrentSpriteHighPriority();
+        int tileOcclusionPaletteMask = gm.getCurrentSpriteTileOcclusionPaletteMask();
+        boolean ghostEffectActive = gm.isGhostRenderEffectActive();
+        float ghostAlpha = gm.getGhostRenderAlpha();
         BatchRenderCommand command = obtainBatchCommand();
-        command.load(vertexData, texCoordData, paletteCoordData, patternCount, usePriority, highPri);
+        command.load(vertexData, texCoordData, paletteCoordData, patternCount,
+                usePriority, tileOcclusionPaletteMask, ghostEffectActive, ghostAlpha);
 
         // Reset for next batch
         patternCount = 0;
@@ -374,7 +374,13 @@ public class BatchedPatternRenderer {
      * where shadow pixels are rendered (VDP shadow/highlight mode).
      */
     public void beginShadowBatch() {
+        beginShadowBatch(0);
+    }
+
+    public void beginShadowBatch(int atlasIndex) {
         patternCount = 0;
+        batchDisplayHeight = resolveDisplayHeight();
+        shadowAtlasIndex = atlasIndex;
         shadowBatchActive = true;
         batchActive = false; // Ensure normal batch is not active
     }
@@ -391,14 +397,14 @@ public class BatchedPatternRenderer {
      * Uses the same buffer management as normal batches.
      */
     public boolean addShadowPattern(PatternAtlas.Entry entry, PatternDesc desc, int x, int y) {
-        if (!shadowBatchActive || patternCount >= MAX_PATTERNS_PER_BATCH) {
+        if (!shadowBatchActive || patternCount >= MAX_PATTERNS_PER_BATCH
+                || entry.atlasIndex() != shadowAtlasIndex) {
             return false;
         }
 
         // Convert Y to screen coordinates (flip Y axis)
-        // Use dynamic display height for FBO rendering support
-        int currentHeight = getCurrentDisplayHeight();
-        int screenY = currentHeight - y - 8;
+        // Display height resolved once per batch in beginShadowBatch() (FBO-aware)
+        int screenY = batchDisplayHeight - y - 8;
 
         // Compute the 4 corners of the quad
         float x0 = x;
@@ -441,7 +447,7 @@ public class BatchedPatternRenderer {
         }
 
         ShadowBatchRenderCommand command = obtainShadowCommand();
-        command.load(vertexData, texCoordData, patternCount);
+        command.load(vertexData, texCoordData, patternCount, shadowAtlasIndex);
 
         // Reset for next batch
         patternCount = 0;
@@ -455,6 +461,7 @@ public class BatchedPatternRenderer {
         if (command == null) {
             command = new BatchRenderCommand();
         }
+        command.leased = true;
         return command;
     }
 
@@ -463,6 +470,7 @@ public class BatchedPatternRenderer {
         if (command == null) {
             command = new ShadowBatchRenderCommand();
         }
+        command.leased = true;
         return command;
     }
 
@@ -498,6 +506,12 @@ public class BatchedPatternRenderer {
      * Clears internal state without making GL calls.
      */
     public void cleanupHeadless() {
+        for (BatchRenderCommand command : batchCommandPool) {
+            command.releaseNativeBuffers();
+        }
+        for (ShadowBatchRenderCommand command : shadowCommandPool) {
+            command.releaseNativeBuffers();
+        }
         batchCommandPool.clear();
         shadowCommandPool.clear();
         patternCount = 0;
@@ -515,10 +529,13 @@ public class BatchedPatternRenderer {
         private int texCoordFloatCount;
         private int paletteFloatCount;
         private boolean usePriorityShader;
-        private boolean capturedHighPriority; // captured at batch creation, not read at execute time
+        private int capturedTileOcclusionPaletteMask;
+        private boolean capturedGhostEffectActive;
+        private float capturedGhostAlpha;
         private FloatBuffer vertexBuffer;
         private FloatBuffer texCoordBuffer;
         private FloatBuffer paletteCoordBuffer;
+        private boolean leased;
 
         private int vaoId;
         private int vertexVboId;
@@ -536,10 +553,13 @@ public class BatchedPatternRenderer {
         private int cachedShaderProgramId = -1;
 
         private void load(float[] vertexData, float[] texCoordData, float[] paletteCoordData,
-                          int patternCount, boolean usePriorityShader, boolean highPriority) {
+                          int patternCount, boolean usePriorityShader, int tileOcclusionPaletteMask,
+                          boolean ghostEffectActive, float ghostAlpha) {
             this.patternCount = patternCount;
             this.usePriorityShader = usePriorityShader;
-            this.capturedHighPriority = highPriority;
+            this.capturedTileOcclusionPaletteMask = tileOcclusionPaletteMask;
+            this.capturedGhostEffectActive = ghostEffectActive;
+            this.capturedGhostAlpha = ghostAlpha;
             this.vertexFloatCount = patternCount * FLOATS_PER_PATTERN_VERTS;
             this.texCoordFloatCount = patternCount * FLOATS_PER_PATTERN_TEXCOORDS;
             this.paletteFloatCount = patternCount * 6;
@@ -562,12 +582,20 @@ public class BatchedPatternRenderer {
 
         @Override
         public void execute(int cameraX, int cameraY, int cameraWidth, int cameraHeight) {
+            try {
+                executeLeased(cameraX, cameraY, cameraWidth, cameraHeight);
+            } finally {
+                discard();
+            }
+        }
+
+        private void executeLeased(int cameraX, int cameraY, int cameraWidth, int cameraHeight) {
             if (patternCount == 0) {
                 return;
             }
             ensureVbos();
 
-            GraphicsManager gm = getGm();
+            GraphicsManager gm = graphicsManager;
             // Use captured priority shader state from batch creation time
             ShaderProgram shader;
             if (usePriorityShader) {
@@ -588,6 +616,7 @@ public class BatchedPatternRenderer {
             glUniform1i(shader.getIndexedColorTextureLocation(), 1);
             shader.setPaletteLine(-1.0f);
             shader.setTotalPaletteLines((float) RenderContext.getTotalPaletteLines());
+            shader.setGhostEffect(capturedGhostEffectActive, capturedGhostAlpha);
 
             // Cache uniform locations per shader program to avoid per-batch string lookups
             int programId = shader.getProgramId();
@@ -617,7 +646,7 @@ public class BatchedPatternRenderer {
             // Use the priority captured at batch creation time (not the current global
             // state, which may have changed since the batch was created).
             if (shader instanceof SpritePriorityShaderProgram priorityShader) {
-                priorityShader.setSpriteHighPriority(capturedHighPriority);
+                priorityShader.setTileOcclusionPaletteMask(capturedTileOcclusionPaletteMask);
 
                 // Bind tile priority FBO texture to unit 5 (avoid conflict with TilemapGpuRenderer which uses 0-4)
                 TilePriorityFBO fbo = gm.getTilePriorityFBO();
@@ -731,6 +760,14 @@ public class BatchedPatternRenderer {
             // will properly reinitialize GL state (since we just disabled everything)
             PatternRenderCommand.resetFrameState();
 
+        }
+
+        @Override
+        public void discard() {
+            if (!leased) {
+                return;
+            }
+            leased = false;
             recycleBatchCommand(this);
         }
 
@@ -761,6 +798,21 @@ public class BatchedPatternRenderer {
             return buffer;
         }
 
+        private void releaseNativeBuffers() {
+            if (vertexBuffer != null) {
+                MemoryUtil.memFree(vertexBuffer);
+                vertexBuffer = null;
+            }
+            if (texCoordBuffer != null) {
+                MemoryUtil.memFree(texCoordBuffer);
+                texCoordBuffer = null;
+            }
+            if (paletteCoordBuffer != null) {
+                MemoryUtil.memFree(paletteCoordBuffer);
+                paletteCoordBuffer = null;
+            }
+        }
+
         private void dispose() {
             if (vaoId != 0) {
                 glDeleteVertexArrays(vaoId);
@@ -778,18 +830,7 @@ public class BatchedPatternRenderer {
                 glDeleteBuffers(paletteVboId);
                 paletteVboId = 0;
             }
-            if (vertexBuffer != null) {
-                MemoryUtil.memFree(vertexBuffer);
-                vertexBuffer = null;
-            }
-            if (texCoordBuffer != null) {
-                MemoryUtil.memFree(texCoordBuffer);
-                texCoordBuffer = null;
-            }
-            if (paletteCoordBuffer != null) {
-                MemoryUtil.memFree(paletteCoordBuffer);
-                paletteCoordBuffer = null;
-            }
+            releaseNativeBuffers();
         }
     }
 
@@ -803,9 +844,11 @@ public class BatchedPatternRenderer {
         private int patternCount;
         private int vertexFloatCount;
         private int texCoordFloatCount;
+        private int atlasIndex;
 
         private FloatBuffer vertexBuffer;
         private FloatBuffer texCoordBuffer;
+        private boolean leased;
 
         private int vaoId;
         private int vertexVboId;
@@ -820,8 +863,9 @@ public class BatchedPatternRenderer {
         private int cachedCameraOffsetLoc = -2;
         private int cachedShaderProgramId = -1;
 
-        private void load(float[] vertexData, float[] texCoordData, int patternCount) {
+        private void load(float[] vertexData, float[] texCoordData, int patternCount, int atlasIndex) {
             this.patternCount = patternCount;
+            this.atlasIndex = atlasIndex;
             this.vertexFloatCount = patternCount * FLOATS_PER_PATTERN_VERTS;
             this.texCoordFloatCount = patternCount * FLOATS_PER_PATTERN_TEXCOORDS;
 
@@ -839,12 +883,20 @@ public class BatchedPatternRenderer {
 
         @Override
         public void execute(int cameraX, int cameraY, int cameraWidth, int cameraHeight) {
+            try {
+                executeLeased(cameraX, cameraY, cameraWidth, cameraHeight);
+            } finally {
+                discard();
+            }
+        }
+
+        private void executeLeased(int cameraX, int cameraY, int cameraWidth, int cameraHeight) {
             if (patternCount == 0) {
                 return;
             }
             ensureVbos();
 
-            GraphicsManager gm = getGm();
+            GraphicsManager gm = graphicsManager;
             ShaderProgram shadowShader = gm.getShadowShaderProgram();
 
             // Setup state for shadow rendering
@@ -889,7 +941,7 @@ public class BatchedPatternRenderer {
             // Bind VAO (required for core profile)
             glBindVertexArray(vaoId);
 
-            Integer atlasTextureId = gm.getPatternAtlasTextureId();
+            Integer atlasTextureId = resolveAtlasTextureId();
             if (atlasTextureId != null) {
                 glActiveTexture(GL_TEXTURE0);
                 glBindTexture(GL_TEXTURE_2D, atlasTextureId);
@@ -922,6 +974,18 @@ public class BatchedPatternRenderer {
 
             PatternRenderCommand.resetFrameState();
 
+        }
+
+        private Integer resolveAtlasTextureId() {
+            return graphicsManager.getPatternAtlasTextureId(atlasIndex);
+        }
+
+        @Override
+        public void discard() {
+            if (!leased) {
+                return;
+            }
+            leased = false;
             recycleShadowCommand(this);
         }
 
@@ -951,6 +1015,17 @@ public class BatchedPatternRenderer {
             return buffer;
         }
 
+        private void releaseNativeBuffers() {
+            if (vertexBuffer != null) {
+                MemoryUtil.memFree(vertexBuffer);
+                vertexBuffer = null;
+            }
+            if (texCoordBuffer != null) {
+                MemoryUtil.memFree(texCoordBuffer);
+                texCoordBuffer = null;
+            }
+        }
+
         private void dispose() {
             if (vaoId != 0) {
                 glDeleteVertexArrays(vaoId);
@@ -964,14 +1039,7 @@ public class BatchedPatternRenderer {
                 glDeleteBuffers(texCoordVboId);
                 texCoordVboId = 0;
             }
-            if (vertexBuffer != null) {
-                MemoryUtil.memFree(vertexBuffer);
-                vertexBuffer = null;
-            }
-            if (texCoordBuffer != null) {
-                MemoryUtil.memFree(texCoordBuffer);
-                texCoordBuffer = null;
-            }
+            releaseNativeBuffers();
         }
     }
 }

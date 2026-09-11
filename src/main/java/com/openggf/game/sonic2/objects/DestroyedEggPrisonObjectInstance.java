@@ -7,6 +7,7 @@ import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 import com.openggf.game.PlayableEntity;
@@ -30,7 +31,7 @@ import java.util.List;
  * - No updates: Just renders, no logic
  */
 public class DestroyedEggPrisonObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider {
+        implements SolidObjectProvider, SpawnRewindRecreatable {
 
     private static final int FRAME_BODY_OPEN_3 = 3; // Fully open capsule frame
 
@@ -38,8 +39,8 @@ public class DestroyedEggPrisonObjectInstance extends AbstractObjectInstance
     private static final int BODY_HALF_WIDTH = 0x2B;  // 43 pixels
     private static final int BODY_HALF_HEIGHT = 0x18; // 24 pixels
 
-    private final int positionX;
-    private final int positionY;
+    private int positionX;
+    private int positionY;
 
     /**
      * Create a static destroyed capsule visual at the given position.
@@ -54,8 +55,12 @@ public class DestroyedEggPrisonObjectInstance extends AbstractObjectInstance
         this.positionY = y;
     }
 
+    DestroyedEggPrisonObjectInstance(ObjectSpawn spawn) {
+        this(spawn, spawn.x(), spawn.y());
+    }
+
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // No updates - static visual only
     }
@@ -94,9 +99,26 @@ public class DestroyedEggPrisonObjectInstance extends AbstractObjectInstance
     }
 
     @Override
+    public boolean usesInstanceSolidStateLatchKey() {
+        // ROM Obj3E allocates each capsule piece (body, button, lock, broken
+        // half) into its own SST slot via AllocateObject, and copies only the
+        // per-piece load data into it (docs/s2disasm/s2.asm:84832-84865). Each
+        // piece therefore owns a separate status(a0) byte, and
+        // SolidObject_TestClearPush releases the player's push bit only when
+        // the CALLING object's own pushing bit is set -- otherwise it branches
+        // straight to SolidObject_NoCollision without touching status(a1)
+        // (docs/s2disasm/s2.asm:35462-35466,35483-35490). Keying the engine's
+        // push/standing latch on the shared ObjectSpawn instead lets a sibling
+        // piece's no-contact pass clear the body's push mark inside the same
+        // object pass, so Sonic's next Sonic_Animate never sees Status_Push and
+        // publishes a walk mapping frame where ROM publishes SonAni_Push.
+        return true;
+    }
+
+    @Override
     public SolidObjectParams getSolidParams() {
         // Same collision as the original capsule body
-        return new SolidObjectParams(
+        return SolidObjectParams.of(
             BODY_HALF_WIDTH,    // 0x2B = 43 pixels
             BODY_HALF_HEIGHT,   // 0x18 = 24 pixels (air)
             BODY_HALF_HEIGHT    // 0x18 = 24 pixels (ground)

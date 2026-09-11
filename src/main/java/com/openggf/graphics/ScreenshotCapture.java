@@ -1,12 +1,14 @@
 package com.openggf.graphics;
 
+import org.lwjgl.stb.STBImage;
 import org.lwjgl.stb.STBImageWrite;
+import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.IntBuffer;
+import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.lwjgl.opengl.GL11.*;
@@ -41,30 +43,38 @@ public final class ScreenshotCapture {
     }
 
     /**
-     * Capture the current OpenGL framebuffer as a BufferedImage.
+     * Capture the current OpenGL framebuffer as an RGBA image.
      * Reads from the back buffer and flips the Y-axis (OpenGL origin is bottom-left).
      *
      * @param width  Width of the capture area in pixels
      * @param height Height of the capture area in pixels
-     * @return A BufferedImage containing the captured framebuffer contents
+     * @return An image containing the captured framebuffer contents
      */
-    public static BufferedImage captureFramebuffer(int width, int height) {
-        // Allocate buffer for RGBA data using LWJGL's MemoryUtil
+    public static RgbaImage captureFramebuffer(int width, int height) {
+        return captureFramebufferRegion(0, 0, width, height);
+    }
+
+    /**
+     * Capture a specific region of the current OpenGL framebuffer as an RGBA image.
+     * Reads from the back buffer and flips the Y-axis (OpenGL origin is bottom-left).
+     *
+     * @param x      Left edge of the capture area in framebuffer pixels
+     * @param y      Bottom edge of the capture area in framebuffer pixels
+     * @param width  Width of the capture area in pixels
+     * @param height Height of the capture area in pixels
+     * @return An image containing the captured framebuffer region
+     */
+    public static RgbaImage captureFramebufferRegion(int startX, int startY, int width, int height) {
         ByteBuffer buffer = MemoryUtil.memAlloc(width * height * 4);
 
         try {
-            // Read pixels from back buffer
             glReadBuffer(GL_BACK);
-            glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, buffer);
+            glReadPixels(startX, startY, width, height, GL_RGBA, GL_UNSIGNED_BYTE, buffer);
 
-            // Create BufferedImage
-            BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+            RgbaImage image = new RgbaImage(width, height, new int[width * height]);
 
-            // Copy pixels from buffer to image, flipping Y coordinate
-            // OpenGL origin is bottom-left, BufferedImage origin is top-left
             for (int y = 0; y < height; y++) {
                 for (int x = 0; x < width; x++) {
-                    // Read from flipped Y position in buffer
                     int srcY = height - 1 - y;
                     int srcIndex = (srcY * width + x) * 4;
 
@@ -73,8 +83,7 @@ public final class ScreenshotCapture {
                     int b = buffer.get(srcIndex + 2) & 0xFF;
                     int a = buffer.get(srcIndex + 3) & 0xFF;
 
-                    int argb = (a << 24) | (r << 16) | (g << 8) | b;
-                    image.setRGB(x, y, argb);
+                    image.setArgb(x, y, (a << 24) | (r << 16) | (g << 8) | b);
                 }
             }
 
@@ -93,10 +102,10 @@ public final class ScreenshotCapture {
      * @param tolerance Per-channel tolerance for pixel comparison (0 = exact match required)
      * @return ComparisonResult with match status and diff details
      */
-    public static ComparisonResult imagesMatch(BufferedImage reference, BufferedImage current, int tolerance) {
-        if (reference.getWidth() != current.getWidth() || reference.getHeight() != current.getHeight()) {
+    public static ComparisonResult imagesMatch(RgbaImage reference, RgbaImage current, int tolerance) {
+        if (reference.width() != current.width() || reference.height() != current.height()) {
             return ComparisonResult.failure(
-                    reference.getWidth() * reference.getHeight(),
+                    reference.width() * reference.height(),
                     255,
                     0, 0
             );
@@ -107,10 +116,10 @@ public final class ScreenshotCapture {
         int firstDiffX = -1;
         int firstDiffY = -1;
 
-        for (int y = 0; y < reference.getHeight(); y++) {
-            for (int x = 0; x < reference.getWidth(); x++) {
-                int refPixel = reference.getRGB(x, y);
-                int curPixel = current.getRGB(x, y);
+        for (int y = 0; y < reference.height(); y++) {
+            for (int x = 0; x < reference.width(); x++) {
+                int refPixel = reference.argb(x, y);
+                int curPixel = current.argb(x, y);
 
                 // Extract ARGB components
                 int refA = (refPixel >> 24) & 0xFF;
@@ -151,25 +160,55 @@ public final class ScreenshotCapture {
     }
 
     /**
-     * Save a BufferedImage as a PNG file.
+     * Save an RGBA image as a PNG file.
      *
      * @param image The image to save
      * @param path  The file path to save to
      * @throws IOException If the file cannot be written
      */
-    public static void savePNG(BufferedImage image, Path path) throws IOException {
-        ImageIO.write(image, "PNG", path.toFile());
+    // STB's flip-on-write setting is process-global. Serialize every PNG write
+    // through this entry point, including asynchronous interactive screenshots.
+    public static synchronized void savePNG(RgbaImage image, Path path) throws IOException {
+        ByteBuffer rgba = toRgbaByteBuffer(image);
+        try {
+            STBImageWrite.stbi_flip_vertically_on_write(false);
+            if (!STBImageWrite.stbi_write_png(path.toString(), image.width(), image.height(), 4, rgba, image.width() * 4)) {
+                throw new IOException("Failed to write PNG: " + path);
+            }
+        } finally {
+            MemoryUtil.memFree(rgba);
+        }
     }
 
     /**
-     * Load a PNG file as a BufferedImage.
+     * Load a PNG file as an RGBA image.
      *
      * @param path The file path to load from
-     * @return The loaded BufferedImage
+     * @return The loaded image
      * @throws IOException If the file cannot be read
      */
-    public static BufferedImage loadPNG(Path path) throws IOException {
-        return ImageIO.read(path.toFile());
+    public static RgbaImage loadPNG(Path path) throws IOException {
+        byte[] bytes = Files.readAllBytes(path);
+        ByteBuffer raw = MemoryUtil.memAlloc(bytes.length);
+        raw.put(bytes).flip();
+
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            IntBuffer width = stack.mallocInt(1);
+            IntBuffer height = stack.mallocInt(1);
+            IntBuffer channels = stack.mallocInt(1);
+            STBImage.stbi_set_flip_vertically_on_load(false);
+            ByteBuffer decoded = STBImage.stbi_load_from_memory(raw, width, height, channels, 4);
+            if (decoded == null) {
+                throw new IOException("Failed to decode PNG: " + path + " (" + STBImage.stbi_failure_reason() + ")");
+            }
+            try {
+                return fromRgbaByteBuffer(decoded, width.get(0), height.get(0));
+            } finally {
+                STBImage.stbi_image_free(decoded);
+            }
+        } finally {
+            MemoryUtil.memFree(raw);
+        }
     }
 
     /**
@@ -181,23 +220,21 @@ public final class ScreenshotCapture {
      * @param tolerance Per-channel tolerance
      * @return A new image highlighting the differences
      */
-    public static BufferedImage createDiffImage(BufferedImage reference, BufferedImage current, int tolerance) {
-        int width = Math.max(reference.getWidth(), current.getWidth());
-        int height = Math.max(reference.getHeight(), current.getHeight());
-        BufferedImage diff = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+    public static RgbaImage createDiffImage(RgbaImage reference, RgbaImage current, int tolerance) {
+        int width = Math.max(reference.width(), current.width());
+        int height = Math.max(reference.height(), current.height());
+        RgbaImage diff = new RgbaImage(width, height, new int[width * height]);
 
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
-                // Handle size mismatch
-                if (x >= reference.getWidth() || y >= reference.getHeight() ||
-                        x >= current.getWidth() || y >= current.getHeight()) {
-                    // Out of bounds in one image - mark as red
-                    diff.setRGB(x, y, 0xFFFF0000);
+                if (x >= reference.width() || y >= reference.height() ||
+                        x >= current.width() || y >= current.height()) {
+                    diff.setArgb(x, y, 0xFFFF0000);
                     continue;
                 }
 
-                int refPixel = reference.getRGB(x, y);
-                int curPixel = current.getRGB(x, y);
+                int refPixel = reference.argb(x, y);
+                int curPixel = current.argb(x, y);
 
                 int refR = (refPixel >> 16) & 0xFF;
                 int refG = (refPixel >> 8) & 0xFF;
@@ -214,15 +251,13 @@ public final class ScreenshotCapture {
                 int maxDiff = Math.max(Math.max(diffR, diffG), diffB);
 
                 if (maxDiff > tolerance) {
-                    // Highlight differences in red, intensity based on diff magnitude
                     int intensity = Math.min(255, 128 + maxDiff);
-                    diff.setRGB(x, y, 0xFF000000 | (intensity << 16));
+                    diff.setArgb(x, y, 0xFF000000 | (intensity << 16));
                 } else {
-                    // Match - show dimmed version of current image
                     int dimR = curR / 4;
                     int dimG = curG / 4;
                     int dimB = curB / 4;
-                    diff.setRGB(x, y, 0xFF000000 | (dimR << 16) | (dimG << 8) | dimB);
+                    diff.setArgb(x, y, 0xFF000000 | (dimR << 16) | (dimG << 8) | dimB);
                 }
             }
         }
@@ -232,7 +267,7 @@ public final class ScreenshotCapture {
 
     /**
      * Capture the framebuffer and save directly to a PNG file using STBImageWrite.
-     * This method does NOT depend on java.awt and is safe for GraalVM native-image builds.
+     * This method does NOT depend on AWT and is safe for GraalVM native-image builds.
      *
      * @param width  Width of the capture area in pixels
      * @param height Height of the capture area in pixels
@@ -240,32 +275,36 @@ public final class ScreenshotCapture {
      * @throws IOException If the file cannot be written
      */
     public static void captureAndSavePNG(int width, int height, Path path) throws IOException {
-        ByteBuffer buffer = MemoryUtil.memAlloc(width * height * 4);
-        try {
-            glReadBuffer(GL_BACK);
-            glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, buffer);
+        savePNG(captureFramebuffer(width, height), path);
+    }
 
-            // Flip Y: OpenGL origin is bottom-left, PNG expects top-left
-            int stride = width * 4;
-            ByteBuffer flipped = MemoryUtil.memAlloc(width * height * 4);
-            try {
-                for (int y = 0; y < height; y++) {
-                    int srcPos = (height - 1 - y) * stride;
-                    int dstPos = y * stride;
-                    for (int i = 0; i < stride; i++) {
-                        flipped.put(dstPos + i, buffer.get(srcPos + i));
-                    }
-                }
-
-                STBImageWrite.stbi_flip_vertically_on_write(false);
-                if (!STBImageWrite.stbi_write_png(path.toString(), width, height, 4, flipped, stride)) {
-                    throw new IOException("Failed to write screenshot PNG: " + path);
-                }
-            } finally {
-                MemoryUtil.memFree(flipped);
+    private static ByteBuffer toRgbaByteBuffer(RgbaImage image) {
+        ByteBuffer buffer = MemoryUtil.memAlloc(image.width() * image.height() * 4);
+        for (int y = 0; y < image.height(); y++) {
+            for (int x = 0; x < image.width(); x++) {
+                int argb = image.argb(x, y);
+                buffer.put((byte) ((argb >> 16) & 0xFF));
+                buffer.put((byte) ((argb >> 8) & 0xFF));
+                buffer.put((byte) (argb & 0xFF));
+                buffer.put((byte) ((argb >> 24) & 0xFF));
             }
-        } finally {
-            MemoryUtil.memFree(buffer);
         }
+        buffer.flip();
+        return buffer;
+    }
+
+    private static RgbaImage fromRgbaByteBuffer(ByteBuffer buffer, int width, int height) {
+        RgbaImage image = new RgbaImage(width, height, new int[width * height]);
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int index = (y * width + x) * 4;
+                int r = buffer.get(index) & 0xFF;
+                int g = buffer.get(index + 1) & 0xFF;
+                int b = buffer.get(index + 2) & 0xFF;
+                int a = buffer.get(index + 3) & 0xFF;
+                image.setArgb(x, y, (a << 24) | (r << 16) | (g << 8) | b);
+            }
+        }
+        return image;
     }
 }

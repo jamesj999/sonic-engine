@@ -5,12 +5,15 @@ import com.openggf.game.sonic2.audio.Sonic2Music;
 import com.openggf.game.sonic2.audio.Sonic2Sfx;
 import com.openggf.game.PlayableEntity;
 import com.openggf.game.sonic2.constants.Sonic2ObjectIds;
+import com.openggf.game.sonic2.constants.Sonic2Constants;
+import com.openggf.game.sonic2.resources.Sonic2PlcRequests;
 import com.openggf.level.objects.ObjectAnimationState;
 import com.openggf.game.sonic2.Sonic2ObjectArtKeys;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.ObjectServices;
+import com.openggf.level.objects.SpawnConstructionContextRewindRecreatable;
 import com.openggf.level.objects.boss.AbstractBossInstance;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
@@ -40,7 +43,8 @@ import java.util.List;
  * - STOP_EXPLODING: Post-explosion bounce
  * - RETREAT: Flee off-screen
  */
-public class Sonic2CPZBossInstance extends AbstractBossInstance {
+public class Sonic2CPZBossInstance extends AbstractBossInstance
+        implements SpawnConstructionContextRewindRecreatable {
 
     // Boss routine states
     private static final int MAIN_DESCEND = 0x00;
@@ -69,7 +73,7 @@ public class Sonic2CPZBossInstance extends AbstractBossInstance {
 
     // Status bit flags (ROM: Obj5D_status)
     private static final int STATUS_SIDE = 0x08;      // bit3: which side to target
-    private static final int STATUS_HIT = 0x02;       // bit1: was just hit
+    private static final int STATUS_HIT = 0x02;       // bit1: ROM reads this, but Obj5D never sets it on hit
     private static final int STATUS_GUNK_READY = 0x04; // bit2: gunk ready to drop
 
     // Status2 bit flags (ROM: Obj5D_status2)
@@ -92,9 +96,14 @@ public class Sonic2CPZBossInstance extends AbstractBossInstance {
     private int status;
     private int status2;
     private boolean bossDefeated;
+    /** Publication latch; keeps an equality-timed animal/explosion request retryable. */
+    private boolean animalExplosionSubmitted;
 
     // Timing
     private int defeatTimer;
+
+    /** ROM Obj5D_Init runs once, from the boss's own slot. */
+    private boolean childComponentsSpawned;
 
     // Animation
     private int anim;
@@ -127,7 +136,30 @@ public class Sonic2CPZBossInstance extends AbstractBossInstance {
         animationState = new ObjectAnimationState(
                 CPZBossAnimations.getEggpodAnimations(), anim, mappingFrame);
 
-        // Spawn child components
+        // Children are NOT spawned here. ROM Obj5D_Init allocates all five with
+        // AllocateObjectAfterCurrent (docs/s2disasm/s2.asm:61628-61710), and it runs
+        // as the boss's own routine 0 from the boss's SST slot, so every child lands
+        // in a slot ABOVE the boss and the boss executes first each frame. This
+        // engine's boss constructor runs before the object manager has given the
+        // boss a slot, so spawning from here made the children take the lower free
+        // slots and the boss the higher one -- inverting the ROM's execution order,
+        // which left the container reading the boss's previous-frame position.
+        // See spawnChildComponentsFromOwnSlot, called on the boss's first update.
+    }
+
+    /**
+     * ROM {@code Obj5D_Init}: the boss's routine 0, executed from the boss's own
+     * slot, allocating each child with {@code AllocateObjectAfterCurrent} in this
+     * order -- Robotnik, Flame, Pump, Container, Pipe
+     * (docs/s2disasm/s2.asm:61628-61710). Running it from the first update rather
+     * than the constructor is what gives the boss the lowest slot of its family,
+     * so it moves before the container samples its position.
+     */
+    private void spawnChildComponentsFromOwnSlot() {
+        if (childComponentsSpawned) {
+            return;
+        }
+        childComponentsSpawned = true;
         spawnRobotnik();
         spawnFlame();
         spawnPump();
@@ -147,7 +179,6 @@ public class Sonic2CPZBossInstance extends AbstractBossInstance {
 
     @Override
     protected void onHitTaken(int remainingHits) {
-        status |= STATUS_HIT;
         if (robotnik != null) {
             robotnik.setAnim(2); // Hurt face
         }
@@ -159,7 +190,13 @@ public class Sonic2CPZBossInstance extends AbstractBossInstance {
     }
 
     @Override
+    protected boolean defeatDeferralAppliesToThisBoss() {
+        return true;
+    }
+
+    @Override
     protected void onDefeatStarted() {
+        if (!isDefeatEntryPrepared() && !Sonic2PlcRequests.append(services(), Sonic2Constants.PLC_CAPSULE)) return;
         bossDefeated = true;
         state.routine = MAIN_EXPLODE;
         defeatTimer = DEFEAT_TIMER_START;
@@ -169,8 +206,14 @@ public class Sonic2CPZBossInstance extends AbstractBossInstance {
     }
 
     @Override
-    protected void updateBossLogic(int frameCounter, PlayableEntity playerEntity) {
+    protected boolean prepareDefeatEntry() {
+        return Sonic2PlcRequests.append(services(), Sonic2Constants.PLC_CAPSULE);
+    }
+
+    @Override
+    protected void updateBossLogic(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
+        spawnChildComponentsFromOwnSlot();
         lookAtPlayer(player);
 
         switch (state.routine) {
@@ -178,7 +221,7 @@ public class Sonic2CPZBossInstance extends AbstractBossInstance {
             case MAIN_MOVE_TOWARD_TARGET -> updateMainMoveTowardTarget();
             case MAIN_WAIT -> updateMainWait();
             case MAIN_FOLLOW_PLAYER -> updateMainFollowPlayer(player);
-            case MAIN_EXPLODE -> updateMainExplode(frameCounter);
+            case MAIN_EXPLODE -> updateMainExplode(vIntRunCount);
             case MAIN_STOP_EXPLODING -> updateMainStopExploding();
             case MAIN_RETREAT -> updateMainRetreat();
         }
@@ -202,13 +245,15 @@ public class Sonic2CPZBossInstance extends AbstractBossInstance {
         int diff = Math.abs(target - baseX);
         if (diff <= 3) {
             if ((state.yFixed >> 16) == MAIN_TARGET_Y) {
+                // ROM Obj5D_Main_2_Stop branches straight to Pos_and_Collision after halting.
+                state.xVel = 0;
+                state.yVel = 0;
                 state.routine = MAIN_WAIT;
                 status ^= STATUS_SIDE;
-                // Clear stale container flags before starting new attack cycle
-                status2 &= ~STATUS2_ACTION2;  // Clear container moving
-                status2 &= ~STATUS2_ACTION4;  // Clear container returning
                 status2 |= STATUS2_ACTION0;   // Activate pipe
             }
+            updateMainPositionAndHover();
+            return;
         } else {
             state.xVel = target > baseX ? MAIN_MOVE_VEL : -MAIN_MOVE_VEL;
         }
@@ -244,10 +289,10 @@ public class Sonic2CPZBossInstance extends AbstractBossInstance {
         updateMainPositionAndHover();
     }
 
-    private void updateMainExplode(int frameCounter) {
+    private void updateMainExplode(int vIntRunCount) {
         defeatTimer--;
         if (defeatTimer >= 0) {
-            if ((frameCounter & EXPLOSION_INTERVAL - 1) == 0) {
+            if ((vIntRunCount & EXPLOSION_INTERVAL - 1) == 0) {
                 spawnDefeatExplosion();
             }
         } else {
@@ -269,7 +314,10 @@ public class Sonic2CPZBossInstance extends AbstractBossInstance {
         } else {
             if (defeatTimer < 0x30) {
                 state.yVel -= 8;
-            } else if (defeatTimer == 0x30) {
+            } else if (defeatTimer >= 0x30 && !animalExplosionSubmitted) {
+                if (!Sonic2PlcRequests.append(services(), Sonic2Constants.PLC_ANIMALS_CPZ,
+                        Sonic2Constants.PLC_EXPLOSION)) return;
+                animalExplosionSubmitted = true;
                 state.yVel = 0;
                 services().playMusic(Sonic2Music.CHEMICAL_PLANT.id);
             } else if (defeatTimer >= 0x38) {
@@ -328,7 +376,16 @@ public class Sonic2CPZBossInstance extends AbstractBossInstance {
         if (robotnik != null) {
             robotnik.setDestroyed(true);
         }
-        services().gameState().setCurrentBossId(0);
+        // ROM: Current_Boss_ID is NEVER cleared in Sonic 2. It is written only by
+        // the boss-arena setup routines (`move.b #N,(Current_Boss_ID).w`, ids 1-9)
+        // and read by `tst.b`; docs/s2disasm/s2.asm contains no `clr.b` or
+        // `move.b #0` for it, so it resets only via the level-load RAM clear and
+        // persists to the end of the act. Sonic_Boundary's right-hand test widens
+        // the side boundary by $40 only when it is zero (s2.asm:37243-37251), so
+        // clearing it here let the character run 64px past the ROM's clamp.
+        // Contrast S1, which DOES clear at the Egg Prison
+        // (s1disasm/_incObj/3E Prison Capsule.asm:97), and S3K, which clears
+        // Boss_flag at 31 sites. S2 is the exception.
         setDestroyed(true);
     }
 
@@ -347,8 +404,7 @@ public class Sonic2CPZBossInstance extends AbstractBossInstance {
             return;
         }
         ObjectSpawn robotnikSpawn = new ObjectSpawn(state.x, state.y, Sonic2ObjectIds.CPZ_BOSS, 0, state.renderFlags, false, 0);
-        robotnik = new CPZBossRobotnik(robotnikSpawn, this);
-        services().objectManager().addDynamicObject(robotnik);
+        robotnik = spawnChild(() -> new CPZBossRobotnik(robotnikSpawn, this));
     }
 
     private void spawnFlame() {
@@ -359,8 +415,7 @@ public class Sonic2CPZBossInstance extends AbstractBossInstance {
             return;
         }
         ObjectSpawn flameSpawn = new ObjectSpawn(state.x, state.y, Sonic2ObjectIds.CPZ_BOSS, 0, state.renderFlags, false, 0);
-        flame = new CPZBossFlame(flameSpawn, this);
-        services().objectManager().addDynamicObject(flame);
+        flame = spawnChild(() -> new CPZBossFlame(flameSpawn, this));
     }
 
     private void spawnPump() {
@@ -368,8 +423,7 @@ public class Sonic2CPZBossInstance extends AbstractBossInstance {
             return;
         }
         ObjectSpawn pumpSpawn = new ObjectSpawn(state.x, state.y, Sonic2ObjectIds.CPZ_BOSS, 0, state.renderFlags, false, 0);
-        pump = new CPZBossPump(pumpSpawn, this);
-        services().objectManager().addDynamicObject(pump);
+        pump = spawnChild(() -> new CPZBossPump(pumpSpawn, this));
     }
 
     private void spawnContainer() {
@@ -377,8 +431,7 @@ public class Sonic2CPZBossInstance extends AbstractBossInstance {
             return;
         }
         ObjectSpawn containerSpawn = new ObjectSpawn(state.x, state.y, Sonic2ObjectIds.CPZ_BOSS, 0, state.renderFlags, false, 0);
-        container = new CPZBossContainer(containerSpawn, this);
-        services().objectManager().addDynamicObject(container);
+        container = spawnChild(() -> new CPZBossContainer(containerSpawn, this));
     }
 
     private void spawnPipe() {
@@ -386,8 +439,7 @@ public class Sonic2CPZBossInstance extends AbstractBossInstance {
             return;
         }
         ObjectSpawn pipeSpawn = new ObjectSpawn(state.x, state.y, Sonic2ObjectIds.CPZ_BOSS, 0, state.renderFlags, false, 0);
-        currentPipe = new CPZBossPipe(pipeSpawn, this);
-        services().objectManager().addDynamicObject(currentPipe);
+        currentPipe = spawnChild(() -> new CPZBossPipe(pipeSpawn, this));
     }
 
     // ========================================================================
@@ -424,8 +476,10 @@ public class Sonic2CPZBossInstance extends AbstractBossInstance {
     }
 
     public void onPipeComplete() {
-        status2 &= ~STATUS2_ACTION0;
-        spawnPipe(); // Prepare for next cycle
+        // Obj5D_Pipe_Retract only deletes the pipe control object. Action 0 is
+        // cleared later by Obj5D_Container_Extend when the fill animation ends
+        // (s2.asm:62740-62742); the next pipe is spawned by the returning
+        // container path (s2.asm:62649-62664).
     }
 
     // Dripper state
@@ -559,6 +613,13 @@ public class Sonic2CPZBossInstance extends AbstractBossInstance {
     }
 
     @Override
+    public boolean isPersistent() {
+        // Obj5D_Main_Retreat owns its delete gate: it keeps widening
+        // Camera_Max_X_pos to $2C30 before testing the on-screen bit.
+        return true;
+    }
+
+    @Override
     protected boolean isOnScreen() {
         Camera camera = services().camera();
         int screenX = state.x - camera.getX();
@@ -575,5 +636,10 @@ public class Sonic2CPZBossInstance extends AbstractBossInstance {
     @Override
     protected int getBossExplosionSfxId() {
         return Sonic2Sfx.BOSS_EXPLOSION.id;
+    }
+
+    @Override
+    protected int getBossExplosionObjectId() {
+        return com.openggf.game.sonic2.constants.Sonic2ObjectIds.BOSS_EXPLOSION;
     }
 }

@@ -14,8 +14,16 @@ com.openggf/
   game/                      -- Game module system
     GameModule.java          -- Interface each game implements
     GameModuleRegistry.java  -- Maps game identifiers ("s1","s2","s3k") to modules
-    GameServices.java        -- Global services: ROM access, graphics, configuration
-    GameRuntime.java         -- Mutable gameplay state container (in progress)
+    GameServices.java        -- Global facade over engine and runtime-owned services
+    session/                 -- EngineServices, SessionManager, WorldSession, mode contexts
+    rewind/                  -- Frame rewind primitives, keyframes, registry, playback controller
+      identity/              -- Stable player/object/spawn ids for reference rebinding
+      schema/                -- Compact field-capture schemas, codecs, and state blobs
+    zone/                    -- Typed zone runtime state adapters
+    palette/                 -- Shared palette ownership/composition
+    animation/               -- Shared animated tile channel graph
+    mutation/                -- Deterministic level-layout mutation pipeline
+    render/                  -- Staged special render effects + advanced render modes
 
     sonic1/                  -- Sonic 1 module
       Sonic1GameModule.java  -- S1 provider wiring
@@ -30,7 +38,13 @@ com.openggf/
     sonic3k/                 -- Sonic 3&K module (same structure)
 
   level/                     -- Level infrastructure
-    LevelManager.java        -- Active level state, tile grid, object spawning
+    LevelManager.java        -- Public coordinator/facade for the active level
+    LevelTilemapManager.java -- Tile grid, chunk/block state, VRAM upload
+    LevelRenderer.java       -- Scene, sprite/object, and ending-background render passes
+    LevelActTransitionExecutor.java -- In-place act-transition reload choreography
+    LevelWaterCoordinator.java      -- Water loading and playable underwater state
+    LevelCheckpointCoordinator.java -- Checkpoint/respawn state and restore
+    LevelDirtyRegionDispatcher.java -- MutableLevel dirty-region dispatch
     objects/                 -- Base object classes, registry interface, spawn records
       AbstractObjectInstance.java  -- Base class for all game objects
       ObjectRegistry.java         -- Interface: maps object IDs to factories
@@ -63,7 +77,7 @@ com.openggf/
   camera/                    -- Camera position, boundaries, shake
   data/                      -- ROM reading, decompression (Kosinski, Nemesis, etc.)
   debug/                     -- Debug overlays and visualization
-  tools/                     -- Offline tools (RomOffsetFinder, etc.)
+  tools/                     -- Offline tools (RomOffsetFinder, rewind inventory, etc.)
 ```
 
 ## The GameModule / Provider Pattern
@@ -99,41 +113,187 @@ returns water heights for ARZ and CPZ; Sonic 1's returns heights for LZ and SBZ3
 Sonic 3&K's returns heights for HCZ and LBZ. The engine does not know or care which
 zones have water -- it just asks the provider.
 
-## GameServices and ObjectServices
+## Services and Session Ownership
 
-The engine uses a two-tier service architecture:
+The engine uses a scoped service architecture:
 
-**GameServices** is the global tier. It provides access to things that exist once for the
-entire application:
+**EngineServices** (`com.openggf.game.session.EngineServices`) is the process-level root.
+It owns services that are not recreated with gameplay sessions:
 - ROM data access
 - Graphics pipeline
 - Audio system
 - Configuration
+- Debug/profiling services
+- ROM detection and cross-game feature donation
 
-**ObjectServices** is the contextual tier. It provides access to things that are specific
-to the current gameplay context:
+**SessionManager** owns the current `WorldSession` plus the active mode context.
+`WorldSession` is durable world state: active `GameModule`, save session context,
+current zone/act metadata, and the loaded `Level`/`MutableLevel`. It survives editor
+mode swaps.
+
+**GameplayModeContext** is disposable gameplay state. It is rebuilt when gameplay is
+entered or resumed, and owns `Camera`, `TimerManager`, `GameStateManager`, `FadeManager`,
+`GameRng`, `SolidExecutionRegistry`, `WaterSystem`, `ParallaxManager`,
+`TerrainCollisionManager`, `CollisionSystem`, `SpriteManager`, `LevelManager`, rewind
+controllers, and the shared runtime framework stack.
+
+**GameServices** is the static facade for non-object code. Gameplay-scoped accessors
+resolve through the active `GameplayModeContext`; engine-global accessors resolve
+through `EngineServices`. Code that can receive explicit dependencies should still do so,
+but managers, event handlers, HUD code, and render orchestration commonly use
+`GameServices`.
+
+**ObjectServices** is the contextual tier for object instances. It provides access to
+things that are specific to the current gameplay context:
 - Current level and camera
-- Object manager (for spawning dynamic objects)
+- Object lifecycle helpers and object-manager-backed operations
 - Sound effect playback
 - Game state (rings, lives, score)
 
 Every object instance receives an `ObjectServices` reference via `services()`. This is
-how objects interact with the world: `services().playSfx(id)`,
-`services().objectManager().addDynamicObject(obj)`, etc.
+how objects interact with the world: `services().playSfx(id)`, camera queries,
+game-state updates, and object-manager-backed helpers. New runtime child objects
+should be spawned through `spawnChild(...)`, `spawnFreeChild(...)`, or an existing
+`level.objects` lifecycle wrapper rather than direct manager calls.
 
 The separation exists because the planned level editor will have multiple simultaneous
-level contexts. GameServices stays shared; ObjectServices will be backed by a specific
-runtime context.
+level contexts. Process services stay shared; object services are backed by the active
+gameplay context.
 
-## GameRuntime (In Progress)
+### Object Service Access Contract
 
-The target architecture moves all mutable gameplay state into an explicit `GameRuntime`
-object. Currently, some state lives in static singletons (e.g., `LevelManager.getInstance()`).
-The migration is ongoing. As a contributor, be aware that:
+Object instances must treat `ObjectServices` as their runtime boundary:
+
+- Use `services()` for required gameplay dependencies such as camera, object manager,
+  audio, game state, render manager, level manager, zone features, and RNG.
+- Use `tryServices()` only for optional fallback paths where the object can safely run
+  before injection, such as legacy direct-construction tests or debug-only probes.
+- Do not call `GameServices`, `EngineServices`, `RuntimeManager`, `GameModuleRegistry`,
+  or manager `getInstance()` methods from normal object code. Those process-global
+  roots are reserved for documented bridge classes such as `DefaultObjectServices`,
+  `BootstrapObjectServices`, `ObjectManager`, and registry/composition code.
+- Do not call `services()` from object constructors. Object services are injected by the
+  object manager after construction unless the object is created through a managed
+  construction-context helper. Initialize service-dependent state lazily in `update()`
+  or through an explicit post-construction path.
+- When an object creates a child object that needs services during construction, use
+  `spawnChild(...)`, `spawnFreeChild(...)`, or an explicit construction-context wrapper
+  instead of `new ChildInstance(...)` followed by `addDynamicObject(...)`.
+
+The test guard suite enforces this contract with `TestObjectServicesMigrationGuard`,
+`TestNoServicesInObjectConstructors`, and `TestConstructionContextGuard`. If a new
+exception is truly needed, document the exact bridge line and reason in the guard rather
+than exempting a whole class.
+
+### Object Behavior Profiles And Control Contracts
+
+Object behavior vocabulary should be shared at the game layer and executed by the
+object layer:
+
+- Canonical profiles live under `com.openggf.game.profiles.*`, with family
+  subpackages such as solid routines, touch response, and object lifecycle. These
+  profiles describe cross-game behavior; they are not zone-local or object-manager
+  implementation details.
+- `level.objects` remains the compatibility and execution layer. It may adapt
+  legacy provider booleans and hooks to canonical profiles, but new profile types
+  should not be invented in game-specific object packages.
+- `ObjectControlState` should describe object-control intent and derived predicates
+  instead of adding new raw setter combinations.
+- `ObjectPlayerQuery` plus `ObjectPlayerParticipationPolicy` should decide which
+  playable entities participate in object logic. Code that uses only the focused
+  player or first sidekick needs an explicit native-P1/P2 reason.
+- `ObjectLifetimeOps` should own object destruction, offscreen expiry,
+  respawn-latch mutation, and slot transfer operations. Direct lifecycle mutation
+  is legacy or compatibility code unless a documented profile gap requires it.
+
+When source guards enforce these rules, keep their baselines as shrink-only migration
+artifacts. Adding a new object, boss, badnik, or trace fix should either use the shared
+contract or document why an existing compatibility wrapper is still required.
+
+## Runtime-Owned Systems
+
+The old `GameRuntime`/`RuntimeManager` facade has been retired from production code.
+Mutable gameplay state now lives on `GameplayModeContext`; durable world state lives
+on `WorldSession`; process-level services live behind `EngineServices`. New behavior
+should route through these owners, `GameServices`, `ObjectServices`, or explicit
+injection rather than direct singleton or retired-runtime lookups.
+
+The current framework stack includes:
+
+- Rewind framework - gameplay-scoped keyframe capture, restore, deterministic replay, and
+  held-rewind support. It also owns the generic and compact-schema field capture
+  paths, stable identity ids, and policy registry used to close object/player
+  snapshot coverage. Default object subclass scalar capture is centrally gated so
+  broad object coverage does not require repeated leaf-object edits. See
+  [Rewind System](rewind-system.md).
+- `ZoneRuntimeRegistry` - typed per-zone runtime state adapters over raw event/state bytes
+- `PaletteOwnershipRegistry` - palette-write arbitration, precedence, and underwater mirroring
+- `AnimatedTileChannelGraph` - shared animated tile channels for script-driven and custom uploads
+- `ZoneLayoutMutationPipeline` - deterministic queued/immediate live layout edits and redraw sequencing
+- `SpecialRenderEffectRegistry` - staged additional render passes layered into the normal scene
+- `AdvancedRenderModeController` - frame-level render-mode state such as per-line/per-cell scroll overrides
+
+Related scroll/deform reuse lives in `level.scroll.compose`, centered on `ScrollEffectComposer`
+and helper plans such as `DeformationPlan` and `WaterlineBlendComposer`.
+
+## Current Migration Status
+
+The runtime-owned framework stack is the preferred architecture, but migration is still partial:
+
+- Sonic 2 uses it for HTZ/CNZ typed runtime state, palette ownership, animated tile orchestration, CNZ staged render effects (slot overlay), and CNZ layout edits queued through `ZoneLayoutMutationPipeline`.
+- Sonic 3&K uses it for AIZ/HCZ/CNZ typed runtime state, AIZ staged render effects and advanced render modes (fire-transition and battleship overlays), HCZ/SOZ animated tiles, CNZ runtime-state-backed scroll behavior, and seamless terrain-swap writes routed through the mutation pipeline.
+- Shared scroll/deform composition helpers are already live in the AIZ, HCZ, and MGZ handlers; prefer extending those helpers before copying bespoke scanline-fill logic into another zone.
+- Other implemented zones still mix runtime-owned systems with older zone-local machinery. Before extending a zone, inspect whether it already has a typed runtime-state adapter, palette ownership integration, channel-graph usage, mutation-pipeline writes, scroll-composer usage, or render-registry wiring.
+
+As a contributor, be aware that:
 
 - New code should prefer receiving dependencies through method parameters or
   `ObjectServices` rather than calling static `getInstance()` methods.
-- Existing `getInstance()` patterns still work but represent the old style.
+- New zone behavior should prefer the runtime-owned framework stack over bespoke zone-local
+  registries, buffers, or render-mode booleans.
+- Some process-global `getInstance()` compatibility paths still exist for bootstrap and legacy tests, but they are not the current production style.
+
+## Architecture Ratchets And Migration Sequence
+
+The architecture guard suite is meant to make the preferred direction
+incremental. Existing debt is frozen in explicit baselines or source-text
+budgets, and new work should reduce those numbers rather than growing them.
+Current source ratchets cover four high-pressure seams:
+
+- `Engine` and `GameLoop` should be composition and mode-dispatch roots, not
+  owners of concrete Sonic 1, Sonic 2, or Sonic 3&K behavior.
+- `ObjectManager` should stay game-agnostic. Rewind recreation, dynamic children,
+  and object lifecycle special cases should move through registered codecs,
+  factories, or provider contracts instead of naming concrete Sonic objects.
+- Low-level graphics and audio code should not look up gameplay-scoped services
+  directly. Camera, fade, level, sprite, or gameplay state should arrive from the
+  render/audio orchestration layer through explicit parameters or context objects.
+- Large root dispatch methods in `Engine` and `GameLoop` should not grow. When a
+  change touches one of those methods, prefer extracting a focused collaborator
+  and lowering the documented budget.
+
+The target architecture is:
+
+1. `Engine` wires process services, window/runtime bootstrapping, and top-level
+   mode transitions only.
+2. `GameLoop` delegates each mode to provider-backed mode controllers or
+   existing module interfaces.
+3. Game modules own concrete game objects, art, save/data-select presentation,
+   special/bonus-stage bootstrap details, and debug-only game-specific helpers.
+4. Shared managers such as `ObjectManager` depend on shared lifecycle/profile
+   contracts and registries, not concrete `game.sonic*` classes.
+5. Graphics/audio infrastructure remains a lower layer; gameplay state is pushed
+   to it by callers rather than pulled through `GameServices`.
+
+Use this migration order when cleaning up a boundary:
+
+1. Add or reuse a provider/registry contract at the current shared boundary.
+2. Move one concrete Sonic dependency behind that contract without changing
+   runtime behavior.
+3. Run the focused architecture guard that owns the boundary.
+4. If the count shrinks, lower the source-ratchet budget or frozen baseline in
+   the same commit and update `docs/architecture/archunit-exceptions.md`.
+5. Repeat with the next concrete dependency or oversized dispatcher block.
 
 ## Level Initialization: LevelInitProfile
 
@@ -194,8 +354,11 @@ commands are sorted by priority bucket and executed.
 
 ### Destruction
 
-Objects mark themselves for removal by calling `setDestroyed(true)`. The object manager
-removes them at the end of the frame. Common reasons:
+Objects mark themselves for removal through the lifecycle contract. New code should use
+`ObjectLifetimeOps` or an existing `level.objects` compatibility wrapper so respawn
+latches, dynamic expiry, and slot-transfer behavior stay consistent. Legacy code may still
+call `setDestroyed(true)` directly; treat that as a migration target rather than a pattern
+to copy. Common reasons:
 - Off-screen cleanup (the `isOnScreen()` check, equivalent to `MarkObjGone`)
 - Defeated badnik (after explosion animation)
 - Collected item (ring, monitor)
@@ -204,8 +367,12 @@ removes them at the end of the frame. Common reasons:
 ### Dynamic Objects
 
 Objects created at runtime (projectiles, explosions, debris) are not part of the
-placement list. They are added via `ObjectManager.addDynamicObject(obj)`. They follow
-the same update/render/destroy lifecycle but are not subject to camera-based spawn/despawn.
+placement list. New object code should use `spawnChild(...)`, `spawnFreeChild(...)`,
+or another `level.objects` compatibility wrapper so construction context and lifecycle
+semantics stay centralized. Direct `ObjectManager.addDynamicObject(obj)` is reserved
+for documented bridge code and unusual allocation paths that cannot use the standard
+helpers. Dynamic objects follow the same
+update/render/destroy lifecycle but are not subject to camera-based spawn/despawn.
 
 ## Rendering Pipeline
 
@@ -240,6 +407,21 @@ The audio system reimplements the SMPS (Sample Music Playback System) sound driv
 3. **Ym2612Chip** produces FM synthesis audio from register writes.
 4. **PsgChip** produces PSG audio (square waves and noise).
 5. **DacData** manages PCM drum sample data and playback rates.
+
+This is a reimplementation, not a blanket register-write parity guarantee.
+S3K coordinate flags are handled by `Sonic3kCoordFlagHandler`; meta commands
+`SND_CMD`, `MUS_PAUSE`, and `COPY_MEM` are proven absent from the
+S&K-loader-supported S3K music/SFX streams and both native SFX tables
+(`33-DF`, 173 entries each). Strict full-bank traversal covers every native
+root and frontier, including the differing `9B`/`AD` payloads and `DC-DF`
+aliases. ROM type-check bytes prove S&K's `DC` CreditsK music special case and
+S3's `DC-DF` SFX dispatch. Their handler cases consume operands only for
+stream alignment and deliberately do not claim the native dispatch, all-track
+halt, or shared-Z80-memory-copy semantics.
+The ROM inventory and native contracts
+are recorded in
+`docs/architecture/research/audio/2026-08-08-s3k-smps-meta-command-reachability.md`;
+future custom-stream support must implement these at the audio driver boundary.
 
 Each game has a `SmpsSequencerConfig` that captures driver differences:
 - **Tempo mode:** S3K uses OVERFLOW (overflow = skip), S2 uses OVERFLOW2 (overflow = tick).

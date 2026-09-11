@@ -1,19 +1,16 @@
 package com.openggf.tests;
-
-import org.junit.Rule;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import com.openggf.data.RomByteReader;
 import com.openggf.game.sonic1.Sonic1ObjectPlacement;
 import com.openggf.game.sonic1.constants.Sonic1Constants;
 import com.openggf.game.sonic1.constants.Sonic1ObjectIds;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
 
 import java.util.List;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Verifies Sonic 1 object placement parsing against known-good positions
@@ -21,15 +18,11 @@ import static org.junit.Assert.*;
  */
 @RequiresRom(SonicGame.SONIC_1)
 public class Sonic1ObjectPlacementTest {
-
-    @Rule
-    public RequiresRomRule romRule = new RequiresRomRule();
-
     @Test
     public void parsesGhz1ObjectCount() throws Exception {
         List<ObjectSpawn> spawns = loadGhz1();
         // GHZ1 has 214 object records (verified from disassembly binary)
-        assertEquals("GHZ1 object count", 214, spawns.size());
+        assertEquals(214, spawns.size(), "GHZ1 object count");
     }
 
     @Test
@@ -38,7 +31,7 @@ public class Sonic1ObjectPlacementTest {
         assertFalse(spawns.isEmpty());
         // First object in GHZ1 sorted by X (verified from objpos/ghz1.bin)
         ObjectSpawn first = spawns.get(0);
-        assertTrue("First object X should be small", first.x() < 0x0200);
+        assertTrue(first.x() < 0x0200, "First object X should be small");
     }
 
     /**
@@ -59,7 +52,7 @@ public class Sonic1ObjectPlacementTest {
                 .filter(s -> s.objectId() == Sonic1ObjectIds.CRABMEAT)
                 .toList();
 
-        assertEquals("GHZ1 should have 3 Crabmeats", 3, crabmeats.size());
+        assertEquals(3, crabmeats.size(), "GHZ1 should have 3 Crabmeats");
 
         // Crabmeat #1: on lower platform area
         assertSpawnPosition("Crabmeat #1", crabmeats.get(0),
@@ -82,8 +75,7 @@ public class Sonic1ObjectPlacementTest {
                 .toList();
 
         for (int i = 0; i < crabmeats.size(); i++) {
-            assertEquals("Crabmeat " + i + " renderFlags should be 0",
-                    0, crabmeats.get(i).renderFlags());
+            assertEquals(0, crabmeats.get(i).renderFlags(), "Crabmeat " + i + " renderFlags should be 0");
         }
     }
 
@@ -91,8 +83,7 @@ public class Sonic1ObjectPlacementTest {
     public void objectsAreSortedByX() throws Exception {
         List<ObjectSpawn> spawns = loadGhz1();
         for (int i = 1; i < spawns.size(); i++) {
-            assertTrue("Objects must be sorted by X: index " + i,
-                    spawns.get(i).x() >= spawns.get(i - 1).x());
+            assertTrue(spawns.get(i).x() >= spawns.get(i - 1).x(), "Objects must be sorted by X: index " + i);
         }
     }
 
@@ -103,21 +94,21 @@ public class Sonic1ObjectPlacementTest {
                 .filter(s -> s.objectId() == Sonic1ObjectIds.CRABMEAT)
                 .toList();
 
-        assertEquals("GHZ2 should have 4 Crabmeats", 4, crabmeats.size());
+        assertEquals(4, crabmeats.size(), "GHZ2 should have 4 Crabmeats");
         // All Crabmeats should have valid positions (Y < 0x1000, X > 0)
         for (ObjectSpawn crab : crabmeats) {
-            assertTrue("Crabmeat X > 0", crab.x() > 0);
-            assertTrue("Crabmeat Y < 0x1000", crab.y() < 0x1000);
+            assertTrue(crab.x() > 0, "Crabmeat X > 0");
+            assertTrue(crab.y() < 0x1000, "Crabmeat Y < 0x1000");
         }
     }
 
     @Test
     public void pointerTableFirstEntryIsValid() throws Exception {
-        RomByteReader reader = RomByteReader.fromRom(romRule.rom());
+        RomByteReader reader = RomByteReader.fromRom(com.openggf.tests.TestEnvironment.currentRom());
         int firstOffset = reader.readU16BE(Sonic1Constants.OBJ_POS_INDEX_ADDR);
         // First entry should be a reasonable offset (not zero, not huge)
-        assertTrue("First pointer offset should be > 0", firstOffset > 0);
-        assertTrue("First pointer offset should be < 0x2000", firstOffset < 0x2000);
+        assertTrue(firstOffset > 0, "First pointer offset should be > 0");
+        assertTrue(firstOffset < 0x2000, "First pointer offset should be < 0x2000");
     }
 
     private List<ObjectSpawn> loadGhz1() throws Exception {
@@ -125,7 +116,7 @@ public class Sonic1ObjectPlacementTest {
     }
 
     private List<ObjectSpawn> loadZone(int zone, int act) throws Exception {
-        RomByteReader reader = RomByteReader.fromRom(romRule.rom());
+        RomByteReader reader = RomByteReader.fromRom(com.openggf.tests.TestEnvironment.currentRom());
         Sonic1ObjectPlacement placement = new Sonic1ObjectPlacement(reader);
         return placement.load(zone, act);
     }
@@ -139,11 +130,13 @@ public class Sonic1ObjectPlacementTest {
             int expectedSubtype,
             boolean expectedRespawn,
             int expectedRenderFlags) {
-        assertEquals(label + " X", expectedX, spawn.x());
-        assertEquals(label + " Y", expectedY, spawn.y());
-        assertEquals(label + " objectId", expectedObjectId, spawn.objectId());
-        assertEquals(label + " subtype", expectedSubtype, spawn.subtype());
-        assertEquals(label + " respawnTracked", expectedRespawn, spawn.respawnTracked());
-        assertEquals(label + " renderFlags", expectedRenderFlags, spawn.renderFlags());
+        assertEquals(expectedX, spawn.x(), label + " X");
+        assertEquals(expectedY, spawn.y(), label + " Y");
+        assertEquals(expectedObjectId, spawn.objectId(), label + " objectId");
+        assertEquals(expectedSubtype, spawn.subtype(), label + " subtype");
+        assertEquals(expectedRespawn, spawn.respawnTracked(), label + " respawnTracked");
+        assertEquals(expectedRenderFlags, spawn.renderFlags(), label + " renderFlags");
     }
 }
+
+

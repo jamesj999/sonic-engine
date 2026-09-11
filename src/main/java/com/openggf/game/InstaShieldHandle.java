@@ -21,8 +21,8 @@ public interface InstaShieldHandle extends PowerUpObject {
     /**
      * Per-frame update for animation stepping and double-jump flag transitions.
      *
-     * @param frameCounter global frame counter
+     * @param vIntRunCount object-visible V-int run count
      * @param player       the owning player entity
      */
-    void update(int frameCounter, PlayableEntity player);
+    void update(int vIntRunCount, PlayableEntity player);
 }

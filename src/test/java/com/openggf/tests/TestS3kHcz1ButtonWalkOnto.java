@@ -10,16 +10,14 @@ import com.openggf.game.sonic3k.objects.Sonic3kButtonObjectInstance;
 import com.openggf.level.objects.ObjectInstance;
 import com.openggf.sprites.playable.Sonic;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * Headless regression for HCZ Act 1 SolidObjectTop button landing.
@@ -28,7 +26,7 @@ import static org.junit.Assert.fail;
  * (subtype 0x20, trigger index 0). The button is co-located with
  * retractable spikes, so a ground-level side-approach is blocked.
  * Instead, we place Sonic directly above the button and let him fall
- * onto it — this isolates the landing threshold behaviour.
+ * onto it â€” this isolates the landing threshold behaviour.
  *
  * <p>ROM reference: sonic3k.asm Obj_Button loc_2C62C (SolidObjectTop path),
  * SolidObjectTop_1P landing at lines 41983-42015. The landing vertical
@@ -42,17 +40,13 @@ import static org.junit.Assert.fail;
  */
 @RequiresRom(SonicGame.SONIC_3K)
 public class TestS3kHcz1ButtonWalkOnto {
-
-    @ClassRule
-    public static RequiresRomRule romRule = new RequiresRomRule();
-
     /** Button layout position from HCZ1 object data (0x3470, 0x07F5). */
     private static final int BUTTON_X = 13424;
     private static final int BUTTON_RAW_Y = 2037;
 
     /**
      * Sonic is placed ON THE GROUND at the button's X, at the user-reported
-     * Y position (top-left 2009 → centreY 2028). This gives distY = 16:
+     * Y position (top-left 2009 â†’ centreY 2028). This gives distY = 16:
      *   button collision Y = 2037 + 4 (init) = 2041
      *   maxTop = airHalfHeight(6) + yRadius(19) = 25
      *   relY = 2028 - 2041 + 4 + 25 = 16
@@ -71,7 +65,7 @@ public class TestS3kHcz1ButtonWalkOnto {
     private HeadlessTestFixture fixture;
     private Sonic sprite;
 
-    @BeforeClass
+    @BeforeAll
     public static void loadLevel() throws Exception {
         SonicConfigurationService config = SonicConfigurationService.getInstance();
         oldSkipIntros = config.getConfigValue(SonicConfiguration.S3K_SKIP_INTROS);
@@ -83,7 +77,7 @@ public class TestS3kHcz1ButtonWalkOnto {
         sharedLevel = SharedLevel.load(SonicGame.SONIC_3K, Sonic3kZoneIds.ZONE_HCZ, 0);
     }
 
-    @AfterClass
+    @AfterAll
     public static void cleanup() {
         SonicConfigurationService config = SonicConfigurationService.getInstance();
         config.setConfigValue(SonicConfiguration.S3K_SKIP_INTROS,
@@ -95,7 +89,7 @@ public class TestS3kHcz1ButtonWalkOnto {
         if (sharedLevel != null) sharedLevel.dispose();
     }
 
-    @Before
+    @BeforeEach
     public void setUp() {
         fixture = HeadlessTestFixture.builder()
                 .withSharedLevel(sharedLevel)
@@ -128,9 +122,11 @@ public class TestS3kHcz1ButtonWalkOnto {
         // to prevent interference with the button collision test.
         var om = GameServices.level().getObjectManager();
         for (ObjectInstance obj : new java.util.ArrayList<>(om.getActiveObjects())) {
+            var spawn = obj.getSpawn();
             if (obj instanceof com.openggf.level.objects.AbstractObjectInstance absObj
-                    && obj.getSpawn().objectId() != 0x33
-                    && Math.abs(obj.getX() - BUTTON_X) < 60) {
+                    && spawn != null
+                    && spawn.objectId() != 0x33
+                    && Math.abs(spawn.x() - BUTTON_X) < 60) {
                 absObj.setDestroyed(true);
             }
         }
@@ -153,7 +149,7 @@ public class TestS3kHcz1ButtonWalkOnto {
     /**
      * Sonic stands on the ground at the button's position, at the exact Y
      * that produces distY = 16.  SolidObjectTop must accept this (ROM does).
-     * Steps a few idle frames — button collision should detect standing and
+     * Steps a few idle frames â€” button collision should detect standing and
      * set the trigger.
      */
     @Test
@@ -169,13 +165,12 @@ public class TestS3kHcz1ButtonWalkOnto {
             }
         }
 
-        assertTrue("Sonic at ground level (topLeft Y=" + GROUND_TOP_LEFT_Y
+        assertTrue(triggerFired, "Sonic at ground level (topLeft Y=" + GROUND_TOP_LEFT_Y
                 + ") should activate the HCZ1 button (trigger 0). "
                 + "This tests distY=16 acceptance for SolidObjectTop. "
                 + "Final centre: (" + sprite.getCentreX() + ", " + sprite.getCentreY()
                 + "), air=" + sprite.getAir()
-                + ", onObject=" + sprite.isOnObject(),
-                triggerFired);
+                + ", onObject=" + sprite.isOnObject());
     }
 
     /**
@@ -198,3 +193,5 @@ public class TestS3kHcz1ButtonWalkOnto {
         fail("No Button object found near x=" + BUTTON_X + " in HCZ1");
     }
 }
+
+

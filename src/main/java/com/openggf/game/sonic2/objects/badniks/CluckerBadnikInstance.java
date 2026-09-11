@@ -9,6 +9,8 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -45,7 +47,7 @@ import java.util.List;
  *   y_pos offset = +$B
  *   x_pos offset = -8 (or +8 if x_flip)
  */
-public class CluckerBadnikInstance extends AbstractBadnikInstance {
+public class CluckerBadnikInstance extends AbstractBadnikInstance implements RewindRecreatable {
 
     // Collision size index from disassembly: collision_flags = 6
     // Set during routine 4->6 transition (move.b #6,collision_flags(a0))
@@ -126,7 +128,12 @@ public class CluckerBadnikInstance extends AbstractBadnikInstance {
     }
 
     @Override
-    protected void updateMovement(int frameCounter, PlayableEntity playerEntity) {
+    public CluckerBadnikInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new CluckerBadnikInstance(ctx.spawn());
+    }
+
+    @Override
+    protected void updateMovement(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         switch (state) {
             case CHECK_DISTANCE -> updateCheckDistance(player);
@@ -247,17 +254,19 @@ public class CluckerBadnikInstance extends AbstractBadnikInstance {
             xOffset = SHOT_X_OFFSET;
         }
 
-        BadnikProjectileInstance projectile = new BadnikProjectileInstance(
-                spawn,
-                BadnikProjectileInstance.ProjectileType.CLUCKER_SHOT,
-                currentX + xOffset,
-                currentY + SHOT_Y_OFFSET,
-                xVel,
-                0, // y_vel = 0 (Obj98_CluckerShotMove uses ObjectMove, no gravity)
-                false,
-                !facingLeft);
-
-        services().objectManager().addDynamicObject(projectile);
+        spawnChild(() -> {
+            BadnikProjectileInstance projectile = new BadnikProjectileInstance(
+                    spawn,
+                    BadnikProjectileInstance.ProjectileType.CLUCKER_SHOT,
+                    currentX + xOffset,
+                    currentY + SHOT_Y_OFFSET,
+                    xVel,
+                    0, // y_vel = 0 (Obj98_CluckerShotMove uses ObjectMove, no gravity)
+                    false,
+                    !facingLeft);
+            projectile.deferFirstMovementForLoadSubObjectInit();
+            return projectile;
+        });
     }
 
     /**
@@ -281,7 +290,7 @@ public class CluckerBadnikInstance extends AbstractBadnikInstance {
     }
 
     @Override
-    protected void updateAnimation(int frameCounter) {
+    protected void updateAnimation(int vIntRunCount) {
         // Animation is driven by the state machine in updateMovement
     }
 

@@ -144,51 +144,69 @@ public final class Bk2MovieLoader {
 
         List<String> logKeyFields = splitFields(logKey);
         List<String> firstFrameFields = splitFields(frameLines.get(0));
-        FrameBindings bindings = resolveBindings(logKeyFields, firstFrameFields);
-        if (bindings.bindings().isEmpty()) {
+        FrameBindings p1Bindings = resolveBindings(logKeyFields, firstFrameFields, Lane.P1);
+        if (p1Bindings.bindings().isEmpty()) {
             throw new IOException("Unable to resolve P1 Genesis bindings from LogKey: " + logKey);
         }
+        // P2 bindings are optional — older single-controller BK2s won't carry P2 fields.
+        FrameBindings p2Bindings = resolveBindings(logKeyFields, firstFrameFields, Lane.P2);
 
         List<Bk2FrameInput> frames = new ArrayList<>(frameLines.size());
         for (int i = 0; i < frameLines.size(); i++) {
             String raw = frameLines.get(i);
             List<String> fields = splitFields(raw);
-            int mask = 0;
-            boolean startPressed = false;
-            boolean a = isPressed(bindings.bindings().get(Button.A), fields);
-            boolean b = isPressed(bindings.bindings().get(Button.B), fields);
-            boolean c = isPressed(bindings.bindings().get(Button.C), fields);
-            int actionMask = (a ? 0x01 : 0) | (b ? 0x02 : 0) | (c ? 0x04 : 0);
 
-            if (isPressed(bindings.bindings().get(Button.UP), fields)) {
-                mask |= AbstractPlayableSprite.INPUT_UP;
-            }
-            if (isPressed(bindings.bindings().get(Button.DOWN), fields)) {
-                mask |= AbstractPlayableSprite.INPUT_DOWN;
-            }
-            if (isPressed(bindings.bindings().get(Button.LEFT), fields)) {
-                mask |= AbstractPlayableSprite.INPUT_LEFT;
-            }
-            if (isPressed(bindings.bindings().get(Button.RIGHT), fields)) {
-                mask |= AbstractPlayableSprite.INPUT_RIGHT;
-            }
-            if (a || b || c) {
-                mask |= AbstractPlayableSprite.INPUT_JUMP;
-            }
-            if (isPressed(bindings.bindings().get(Button.START), fields)) {
-                startPressed = true;
-            }
+            ParsedLane p1 = parseLane(p1Bindings, fields);
+            ParsedLane p2 = parseLane(p2Bindings, fields);
 
-            frames.add(new Bk2FrameInput(i, mask, actionMask, startPressed, raw));
+            frames.add(new Bk2FrameInput(
+                    i,
+                    p1.inputMask(), p1.actionMask(), p1.startPressed(),
+                    p2.inputMask(), p2.actionMask(), p2.startPressed(),
+                    raw));
         }
 
         return new ParsedInputLog(logKey, frames, Math.max(1, firstFrameLineNumber));
     }
 
-    private static FrameBindings resolveBindings(List<String> logKeyFields, List<String> firstFrameFields) {
+    /**
+     * Resolves a single controller-lane's bindings into mask/action-mask/start.
+     * Returns zero/false fields if the lane has no resolved bindings (older
+     * single-controller BK2s).
+     */
+    private static ParsedLane parseLane(FrameBindings bindings, List<String> fields) {
+        if (bindings == null || bindings.bindings().isEmpty()) {
+            return ParsedLane.EMPTY;
+        }
+        boolean a = isPressed(bindings.bindings().get(Button.A), fields);
+        boolean b = isPressed(bindings.bindings().get(Button.B), fields);
+        boolean c = isPressed(bindings.bindings().get(Button.C), fields);
+        int actionMask = (a ? 0x01 : 0) | (b ? 0x02 : 0) | (c ? 0x04 : 0);
+
+        int mask = 0;
+        if (isPressed(bindings.bindings().get(Button.UP), fields)) {
+            mask |= AbstractPlayableSprite.INPUT_UP;
+        }
+        if (isPressed(bindings.bindings().get(Button.DOWN), fields)) {
+            mask |= AbstractPlayableSprite.INPUT_DOWN;
+        }
+        if (isPressed(bindings.bindings().get(Button.LEFT), fields)) {
+            mask |= AbstractPlayableSprite.INPUT_LEFT;
+        }
+        if (isPressed(bindings.bindings().get(Button.RIGHT), fields)) {
+            mask |= AbstractPlayableSprite.INPUT_RIGHT;
+        }
+        if (a || b || c) {
+            mask |= AbstractPlayableSprite.INPUT_JUMP;
+        }
+        boolean startPressed = isPressed(bindings.bindings().get(Button.START), fields);
+        return new ParsedLane(mask, actionMask, startPressed);
+    }
+
+    private static FrameBindings resolveBindings(List<String> logKeyFields, List<String> firstFrameFields, Lane lane) {
         EnumMap<Button, FieldBinding> map = new EnumMap<>(Button.class);
 
-        resolveHashGroupedBindings(logKeyFields, firstFrameFields, map);
+        resolveHashGroupedBindings(logKeyFields, firstFrameFields, map, lane);
         if (hasDirectionMapping(map)) {
             return new FrameBindings(map);
         }
@@ -196,11 +214,18 @@ public final class Bk2MovieLoader {
         // Direct field-by-field mapping is only valid when line/token arity matches.
         if (Math.abs(logKeyFields.size() - firstFrameFields.size()) <= 2) {
             for (int i = 0; i < logKeyFields.size(); i++) {
-                putButtonBinding(map, logKeyFields.get(i), FieldBinding.field(i));
+                putButtonBinding(map, logKeyFields.get(i), FieldBinding.field(i), lane);
             }
         }
 
         if (hasDirectionMapping(map)) {
+            return new FrameBindings(map);
+        }
+
+        // P2 has no fallback for unlabelled grouped/single tokens — without an
+        // explicit "P2" label we can't tell which lane owns it. Return empty so
+        // callers see no P2 bindings.
+        if (lane == Lane.P2) {
             return new FrameBindings(map);
         }
 
@@ -244,7 +269,7 @@ public final class Bk2MovieLoader {
     }
 
     private static void resolveHashGroupedBindings(List<String> logKeyFields, List<String> firstFrameFields,
-            EnumMap<Button, FieldBinding> map) {
+            EnumMap<Button, FieldBinding> map, Lane lane) {
         List<GroupDescriptor> groups = buildHashGroups(logKeyFields);
         if (groups.isEmpty()) {
             return;
@@ -257,7 +282,7 @@ public final class Bk2MovieLoader {
             GroupDescriptor group = groups.get(groupIndex);
             int fieldIndex = dataIndices[groupIndex];
             for (int charIndex = 0; charIndex < group.tokens().size(); charIndex++) {
-                putButtonBinding(map, group.tokens().get(charIndex), FieldBinding.charAt(fieldIndex, charIndex));
+                putButtonBinding(map, group.tokens().get(charIndex), FieldBinding.charAt(fieldIndex, charIndex), lane);
             }
         }
     }
@@ -296,33 +321,50 @@ public final class Bk2MovieLoader {
         return indices;
     }
 
-    private static void putButtonBinding(EnumMap<Button, FieldBinding> map, String rawToken, FieldBinding binding) {
+    private static void putButtonBinding(EnumMap<Button, FieldBinding> map, String rawToken, FieldBinding binding,
+            Lane lane) {
         String token = normalize(rawToken);
-        if (token.isEmpty() || token.contains("p2")) {
+        if (token.isEmpty()) {
             return;
         }
         boolean p1Scoped = token.contains("p1");
+        boolean p2Scoped = token.contains("p2");
+        // Lane filter:
+        //   - When asked for P1 bindings, skip tokens explicitly tagged "p2".
+        //   - When asked for P2 bindings, ONLY accept tokens explicitly tagged "p2".
+        //     (Unscoped tokens — e.g. plain "Up" — implicitly belong to P1.)
+        if (lane == Lane.P1) {
+            if (p2Scoped) {
+                return;
+            }
+        } else { // Lane.P2
+            if (!p2Scoped) {
+                return;
+            }
+        }
+        boolean laneAccepts = (lane == Lane.P1)
+                ? (p1Scoped || !containsLanePrefix(token))
+                : p2Scoped;
         String leaf = token;
         int lastSpace = token.lastIndexOf(' ');
         if (lastSpace >= 0 && lastSpace < token.length() - 1) {
             leaf = token.substring(lastSpace + 1);
         }
-        if ("up".equals(leaf) && (p1Scoped || !containsLanePrefix(token))) {
-            map.putIfAbsent(Button.UP, binding);
-        } else if ("down".equals(leaf) && (p1Scoped || !containsLanePrefix(token))) {
-            map.putIfAbsent(Button.DOWN, binding);
-        } else if ("left".equals(leaf) && (p1Scoped || !containsLanePrefix(token))) {
-            map.putIfAbsent(Button.LEFT, binding);
-        } else if ("right".equals(leaf) && (p1Scoped || !containsLanePrefix(token))) {
-            map.putIfAbsent(Button.RIGHT, binding);
-        } else if ("a".equals(leaf) && (p1Scoped || !containsLanePrefix(token))) {
-            map.putIfAbsent(Button.A, binding);
-        } else if ("b".equals(leaf) && (p1Scoped || !containsLanePrefix(token))) {
-            map.putIfAbsent(Button.B, binding);
-        } else if ("c".equals(leaf) && (p1Scoped || !containsLanePrefix(token))) {
-            map.putIfAbsent(Button.C, binding);
-        } else if ("start".equals(leaf) && (p1Scoped || !containsLanePrefix(token))) {
-            map.putIfAbsent(Button.START, binding);
+        if (!laneAccepts) {
+            return;
+        }
+        switch (leaf) {
+            case "up" -> map.putIfAbsent(Button.UP, binding);
+            case "down" -> map.putIfAbsent(Button.DOWN, binding);
+            case "left" -> map.putIfAbsent(Button.LEFT, binding);
+            case "right" -> map.putIfAbsent(Button.RIGHT, binding);
+            case "a" -> map.putIfAbsent(Button.A, binding);
+            case "b" -> map.putIfAbsent(Button.B, binding);
+            case "c" -> map.putIfAbsent(Button.C, binding);
+            case "start" -> map.putIfAbsent(Button.START, binding);
+            default -> {
+                // Not a recognised Genesis-pad button leaf; ignore.
+            }
         }
     }
 
@@ -396,6 +438,16 @@ public final class Bk2MovieLoader {
 
     private enum Button {
         UP, DOWN, LEFT, RIGHT, START, A, B, C
+    }
+
+    /** Which controller-lane to resolve bindings for. */
+    private enum Lane {
+        P1, P2
+    }
+
+    /** Parsed per-lane input fields for a single frame. */
+    private record ParsedLane(int inputMask, int actionMask, boolean startPressed) {
+        static final ParsedLane EMPTY = new ParsedLane(0, 0, false);
     }
 
     private record FieldBinding(int fieldIndex, int charIndex) {

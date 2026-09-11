@@ -1,15 +1,26 @@
 package com.openggf.game.sonic3k.objects;
 
+import com.openggf.game.sonic3k.resources.S3kRuntimeArtCoordinator;
+
 import com.openggf.data.RomByteReader;
 import com.openggf.game.PlayableEntity;
 import com.openggf.game.sonic3k.Sonic3kPlayerArt;
 import com.openggf.game.sonic3k.Sonic3kSuperStateController;
+import com.openggf.game.sonic3k.constants.Sonic3kAnimationIds;
+import com.openggf.game.sonic3k.constants.Sonic3kConstants;
+import com.openggf.game.sonic3k.resources.S3kKosModuleQueue;
+import com.openggf.game.timing.HardwareWorkHandle;
+import com.openggf.game.timing.HardwareWorkKind;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
+import com.openggf.level.objects.ObjectServices;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.physics.SwingMotion;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
+import com.openggf.sprites.playable.ObjectControlState;
 import com.openggf.sprites.render.PlayerSpriteRenderer;
 
 import java.util.ArrayList;
@@ -40,7 +51,7 @@ import java.util.logging.Logger;
  *   0x18 - Monitor approach: wait until player.x>=0x1240, y_pos-=0x20
  *   0x1A - Explosion: wait until player.x>=0x13D0, release player, scatter emeralds, delete
  */
-public class AizPlaneIntroInstance extends AbstractObjectInstance {
+public class AizPlaneIntroInstance extends AbstractObjectInstance implements RewindRecreatable {
 
     private static final Logger LOG = Logger.getLogger(AizPlaneIntroInstance.class.getName());
 
@@ -181,7 +192,7 @@ public class AizPlaneIntroInstance extends AbstractObjectInstance {
     private int liftoffAnimIndex;
 
     /** Palette cycler for Super Sonic visual effect (routines 0x0C+). */
-    private final AizIntroPaletteCycler paletteCycler;
+    private AizIntroPaletteCycler paletteCycler;
 
     /** Whether this object currently owns player control lock. */
     private boolean ownsPlayerControl;
@@ -203,9 +214,11 @@ public class AizPlaneIntroInstance extends AbstractObjectInstance {
     private PlayerSpriteRenderer sonicRenderer;
     private PlayerSpriteRenderer superSonicRenderer;
     private boolean renderersLoaded;
-
-    /** Deferred explosion phase: 0=not triggered, 1=hurt pending (next frame). */
-    private int explodeFrame;
+    private S3kKosModuleQueue introSpriteArtQueue;
+    private HardwareWorkHandle planeArtHandle;
+    private HardwareWorkHandle emeraldArtHandle;
+    private long planeArtOrdinal = -1;
+    private long emeraldArtOrdinal = -1;
 
     /** ROM $40 field — scroll speed. Changes at routine transitions. */
     private int scrollSpeed = SCROLL_SPEED;
@@ -217,36 +230,18 @@ public class AizPlaneIntroInstance extends AbstractObjectInstance {
     private static int introScrollOffset = 0;
     /** Set once intro transitions to the post-$1400 main-level phase. */
     private static boolean mainLevelPhaseActive = false;
-    /** Prevent repeated terrain swap attempts. */
-    private static boolean mainLevelTerrainSwapAttempted = false;
-
-    /**
-     * Simulates the ROM's Kos_decomp_queue_count gate.
-     * When > 0, terrain swap has been triggered but art "decompression" is still
-     * in progress — the BG scroll handler stays in intro deformation mode.
-     * ROM queues 2 Kos items (16x16 blocks + 8x8 patterns) that process
-     * incrementally across VBlanks.
-     */
-    private static int decompressionCountdown = 0;
-
-    /**
-     * When true, CPU-controlled Tails sidekick is suppressed (ROM: Tails_CPU_routine = $20).
-     * Set during intro init, cleared when Knuckles spawns (routine >= 22).
-     */
-    private static boolean sidekickSuppressed = false;
+    private static AizPlaneIntroInstance activeIntroInstance;
 
     /** Returns the current Events_fg_1 accumulator value for BG parallax. */
     public static int getIntroScrollOffset() { return introScrollOffset; }
     public static boolean isMainLevelPhaseActive() { return mainLevelPhaseActive; }
     public static void setMainLevelPhaseActive(boolean active) { mainLevelPhaseActive = active; }
-    public static boolean isSidekickSuppressed() { return sidekickSuppressed; }
-    public static void setSidekickSuppressed(boolean suppressed) { sidekickSuppressed = suppressed; }
+    public static AizPlaneIntroInstance getActiveIntroInstance() { return activeIntroInstance; }
+    public static void adoptActiveIntroInstance(AizPlaneIntroInstance instance) { activeIntroInstance = instance; }
     public static void resetIntroPhaseState() {
         introScrollOffset = 0;
         mainLevelPhaseActive = false;
-        mainLevelTerrainSwapAttempted = false;
-        decompressionCountdown = 0;
-        sidekickSuppressed = false;
+        activeIntroInstance = null;
     }
 
     // -----------------------------------------------------------------------
@@ -255,6 +250,7 @@ public class AizPlaneIntroInstance extends AbstractObjectInstance {
 
     public AizPlaneIntroInstance(ObjectSpawn spawn) {
         super(spawn, "AIZPlaneIntro");
+        activeIntroInstance = this;
         this.currentX = spawn.x();
         this.currentY = spawn.y();
         this.routine = 0;
@@ -270,11 +266,15 @@ public class AizPlaneIntroInstance extends AbstractObjectInstance {
         this.planeDetached = false;
         this.planeWalkLeft = false;
         this.superSonicActive = false;
-        this.paletteCycler = new AizIntroPaletteCycler();
         this.ownsPlayerControl = false;
         this.mappingFrame = INTRO_MAPPING_FRAME;
         this.lastFrameCounter = 0;
         this.renderersLoaded = false;
+    }
+
+    @Override
+    public AizPlaneIntroInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new AizPlaneIntroInstance(ctx.spawn());
     }
 
     // -----------------------------------------------------------------------
@@ -297,9 +297,11 @@ public class AizPlaneIntroInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
+        rebindIntroSpriteArtAfterRestore();
+        claimIntroSpriteArtIfReady();
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        lastFrameCounter = frameCounter;
+        lastFrameCounter = vIntRunCount;
         AbstractPlayableSprite trackedPlayer = resolveTrackedPlayer(player);
 
         // ROM: routine dispatch FIRST (s3.asm line 81188-81195)
@@ -377,14 +379,23 @@ public class AizPlaneIntroInstance extends AbstractObjectInstance {
     }
 
     @Override
+    public int getPriorityBucket() {
+        // ROM: loc_674AC writes priority(a0) = $280.
+        return 5;
+    }
+
+    @Override
     public void onUnload() {
+        if (activeIntroInstance == this) {
+            activeIntroInstance = null;
+        }
         // Safety net: release player control if we still own it.
         if (ownsPlayerControl) {
             try {
                 var focusedSprite = services().camera().getFocusedSprite();
                 if (focusedSprite instanceof AbstractPlayableSprite ps) {
                     ps.setControlLocked(false);
-                    ps.setObjectControlled(false);
+                    ObjectControlState.none().applyTo(ps);
                     ps.setHidden(false);
                 }
             } catch (Exception e) {
@@ -405,6 +416,22 @@ public class AizPlaneIntroInstance extends AbstractObjectInstance {
 
     public int getRoutine() {
         return routine;
+    }
+
+    public short getReplayXSpeed() {
+        return (short) xVel;
+    }
+
+    public short getReplayYSpeed() {
+        return (short) yVel;
+    }
+
+    public int getReplayXSubpixelRaw() {
+        return (xSub & 0xFF) << 8;
+    }
+
+    public int getReplayYSubpixelRaw() {
+        return (ySub & 0xFF) << 8;
     }
 
     int getScrollSpeed() {
@@ -507,74 +534,11 @@ public class AizPlaneIntroInstance extends AbstractObjectInstance {
         }
     }
 
-    /**
-     * ROM dynamic-resize transition point:
-     * once camera reaches X >= $1400, switch to main-level terrain overlays and
-     * leave the intro deformation phase.
-     */
-    /**
-     * Simulated decompression frames for 2 Kos queue items.
-     * ROM processes Kos modules incrementally during VBlank — each module takes
-     * multiple frames depending on compressed size. Typical for AIZ1's two small
-     * overlays (16x16 blocks + 8x8 patterns).
-     */
-    private static final int DECOMPRESSION_FRAMES = 30;
-
-    /**
-     * When true, simulates the ROM's KosinskiM decompression queue delay.
-     * The ROM queues 2 items (16x16 blocks + 8x8 patterns) at camera X >= $1400,
-     * then the BG event handler (AIZ1BGE_Intro) polls Kos_decomp_queue_count
-     * each frame and stays in intro deformation until the queue drains.
-     * Set to false to skip the delay for faster testing.
-     */
-    private static boolean simulateDecompressionLoading = true;
-
-    /**
-     * @param introWasPlayed true when the intro cinematic ran (terrain swap was triggered
-     *     dynamically at cameraX=$1400). false for skip-intro or level-select past $1400.
-     *     When false, the simulated decompression countdown is skipped because no Kos data
-     *     was queued — matching ROM behavior where Kos_decomp_queue_count is 0 at level start.
-     */
-    public static void updateMainLevelPhaseForCameraX(int cameraX, boolean introWasPlayed) {
-        if (mainLevelPhaseActive) {
-            return;
+    private AizIntroPaletteCycler paletteCycler() {
+        if (paletteCycler == null) {
+            paletteCycler = new AizIntroPaletteCycler(services());
         }
-
-        // ROM gate: while Kos_decomp_queue_count > 0, stay in intro deformation.
-        // The BG event handler (AIZ1BGE_Intro, s3.asm line 70004) polls this
-        // each frame and keeps using AIZ1_IntroDeform until the queue empties.
-        if (decompressionCountdown > 0) {
-            decompressionCountdown--;
-            if (decompressionCountdown <= 0) {
-                mainLevelPhaseActive = true;
-            }
-            return;
-        }
-
-        if ((cameraX & 0xFFFF) < 0x1400) {
-            return;
-        }
-
-        // ROM: FG event queues terrain overlays when camera reaches $1400
-        if (!mainLevelTerrainSwapAttempted) {
-            mainLevelTerrainSwapAttempted = true;
-            boolean swapped = AizIntroTerrainSwap.applyMainLevelOverlays();
-            if (swapped) {
-                LOG.info("AIZ intro: main-level terrain overlays applied");
-            } else {
-                LOG.warning("AIZ intro: failed to apply main-level terrain overlays at transition point.");
-            }
-        }
-
-        // ROM parity: the decompression queue only has pending work when the
-        // intro terrain swap was triggered dynamically (camera scrolled past
-        // $1400 during gameplay). When the intro is skipped, terrain is already
-        // loaded from LevelLoadBlock entry 26 and Kos_decomp_queue_count is 0.
-        if (simulateDecompressionLoading && introWasPlayed) {
-            decompressionCountdown = DECOMPRESSION_FRAMES;
-        } else {
-            mainLevelPhaseActive = true;
-        }
+        return paletteCycler;
     }
 
     // -----------------------------------------------------------------------
@@ -600,9 +564,10 @@ public class AizPlaneIntroInstance extends AbstractObjectInstance {
     // -----------------------------------------------------------------------
 
     private void superSonicPaletteAnim() {
-        paletteCycler.advance();
-        paletteCycler.applyToGpu();
-        mappingFrame = paletteCycler.getMappingFrame(lastFrameCounter);
+        AizIntroPaletteCycler cycler = paletteCycler();
+        cycler.advance();
+        cycler.applyToGpu();
+        mappingFrame = cycler.getMappingFrame(lastFrameCounter);
     }
 
     // -----------------------------------------------------------------------
@@ -612,7 +577,7 @@ public class AizPlaneIntroInstance extends AbstractObjectInstance {
     private void routine0Init(AbstractPlayableSprite player) {
         LOG.fine("Routine 0: initializing intro sequence");
         resetIntroPhaseState();
-        sidekickSuppressed = true;
+        activeIntroInstance = this;
 
         // ROM: set position (0x60, 0x30)
         currentX = 0x60;
@@ -621,23 +586,36 @@ public class AizPlaneIntroInstance extends AbstractObjectInstance {
         // ROM: timer = 0x40 (wait happens in routine 2)
         waitTimer = INIT_WAIT_TIMER;
         waveTimer = WAVE_SPAWN_INTERVAL;
-        paletteCycler.init();
+        paletteCycler().init();
         superSonicActive = false;
         mappingFrame = INTRO_MAPPING_FRAME;
         ensureIntroSonicRenderersLoaded();
 
         // Lock player control for the duration of the intro.
-        // ROM: player.object_control = $53 (fully suppressed)
+        // The strict intro replay window shows the hidden player body staying
+        // frozen at the live spawn position until the cutscene releases it, so
+        // AIZ needs full object-controlled suppression here.
         if (player != null) {
+            player.setXSpeed((short) 0);
+            player.setYSpeed((short) 0);
+            player.setGSpeed((short) 0);
+            player.setSubpixelRaw(0, 0);
+            // Obj_AIZPlaneIntro init writes mapping_frame=0 and
+            // object_control=$53. Bit 1 keeps Animate_Sonic from replacing
+            // that frame while the hidden player slot is owned by the intro
+            // (sonic3k.asm:135492-135495,22067-22076).
+            player.setMappingFrame(0);
+            player.setObjectMappingFrameControl(true);
+            player.setAir(false);
             player.setControlLocked(true);
-            player.setObjectControlled(true);
+            ObjectControlState.engineScriptedPreserveCpuMovementSuppressed().applyTo(player);
             player.setHidden(true);
             ownsPlayerControl = true;
         }
 
         // Load all intro art.
         try {
-            AizIntroArtLoader.loadAllIntroArt();
+            AizIntroArtLoader.loadAllIntroArt(services());
         } catch (Exception e) {
             LOG.fine("Could not load intro art (test env?): " + e.getMessage());
         }
@@ -664,6 +642,7 @@ public class AizPlaneIntroInstance extends AbstractObjectInstance {
     private void routine2Wait(AbstractPlayableSprite player) {
         waitTimer--;
         if (waitTimer < 0) {
+            queueIntroSpriteArt();
             // Wait complete — spawn plane child and set descent velocity
             LOG.fine("Routine 2: wait complete, spawning plane child");
 
@@ -677,15 +656,95 @@ public class AizPlaneIntroInstance extends AbstractObjectInstance {
             planeChild = new AizIntroPlaneChild(planeSpawn, this);
             spawnDynamicObject(planeChild);
 
-            // Create two emerald glow children attached to the plane
-            ObjectSpawn glow1Spawn = new ObjectSpawn(currentX, currentY, 0, 0, 0, false, 0);
-            AizIntroEmeraldGlowChild glow1 = new AizIntroEmeraldGlowChild(glow1Spawn, planeChild, -8, -12);
-            ObjectSpawn glow2Spawn = new ObjectSpawn(currentX, currentY, 0, 0, 0, false, 0);
-            AizIntroEmeraldGlowChild glow2 = new AizIntroEmeraldGlowChild(glow2Spawn, planeChild, 8, -12);
+            // CreateChild1_Normal also allocates the two animated plane pieces
+            // in their own following SST slots (sonic3k.asm:135702-135718,
+            // 135741-135819). They must remain real dynamic objects so later
+            // AllocateObject calls observe the same slot pressure.
+            ObjectSpawn glow1Spawn = new ObjectSpawn(
+                    planeChild.getX() + 0x38, planeChild.getY() + 0x04,
+                    0, 0, 0, false, 0);
+            AizIntroEmeraldGlowChild glow1 =
+                    new AizIntroEmeraldGlowChild(glow1Spawn, planeChild, 0);
+            spawnDynamicObject(glow1);
+            ObjectSpawn glow2Spawn = new ObjectSpawn(
+                    planeChild.getX() + 0x18, planeChild.getY() + 0x18,
+                    0, 1, 0, false, 0);
+            AizIntroEmeraldGlowChild glow2 =
+                    new AizIntroEmeraldGlowChild(glow2Spawn, planeChild, 1);
+            spawnDynamicObject(glow2);
             planeChild.setGlowChildren(glow1, glow2);
 
             advanceRoutine();
         }
+    }
+
+    private void queueIntroSpriteArt() {
+        if (planeArtHandle != null || emeraldArtHandle != null
+                || planeArtOrdinal >= 0 || emeraldArtOrdinal >= 0) {
+            return;
+        }
+        try {
+            introSpriteArtQueue =
+                    S3kRuntimeArtCoordinator.from(services()).moduleQueue();
+            planeArtHandle = introSpriteArtQueue.queue(
+                    services().rom(),
+                    Sonic3kConstants.ART_KOSM_AIZ_INTRO_PLANE_ADDR,
+                    Sonic3kConstants.ARTTILE_AIZ_INTRO_PLANE);
+            planeArtOrdinal = planeArtHandle.ordinal();
+            emeraldArtHandle = introSpriteArtQueue.queue(
+                    services().rom(),
+                    Sonic3kConstants.ART_KOSM_AIZ_INTRO_EMERALDS_ADDR,
+                    Sonic3kConstants.ARTTILE_AIZ_INTRO_EMERALDS);
+            emeraldArtOrdinal = emeraldArtHandle.ordinal();
+        } catch (Exception e) {
+            throw new IllegalStateException(
+                    "Unable to queue AIZ intro sprite KosM art", e);
+        }
+    }
+
+    private void claimIntroSpriteArtIfReady() {
+        if (introSpriteArtQueue == null) {
+            return;
+        }
+        if (planeArtHandle != null
+                && introSpriteArtQueue.isReady(planeArtHandle)) {
+            introSpriteArtQueue.claim(planeArtHandle);
+            planeArtHandle = null;
+            planeArtOrdinal = -1;
+        }
+        if (emeraldArtHandle != null
+                && introSpriteArtQueue.isReady(emeraldArtHandle)) {
+            introSpriteArtQueue.claim(emeraldArtHandle);
+            emeraldArtHandle = null;
+            emeraldArtOrdinal = -1;
+        }
+        if (planeArtHandle == null && emeraldArtHandle == null) {
+            introSpriteArtQueue = null;
+        }
+    }
+
+    private void rebindIntroSpriteArtAfterRestore() {
+        if ((planeArtOrdinal < 0 && emeraldArtOrdinal < 0)
+                || introSpriteArtQueue != null) {
+            return;
+        }
+        introSpriteArtQueue = S3kRuntimeArtCoordinator.from(services()).moduleQueue();
+        if (planeArtOrdinal >= 0) {
+            planeArtHandle = restoredIntroArtHandle(
+                    planeArtOrdinal, "plane");
+        }
+        if (emeraldArtOrdinal >= 0) {
+            emeraldArtHandle = restoredIntroArtHandle(
+                    emeraldArtOrdinal, "emerald");
+        }
+    }
+
+    private HardwareWorkHandle restoredIntroArtHandle(long ordinal, String name) {
+        return services().hardwareTiming().pendingHandle(
+                        HardwareWorkKind.KOS_MODULE_QUEUE, ordinal)
+                .orElseThrow(() -> new IllegalStateException(
+                        "Missing restored AIZ intro " + name
+                                + " KosM job " + ordinal));
     }
 
     // -----------------------------------------------------------------------
@@ -708,7 +767,6 @@ public class AizPlaneIntroInstance extends AbstractObjectInstance {
 
             // Set swing+wait timer
             waitTimer = SWING_WAIT_TIMER;
-
             LOG.fine("Routine 4: descent complete at y=" + currentY + ", advancing to swing");
             advanceRoutine();
             return;
@@ -827,7 +885,7 @@ public class AizPlaneIntroInstance extends AbstractObjectInstance {
      */
     private void setupSuperSonic() {
         superSonicActive = true;
-        paletteCycler.init();
+        paletteCycler().init();
         mappingFrame = SUPER_MAPPING_FRAME_BASE;
     }
 
@@ -914,6 +972,7 @@ public class AizPlaneIntroInstance extends AbstractObjectInstance {
 
     private void routine20Wait(AbstractPlayableSprite player) {
         superSonicPaletteAnim();
+        tickWaveSpawn();
 
         secondaryTimer--;
         if (secondaryTimer < 0) {
@@ -936,9 +995,6 @@ public class AizPlaneIntroInstance extends AbstractObjectInstance {
         }
 
         if (checkX >= KNUCKLES_SPAWN_X) {
-            // ROM: Tails regains control when Knuckles appears
-            sidekickSuppressed = false;
-
             // Spawn Knuckles
             ObjectSpawn knuxSpawn = new ObjectSpawn(
                     CutsceneKnucklesAiz1Instance.INIT_X,
@@ -950,6 +1006,8 @@ public class AizPlaneIntroInstance extends AbstractObjectInstance {
 
             LOG.fine("Routine 22: spawned Knuckles");
             advanceRoutine();
+        } else {
+            tickWaveSpawn();
         }
     }
 
@@ -982,22 +1040,6 @@ public class AizPlaneIntroInstance extends AbstractObjectInstance {
     private void routine26Explode(AbstractPlayableSprite player) {
         superSonicPaletteAnim();
 
-        // Phase B: deferred hurt activation (one frame after explosion).
-        // ROM processes Sonic (slot 0) BEFORE objects, so hurt set by an object
-        // takes effect on the NEXT frame's Sonic update. We defer to match.
-        if (explodeFrame == 1) {
-            if (player != null) {
-                player.setYSpeed((short) -0x400);
-                player.setXSpeed((short) -0x200);
-                player.setGSpeed((short) 0);
-                // ROM: move.b #4,routine(a1) + bset Status_InAir
-                player.setHurt(true);
-                player.setAir(true);
-            }
-            setDestroyed(true);
-            return;
-        }
-
         // ROM: check Player_1.x_pos >= 0x13D0
         int checkX = currentX;
         if (player != null) {
@@ -1005,14 +1047,25 @@ public class AizPlaneIntroInstance extends AbstractObjectInstance {
         }
 
         if (checkX >= EXPLOSION_TRIGGER_X) {
-            // Phase A: release player visually, spawn emeralds, trigger Knuckles.
-            // Hurt state is deferred to Phase B (next frame) to match ROM slot order.
+            // ROM routine 0x1A latches hurt state immediately, then Go_Delete_Sprite.
+            // Sonic has already updated for this frame, so the new velocities only
+            // affect movement on the next frame, but the end-of-frame trace already
+            // shows hurt routine/air/velocity on the release frame.
             if (player != null) {
                 player.setHidden(false);
-                player.setObjectControlled(false);
-                // Controls still locked — player bounces but can't move
-                // player.setControlLocked remains true
+                ObjectControlState.none().applyTo(player);
                 ownsPlayerControl = false;
+                // The object runs after the player slot. Retail publishes the
+                // Hurt byte immediately but leaves the already displayed intro
+                // frame intact until the next Animate_Sonic pass
+                // (sonic3k.asm:135609-135619).
+                player.setObjectMappingFrameControl(false);
+                player.setAnimationId(Sonic3kAnimationIds.HURT);
+                player.setYSpeed((short) -0x400);
+                player.setXSpeed((short) -0x200);
+                player.setGSpeed((short) 0);
+                player.setHurt(true);
+                player.setAir(true);
             }
 
             // ROM: clr.b (Super_Sonic_Knux_flag) + move.b #2,(Super_palette_status)
@@ -1025,7 +1078,7 @@ public class AizPlaneIntroInstance extends AbstractObjectInstance {
             }
 
             // Apply emerald palette now (overwrites intro palette on line 3)
-            AizIntroArtLoader.applyEmeraldPalette();
+            AizIntroArtLoader.applyEmeraldPalette(services());
 
             // Spawn 7 emeralds.
             // ROM: CreateChild6_Simple places emeralds in later object slots.
@@ -1059,9 +1112,7 @@ public class AizPlaneIntroInstance extends AbstractObjectInstance {
                 knuckles.trigger();
             }
 
-            // Defer hurt to next frame (Phase B)
-            explodeFrame = 1;
+            setDestroyed(true);
         }
     }
 }
-

@@ -1,9 +1,9 @@
 package com.openggf.game.sonic3k;
 
-import com.openggf.game.PhysicsFeatureSet;
 import com.openggf.game.PhysicsModifiers;
 import com.openggf.game.PhysicsProfile;
 import com.openggf.game.PhysicsProvider;
+import com.openggf.game.rules.GameRules;
 
 /**
  * Physics provider for Sonic 3 &amp; Knuckles.
@@ -41,7 +41,7 @@ public class Sonic3kPhysicsProvider implements PhysicsProvider {
     }
 
     @Override
-    public PhysicsFeatureSet getFeatureSet() {
-        return PhysicsFeatureSet.SONIC_3K;
+    public GameRules getRules() {
+        return GameRules.SONIC_3K;
     }
 }

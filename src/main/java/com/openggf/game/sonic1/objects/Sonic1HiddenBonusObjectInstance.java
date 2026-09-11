@@ -8,6 +8,7 @@ import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -35,7 +36,7 @@ import java.util.List;
  * <p>
  * Art: Nem_Bonus at ArtTile_Hidden_Points ($4B6), palette 0, priority bit set.
  */
-public class Sonic1HiddenBonusObjectInstance extends AbstractObjectInstance {
+public class Sonic1HiddenBonusObjectInstance extends AbstractObjectInstance implements SpawnRewindRecreatable {
 
     // From disassembly: moveq #$10,d2 — detection radius on each axis
     private static final int DETECTION_RADIUS = 0x10;
@@ -64,7 +65,7 @@ public class Sonic1HiddenBonusObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         switch (state) {
             case WAITING -> updateWaiting(player);

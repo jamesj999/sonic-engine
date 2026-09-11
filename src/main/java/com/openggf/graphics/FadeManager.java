@@ -1,6 +1,6 @@
 package com.openggf.graphics;
 
-import com.openggf.game.RuntimeManager;
+import com.openggf.game.rewind.RewindSnapshottable;
 
 import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL14.*;
@@ -23,7 +23,7 @@ import static org.lwjgl.opengl.GL20.*;
  * Standard fade-to-black where all RGB channels decrement together.
  * Uses alpha blending with a black overlay quad.
  */
-public class FadeManager {
+public class FadeManager implements RewindSnapshottable<FadeManagerSnapshot> {
 
     /**
      * Fade state enumeration.
@@ -55,8 +55,6 @@ public class FadeManager {
         BLACK
     }
 
-    private static FadeManager bootstrapInstance;
-
     // Current fade state
     private FadeState state = FadeState.NONE;
     private int frameCount = 0;
@@ -86,6 +84,9 @@ public class FadeManager {
 
     // Callback to execute when fade completes
     private Runnable onFadeComplete;
+    private boolean holdRestoredFrameForNextUpdate;
+    private int reversePresentationDepth;
+    private boolean exactToFadeDuration;
 
     // Hold duration in frames (for optional pause at full white)
     private int holdDuration = 0;
@@ -110,20 +111,6 @@ public class FadeManager {
     }
 
     /**
-     * Get the singleton instance.
-     */
-    public static synchronized FadeManager getInstance() {
-        var runtime = RuntimeManager.getCurrent();
-        if (runtime != null) {
-            return runtime.getFadeManager();
-        }
-        if (bootstrapInstance == null) {
-            bootstrapInstance = new FadeManager();
-        }
-        return bootstrapInstance;
-    }
-
-    /**
      * Resets mutable state without destroying the singleton instance.
      * Cached references held by other classes remain valid.
      * Preserves the shader and quad renderer (configuration), clears fade state.
@@ -133,6 +120,7 @@ public class FadeManager {
         effectiveFPC = FRAMES_PER_CHANNEL;
         effectiveIncrement = CHANNEL_INCREMENT;
         effectiveDuration = FADE_DURATION;
+        exactToFadeDuration = false;
     }
 
     /**
@@ -159,6 +147,7 @@ public class FadeManager {
      * @param holdFrames   Number of frames to hold at full white before completing
      */
     public void startFadeToWhite(Runnable onComplete, int holdFrames) {
+        this.holdRestoredFrameForNextUpdate = false;
         this.state = FadeState.FADING_TO_WHITE;
         this.fadeType = FadeType.WHITE;
         this.frameCount = 0;
@@ -176,6 +165,7 @@ public class FadeManager {
      * @param onComplete Callback to execute when fade completes (can be null)
      */
     public void startFadeFromWhite(Runnable onComplete) {
+        this.holdRestoredFrameForNextUpdate = false;
         this.state = FadeState.FADING_FROM_WHITE;
         this.fadeType = FadeType.WHITE;
         this.frameCount = 0;
@@ -185,6 +175,48 @@ public class FadeManager {
         this.onFadeComplete = onComplete;
         this.holdDuration = 0;
         this.holdFrameCount = 0;
+    }
+
+    /**
+     * Skips the next {@link #update()} step of the fade that was just started.
+     *
+     * <p>The ROM fade routines are synchronous wait loops whose first action is a
+     * V-int wait, not a colour step: {@code Pal_FadeToWhite} does
+     * {@code move.b #VintID_Fade,(Vint_routine).w / bsr.w WaitForVint /
+     * bsr.s .UpdateAllColours} (docs/s2disasm/s2.asm:3571-3582; the S1 and S3K
+     * equivalents have the same shape). The V-int on which the caller decided to
+     * fade has therefore already been consumed by the loop iteration that made the
+     * decision, so the first colour step belongs to the following V-int. Engine
+     * callers that start a fade from inside a frame's logic — where
+     * {@code FadeManager.update()} still runs later in that same frame — use this
+     * to keep the fade window the same length as the ROM's.
+     */
+    public void deferFirstStepToNextVint() {
+        this.holdRestoredFrameForNextUpdate = true;
+    }
+
+    /** Holds a fully opaque white overlay until another fade is started or cancelled. */
+    public void holdWhite() {
+        holdOpaque(FadeState.HOLD_WHITE, FadeType.WHITE);
+    }
+
+    /** Holds a fully opaque black overlay until another fade is started or cancelled. */
+    public void holdBlack() {
+        holdOpaque(FadeState.HOLD_BLACK, FadeType.BLACK);
+    }
+
+    private void holdOpaque(FadeState holdState, FadeType type) {
+        holdRestoredFrameForNextUpdate = false;
+        state = holdState;
+        fadeType = type;
+        frameCount = 0;
+        fadeR = 1f;
+        fadeG = 1f;
+        fadeB = 1f;
+        fadeAlpha = type == FadeType.BLACK ? 1f : 0f;
+        onFadeComplete = null;
+        holdDuration = Integer.MAX_VALUE;
+        holdFrameCount = 0;
     }
 
     /**
@@ -225,6 +257,7 @@ public class FadeManager {
      *                       Must be divisible by 3 for even channel distribution.
      */
     public void startFadeToBlack(Runnable onComplete, int holdFrames, int totalDuration) {
+        this.holdRestoredFrameForNextUpdate = false;
         this.state = FadeState.FADING_TO_BLACK;
         this.fadeType = FadeType.BLACK;
         this.frameCount = 0;
@@ -239,10 +272,12 @@ public class FadeManager {
             this.effectiveFPC = totalDuration / 3;
             this.effectiveIncrement = 1.0f / this.effectiveFPC;
             this.effectiveDuration = totalDuration;
+            this.exactToFadeDuration = true;
         } else {
             this.effectiveFPC = FRAMES_PER_CHANNEL;
             this.effectiveIncrement = CHANNEL_INCREMENT;
             this.effectiveDuration = FADE_DURATION;
+            this.exactToFadeDuration = false;
         }
     }
 
@@ -253,6 +288,19 @@ public class FadeManager {
      * @param onComplete Callback to execute when fade completes (can be null)
      */
     public void startFadeFromBlack(Runnable onComplete) {
+        startFadeFromBlack(onComplete, 0);
+    }
+
+    /**
+     * Starts a fade from black with optional fully revealed terminal VBlanks.
+     * The S3K level reveal services 22 VBlanks: 21 change color and the last is
+     * a no-op (Palette_fade_timer=$16 at sonic3k.asm:7875-7892).
+     */
+    public void startFadeFromBlack(Runnable onComplete, int terminalNoOpFrames) {
+        if (terminalNoOpFrames < 0) {
+            throw new IllegalArgumentException("terminalNoOpFrames must not be negative");
+        }
+        this.holdRestoredFrameForNextUpdate = false;
         this.state = FadeState.FADING_FROM_BLACK;
         this.fadeType = FadeType.BLACK;
         this.frameCount = 0;
@@ -261,7 +309,7 @@ public class FadeManager {
         this.fadeG = 1f;
         this.fadeB = 1f;
         this.onFadeComplete = onComplete;
-        this.holdDuration = 0;
+        this.holdDuration = terminalNoOpFrames;
         this.holdFrameCount = 0;
     }
 
@@ -269,6 +317,13 @@ public class FadeManager {
      * Update the fade state. Call once per frame.
      */
     public void update() {
+        if (reversePresentationDepth > 0) {
+            return;
+        }
+        if (holdRestoredFrameForNextUpdate) {
+            holdRestoredFrameForNextUpdate = false;
+            return;
+        }
         switch (state) {
             case FADING_TO_WHITE:
                 updateFadeToWhite();
@@ -292,6 +347,28 @@ public class FadeManager {
             default:
                 break;
         }
+    }
+
+    /**
+     * Suppresses display-driven fade advancement while rewind restores historical
+     * fade snapshots for rendering.
+     */
+    public void beginReversePresentation() {
+        reversePresentationDepth++;
+        holdRestoredFrameForNextUpdate = false;
+    }
+
+    public void endReversePresentation() {
+        if (reversePresentationDepth > 0) {
+            reversePresentationDepth--;
+        }
+        if (reversePresentationDepth == 0) {
+            holdRestoredFrameForNextUpdate = false;
+        }
+    }
+
+    public boolean isReversePresentationActive() {
+        return reversePresentationDepth > 0;
     }
 
     private void updateFadeToWhite() {
@@ -329,6 +406,9 @@ public class FadeManager {
     }
 
     private void updateHoldWhite() {
+        if (holdDuration == Integer.MAX_VALUE) {
+            return;
+        }
         holdFrameCount++;
         if (holdFrameCount >= holdDuration) {
             completeFade();
@@ -391,12 +471,18 @@ public class FadeManager {
                 state = FadeState.HOLD_BLACK;
                 holdFrameCount = 0;
             } else {
+                if (exactToFadeDuration) {
+                    state = FadeState.HOLD_BLACK;
+                }
                 completeFade();
             }
         }
     }
 
     private void updateHoldBlack() {
+        if (holdDuration == Integer.MAX_VALUE) {
+            return;
+        }
         holdFrameCount++;
         if (holdFrameCount >= holdDuration) {
             completeFade();
@@ -425,6 +511,10 @@ public class FadeManager {
             fadeR = 0f;
             fadeG = 0f;
             fadeB = 0f;
+            if (holdFrameCount < holdDuration) {
+                holdFrameCount++;
+                return;
+            }
             completeFade();
         }
     }
@@ -620,6 +710,24 @@ public class FadeManager {
     }
 
     /**
+     * True while a fade is in flight AND has a completion callback that has not
+     * yet run. {@link #restore(FadeManagerSnapshot)} deliberately does not restore
+     * {@link #onFadeComplete} (a transient callback closure, not restorable
+     * state), so a rewind restore landing inside this window silently orphans
+     * whatever the callback was going to do -- e.g. advancing zone/act counters,
+     * requesting a special stage, or loading the next level -- with no other
+     * flag observing it. Object/GameLoop code that starts a fade whose callback
+     * performs a level/mode transition should be covered by
+     * {@code GameLoop.isNonRewindableTransitionPending()}, which folds this in
+     * game-agnostically rather than requiring every such call site to also set
+     * one of the existing narrower transition-pending flags. See
+     * ssentry-rewind-report.md.
+     */
+    public boolean hasPendingCompletion() {
+        return state != FadeState.NONE && onFadeComplete != null;
+    }
+
+    /**
      * Get the current fade state.
      */
     public FadeState getState() {
@@ -646,6 +754,8 @@ public class FadeManager {
      * Cancel any active fade and reset to normal.
      */
     public void cancel() {
+        holdRestoredFrameForNextUpdate = false;
+        reversePresentationDepth = 0;
         state = FadeState.NONE;
         fadeType = FadeType.WHITE;
         frameCount = 0;
@@ -656,6 +766,31 @@ public class FadeManager {
         onFadeComplete = null;
         holdDuration = 0;
         holdFrameCount = 0;
+        exactToFadeDuration = false;
+    }
+
+    /**
+     * Clears any held or in-flight overlay immediately, modelling a ROM routine
+     * that writes a whole new palette straight to the active palette instead of
+     * fading back into it — {@code PalLoad_Now} in Sonic 2
+     * (docs/s2disasm/s2.asm:3799) and {@code PalLoad} in Sonic 1
+     * (docs/s1disasm/sonic.asm:3383). Unlike {@link #cancel()} this leaves the
+     * reverse-presentation depth alone, so a rewind restore in flight keeps
+     * owning fade advancement.
+     */
+    public void clearOverlayForImmediatePaletteLoad() {
+        holdRestoredFrameForNextUpdate = false;
+        state = FadeState.NONE;
+        fadeType = FadeType.WHITE;
+        frameCount = 0;
+        fadeR = 0f;
+        fadeG = 0f;
+        fadeB = 0f;
+        fadeAlpha = 0f;
+        onFadeComplete = null;
+        holdDuration = 0;
+        holdFrameCount = 0;
+        exactToFadeDuration = false;
     }
 
     public void cleanup() {
@@ -674,5 +809,39 @@ public class FadeManager {
      */
     public float getFadeAlpha() {
         return fadeAlpha;
+    }
+
+    @Override
+    public String key() {
+        return "fademanager";
+    }
+
+    @Override
+    public FadeManagerSnapshot capture() {
+        return new FadeManagerSnapshot(
+                state, frameCount, fadeR, fadeG, fadeB, fadeAlpha,
+                fadeType, holdDuration, holdFrameCount,
+                effectiveFPC, effectiveIncrement, effectiveDuration, exactToFadeDuration,
+                onFadeComplete != null);
+    }
+
+    @Override
+    public void restore(FadeManagerSnapshot snapshot) {
+        this.state = snapshot.state();
+        this.frameCount = snapshot.frameCount();
+        this.fadeR = snapshot.fadeR();
+        this.fadeG = snapshot.fadeG();
+        this.fadeB = snapshot.fadeB();
+        this.fadeAlpha = snapshot.fadeAlpha();
+        this.fadeType = snapshot.fadeType();
+        this.holdDuration = snapshot.holdDuration();
+        this.holdFrameCount = snapshot.holdFrameCount();
+        this.effectiveFPC = snapshot.effectiveFPC();
+        this.effectiveIncrement = snapshot.effectiveIncrement();
+        this.effectiveDuration = snapshot.effectiveDuration();
+        this.exactToFadeDuration = snapshot.exactToFadeDuration();
+        // Note: onFadeComplete callback is NOT restored (transient)
+        this.onFadeComplete = null;
+        this.holdRestoredFrameForNextUpdate = true;
     }
 }

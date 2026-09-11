@@ -15,7 +15,6 @@ import com.openggf.sprites.managers.SpriteManager;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 import com.openggf.sprites.playable.Sonic;
 
-import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -235,7 +234,7 @@ public class VisualReferenceGenerator {
                 glFinish();
 
                 // Capture framebuffer
-                BufferedImage screenshot = ScreenshotCapture.captureFramebuffer(SCREEN_WIDTH, SCREEN_HEIGHT);
+                RgbaImage screenshot = ScreenshotCapture.captureFramebuffer(SCREEN_WIDTH, SCREEN_HEIGHT);
 
                 // Save to file
                 Path filePath = refDir.resolve(filename);
@@ -267,3 +266,5 @@ public class VisualReferenceGenerator {
         GraphicsManager.getInstance().resetState();
     }
 }
+
+

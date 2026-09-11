@@ -8,7 +8,9 @@ import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnCoordinateZeroScalarArgsRewindRecreatable;
 import com.openggf.level.objects.TouchResponseProvider;
+import com.openggf.level.objects.TouchResponseProfile;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.ObjectTerrainUtils;
 import com.openggf.physics.TerrainCheckResult;
@@ -26,7 +28,8 @@ import java.util.List;
  * Physics: Standard ObjectMove (8.8 velocity, 16.16 position) + gravity 0x18/frame.
  * Collision flags: 0x8B (enemy projectile).
  */
-public class HtzFireProjectileObjectInstance extends AbstractObjectInstance implements TouchResponseProvider {
+public class HtzFireProjectileObjectInstance extends AbstractObjectInstance
+        implements TouchResponseProvider, SpawnCoordinateZeroScalarArgsRewindRecreatable {
 
     private static final int PRIORITY = 3;
     private static final int GRAVITY = 0x18;           // ROM: addi.w #$18,y_vel(a0)
@@ -44,10 +47,14 @@ public class HtzFireProjectileObjectInstance extends AbstractObjectInstance impl
     private int xVel;
     private int yVel;
 
-    private final boolean hFlip;
+    private boolean hFlip;
     private boolean vFlip;
     private int animFrame;
     private int animTimer;
+
+    private HtzFireProjectileObjectInstance() {
+        this(0, 0, 0, 0, false);
+    }
 
     public HtzFireProjectileObjectInstance(int x, int y, int xVel, int yVel, boolean hFlip) {
         // Dynamic child - uses parent ID for spawn record (not placed from level layout)
@@ -65,7 +72,7 @@ public class HtzFireProjectileObjectInstance extends AbstractObjectInstance impl
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) {
             return;
@@ -148,6 +155,11 @@ public class HtzFireProjectileObjectInstance extends AbstractObjectInstance impl
     @Override
     public int getCollisionProperty() {
         return 0;
+    }
+
+    @Override
+    public TouchResponseProfile getTouchResponseProfile() {
+        return TouchResponseProfile.standardEnemy();
     }
 
     @Override

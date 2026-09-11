@@ -157,13 +157,7 @@ public class WaterSurfaceManager {
             return false;
         }
 
-        // Only render for CPZ Act 2, ARZ Act 1, and ARZ Act 2
-        if (zoneId == ZONE_CPZ && actId == 1)
-            return true; // CPZ Act 2
-        if (zoneId == ZONE_ARZ)
-            return true; // ARZ Act 1 or 2
-
-        return false;
+        return isWaterSurfaceZoneEligible();
     }
 
     /**
@@ -213,34 +207,14 @@ public class WaterSurfaceManager {
         // original game)
         // Animation uses ping-pong pattern: 0-1-2-1-0-1-2-1... (bounces back instead of
         // looping)
-        int mappingFrameCount = (zoneId == ZONE_CPZ) ? cpzSheet.getFrameCount() : arzSheet.getFrameCount();
-        int animFrame;
-        if (mappingFrameCount <= 1) {
-            animFrame = 0;
-        } else {
-            // Ping-pong cycle length is (frameCount - 1) * 2
-            // For 3 frames: cycle is 0,1,2,1 = 4 steps
-            int cycleLength = (mappingFrameCount - 1) * 2;
-            int position = (frameCounter / 16) % cycleLength;
-            // If position < frameCount, use position directly; otherwise bounce back
-            if (position < mappingFrameCount) {
-                animFrame = position;
-            } else {
-                animFrame = cycleLength - position;
-            }
-        }
+        int animFrame = animationFrameForCounter(frameCounter);
 
         // Alternate which segments are drawn each frame (even/odd based on
         // frameCounter)
         // This mimics the original game's sprite-saving technique
-        boolean drawEven = (frameCounter % 2) == 0;
-
         int segment = 0;
         for (int x = startX; x < endX; x += SEGMENT_WIDTH_PIXELS) {
-            // Alternate: draw even segments on even frames, odd on odd frames
-            boolean shouldDraw = (segment % 2 == 0) ? drawEven : !drawEven;
-
-            if (shouldDraw) {
+            if (shouldDrawSegment(frameCounter, segment)) {
                 // Draw the water surface segment at this position
                 // Y position is at the water line, centered on the segment
                 renderer.drawFrameIndex(animFrame, x + SEGMENT_WIDTH_PIXELS / 2, waterLevelY, false, false);
@@ -279,5 +253,31 @@ public class WaterSurfaceManager {
 
     public boolean isInitialized() {
         return initialized;
+    }
+
+    boolean isWaterSurfaceZoneEligible() {
+        if (zoneId == ZONE_CPZ && actId == 1) {
+            return true;
+        }
+        return zoneId == ZONE_ARZ;
+    }
+
+    int animationFrameForCounter(int frameCounter) {
+        int mappingFrameCount = (zoneId == ZONE_CPZ) ? cpzSheet.getFrameCount() : arzSheet.getFrameCount();
+        if (mappingFrameCount <= 1) {
+            return 0;
+        }
+
+        int cycleLength = (mappingFrameCount - 1) * 2;
+        int position = (frameCounter / 16) % cycleLength;
+        if (position < mappingFrameCount) {
+            return position;
+        }
+        return cycleLength - position;
+    }
+
+    boolean shouldDrawSegment(int frameCounter, int segmentIndex) {
+        boolean drawEven = (frameCounter % 2) == 0;
+        return (segmentIndex % 2 == 0) ? drawEven : !drawEven;
     }
 }

@@ -1,0 +1,41 @@
+{
+  "schema": "openggf.s2_audio_driver_state_reference_fixture.v1",
+  "reference": "s2-driver-state-cpz-w0-3450.reference-v2.jsonl.gz",
+  "reference_gzip_sha256": "46ab4ecd466574e3a281cc0fdfa8a863e6f61aeea51d483eec4634f437245e16",
+  "reference_uncompressed_sha256": "22f36feaa9bbdba5ae0ab97453661d8a45c5622234bb7f82884e1c7c59a238d1",
+  "payload_schema": "openggf.s2-driver-state-reference.v2",
+  "rom": {
+    "name": "Sonic 2 World REV01",
+    "sha1": "8bca5dcef1af3e00098666fd892dc1c2a76333f9",
+    "crc32": "7b905383"
+  },
+  "movie": {
+    "name": "s2-lvl-select-CPZ.bk2",
+    "path": "src/test/resources/traces/s2/cpz/s2-lvl-select-CPZ.bk2",
+    "sha256": "7e28cf822d5dbbe64646965cd857f264bf51d3349075af94db1a818cac7311e4",
+    "rows": 21103
+  },
+  "window": {
+    "first_row": 0,
+    "exclusive_end": 3450,
+    "note": "Requested from row 0. The driver's first completed service is at movie row 120, so that is the first tick; the Z80 is held in reset before it."
+  },
+  "ticks": 3264,
+  "why_this_window": "The power-on span of the same recording the 2700-3450 fixture windows. It exists so a mid-run window's inherited driver state can be checked against the run that produced it rather than assumed. Its zRingSpeaker history is the first use: the flag is 00h from power-on, flips once at movie row 1436, and is therefore FFh when the CPZ window opens at 2700.",
+  "songs_loaded": "zCurSong over the span: 99h at row 450, 91h at 552, 99h at 833, 89h at 1274, 97h at 1432, 82h at 1805, 99h at 2210, 91h at 2431, 8Eh at 2725. The last is the CPZ load the 2700-3450 window anchors on.",
+  "sampling": "driver RAM 12FEh..2000h captured by the observer core as a completion snapshot on the driver's own service boundaries, identical in shape and bounds to the other two S2 references.",
+  "observer": {
+    "patch": "0001-buffer-z80-audio-events",
+    "core_compressed_sha256": "25ee305d8bcac2567d60fd04c14238784ddd018808d4dafe7d5ef2b8372677b6",
+    "build_id": "9ded8f477abe193d",
+    "observer_identity_sha256": "95188e3c2cbb433188bce06e995d497afd290246ee6123da6f0060a5463893e7",
+    "manifest": "fixtures/gpgx-audio-service-manifest-s2-oracle-v2.json (game s2)",
+    "tracechaser_producer_commit": "24b009fa99f301724080517e84f5009c7b6f05c0"
+  },
+  "capture_command": "tools/tracechaser/bizhawk-headless/run-s2-request-window.sh --request-window-mode driver-state --rom <s2.gen> --movie <s2-lvl-select-CPZ.bk2> --movie-sha256 7e28cf822d5dbbe64646965cd857f264bf51d3349075af94db1a818cac7311e4 --service-manifest fixtures/gpgx-audio-service-manifest-s2-oracle-v2.json --bizhawk-home <observer install> --first-row 0 --exclusive-end 3450 --output <absent file>",
+  "duplicate_capture": "met: two serial captures to distinct absent external paths, byte-identical at sha256 22f36feaa9bbdba5ae0ab97453661d8a45c5622234bb7f82884e1c7c59a238d1",
+  "postprocess": "gzip -9 -n",
+  "production_bound": false,
+  "production_bound_meaning": "Comparison-only reference data. Nothing here hydrates engine state. The one value the engine side reads from this recording is the count of ring requests before a window, and that comes from the separately published request stimuli rather than from this file.",
+  "not_yet_compared": "No oracle drives the engine across this span. Doing so needs the engine driver run from power-on through every music load the run performs, and the request producer records no music requests: see the frontier log entry of 2026-09-04 for the two producer limitations found here."
+}

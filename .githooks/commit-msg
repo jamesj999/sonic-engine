@@ -1,0 +1,9 @@
+#!/bin/sh
+
+set -eu
+
+HOOK_DIR=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+
+# Content validation intentionally runs here as a merge-path backstop as well
+# as through pre-commit for earlier feedback.
+"$HOOK_DIR/run-policy" commit-msg "$@"

@@ -1,6 +1,7 @@
 package com.openggf.game.sonic1.scroll;
 
 import com.openggf.level.scroll.AbstractZoneScrollHandler;
+import com.openggf.level.scroll.compose.ScrollEffectComposer;
 import static com.openggf.level.scroll.M68KMath.*;
 
 /**
@@ -44,6 +45,8 @@ public class SwScrlSlz extends AbstractZoneScrollHandler {
     // Pre-allocated scroll buffer (Deform_SLZ_2 output)
     private final short[] scrollBuffer = new short[SCROLL_BUFFER_SIZE];
 
+    private final ScrollEffectComposer composer = new ScrollEffectComposer();
+
     public void init(int cameraX, int cameraY) {
         // BgScrollSpeed sets bgscreenposx = screenposx
         bgXPos = (long) cameraX << 16;
@@ -65,6 +68,7 @@ public class SwScrlSlz extends AbstractZoneScrollHandler {
         }
 
         resetScrollTracking();
+        composer.reset();
 
         int deltaX = cameraX - lastCameraX;
         int deltaY = cameraY - lastCameraY;
@@ -76,7 +80,7 @@ public class SwScrlSlz extends AbstractZoneScrollHandler {
         bgYPos += (long) deltaY * 128 * 256;
 
         int bgY = (int) (bgYPos >> 16);
-        vscrollFactorBG = (short) bgY;
+        composer.setVscrollFactorBG((short) bgY);
 
         // FG scroll (high word of packed h-scroll entries)
         short fgScroll = negWord(cameraX);
@@ -165,12 +169,9 @@ public class SwScrlSlz extends AbstractZoneScrollHandler {
         if (firstGroupLines > 0 && firstGroupLines < LINES_PER_GROUP) {
             int bufIdx = yOffset % SCROLL_BUFFER_SIZE;
             short bgScroll = scrollBuffer[bufIdx];
-            int packed = packScrollWords(fgScroll, bgScroll);
-            trackOffset(fgScroll, bgScroll);
-            int limit = Math.min(VISIBLE_LINES, firstGroupLines);
-            for (; lineIndex < limit; lineIndex++) {
-                horizScrollBuf[lineIndex] = packed;
-            }
+            int writeCount = Math.min(firstGroupLines, VISIBLE_LINES - lineIndex);
+            composer.fillPackedScrollWords(lineIndex, writeCount, fgScroll, bgScroll);
+            lineIndex += writeCount;
             yOffset++;
         }
 
@@ -178,15 +179,16 @@ public class SwScrlSlz extends AbstractZoneScrollHandler {
         while (lineIndex < VISIBLE_LINES) {
             int bufIdx = yOffset % SCROLL_BUFFER_SIZE;
             short bgScroll = scrollBuffer[bufIdx];
-            int packed = packScrollWords(fgScroll, bgScroll);
-            trackOffset(fgScroll, bgScroll);
-
-            int limit = Math.min(VISIBLE_LINES, lineIndex + LINES_PER_GROUP);
-            for (; lineIndex < limit; lineIndex++) {
-                horizScrollBuf[lineIndex] = packed;
-            }
+            int writeCount = Math.min(LINES_PER_GROUP, VISIBLE_LINES - lineIndex);
+            composer.fillPackedScrollWords(lineIndex, writeCount, fgScroll, bgScroll);
+            lineIndex += writeCount;
             yOffset++;
         }
+
+        composer.copyPackedScrollWordsTo(horizScrollBuf);
+        vscrollFactorBG = composer.getVscrollFactorBG();
+        minScrollOffset = composer.getMinScrollOffset();
+        maxScrollOffset = composer.getMaxScrollOffset();
     }
 
 }

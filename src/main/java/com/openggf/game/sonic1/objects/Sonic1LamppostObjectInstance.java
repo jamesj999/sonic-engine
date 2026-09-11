@@ -9,9 +9,9 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.WaterSystem;
 import com.openggf.level.objects.AbstractObjectInstance;
-import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -36,7 +36,7 @@ import java.util.logging.Logger;
  *   <li>Frame 3 (.red): Pole + red ball (visited)</li>
  * </ul>
  */
-public class Sonic1LamppostObjectInstance extends AbstractObjectInstance {
+public class Sonic1LamppostObjectInstance extends AbstractObjectInstance implements SpawnRewindRecreatable {
     private static final Logger LOGGER = Logger.getLogger(Sonic1LamppostObjectInstance.class.getName());
 
     // Mapping frame indices from Map_Lamp_internal
@@ -55,8 +55,8 @@ public class Sonic1LamppostObjectInstance extends AbstractObjectInstance {
     // From disassembly: subi.w #$18,lamp_origY(a1)
     static final int TWIRL_Y_OFFSET = 0x18;
 
-    private final int checkpointIndex;
-    private final boolean cameraLockFlag;
+    private int checkpointIndex;
+    private boolean cameraLockFlag;
     private int mappingFrame;
     private boolean activated;
     private boolean twirlActive;
@@ -89,7 +89,7 @@ public class Sonic1LamppostObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         ensureInitialized();
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (activated || player == null) {
@@ -149,10 +149,9 @@ public class Sonic1LamppostObjectInstance extends AbstractObjectInstance {
         }
 
         // Spawn twirl child: jsr (FindFreeObj).l
-        ObjectManager objectManager = services().objectManager();
-        if (objectManager != null) {
+        if (services().objectManager() != null) {
             twirlActive = true;
-            objectManager.addDynamicObject(new Sonic1LamppostTwirlInstance(this));
+            spawnFreeChild(() -> new Sonic1LamppostTwirlInstance(this));
         }
 
         // Set frame to pole only: move.b #1,obFrame(a0)
@@ -198,14 +197,31 @@ public class Sonic1LamppostObjectInstance extends AbstractObjectInstance {
 
     /**
      * Called by the twirl child when its animation completes.
-     * Switches from "pole only" (frame 1) to "red" (frame 3).
-     * In the original ROM, the twirl child persists at its last position until off-screen,
-     * and the lamppost re-creates as red on re-entry. Since our engine destroys the twirl
-     * immediately, we switch to red here to match the intended visual result.
+     * <p>
+     * ROM Lamp_Finish (79 Lamppost.asm:122-123, routine 4) is a plain {@code rts}
+     * -- the pole object's own mapping frame is never touched again this act.
+     * Lamp_Finish itself does not delete the twirl child either. That does
+     * <b>not</b> mean the twirl (or the pole) persists forever, though: every
+     * routine dispatched through {@code Lamppost:} -- pole and twirl alike --
+     * falls through to {@code jmp (RememberState).l} (79 Lamppost.asm:6-11),
+     * and {@code RememberState} (sub RememberState.asm:8-10) runs the standard
+     * ROM {@code out_of_range} check and deletes the object once it scrolls
+     * off-screen, exactly like any other object. So both the pole and its
+     * twirl child are deleted together once the camera moves far enough away,
+     * matching the engine's generic per-frame out-of-range eviction.
+     * <p>
+     * A previous version of this method switched the pole to {@code FRAME_RED}
+     * here, on the theory that the engine "destroys the twirl immediately" --
+     * it doesn't (see {@link Sonic1LamppostTwirlInstance#update}, which freezes
+     * rather than self-destructing once its orbit completes). With both objects
+     * alive, that fabricated frame swap produced a second, exactly-centered ball
+     * stacked next to the twirl's own frozen resting ball -- the "lamppost head
+     * sometimes stops duplicated and X-offset" bug. Only clear the bookkeeping
+     * flag; leave the pole's mapping frame at {@code FRAME_POLE_ONLY}, matching
+     * ROM.
      */
     public void onTwirlComplete() {
         twirlActive = false;
-        mappingFrame = FRAME_RED;
     }
 
     public int getCenterX() {

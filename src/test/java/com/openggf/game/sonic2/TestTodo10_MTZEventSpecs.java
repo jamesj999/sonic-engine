@@ -1,20 +1,25 @@
 package com.openggf.game.sonic2;
 
+import com.openggf.game.session.SessionManager;
+import com.openggf.tests.TestEnvironment;
+
 import com.openggf.camera.Camera;
 import com.openggf.game.GameServices;
-import com.openggf.game.RuntimeManager;
 import com.openggf.game.sonic2.events.Sonic2MTZEvents;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectServices;
 import com.openggf.level.objects.TestObjectServices;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Ignore;
-import org.junit.Test;
+import com.openggf.physics.Direction;
+import com.openggf.sprites.playable.AbstractPlayableSprite;
+import com.openggf.sprites.playable.SidekickCpuController;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Spec tests for Metropolis Zone (MTZ) level events.
@@ -42,6 +47,31 @@ public class TestTodo10_MTZEventSpecs {
     private Sonic2MTZEvents events;
     private Camera cam;
 
+    static class TestableSidekick extends AbstractPlayableSprite {
+        TestableSidekick() {
+            super("tails_p2", (short) 0, (short) 0);
+        }
+
+        @Override
+        public void draw() {}
+
+        @Override
+        public void defineSpeeds() {
+            runHeight = 38;
+            rollHeight = 28;
+            standXRadius = 9;
+            standYRadius = 19;
+            rollXRadius = 7;
+            rollYRadius = 14;
+            setWidth(18);
+            setHeight(runHeight);
+            setDirection(Direction.RIGHT);
+        }
+
+        @Override
+        protected void createSensorLines() {}
+    }
+
     @SuppressWarnings("unchecked")
     private static void setConstructionContext(ObjectServices services) {
         try {
@@ -64,9 +94,9 @@ public class TestTodo10_MTZEventSpecs {
         }
     }
 
-    @Before
+    @BeforeEach
     public void setUp() {
-        RuntimeManager.createGameplay();
+        TestEnvironment.activeGameplayMode();
         GameServices.camera().resetState();
         cam = GameServices.camera();
         setConstructionContext(new TestObjectServices());
@@ -74,10 +104,10 @@ public class TestTodo10_MTZEventSpecs {
         events.init(0);
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         clearConstructionContext();
-        RuntimeManager.destroyCurrent();
+        SessionManager.clear();
     }
 
     /**
@@ -92,14 +122,14 @@ public class TestTodo10_MTZEventSpecs {
     public void testMTZAct1_NoEvents() {
         cam.setX((short) 0x2530);  // Would trigger routine 0 in Act 3
         events.update(0, 0);  // act 0 = Act 1
-        assertEquals("Act 1 should not advance routine", 0, events.getEventRoutine());
+        assertEquals(0, events.getEventRoutine(), "Act 1 should not advance routine");
     }
 
     @Test
     public void testMTZAct2_NoEvents() {
         cam.setX((short) 0x2530);
         events.update(1, 0);  // act 1 = Act 2
-        assertEquals("Act 2 should not advance routine", 0, events.getEventRoutine());
+        assertEquals(0, events.getEventRoutine(), "Act 2 should not advance routine");
     }
 
     /**
@@ -118,20 +148,16 @@ public class TestTodo10_MTZEventSpecs {
     public void testMTZ3Routine0_DoesNotAdvanceBelowThreshold() {
         cam.setX((short) 0x2000);
         events.update(2, 0);  // act 2 = Act 3
-        assertEquals("Should stay at routine 0 when camera X < $2530",
-                0, events.getEventRoutine());
+        assertEquals(0, events.getEventRoutine(), "Should stay at routine 0 when camera X < $2530");
     }
 
     @Test
     public void testMTZ3Routine0_AdvancesAndSetsYBounds() {
         cam.setX((short) 0x2530);
         events.update(2, 0);
-        assertEquals("Should advance to routine 2 when camera X >= $2530",
-                2, events.getEventRoutine());
-        assertEquals("Camera_Max_Y_pos should be $500",
-                (short) 0x500, cam.getMaxY());
-        assertEquals("Camera_Max_Y_pos_target should be $450",
-                (short) 0x450, cam.getMaxYTarget());
+        assertEquals(2, events.getEventRoutine(), "Should advance to routine 2 when camera X >= $2530");
+        assertEquals((short) 0x500, cam.getMaxY(), "Camera_Max_Y_pos should be $500");
+        assertEquals((short) 0x450, cam.getMaxYTarget(), "Camera_Max_Y_pos_target should be $450");
     }
 
     /**
@@ -152,8 +178,7 @@ public class TestTodo10_MTZEventSpecs {
         events.setEventRoutine(2);
         cam.setX((short) 0x2900);
         events.update(2, 0);
-        assertEquals("Should stay at routine 2 when camera X < $2980",
-                2, events.getEventRoutine());
+        assertEquals(2, events.getEventRoutine(), "Should stay at routine 2 when camera X < $2980");
     }
 
     @Test
@@ -161,12 +186,9 @@ public class TestTodo10_MTZEventSpecs {
         events.setEventRoutine(2);
         cam.setX((short) 0x2980);
         events.update(2, 0);
-        assertEquals("Should advance to routine 4 when camera X >= $2980",
-                4, events.getEventRoutine());
-        assertEquals("MinX should be locked to camera X ($2980)",
-                (short) 0x2980, cam.getMinX());
-        assertEquals("Camera_Max_Y_pos_target should be $400",
-                (short) 0x400, cam.getMaxYTarget());
+        assertEquals(4, events.getEventRoutine(), "Should advance to routine 4 when camera X >= $2980");
+        assertEquals((short) 0x2980, cam.getMinX(), "MinX should be locked to camera X ($2980)");
+        assertEquals((short) 0x400, cam.getMaxYTarget(), "Camera_Max_Y_pos_target should be $400");
     }
 
     /**
@@ -191,8 +213,7 @@ public class TestTodo10_MTZEventSpecs {
         events.setEventRoutine(4);
         cam.setX((short) 0x2A00);
         events.update(2, 0);
-        assertEquals("Should stay at routine 4 when camera X < $2A80",
-                4, events.getEventRoutine());
+        assertEquals(4, events.getEventRoutine(), "Should stay at routine 4 when camera X < $2A80");
     }
 
     @Test
@@ -200,12 +221,9 @@ public class TestTodo10_MTZEventSpecs {
         events.setEventRoutine(4);
         cam.setX((short) 0x2A80);
         events.update(2, 0);
-        assertEquals("Should advance to routine 6 when camera X >= $2A80",
-                6, events.getEventRoutine());
-        assertEquals("Arena minX should be locked at $2AB0",
-                (short) 0x2AB0, cam.getMinX());
-        assertEquals("Arena maxX should be locked at $2AB0",
-                (short) 0x2AB0, cam.getMaxX());
+        assertEquals(6, events.getEventRoutine(), "Should advance to routine 6 when camera X >= $2A80");
+        assertEquals((short) 0x2AB0, cam.getMinX(), "Arena minX should be locked at $2AB0");
+        assertEquals((short) 0x2AB0, cam.getMaxX(), "Arena maxX should be locked at $2AB0");
     }
 
     /**
@@ -227,21 +245,27 @@ public class TestTodo10_MTZEventSpecs {
      */
     @Test
     public void testMTZ3Routine6_LocksMinYWhenAboveThreshold() {
+        TestableSidekick tails = addCpuSidekick();
         events.setEventRoutine(6);
         cam.setY((short) 0x400);
         events.update(2, 0);
-        assertEquals("MinY should be locked at $400 when camera Y >= $400",
-                (short) 0x400, cam.getMinY());
+        assertEquals((short) 0x400, cam.getMinY(), "MinY should be locked at $400 when camera Y >= $400");
+        assertEquals(0x400, tails.getCpuController().getMinYBound(Integer.MIN_VALUE),
+                "MTZ3 should also mirror the ROM Tails_Min_Y_pos write");
+        assertEquals(Integer.MIN_VALUE, tails.getCpuController().getMaxYBound(Integer.MIN_VALUE),
+                "Routine 6 writes Tails_Min_Y_pos, not Tails_Max_Y_pos");
     }
 
     @Test
     public void testMTZ3Routine6_DoesNotLockMinYBelowThreshold() {
+        TestableSidekick tails = addCpuSidekick();
         events.setEventRoutine(6);
         cam.setY((short) 0x300);
         short minYBefore = cam.getMinY();
         events.update(2, 0);
-        assertEquals("MinY should not change when camera Y < $400",
-                minYBefore, cam.getMinY());
+        assertEquals(minYBefore, cam.getMinY(), "MinY should not change when camera Y < $400");
+        assertEquals(Integer.MIN_VALUE, tails.getCpuController().getMinYBound(Integer.MIN_VALUE),
+                "Tails_Min_Y_pos should not change before the camera reaches the threshold");
     }
 
     @Test
@@ -252,8 +276,7 @@ public class TestTodo10_MTZEventSpecs {
         for (int i = 0; i < 0x59; i++) {
             events.update(2, i);
         }
-        assertEquals("Should stay at routine 6 before 90 frames ($5A)",
-                6, events.getEventRoutine());
+        assertEquals(6, events.getEventRoutine(), "Should stay at routine 6 before 90 frames ($5A)");
     }
 
     @Test
@@ -264,19 +287,18 @@ public class TestTodo10_MTZEventSpecs {
         for (int i = 0; i < 0x5A; i++) {
             events.update(2, i);
         }
-        assertEquals("Should advance to routine 8 after 90 frames ($5A)",
-                8, events.getEventRoutine());
+        assertEquals(8, events.getEventRoutine(), "Should advance to routine 8 after 90 frames ($5A)");
     }
 
     /**
      * MTZ3 Routine 8: Track camera position (boss active).
-     * ROM reference: LevEvents_MTZ3_Routine5 (s2.asm:20552-20556)
+     * ROM reference: LevEvents_MTZ3_Routine5 (s2.asm:20542-20544)
      * <pre>
      *   move.w (Camera_X_pos).w,(Camera_Min_X_pos).w
-     *   move.w (Camera_Max_X_pos).w,(Tails_Max_X_pos).w
-     *   move.w (Camera_X_pos).w,(Tails_Min_X_pos).w
      *   rts
      * </pre>
+     * The routine is a single UNCONDITIONAL assignment of Camera_Min_X_pos to the
+     * current Camera_X_pos. There is no ratchet/guard and no Tails bound write.
      */
     @Test
     public void testMTZ3Routine8_TracksCamera() {
@@ -284,19 +306,22 @@ public class TestTodo10_MTZEventSpecs {
         cam.setX((short) 0x2B00);
         cam.setMinX((short) 0x2A00);  // old minX
         events.update(2, 0);
-        assertEquals("MinX should advance to camera X during boss fight",
-                (short) 0x2B00, cam.getMinX());
-        assertEquals("Should remain at routine 8", 8, events.getEventRoutine());
+        assertEquals((short) 0x2B00, cam.getMinX(), "MinX should advance to camera X during boss fight");
+        assertEquals(8, events.getEventRoutine(), "Should remain at routine 8");
     }
 
     @Test
-    public void testMTZ3Routine8_DoesNotRetreatMinX() {
+    public void testMTZ3Routine8_MinXFollowsCameraUnconditionally() {
+        // ROM Routine5 (s2.asm:20543) writes Camera_Min_X_pos = Camera_X_pos with no
+        // guard, so min-X follows the camera even when the camera is behind the old
+        // min-X. (In real play the camera is pinned at $2AB0 during the boss, so this
+        // never actually retreats; the unit test exercises the raw assignment.)
         events.setEventRoutine(8);
         cam.setMinX((short) 0x2B00);
         cam.setX((short) 0x2A00);  // camera behind current minX
         events.update(2, 0);
-        assertEquals("MinX should not retreat behind current value",
-                (short) 0x2B00, cam.getMinX());
+        assertEquals((short) 0x2A00, cam.getMinX(),
+                "MinX should follow Camera_X unconditionally (ROM has no ratchet)");
     }
 
     /**
@@ -326,4 +351,14 @@ public class TestTodo10_MTZEventSpecs {
         }
         assertEquals(8, events.getEventRoutine());
     }
+
+    private TestableSidekick addCpuSidekick() {
+        TestableSidekick tails = new TestableSidekick();
+        tails.setCpuControlled(true);
+        tails.setCpuController(new SidekickCpuController(tails, null));
+        GameServices.sprites().addSprite(tails);
+        return tails;
+    }
 }
+
+

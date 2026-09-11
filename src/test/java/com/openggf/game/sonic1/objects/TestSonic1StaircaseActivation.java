@@ -6,15 +6,13 @@ import com.openggf.level.objects.ObjectManager;
 import com.openggf.tests.HeadlessTestFixture;
 import com.openggf.tests.SharedLevel;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Regression test for the SLZ Staircase (Object 0x5B).
@@ -25,9 +23,6 @@ import static org.junit.Assert.*;
  */
 @RequiresRom(SonicGame.SONIC_1)
 public class TestSonic1StaircaseActivation {
-
-    @ClassRule public static RequiresRomRule romRule = new RequiresRomRule();
-
     private static final int ZONE_SLZ = 4;
     private static final int ACT_1 = 0;
     private static final int SCREENSHOT_X = 1070;
@@ -35,19 +30,19 @@ public class TestSonic1StaircaseActivation {
 
     private static SharedLevel sharedLevel;
 
-    @BeforeClass
+    @BeforeAll
     public static void loadLevel() throws Exception {
         sharedLevel = SharedLevel.load(SonicGame.SONIC_1, ZONE_SLZ, ACT_1);
     }
 
-    @AfterClass
+    @AfterAll
     public static void cleanup() {
         if (sharedLevel != null) sharedLevel.dispose();
     }
 
     private HeadlessTestFixture fixture;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         fixture = HeadlessTestFixture.builder()
                 .withSharedLevel(sharedLevel)
@@ -76,14 +71,14 @@ public class TestSonic1StaircaseActivation {
                 break;
             }
         }
-        assertNotNull("Should find a staircase near screenshot position", staircase);
+        assertNotNull(staircase, "Should find a staircase near screenshot position");
 
         // Let Sonic fall to the staircase (no terrain at this location)
         for (int f = 0; f < 30; f++) {
             fixture.stepFrame(false, false, false, false, false);
             if (!fixture.sprite().getAir() && fixture.sprite().isOnObject()) break;
         }
-        assertTrue("Sonic should land on staircase", fixture.sprite().isOnObject());
+        assertTrue(fixture.sprite().isOnObject(), "Sonic should land on staircase");
 
         int startY = fixture.sprite().getCentreY();
 
@@ -99,9 +94,9 @@ public class TestSonic1StaircaseActivation {
             }
         }
 
-        assertTrue("Staircase should activate (state > 0, got " + staircase.getState() + ")",
-                staircase.getState() > 0);
-        assertTrue("Sonic should descend with staircase (expected >30px, got " + maxDescent + "px)",
-                maxDescent > 30);
+        assertTrue(staircase.getState() > 0, "Staircase should activate (state > 0, got " + staircase.getState() + ")");
+        assertTrue(maxDescent > 30, "Sonic should descend with staircase (expected >30px, got " + maxDescent + "px)");
     }
 }
+
+

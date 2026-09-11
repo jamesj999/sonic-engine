@@ -1,9 +1,8 @@
 package com.openggf.game.sonic3k;
 
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import com.openggf.camera.Camera;
 import com.openggf.game.GameServices;
 import com.openggf.configuration.SonicConfiguration;
@@ -18,7 +17,6 @@ import com.openggf.sprites.managers.SpriteManager;
 import com.openggf.sprites.playable.Sonic;
 import com.openggf.tests.HeadlessTestRunner;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
 
 import com.openggf.level.Chunk;
@@ -29,20 +27,16 @@ import com.openggf.level.PatternDesc;
 import java.util.LinkedHashMap;
 import java.util.TreeSet;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @RequiresRom(SonicGame.SONIC_3K)
 public class TestS3kAizIntroCoverage {
-
-    @Rule
-    public RequiresRomRule romRule = new RequiresRomRule();
-
     private Object oldSkipIntros;
     private Object oldMainCharacter;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         SonicConfigurationService config = SonicConfigurationService.getInstance();
         oldSkipIntros = config.getConfigValue(SonicConfiguration.S3K_SKIP_INTROS);
@@ -52,7 +46,7 @@ public class TestS3kAizIntroCoverage {
         GraphicsManager.getInstance().initHeadless();
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         SonicConfigurationService config = SonicConfigurationService.getInstance();
         config.setConfigValue(SonicConfiguration.S3K_SKIP_INTROS, oldSkipIntros != null ? oldSkipIntros : false);
@@ -75,9 +69,9 @@ public class TestS3kAizIntroCoverage {
         camera.updatePosition(true);
 
         Level level = levelManager.getCurrentLevel();
-        assertNotNull("AIZ1 level should be loaded", level);
+        assertNotNull(level, "AIZ1 level should be loaded");
         Map map = level.getMap();
-        assertNotNull("AIZ1 map should be loaded", map);
+        assertNotNull(map, "AIZ1 map should be loaded");
         HeadlessTestRunner runner = new HeadlessTestRunner(sonic);
 
         int fgWidth = Math.max(1, level.getLayerWidthBlocks(0));
@@ -122,7 +116,7 @@ public class TestS3kAizIntroCoverage {
             }
         }
 
-        assertEquals("Initial AIZ chunk array should cover all block references", 0, initialInvalidRefs);
+        assertEquals(0, initialInvalidRefs, "Initial AIZ chunk array should cover all block references");
 
         // Run until the intro reaches the ROM transition point (camera X >= $1400),
         // then allow a short settle period for overlay application.
@@ -135,7 +129,7 @@ public class TestS3kAizIntroCoverage {
         }
 
         Level postTransitionLevel = levelManager.getCurrentLevel();
-        assertNotNull("AIZ1 level should remain loaded after intro transition", postTransitionLevel);
+        assertNotNull(postTransitionLevel, "AIZ1 level should remain loaded after intro transition");
         int postChunkCount = postTransitionLevel.getChunkCount();
         int postInvalidRefs = 0;
         invalidColumns.clear();
@@ -149,12 +143,12 @@ public class TestS3kAizIntroCoverage {
                 + " postInvalidRefs=" + postInvalidRefs
                 + " invalidColumns=" + invalidColumns);
 
-        assertEquals("Post-transition AIZ map should not reference missing 16x16 chunks", 0, postInvalidRefs);
+        assertEquals(0, postInvalidRefs, "Post-transition AIZ map should not reference missing 16x16 chunks");
     }
 
     /**
      * Diagnostic: dump the full BG tile data chain before and after the terrain swap.
-     * Traces Map → Block → ChunkDesc → Chunk → PatternDesc → Pattern for every
+     * Traces Map â†’ Block â†’ ChunkDesc â†’ Chunk â†’ PatternDesc â†’ Pattern for every
      * BG tile, comparing pre- and post-transition states to find exactly which
      * tiles change and whether any produce corrupt references.
      */
@@ -296,14 +290,14 @@ public class TestS3kAizIntroCoverage {
                         + " count=" + e.getValue()
                         + (e.getKey() >= postLevel.getPatternCount() ? " OOR!" : "")));
 
-        assertEquals("No BG chunk references should be out of range", 0, chunkOutOfRange);
-        assertEquals("No BG pattern references should be out of range", 0, patternOutOfRange);
-        assertEquals("No non-empty patterns from extended (empty) chunks", 0, nonEmptyFromEmptyChunk);
-        assertEquals("No empty patterns referenced by changed tile descriptors", 0, emptyPatternButVisible);
+        assertEquals(0, chunkOutOfRange, "No BG chunk references should be out of range");
+        assertEquals(0, patternOutOfRange, "No BG pattern references should be out of range");
+        assertEquals(0, nonEmptyFromEmptyChunk, "No non-empty patterns from extended (empty) chunks");
+        assertEquals(0, emptyPatternButVisible, "No empty patterns referenced by changed tile descriptors");
     }
 
     /**
-     * Snapshot all BG tiles as key→[chunkIndex, patternIndex].
+     * Snapshot all BG tiles as keyâ†’[chunkIndex, patternIndex].
      * Key format: "bX_bY_cX_cY_pX_pY" (block pos, chunk-in-block pos, pattern-in-chunk pos).
      */
     private static java.util.Map<String, int[]> snapshotBgTiles(
@@ -361,3 +355,5 @@ public class TestS3kAizIntroCoverage {
         return invalid;
     }
 }
+
+

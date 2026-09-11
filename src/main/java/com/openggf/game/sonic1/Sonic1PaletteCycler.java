@@ -1,5 +1,6 @@
 package com.openggf.game.sonic1;
 
+import com.openggf.data.RomByteReader;
 import com.openggf.game.GameServices;
 import com.openggf.game.PlayerCharacter;
 import com.openggf.game.sonic1.constants.Sonic1Constants;
@@ -28,21 +29,32 @@ import java.util.List;
  *
  * <p>MZ has no palette cycling.
  *
- * <p>Palette cycle data is embedded directly from the s1disasm binary files
- * (palette/Cycle - *.bin) since the data is small and fixed.
+ * <p>Palette cycle data is loaded from the user-supplied ROM cycle data block.
  */
 class Sonic1PaletteCycler implements AnimatedPaletteManager {
     private final Level level;
-    private final GraphicsManager graphicsManager = GraphicsManager.getInstance();
     private final List<PaletteCycle> cycles;
+    private final Sonic1ConveyorState conveyorState;
+    private final CycleData cycleData;
 
     Sonic1PaletteCycler(Level level, int zoneIndex) {
+        this(level, zoneIndex, resolveConveyorState());
+    }
+
+    Sonic1PaletteCycler(Level level, int zoneIndex, Sonic1ConveyorState conveyorState) {
+        this(level, zoneIndex, conveyorState, loadCycleDataFromRuntimeRom());
+    }
+
+    Sonic1PaletteCycler(Level level, int zoneIndex, Sonic1ConveyorState conveyorState, CycleData cycleData) {
         this.level = level;
+        this.conveyorState = conveyorState;
+        this.cycleData = cycleData;
         this.cycles = createCycles(zoneIndex);
     }
 
     @Override
     public void update() {
+        GraphicsManager graphicsManager = GameServices.graphics();
         for (PaletteCycle cycle : cycles) {
             cycle.tick(level, graphicsManager);
         }
@@ -53,8 +65,8 @@ class Sonic1PaletteCycler implements AnimatedPaletteManager {
             case Sonic1Constants.ZONE_GHZ -> List.of(createGhzCycle());
             case Sonic1Constants.ZONE_ENDZ -> List.of(createGhzCycle());
             case Sonic1Constants.ZONE_LZ -> createLzCycles();
-            case Sonic1Constants.ZONE_SLZ -> List.of(new SlzCycle());
-            case Sonic1Constants.ZONE_SYZ -> List.of(new SyzCycle());
+            case Sonic1Constants.ZONE_SLZ -> List.of(new SlzCycle(cycleData.slz()));
+            case Sonic1Constants.ZONE_SYZ -> List.of(new SyzCycle(cycleData.syz1(), cycleData.syz2()));
             case Sonic1Constants.ZONE_SBZ -> createSbzCycles();
             default -> List.of();
         };
@@ -71,7 +83,7 @@ class Sonic1PaletteCycler implements AnimatedPaletteManager {
      * </pre>
      */
     private PaletteCycle createGhzCycle() {
-        return new SimpleCycle(PAL_GHZ_CYC, 4, 8, 5, 2, new int[]{8, 9, 10, 11});
+        return new SimpleCycle(cycleData.ghz(), 4, 8, 5, 2, new int[]{8, 9, 10, 11});
     }
 
     // ===== LZ =====
@@ -89,9 +101,18 @@ class Sonic1PaletteCycler implements AnimatedPaletteManager {
         boolean sbz3Waterfall = isSbz3FeatureState();
 
         List<PaletteCycle> list = new ArrayList<>(2);
-        list.add(new LzWaterfallCycle(sbz3Waterfall, underwaterPalettes));
-        list.add(new LzConveyorCycle(underwaterPalettes));
+        list.add(new LzWaterfallCycle(sbz3Waterfall ? cycleData.sbz3Waterfall() : cycleData.lzWaterfall(),
+                underwaterPalettes));
+        list.add(new LzConveyorCycle(conveyorState, underwaterPalettes,
+                cycleData.lzConveyor(), cycleData.lzUnderwaterConveyor()));
         return list;
+    }
+
+    private static Sonic1ConveyorState resolveConveyorState() {
+        Sonic1ConveyorState runtimeState = GameServices.hasRuntime()
+                ? GameServices.module().getGameService(Sonic1ConveyorState.class)
+                : null;
+        return runtimeState != null ? runtimeState : new Sonic1ConveyorState();
     }
 
     // ===== SBZ =====
@@ -119,28 +140,28 @@ class Sonic1PaletteCycler implements AnimatedPaletteManager {
 
         if (isAct1) {
             // Pal_SBZCycList1: 9 per-entry cycles
-            list.add(new SbzColorCycle(PAL_SBZ_CYC1, 0, 8, 7, 2, 8));
-            list.add(new SbzColorCycle(PAL_SBZ_CYC2, 0, 8, 13, 2, 9));
-            list.add(new SbzColorCycle(PAL_SBZ_CYC3, 0, 8, 14, 3, 7));
-            list.add(new SbzColorCycle(PAL_SBZ_CYC5, 0, 8, 11, 3, 8));
-            list.add(new SbzColorCycle(PAL_SBZ_CYC6, 0, 8, 7, 3, 9));
-            list.add(new SbzColorCycle(PAL_SBZ_CYC7, 0, 16, 28, 3, 15));
-            list.add(new SbzColorCycle(PAL_SBZ_CYC8, 0, 3, 3, 3, 12));
-            list.add(new SbzColorCycle(PAL_SBZ_CYC8, 2, 3, 3, 3, 13));
-            list.add(new SbzColorCycle(PAL_SBZ_CYC8, 4, 3, 3, 3, 14));
+            list.add(new SbzColorCycle(cycleData.sbz1(), 0, 8, 7, 2, 8));
+            list.add(new SbzColorCycle(cycleData.sbz2(), 0, 8, 13, 2, 9));
+            list.add(new SbzColorCycle(cycleData.sbz3(), 0, 8, 14, 3, 7));
+            list.add(new SbzColorCycle(cycleData.sbz5(), 0, 8, 11, 3, 8));
+            list.add(new SbzColorCycle(cycleData.sbz6(), 0, 8, 7, 3, 9));
+            list.add(new SbzColorCycle(cycleData.sbz7(), 0, 16, 28, 3, 15));
+            list.add(new SbzColorCycle(cycleData.sbz8(), 0, 3, 3, 3, 12));
+            list.add(new SbzColorCycle(cycleData.sbz8(), 2, 3, 3, 3, 13));
+            list.add(new SbzColorCycle(cycleData.sbz8(), 4, 3, 3, 3, 14));
             // Conveyor: SBZCyc4, timer reset 1 (every 2 frames)
-            list.add(new SbzConveyorCycle(PAL_SBZ_CYC4, 1));
+            list.add(new SbzConveyorCycle(cycleData.sbz4(), 1));
         } else {
             // Pal_SBZCycList2: 7 per-entry cycles
-            list.add(new SbzColorCycle(PAL_SBZ_CYC1, 0, 8, 7, 2, 8));
-            list.add(new SbzColorCycle(PAL_SBZ_CYC2, 0, 8, 13, 2, 9));
-            list.add(new SbzColorCycle(PAL_SBZ_CYC9, 0, 8, 9, 3, 8));
-            list.add(new SbzColorCycle(PAL_SBZ_CYC6, 0, 8, 7, 3, 9));
-            list.add(new SbzColorCycle(PAL_SBZ_CYC8, 0, 3, 3, 3, 12));
-            list.add(new SbzColorCycle(PAL_SBZ_CYC8, 2, 3, 3, 3, 13));
-            list.add(new SbzColorCycle(PAL_SBZ_CYC8, 4, 3, 3, 3, 14));
+            list.add(new SbzColorCycle(cycleData.sbz1(), 0, 8, 7, 2, 8));
+            list.add(new SbzColorCycle(cycleData.sbz2(), 0, 8, 13, 2, 9));
+            list.add(new SbzColorCycle(cycleData.sbz9(), 0, 8, 9, 3, 8));
+            list.add(new SbzColorCycle(cycleData.sbz6(), 0, 8, 7, 3, 9));
+            list.add(new SbzColorCycle(cycleData.sbz8(), 0, 3, 3, 3, 12));
+            list.add(new SbzColorCycle(cycleData.sbz8(), 2, 3, 3, 3, 13));
+            list.add(new SbzColorCycle(cycleData.sbz8(), 4, 3, 3, 3, 14));
             // Conveyor: SBZCyc10, timer reset 0 (every frame)
-            list.add(new SbzConveyorCycle(PAL_SBZ_CYC10, 0));
+            list.add(new SbzConveyorCycle(cycleData.sbz10(), 0));
         }
 
         return list;
@@ -150,6 +171,36 @@ class Sonic1PaletteCycler implements AnimatedPaletteManager {
 
     private interface PaletteCycle {
         void tick(Level level, GraphicsManager gm);
+    }
+
+    static CycleData loadCycleData(RomByteReader reader) {
+        return new CycleData(
+                reader.slice(Sonic1Constants.PAL_GHZ_CYCLE_ADDR, 32),
+                reader.slice(Sonic1Constants.PAL_LZ_CYCLE1_ADDR, 32),
+                reader.slice(Sonic1Constants.PAL_LZ_CYCLE2_ADDR, 18),
+                reader.slice(Sonic1Constants.PAL_LZ_CYCLE3_ADDR, 18),
+                reader.slice(Sonic1Constants.PAL_SBZ3_CYCLE_ADDR, 32),
+                reader.slice(Sonic1Constants.PAL_SLZ_CYCLE_ADDR, 36),
+                reader.slice(Sonic1Constants.PAL_SYZ_CYCLE1_ADDR, 32),
+                reader.slice(Sonic1Constants.PAL_SYZ_CYCLE2_ADDR, 16),
+                reader.slice(Sonic1Constants.PAL_SBZ_CYCLE1_ADDR, 16),
+                reader.slice(Sonic1Constants.PAL_SBZ_CYCLE2_ADDR, 16),
+                reader.slice(Sonic1Constants.PAL_SBZ_CYCLE3_ADDR, 16),
+                reader.slice(Sonic1Constants.PAL_SBZ_CYCLE4_ADDR, 12),
+                reader.slice(Sonic1Constants.PAL_SBZ_CYCLE5_ADDR, 16),
+                reader.slice(Sonic1Constants.PAL_SBZ_CYCLE6_ADDR, 16),
+                reader.slice(Sonic1Constants.PAL_SBZ_CYCLE7_ADDR, 32),
+                reader.slice(Sonic1Constants.PAL_SBZ_CYCLE8_ADDR, 10),
+                reader.slice(Sonic1Constants.PAL_SBZ_CYCLE9_ADDR, 16),
+                reader.slice(Sonic1Constants.PAL_SBZ_CYCLE10_ADDR, 12));
+    }
+
+    private static CycleData loadCycleDataFromRuntimeRom() {
+        try {
+            return loadCycleData(RomByteReader.fromRom(GameServices.rom().getRom()));
+        } catch (Exception e) {
+            throw new IllegalStateException("Unable to load Sonic 1 palette cycle data from ROM", e);
+        }
     }
 
     private Palette[] loadLzUnderwaterPalettes() {
@@ -249,8 +300,8 @@ class Sonic1PaletteCycler implements AnimatedPaletteManager {
         private int timer;
         private int frame;
 
-        private LzWaterfallCycle(boolean sbz3Waterfall, Palette[] underwaterPalettes) {
-            this.data = sbz3Waterfall ? PAL_SBZ3_CYC : PAL_LZ_CYC1;
+        private LzWaterfallCycle(byte[] data, Palette[] underwaterPalettes) {
+            this.data = data;
             this.underwaterPalettes = underwaterPalettes;
         }
 
@@ -284,12 +335,19 @@ class Sonic1PaletteCycler implements AnimatedPaletteManager {
         private static final int[] TRIGGER_SEQUENCE = {1, 0, 0, 1, 0, 0, 1, 0};
         private static final int[] COLOR_INDICES = {11, 12, 13};
 
+        private final Sonic1ConveyorState conveyorState;
         private final Palette[] underwaterPalettes;
+        private final byte[] normalData;
+        private final byte[] underwaterData;
         private int sequenceIndex;
         private int frameState;
 
-        private LzConveyorCycle(Palette[] underwaterPalettes) {
+        private LzConveyorCycle(Sonic1ConveyorState conveyorState, Palette[] underwaterPalettes,
+                                byte[] normalData, byte[] underwaterData) {
+            this.conveyorState = conveyorState;
             this.underwaterPalettes = underwaterPalettes;
+            this.normalData = normalData;
+            this.underwaterData = underwaterData;
         }
 
         @Override
@@ -300,7 +358,7 @@ class Sonic1PaletteCycler implements AnimatedPaletteManager {
                 return;
             }
 
-            int direction = Sonic1ConveyorState.getInstance().isReversed() ? -1 : 1;
+            int direction = conveyorState.isReversed() ? -1 : 1;
             int nextState = frameState + direction;
             if (nextState >= 3) {
                 nextState = 0;
@@ -311,10 +369,10 @@ class Sonic1PaletteCycler implements AnimatedPaletteManager {
 
             int base = frameState * 6;
             Palette palette = level.getPalette(3);
-            applyColors(PAL_LZ_CYC2, base, palette, COLOR_INDICES);
+            applyColors(normalData, base, palette, COLOR_INDICES);
 
             if (underwaterPalettes != null && underwaterPalettes.length > 3 && underwaterPalettes[3] != null) {
-                applyColors(PAL_LZ_CYC3, base, underwaterPalettes[3], COLOR_INDICES);
+                applyColors(underwaterData, base, underwaterPalettes[3], COLOR_INDICES);
             }
 
             if (gm.isGlInitialized()) {
@@ -336,8 +394,13 @@ class Sonic1PaletteCycler implements AnimatedPaletteManager {
      * </pre>
      */
     private static class SlzCycle implements PaletteCycle {
+        private final byte[] data;
         private int timer;
         private int frame;
+
+        SlzCycle(byte[] data) {
+            this.data = data;
+        }
 
         @Override
         public void tick(Level level, GraphicsManager gm) {
@@ -356,9 +419,9 @@ class Sonic1PaletteCycler implements AnimatedPaletteManager {
 
             // move.w (a0,d0.w),(a1)       → color 11 from offset 0
             // move.l 2(a0,d0.w),4(a1)     → colors 13,14 from offset 2
-            palette.getColor(11).fromSegaFormat(PAL_SLZ_CYC, d0);
-            palette.getColor(13).fromSegaFormat(PAL_SLZ_CYC, d0 + 2);
-            palette.getColor(14).fromSegaFormat(PAL_SLZ_CYC, d0 + 4);
+            palette.getColor(11).fromSegaFormat(data, d0);
+            palette.getColor(13).fromSegaFormat(data, d0 + 2);
+            palette.getColor(14).fromSegaFormat(data, d0 + 4);
 
             if (gm.isGlInitialized()) {
                 gm.cachePaletteTexture(palette, 2);
@@ -378,8 +441,15 @@ class Sonic1PaletteCycler implements AnimatedPaletteManager {
      * </pre>
      */
     private static class SyzCycle implements PaletteCycle {
+        private final byte[] group1Data;
+        private final byte[] group2Data;
         private int timer;
         private int frame;
+
+        SyzCycle(byte[] group1Data, byte[] group2Data) {
+            this.group1Data = group1Data;
+            this.group2Data = group2Data;
+        }
 
         @Override
         public void tick(Level level, GraphicsManager gm) {
@@ -396,15 +466,15 @@ class Sonic1PaletteCycler implements AnimatedPaletteManager {
 
             // Group 1: 4 contiguous colors at 8-byte stride
             int d0 = frameIndex * 8;
-            palette.getColor(7).fromSegaFormat(PAL_SYZ_CYC1, d0);
-            palette.getColor(8).fromSegaFormat(PAL_SYZ_CYC1, d0 + 2);
-            palette.getColor(9).fromSegaFormat(PAL_SYZ_CYC1, d0 + 4);
-            palette.getColor(10).fromSegaFormat(PAL_SYZ_CYC1, d0 + 6);
+            palette.getColor(7).fromSegaFormat(group1Data, d0);
+            palette.getColor(8).fromSegaFormat(group1Data, d0 + 2);
+            palette.getColor(9).fromSegaFormat(group1Data, d0 + 4);
+            palette.getColor(10).fromSegaFormat(group1Data, d0 + 6);
 
             // Group 2: 2 non-contiguous colors at 4-byte stride
             int d1 = frameIndex * 4;
-            palette.getColor(11).fromSegaFormat(PAL_SYZ_CYC2, d1);
-            palette.getColor(13).fromSegaFormat(PAL_SYZ_CYC2, d1 + 2);
+            palette.getColor(11).fromSegaFormat(group2Data, d1);
+            palette.getColor(13).fromSegaFormat(group2Data, d1 + 2);
 
             if (gm.isGlInitialized()) {
                 gm.cachePaletteTexture(palette, 3);
@@ -532,131 +602,44 @@ class Sonic1PaletteCycler implements AnimatedPaletteManager {
         }
     }
 
-    // ===== Embedded palette cycle data (from s1disasm/palette/Cycle - *.bin) =====
-
-    /** GHZ: 32 bytes, 4 frames x 8 bytes (4 colors each). Rotation pattern. */
-    private static final byte[] PAL_GHZ_CYC = {
-            0x0a, (byte) 0x86, 0x0e, (byte) 0x86, 0x0e, (byte) 0xa8, 0x0e, (byte) 0xca,
-            0x0e, (byte) 0xca, 0x0a, (byte) 0x86, 0x0e, (byte) 0x86, 0x0e, (byte) 0xa8,
-            0x0e, (byte) 0xa8, 0x0e, (byte) 0xca, 0x0a, (byte) 0x86, 0x0e, (byte) 0x86,
-            0x0e, (byte) 0x86, 0x0e, (byte) 0xa8, 0x0e, (byte) 0xca, 0x0a, (byte) 0x86
-    };
-
-    /** LZ Waterfall: 32 bytes, 4 frames x 8 bytes (4 colors each). */
-    private static final byte[] PAL_LZ_CYC1 = {
-            0x06, (byte) 0x80, 0x0c, (byte) 0xe6, 0x0a, (byte) 0xc4, 0x08, (byte) 0xa2,
-            0x0c, (byte) 0xe6, 0x0a, (byte) 0xc4, 0x08, (byte) 0xa2, 0x06, (byte) 0x80,
-            0x0a, (byte) 0xc4, 0x08, (byte) 0xa2, 0x06, (byte) 0x80, 0x0c, (byte) 0xe6,
-            0x08, (byte) 0xa2, 0x06, (byte) 0x80, 0x0c, (byte) 0xe6, 0x0a, (byte) 0xc4
-    };
-
-    /** LZ Conveyor Belt: 18 bytes, 3 frames x 6 bytes (3 colors each). */
-    private static final byte[] PAL_LZ_CYC2 = {
-            0x0a, (byte) 0xaa, 0x06, 0x66, 0x02, 0x22,
-            0x06, 0x66, 0x02, 0x22, 0x0a, (byte) 0xaa,
-            0x02, 0x22, 0x0a, (byte) 0xaa, 0x06, 0x66
-    };
-
-    /** LZ Conveyor Belt Underwater: 18 bytes, 3 frames x 6 bytes (3 colors each). */
-    private static final byte[] PAL_LZ_CYC3 = {
-            0x08, (byte) 0xa8, 0x04, 0x64, 0x00, 0x20,
-            0x04, 0x64, 0x00, 0x20, 0x08, (byte) 0xa8,
-            0x00, 0x20, 0x08, (byte) 0xa8, 0x04, 0x64
-    };
-
-    /** SBZ3 Waterfall: 32 bytes, 4 frames x 8 bytes (4 colors each). */
-    private static final byte[] PAL_SBZ3_CYC = {
-            0x0e, (byte) 0xce, 0x0e, (byte) 0x8c, 0x0a, 0x48, 0x08, 0x26,
-            0x0e, (byte) 0x8c, 0x0a, 0x48, 0x08, 0x26, 0x0e, (byte) 0xce,
-            0x0a, 0x48, 0x08, 0x26, 0x0e, (byte) 0xce, 0x0e, (byte) 0x8c,
-            0x08, 0x26, 0x0e, (byte) 0xce, 0x0e, (byte) 0x8c, 0x0a, 0x48
-    };
-
-    /** SLZ: 36 bytes, 6 frames x 6 bytes (3 non-contiguous colors). */
-    private static final byte[] PAL_SLZ_CYC = {
-            0x0e, (byte) 0xe0, 0x00, 0x06, 0x00, 0x66,
-            0x0a, (byte) 0xa0, 0x00, 0x0a, 0x00, 0x22,
-            0x06, 0x60, 0x00, 0x0e, 0x00, 0x66,
-            0x02, 0x20, 0x00, 0x0a, 0x00, (byte) 0xaa,
-            0x06, 0x60, 0x00, 0x06, 0x00, (byte) 0xee,
-            0x0a, (byte) 0xa0, 0x00, 0x02, 0x00, (byte) 0xaa
-    };
-
-    /** SYZ cycle 1: 32 bytes, 4 frames x 8 bytes (4 contiguous colors). */
-    private static final byte[] PAL_SYZ_CYC1 = {
-            0x00, (byte) 0xee, 0x00, (byte) 0xaa, 0x00, 0x66, 0x00, 0x22,
-            0x00, (byte) 0xaa, 0x00, 0x66, 0x00, 0x22, 0x00, (byte) 0xee,
-            0x00, 0x66, 0x00, 0x22, 0x00, (byte) 0xee, 0x00, (byte) 0xaa,
-            0x00, 0x22, 0x00, (byte) 0xee, 0x00, (byte) 0xaa, 0x00, 0x66
-    };
-
-    /** SYZ cycle 2: 16 bytes, 4 frames x 4 bytes (2 non-contiguous colors). */
-    private static final byte[] PAL_SYZ_CYC2 = {
-            0x00, 0x0e, 0x0e, (byte) 0xee, 0x06, 0x6e, 0x0e, (byte) 0x88,
-            0x0e, (byte) 0xee, 0x0c, 0x00, 0x06, 0x6e, 0x0e, (byte) 0x88
-    };
-
-    // ===== SBZ palette cycle data (from s1disasm/palette/Cycle - SBZ *.bin) =====
-
-    /** SBZCyc1: 16 bytes, 8 frames x 1 color. Palette line 2, color 8. */
-    private static final byte[] PAL_SBZ_CYC1 = {
-            0x00, 0x44, 0x0e, (byte) 0xa0, 0x00, 0x44, 0x0e, (byte) 0xa0,
-            0x00, (byte) 0xe8, 0x00, (byte) 0xe8, 0x00, 0x44, 0x0e, 0x4e
-    };
-
-    /** SBZCyc2: 16 bytes, 8 frames x 1 color. Palette line 2, color 9. */
-    private static final byte[] PAL_SBZ_CYC2 = {
-            0x00, (byte) 0xee, 0x00, (byte) 0x8e, 0x00, 0x0e, 0x00, 0x08,
-            0x00, 0x08, 0x00, 0x0e, 0x00, (byte) 0x8e, 0x00, (byte) 0xee
-    };
-
-    /** SBZCyc3: 16 bytes, 8 frames x 1 color. Palette line 3, color 7 (Act 1 only). */
-    private static final byte[] PAL_SBZ_CYC3 = {
-            0x00, 0x0a, 0x00, 0x0a, 0x00, 0x08, 0x00, 0x06,
-            0x00, 0x04, 0x00, 0x04, 0x00, 0x06, 0x00, 0x08
-    };
-
-    /** SBZCyc4: 12 bytes, 3 unique colors doubled. Conveyor belt for Act 1. */
-    private static final byte[] PAL_SBZ_CYC4 = {
-            0x0c, (byte) 0xaa, 0x08, 0x66, 0x04, 0x22,
-            0x0c, (byte) 0xaa, 0x08, 0x66, 0x04, 0x22
-    };
-
-    /** SBZCyc5: 16 bytes, 8 frames x 1 color. Palette line 3, color 8 (Act 1 only). */
-    private static final byte[] PAL_SBZ_CYC5 = {
-            0x00, 0x0e, 0x00, 0x0e, 0x00, 0x0a, 0x00, 0x08,
-            0x00, 0x06, 0x00, 0x06, 0x00, 0x08, 0x00, 0x0a
-    };
-
-    /** SBZCyc6: 16 bytes, 8 frames x 1 color. Palette line 3, color 9. */
-    private static final byte[] PAL_SBZ_CYC6 = {
-            0x0c, (byte) 0xe6, 0x0c, (byte) 0xe6, 0x0a, (byte) 0xc4, 0x08, (byte) 0xa2,
-            0x06, (byte) 0x80, 0x06, (byte) 0x80, 0x08, (byte) 0xa2, 0x0a, (byte) 0xc4
-    };
-
-    /** SBZCyc7: 32 bytes, 16 frames x 1 color. Palette line 3, color 15 (Act 1 only). */
-    private static final byte[] PAL_SBZ_CYC7 = {
-            0x0e, (byte) 0xa0, 0x0e, (byte) 0x86, 0x0e, 0x6a, 0x0e, 0x4e,
-            0x08, (byte) 0x8e, 0x04, (byte) 0xae, 0x02, (byte) 0xce, 0x00, (byte) 0xee,
-            0x00, (byte) 0xee, 0x02, (byte) 0xce, 0x04, (byte) 0xae, 0x08, (byte) 0x8e,
-            0x0e, 0x4e, 0x0e, 0x6a, 0x0e, (byte) 0x86, 0x0e, (byte) 0xa0
-    };
-
-    /** SBZCyc8: 10 bytes, shared by 3 entries with sliding offset. Palette line 3, colors 12-14. */
-    private static final byte[] PAL_SBZ_CYC8 = {
-            0x0e, (byte) 0xae, 0x0e, 0x4e, 0x08, 0x08,
-            0x0e, (byte) 0xae, 0x0e, 0x4e
-    };
-
-    /** SBZCyc9: 16 bytes, 8 frames x 1 color. Palette line 3, color 8 (Act 2 only). */
-    private static final byte[] PAL_SBZ_CYC9 = {
-            0x0e, (byte) 0xa0, 0x0e, (byte) 0xa0, 0x0a, 0x64, 0x06, 0x4a,
-            0x00, 0x0e, 0x00, 0x0e, 0x06, 0x4a, 0x0a, 0x64
-    };
-
-    /** SBZCyc10: 12 bytes, 3 unique colors doubled. Conveyor belt for Act 2. */
-    private static final byte[] PAL_SBZ_CYC10 = {
-            0x0e, (byte) 0xec, 0x0a, (byte) 0xa6, 0x06, 0x60,
-            0x0e, (byte) 0xec, 0x0a, (byte) 0xa6, 0x06, 0x60
-    };
+    record CycleData(
+            byte[] ghz,
+            byte[] lzWaterfall,
+            byte[] lzConveyor,
+            byte[] lzUnderwaterConveyor,
+            byte[] sbz3Waterfall,
+            byte[] slz,
+            byte[] syz1,
+            byte[] syz2,
+            byte[] sbz1,
+            byte[] sbz2,
+            byte[] sbz3,
+            byte[] sbz4,
+            byte[] sbz5,
+            byte[] sbz6,
+            byte[] sbz7,
+            byte[] sbz8,
+            byte[] sbz9,
+            byte[] sbz10) {
+        CycleData {
+            ghz = ghz.clone();
+            lzWaterfall = lzWaterfall.clone();
+            lzConveyor = lzConveyor.clone();
+            lzUnderwaterConveyor = lzUnderwaterConveyor.clone();
+            sbz3Waterfall = sbz3Waterfall.clone();
+            slz = slz.clone();
+            syz1 = syz1.clone();
+            syz2 = syz2.clone();
+            sbz1 = sbz1.clone();
+            sbz2 = sbz2.clone();
+            sbz3 = sbz3.clone();
+            sbz4 = sbz4.clone();
+            sbz5 = sbz5.clone();
+            sbz6 = sbz6.clone();
+            sbz7 = sbz7.clone();
+            sbz8 = sbz8.clone();
+            sbz9 = sbz9.clone();
+            sbz10 = sbz10.clone();
+        }
+    }
 }

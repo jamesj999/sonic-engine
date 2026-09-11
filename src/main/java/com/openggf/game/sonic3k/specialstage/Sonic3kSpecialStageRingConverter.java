@@ -353,4 +353,12 @@ public class Sonic3kSpecialStageRingConverter {
         }
         // If cell is already a ring (0x04), skip silently
     }
+
+    Sonic3kSpecialStageSnapshot.RingConverterSnapshot captureRewindSnapshot() {
+        return new Sonic3kSpecialStageSnapshot.RingConverterSnapshot(seedBlueConverted);
+    }
+
+    void restoreRewindSnapshot(Sonic3kSpecialStageSnapshot.RingConverterSnapshot snapshot) {
+        seedBlueConverted = snapshot.seedBlueConverted();
+    }
 }

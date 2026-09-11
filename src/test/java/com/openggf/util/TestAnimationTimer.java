@@ -1,7 +1,7 @@
 package com.openggf.util;
 
-import org.junit.Test;
-import static org.junit.Assert.*;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class TestAnimationTimer {
 
@@ -25,7 +25,7 @@ public class TestAnimationTimer {
         AnimationTimer timer = new AnimationTimer(3, 4);
         timer.tick(); // 1
         timer.tick(); // 2
-        boolean changed = timer.tick(); // 3 — should advance
+        boolean changed = timer.tick(); // 3 â€” should advance
         assertTrue(changed);
         assertEquals(1, timer.getFrame());
     }
@@ -69,3 +69,5 @@ public class TestAnimationTimer {
         assertEquals(0, timer.getFrame());
     }
 }
+
+

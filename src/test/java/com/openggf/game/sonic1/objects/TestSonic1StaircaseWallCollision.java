@@ -6,22 +6,17 @@ import com.openggf.level.objects.ObjectManager;
 import com.openggf.tests.HeadlessTestFixture;
 import com.openggf.tests.SharedLevel;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
-import org.junit.AfterClass;
-import org.junit.Assume;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @RequiresRom(SonicGame.SONIC_1)
 public class TestSonic1StaircaseWallCollision {
-
-    @ClassRule public static RequiresRomRule romRule = new RequiresRomRule();
-
     private static final int ZONE_SLZ = 4;
     private static final int ACT_1 = 0;
     private static final int STAIRCASE_X = 1070;
@@ -31,19 +26,19 @@ public class TestSonic1StaircaseWallCollision {
 
     private HeadlessTestFixture fixture;
 
-    @BeforeClass
+    @BeforeAll
     public static void loadLevel() throws Exception {
         sharedLevel = SharedLevel.load(SonicGame.SONIC_1, ZONE_SLZ, ACT_1);
     }
 
-    @AfterClass
+    @AfterAll
     public static void cleanup() {
         if (sharedLevel != null) {
             sharedLevel.dispose();
         }
     }
 
-    @Before
+    @BeforeEach
     public void setUp() {
         fixture = HeadlessTestFixture.builder()
                 .withSharedLevel(sharedLevel)
@@ -53,16 +48,16 @@ public class TestSonic1StaircaseWallCollision {
     @Test
     public void ridingIntoHigherStepPushesLikeWall() {
         Sonic1StaircaseObjectInstance staircase = activateMovingStaircase();
-        Assume.assumeNotNull("Expected SLZ staircase to become active near test coordinates", staircase);
+        assertNotNull(staircase, "Expected SLZ staircase to become active near test coordinates");
 
         StepPair pair = findLargestAdjacentStep(staircase);
-        Assume.assumeTrue("Expected a visible SLZ staircase height difference before wall-collision check",
-                pair != null && pair.heightDifference() >= 6);
+        assertTrue(pair != null && pair.heightDifference() >= 6,
+                "Expected a visible SLZ staircase height difference before wall-collision check");
 
         placeSpriteAbovePiece(staircase, pair.lowerPiece());
         ObjectManager objectManager = GameServices.level().getObjectManager();
         boolean landed = waitForRideOnPiece(objectManager, staircase, pair.lowerPiece(), 60);
-        Assume.assumeTrue("Sonic could not land on the lower SLZ staircase piece", landed);
+        assertTrue(landed, "Sonic could not land on the lower SLZ staircase piece");
 
         int startX = fixture.sprite().getCentreX();
         boolean moveRight = staircase.getPieceX(pair.higherPiece()) > staircase.getPieceX(pair.lowerPiece());
@@ -77,10 +72,9 @@ public class TestSonic1StaircaseWallCollision {
         }
 
         int horizontalAdvance = Math.abs(fixture.sprite().getCentreX() - startX);
-        assertTrue("Running from the lower SLZ staircase block into the higher adjacent block "
+        assertTrue(sawPush && horizontalAdvance < 32, "Running from the lower SLZ staircase block into the higher adjacent block "
                         + "should produce a wall-style push before Sonic can advance a full block "
-                        + "(advance=" + horizontalAdvance + ")",
-                sawPush && horizontalAdvance < 32);
+                        + "(advance=" + horizontalAdvance + ")");
     }
 
     private Sonic1StaircaseObjectInstance activateMovingStaircase() {
@@ -162,3 +156,5 @@ public class TestSonic1StaircaseWallCollision {
 
     private record StepPair(int lowerPiece, int higherPiece, int heightDifference) { }
 }
+
+

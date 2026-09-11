@@ -133,3 +133,5 @@ class TestSonic3kSpecialStagePlayer {
                 "Rate should not exceed MAX_RATE: " + player.getRate());
     }
 }
+
+

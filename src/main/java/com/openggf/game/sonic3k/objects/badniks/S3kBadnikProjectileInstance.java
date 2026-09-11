@@ -4,6 +4,9 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.TouchResponseProfile;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.TrigLookupTable;
@@ -16,16 +19,34 @@ import java.util.List;
  * Shared projectile object for S3K badniks that use Map_Bloominator / Map_MonkeyDude
  * projectile frames and hurt-category touch flags.
  */
-final class S3kBadnikProjectileInstance extends AbstractObjectInstance implements TouchResponseProvider {
+public final class S3kBadnikProjectileInstance
+        extends AbstractObjectInstance
+        implements TouchResponseProvider, RewindRecreatable {
     private static final int SHIELD_REACTION_BOUNCE = 1 << 3;
     private static final int DEFLECT_SPEED = 0x800;
+    private static final TouchResponseProfile TOUCH_RESPONSE_PROFILE = TouchResponseProfile.fromCanonical(
+            new com.openggf.game.profiles.touchresponse.TouchResponseProfile(
+                    com.openggf.game.profiles.touchresponse.TouchCategoryDecodeMode.NORMAL,
+                    false,
+                    true,
+                    false,
+                    com.openggf.game.profiles.touchresponse.TouchShieldDeflectCapability.SHIELD_DEFLECT,
+                    SHIELD_REACTION_BOUNCE,
+                    com.openggf.game.profiles.touchresponse.TouchAttackBouncePolicy.STANDARD_ENEMY_KILL,
+                    com.openggf.game.profiles.touchresponse.TouchActorContextPolicy.MAIN_FULL_SIDEKICK_HURT_ONLY,
+                    com.openggf.game.profiles.touchresponse.TouchOverlapStopPolicy
+                            .STOP_AFTER_FIRST_OVERLAP_FOR_ALL_ACTORS));
 
-    private final String rendererKey;
-    private final int mappingFrame;
-    private final int collisionSizeIndex;
-    private final int priorityBucket;
-    private final boolean hFlip;
-    private final int gravity;
+    // These fields are made non-final (not derivable from the captured
+    // ObjectSpawn, which only carries position + the parent badnik's
+    // id/subtype/render flags) so GenericFieldCapturer reapplies their exact
+    // values after a rewind recreate from forRewindRecreate(...) placeholders.
+    private String rendererKey;
+    private int mappingFrame;
+    private int collisionSizeIndex;
+    private int priorityBucket;
+    private boolean hFlip;
+    private int gravity;
 
     private int currentX;
     private int currentY;
@@ -59,8 +80,33 @@ final class S3kBadnikProjectileInstance extends AbstractObjectInstance implement
         this.hFlip = hFlip;
     }
 
+    private S3kBadnikProjectileInstance(ObjectSpawn spawn) {
+        this(spawn, "", 0, spawn.x(), spawn.y(), 0, 0, 0, 0, 0, false);
+    }
+
+    /**
+     * Rewind recreate factory. Generic recreate only needs a structurally-valid
+     * instance positioned at the captured spawn; the non-final differentiator
+     * fields (rendererKey, mappingFrame, gravity, collisionSizeIndex,
+     * priorityBucket, hFlip) and the in-flight motion scalars are reapplied by
+     * the generic field capturer immediately after recreate, so placeholders
+     * are passed here. {@code appendRenderCommands} tolerates the empty
+     * rendererKey for the single pre-reapply frame (getRenderer returns null).
+     */
+    public static S3kBadnikProjectileInstance forRewindRecreate(ObjectSpawn spawn) {
+        return new S3kBadnikProjectileInstance(spawn, "", 0, spawn.x(), spawn.y(), 0, 0, 0, 0, 0, false);
+    }
+
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        ObjectSpawn spawn = ctx.spawn() != null
+                ? ctx.spawn()
+                : new ObjectSpawn(0, 0, 0, 0, 0, false, 0);
+        return forRewindRecreate(spawn);
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // MoveSprite / MoveSprite_LightGravity order:
         // use old y_vel for movement this frame, then apply gravity.
@@ -93,6 +139,25 @@ final class S3kBadnikProjectileInstance extends AbstractObjectInstance implement
     @Override
     public int getCollisionProperty() {
         return 0;
+    }
+
+    @Override
+    public boolean usesCurrentTouchResponseState() {
+        // loc_86D5E runs the child motion callback before
+        // Sprite_CheckDeleteTouchXY adds the pointer to the collision-response
+        // list. The next player slot therefore observes that post-movement
+        // position, as with Obj37 bouncing rings.
+        return true;
+    }
+
+    @Override
+    public TouchResponseProfile getTouchResponseProfile() {
+        return TOUCH_RESPONSE_PROFILE;
+    }
+
+    @Override
+    public TouchResponseProfile getTouchResponseProfile(boolean multiRegionSource) {
+        return TOUCH_RESPONSE_PROFILE;
     }
 
     @Override

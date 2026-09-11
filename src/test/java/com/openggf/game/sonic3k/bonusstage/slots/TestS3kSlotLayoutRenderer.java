@@ -22,6 +22,23 @@ class TestS3kSlotLayoutRenderer {
     private static final int BOOTSTRAP_CAMERA_Y = S3kSlotRomData.SLOT_BONUS_PLAYER_START_Y - 0x70;
 
     @Test
+    void visibleCellsRetainExactRowMajorScanOrderAndValues() {
+        S3kSlotLayoutRenderer renderer = new S3kSlotLayoutRenderer();
+        S3kSlotRenderBuffers buffers = stagedBootstrapBuffers(renderer);
+
+        S3kSlotRenderBuffers.VisibleCells cells = renderer.buildVisibleCells(buffers);
+
+        assertArrayEquals(new int[] {
+                1, 1084, 748, 1, 1108, 748, 1, 1132, 748, 1, 1156, 748, 7, 1276, 748,
+                5, 1036, 844, 5, 1204, 844, 7, 964, 868, 7, 1060, 868, 7, 1180, 868,
+                7, 1276, 868, 8, 1012, 916, 8, 1228, 916, 8, 988, 940, 8, 1012, 940,
+                8, 1228, 940, 8, 1252, 940, 8, 964, 964, 8, 988, 964, 8, 1012, 964,
+                7, 1060, 964, 7, 1180, 964, 8, 1228, 964, 8, 1252, 964, 8, 1276, 964,
+                5, 1060, 988, 5, 1180, 988
+        }, snapshot(cells));
+    }
+
+    @Test
     void renderBuildsVisiblePiecesFromStagedExpandedBuffers() {
         S3kSlotLayoutRenderer renderer = new S3kSlotLayoutRenderer();
         S3kSlotRenderBuffers buffers = S3kSlotRenderBuffers.fromRomData();
@@ -29,15 +46,29 @@ class TestS3kSlotLayoutRenderer {
         buffers.stageViewport(BOOTSTRAP_CAMERA_X, BOOTSTRAP_CAMERA_Y);
         buffers.stagePointGrid(renderer.buildPointGrid(0, BOOTSTRAP_CAMERA_X, BOOTSTRAP_CAMERA_Y));
 
-        List<S3kSlotLayoutRenderer.VisibleCell> cells = renderer.buildVisibleCells(buffers);
+        S3kSlotRenderBuffers.VisibleCells cells = renderer.buildVisibleCells(buffers);
 
         assertFalse(cells.isEmpty());
-        assertTrue(cells.stream().anyMatch(cell -> cell.cellId() == 5));
-        assertTrue(cells.stream().anyMatch(cell -> cell.cellId() == 7));
-        assertTrue(cells.stream().allMatch(cell -> cell.worldX() >= BOOTSTRAP_CAMERA_X - 0x10
-                && cell.worldX() < BOOTSTRAP_CAMERA_X + 0x150));
-        assertTrue(cells.stream().allMatch(cell -> cell.worldY() >= BOOTSTRAP_CAMERA_Y - 0x10
-                && cell.worldY() < BOOTSTRAP_CAMERA_Y + 0xF0));
+        assertTrue(containsCellId(cells, 5));
+        assertTrue(containsCellId(cells, 7));
+        assertTrue(allCellsWithinViewport(cells));
+    }
+
+    private static S3kSlotRenderBuffers stagedBootstrapBuffers(S3kSlotLayoutRenderer renderer) {
+        S3kSlotRenderBuffers buffers = S3kSlotRenderBuffers.fromRomData();
+        buffers.stageViewport(BOOTSTRAP_CAMERA_X, BOOTSTRAP_CAMERA_Y);
+        buffers.stagePointGrid(renderer.buildPointGrid(0, BOOTSTRAP_CAMERA_X, BOOTSTRAP_CAMERA_Y));
+        return buffers;
+    }
+
+    private static int[] snapshot(S3kSlotRenderBuffers.VisibleCells cells) {
+        int[] snapshot = new int[cells.size() * 3];
+        for (int i = 0; i < cells.size(); i++) {
+            snapshot[i * 3] = cells.cellIdAt(i);
+            snapshot[i * 3 + 1] = cells.worldXAt(i);
+            snapshot[i * 3 + 2] = cells.worldYAt(i);
+        }
+        return snapshot;
     }
 
     @Test
@@ -69,22 +100,32 @@ class TestS3kSlotLayoutRenderer {
 
         buffers.startRingAnimationAt(0x21);
 
-        for (int i = 0; i < S3kSlotRomData.RING_SPARKLE_DELAY; i++) {
+        // ROM loc_4BF30 and its siblings claim the slot without touching the layout
+        // byte (sonic3k.asm:99283-99300); loc_4B5C2's first sub_4B592 pass publishes
+        // frames[0] because a cleared slot's countdown is 0 and `subq.b #1 / bpl`
+        // falls straight through (sonic3k.asm:98420-98428). Each later step then
+        // costs RING_SPARKLE_DELAY waiting passes plus the publishing pass, since
+        // the reload of #5 is tested for negative, not zero.
+        renderer.tickTransientAnimations(buffers);
+        assertEquals(0x10, buffers.renderCellIdAt(expandedRow, expandedCol));
+
+        int period = S3kSlotRomData.RING_SPARKLE_DELAY + 1;
+        for (int i = 0; i < period; i++) {
             renderer.tickTransientAnimations(buffers);
         }
         assertEquals(0x11, buffers.renderCellIdAt(expandedRow, expandedCol));
 
-        for (int i = 0; i < S3kSlotRomData.RING_SPARKLE_DELAY; i++) {
+        for (int i = 0; i < period; i++) {
             renderer.tickTransientAnimations(buffers);
         }
         assertEquals(0x12, buffers.renderCellIdAt(expandedRow, expandedCol));
 
-        for (int i = 0; i < S3kSlotRomData.RING_SPARKLE_DELAY; i++) {
+        for (int i = 0; i < period; i++) {
             renderer.tickTransientAnimations(buffers);
         }
         assertEquals(0x13, buffers.renderCellIdAt(expandedRow, expandedCol));
 
-        for (int i = 0; i < S3kSlotRomData.RING_SPARKLE_DELAY; i++) {
+        for (int i = 0; i < period; i++) {
             renderer.tickTransientAnimations(buffers);
         }
         assertFalse(buffers.hasActiveTransientAnimationAt(0x21));
@@ -101,8 +142,15 @@ class TestS3kSlotLayoutRenderer {
         int expandedCol = expandedIndex % buffers.layoutStrideBytes();
 
         buffers.startBumperAnimationAt(compactIndex);
-        renderer.tickTransientAnimations(buffers);
 
+        // loc_4B5F2 (sonic3k.asm:98446-98460): the claiming branch leaves the layout
+        // byte alone, the first sub_4B592 pass publishes byte_4B622[0] = $A, and the
+        // reload of #1 costs one waiting pass before $B.
+        renderer.tickTransientAnimations(buffers);
+        assertEquals(0x0A, buffers.renderCellIdAt(expandedRow, expandedCol));
+
+        renderer.tickTransientAnimations(buffers);
+        renderer.tickTransientAnimations(buffers);
         assertEquals(0x0B, buffers.renderCellIdAt(expandedRow, expandedCol));
     }
 
@@ -158,16 +206,13 @@ class TestS3kSlotLayoutRenderer {
         buffers.stageViewport(BOOTSTRAP_CAMERA_X, BOOTSTRAP_CAMERA_Y);
         buffers.stagePointGrid(renderer.buildPointGrid(0, BOOTSTRAP_CAMERA_X, BOOTSTRAP_CAMERA_Y));
 
-        List<S3kSlotLayoutRenderer.VisibleCell> cells = renderer.buildVisibleCells(buffers);
+        S3kSlotRenderBuffers.VisibleCells cells = renderer.buildVisibleCells(buffers);
 
         assertFalse(cells.isEmpty());
-        assertTrue(cells.stream().anyMatch(cell -> cell.cellId() == 5));
-        assertTrue(cells.stream().anyMatch(cell -> cell.cellId() == 7));
-        assertTrue(cells.stream().anyMatch(cell -> cell.cellId() == 8));
-        assertTrue(cells.stream().allMatch(cell -> cell.worldX() >= BOOTSTRAP_CAMERA_X - 0x10
-                && cell.worldX() < BOOTSTRAP_CAMERA_X + 0x150));
-        assertTrue(cells.stream().allMatch(cell -> cell.worldY() >= BOOTSTRAP_CAMERA_Y - 0x10
-                && cell.worldY() < BOOTSTRAP_CAMERA_Y + 0xF0));
+        assertTrue(containsCellId(cells, 5));
+        assertTrue(containsCellId(cells, 7));
+        assertTrue(containsCellId(cells, 8));
+        assertTrue(allCellsWithinViewport(cells));
     }
 
     @Test
@@ -178,7 +223,7 @@ class TestS3kSlotLayoutRenderer {
                 new StubObjectArtProvider(recordingRenderer, com.openggf.game.sonic3k.Sonic3kObjectArtKeys.SLOT_COLORED_WALL));
 
         renderer.renderVisibleCells(
-                List.of(new S3kSlotLayoutRenderer.VisibleCell((byte) 0x01, 0x450, 0x390)),
+                singleVisibleCell(0x01, 0x450, 0x390),
                 new StubCamera(0x460, 0x430),
                 renderManager);
 
@@ -196,7 +241,7 @@ class TestS3kSlotLayoutRenderer {
 
         renderer.updateAnimations(0x1C);
         renderer.renderVisibleCells(
-                List.of(new S3kSlotLayoutRenderer.VisibleCell((byte) 0x01, 0x450, 0x390)),
+                singleVisibleCell(0x01, 0x450, 0x390),
                 new StubCamera(0x460, 0x430),
                 renderManager);
 
@@ -212,7 +257,7 @@ class TestS3kSlotLayoutRenderer {
                 new StubObjectArtProvider(recordingRenderer, com.openggf.game.sonic3k.Sonic3kObjectArtKeys.SLOT_COLORED_WALL));
 
         renderer.renderVisibleCells(
-                List.of(new S3kSlotLayoutRenderer.VisibleCell((byte) 0x01, 0x450, 0x390)),
+                singleVisibleCell(0x01, 0x450, 0x390),
                 new StubCamera(0x460, 0x430),
                 renderManager);
 
@@ -232,7 +277,7 @@ class TestS3kSlotLayoutRenderer {
             renderer.updateAnimations(0);
         }
         renderer.renderVisibleCells(
-                List.of(new S3kSlotLayoutRenderer.VisibleCell((byte) 0x08, 0x450, 0x390)),
+                singleVisibleCell(0x08, 0x450, 0x390),
                 new StubCamera(0x460, 0x430),
                 renderManager);
 
@@ -245,6 +290,33 @@ class TestS3kSlotLayoutRenderer {
             setX((short) x);
             setY((short) y);
         }
+    }
+
+    private static S3kSlotRenderBuffers.VisibleCells singleVisibleCell(int cellId, int worldX, int worldY) {
+        S3kSlotRenderBuffers.VisibleCells cells = new S3kSlotRenderBuffers.VisibleCells(1);
+        cells.add(cellId, worldX, worldY);
+        return cells;
+    }
+
+    private static boolean containsCellId(S3kSlotRenderBuffers.VisibleCells cells, int cellId) {
+        for (int i = 0; i < cells.size(); i++) {
+            if (cells.cellIdAt(i) == cellId) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean allCellsWithinViewport(S3kSlotRenderBuffers.VisibleCells cells) {
+        for (int i = 0; i < cells.size(); i++) {
+            if (cells.worldXAt(i) < BOOTSTRAP_CAMERA_X - 0x10
+                    || cells.worldXAt(i) >= BOOTSTRAP_CAMERA_X + 0x150
+                    || cells.worldYAt(i) < BOOTSTRAP_CAMERA_Y - 0x10
+                    || cells.worldYAt(i) >= BOOTSTRAP_CAMERA_Y + 0xF0) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static final class StubObjectArtProvider implements ObjectArtProvider {

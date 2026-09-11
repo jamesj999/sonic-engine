@@ -2,6 +2,7 @@ package com.openggf.level.objects;
 
 import com.openggf.sprites.animation.SpriteAnimationScript;
 import com.openggf.sprites.animation.SpriteAnimationSet;
+import java.util.Objects;
 
 /**
  * Lightweight animation runner for object mappings (AnimateSprite-style).
@@ -13,6 +14,7 @@ public class ObjectAnimationState {
     private int frameIndex;
     private int frameTick;
     private int mappingFrame;
+    private int pendingSwitchAnimId = -1;
 
     public ObjectAnimationState(SpriteAnimationSet animationSet, int animId, int initialMappingFrame) {
         this.animationSet = animationSet;
@@ -22,6 +24,7 @@ public class ObjectAnimationState {
 
     public void setAnimId(int animId) {
         this.animId = animId;
+        pendingSwitchAnimId = -1;
     }
 
     public int getAnimId() {
@@ -33,16 +36,45 @@ public class ObjectAnimationState {
     }
 
     /**
+     * Number of displayed frames in the given animation script, or 0 if absent.
+     * Read-only helper; does not affect animation playback.
+     */
+    public int frameCount(int queryAnimId) {
+        if (animationSet == null) {
+            return 0;
+        }
+        SpriteAnimationScript script = animationSet.getScript(queryAnimId);
+        return script == null ? 0 : script.frames().size();
+    }
+
+    public ObjectAnimationState copyForRewind() {
+        ObjectAnimationState copy = new ObjectAnimationState(animationSet, animId, mappingFrame);
+        copy.lastAnimId = lastAnimId;
+        copy.frameIndex = frameIndex;
+        copy.frameTick = frameTick;
+        copy.pendingSwitchAnimId = pendingSwitchAnimId;
+        return copy;
+    }
+
+    /**
      * Reset the animation frame index to 0.
      * Matches ROM: move.b #0,anim_frame(a0)
      */
     public void resetFrameIndex() {
         frameIndex = 0;
         lastAnimId = -1; // Force re-initialization on next update()
+        pendingSwitchAnimId = -1;
     }
 
     public void update() {
         if (animationSet == null) {
+            return;
+        }
+
+        if (pendingSwitchAnimId >= 0) {
+            animId = pendingSwitchAnimId;
+            lastAnimId = -1;
+            pendingSwitchAnimId = -1;
             return;
         }
 
@@ -90,8 +122,8 @@ public class ObjectAnimationState {
                     frameIndex = 0;
                     return;
                 }
-                animId = nextAnimId;
-                lastAnimId = -1;
+                frameIndex = script.frames().size() - 1;
+                pendingSwitchAnimId = nextAnimId;
             }
             case LOOP -> frameIndex = 0;
             default -> frameIndex = 0;
@@ -108,5 +140,21 @@ public class ObjectAnimationState {
             return 0;
         }
         return target;
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof ObjectAnimationState state
+                && animId == state.animId
+                && lastAnimId == state.lastAnimId
+                && frameIndex == state.frameIndex
+                && frameTick == state.frameTick
+                && mappingFrame == state.mappingFrame
+                && pendingSwitchAnimId == state.pendingSwitchAnimId;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(animId, lastAnimId, frameIndex, frameTick, mappingFrame, pendingSwitchAnimId);
     }
 }

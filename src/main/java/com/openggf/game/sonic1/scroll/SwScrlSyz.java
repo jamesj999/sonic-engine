@@ -1,6 +1,7 @@
 package com.openggf.game.sonic1.scroll;
 
 import com.openggf.level.scroll.AbstractZoneScrollHandler;
+import com.openggf.level.scroll.compose.ScrollEffectComposer;
 import static com.openggf.level.scroll.M68KMath.*;
 
 /**
@@ -37,6 +38,8 @@ public class SwScrlSyz extends AbstractZoneScrollHandler {
     // Scroll buffer: 33 word entries, each covering 16px of BG height
     private final short[] scrollBuffer = new short[BUFFER_SIZE];
 
+    private final ScrollEffectComposer composer = new ScrollEffectComposer();
+
     public void init(int cameraX, int cameraY) {
         // BgScroll_SYZ: bgscreenposy = screenposy * 48 / 256
         int initialBgY = (cameraY * 48) >> 8;
@@ -56,19 +59,25 @@ public class SwScrlSyz extends AbstractZoneScrollHandler {
         }
 
         resetScrollTracking();
+        composer.reset();
 
         // Vertical scroll: delta-accumulated at scrshifty * 48/256
         int deltaY = cameraY - lastCameraY;
         lastCameraY = cameraY;
         bgYPos += (long) deltaY * 48 * 256;
         int bgY = (int) (bgYPos >> 16);
-        vscrollFactorBG = (short) bgY;
+        composer.setVscrollFactorBG((short) bgY);
 
         // Build scroll buffer (position-based, computed from screenposx each frame)
         buildScrollBuffer(cameraX);
 
         // Apply buffer to h-scroll table via Bg_Scroll_X pattern
         applyScrollBuffer(horizScrollBuf, cameraX, bgY);
+
+        composer.copyPackedScrollWordsTo(horizScrollBuf);
+        vscrollFactorBG = composer.getVscrollFactorBG();
+        minScrollOffset = composer.getMinScrollOffset();
+        maxScrollOffset = composer.getMaxScrollOffset();
     }
 
     /**
@@ -173,35 +182,21 @@ public class SwScrlSyz extends AbstractZoneScrollHandler {
     private void applyScrollBuffer(int[] horizScrollBuf, int cameraX, int bgY) {
         short fgScroll = negWord(cameraX);
 
-        // Entry index: (bgscreenposy & 0x1F0) >> 4
-        // From asm: andi.w #$1F0,d0 ; lsr.w #3,d0 ; lea (a2,d0.w),a2
-        // d0 gives byte offset; entry index = byte_offset / 2
         int entryIdx = (bgY & 0x1F0) >> 4;
-
-        // Sub-16px pixel offset for first block
-        // From asm: andi.w #$F,d2 (d2 = bgscreenposy saved before masking)
         int subPixelOffset = bgY & 0xF;
 
         int lineIdx = 0;
-
-        // Bg_Scroll_X: d1 = #$E (15 iterations)
         for (int block = 0; block < 15 && lineIdx < VISIBLE_LINES; block++) {
             short bgScroll = scrollBuffer[entryIdx % BUFFER_SIZE];
             entryIdx++;
 
-            // First block is reduced by subPixelOffset (jump into unrolled loop)
             int linesToWrite = LINES_PER_ENTRY;
             if (block == 0) {
                 linesToWrite -= subPixelOffset;
             }
-
-            int packed = packScrollWords(fgScroll, bgScroll);
-            trackOffset(fgScroll, bgScroll);
-
-            int limit = Math.min(VISIBLE_LINES, lineIdx + linesToWrite);
-            for (; lineIdx < limit; lineIdx++) {
-                horizScrollBuf[lineIdx] = packed;
-            }
+            int writeCount = Math.min(linesToWrite, VISIBLE_LINES - lineIdx);
+            composer.fillPackedScrollWords(lineIdx, writeCount, fgScroll, bgScroll);
+            lineIdx += writeCount;
         }
     }
 

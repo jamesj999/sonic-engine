@@ -1,13 +1,25 @@
 package com.openggf.level.objects;
 
+import com.openggf.game.session.EngineServices;
 import static org.lwjgl.opengl.GL11.GL_LINES;
 import com.openggf.camera.Camera;
 import com.openggf.debug.DebugOverlayManager;
-import com.openggf.game.GameServices;
 import com.openggf.debug.DebugOverlayToggle;
 import com.openggf.game.CollisionModel;
-import com.openggf.game.PhysicsFeatureSet;
 import com.openggf.game.GameStateManager;
+import com.openggf.game.PowerUpObject;
+import com.openggf.game.rewind.identity.ObjectRefId;
+import com.openggf.game.rewind.identity.SpawnRefId;
+import com.openggf.game.solid.ContactKind;
+import com.openggf.level.objects.boss.BossChildComponent;
+import com.openggf.game.solid.ObjectSolidExecutionContext;
+import com.openggf.game.solid.PlayerSolidContactResult;
+import com.openggf.game.solid.PlayerStandingState;
+import com.openggf.game.solid.PostContactState;
+import com.openggf.game.solid.PreContactState;
+import com.openggf.game.solid.SolidCheckpointBatch;
+import com.openggf.game.solid.SolidExecutionRegistry;
+import com.openggf.game.session.SessionManager;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.GLCommandGroup;
 import com.openggf.graphics.FadeManager;
@@ -22,9 +34,14 @@ import com.openggf.physics.TerrainCheckResult;
 import com.openggf.game.PlayableEntity;
 import com.openggf.game.DamageCause;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
+import com.openggf.sprites.playable.Knuckles;
+import com.openggf.sprites.playable.SidekickCpuController;
+import com.openggf.sprites.playable.Tails;
+import com.openggf.sprites.NativePositionOps;
 import com.openggf.sprites.managers.SpriteManager;
 import com.openggf.game.GroundMode;
 
+import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
@@ -36,31 +53,122 @@ import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.HashSet;
+import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.logging.Logger;
 
 public class ObjectManager {
     private static final int BUCKET_COUNT = RenderPriority.MAX - RenderPriority.MIN + 1;
-
-    private final Placement placement;
+    static final int ANIM_ROLL = 0x02;
+    static final int ANIM_SPINDASH = 0x09;
+    private final ObjectPlacementController placement;
     private final ObjectRegistry registry;
     private final GraphicsManager graphicsManager;
     private final Camera camera;
     private final Map<ObjectSpawn, ObjectInstance> activeObjects = new IdentityHashMap<>();
+    private final Map<ObjectInstance, ObjectSpawn> instanceToSpawn = new IdentityHashMap<>();
     private final List<ObjectInstance> dynamicObjects = new ArrayList<>();
+    private final DynamicObjectOwnership dynamicOwnership = new DynamicObjectOwnership();
+    private final List<ObjectInstance> dynamicFallbackScratch = new ArrayList<>();
+    private final List<ObjectInstance> activeFallbackScratch = new ArrayList<>();
+    // Per-frame scratch collections reused to avoid steady-state allocation.
+    // Ownership stays inside the populating method (cleared in finally / at the
+    // single reset point); never returned to callers that retain references.
+    private final Set<ObjectInstance> processedInExecLoopScratch =
+            Collections.newSetFromMap(new IdentityHashMap<>());
+    private final BitSet slotsFreedDuringObjectPass = new BitSet();
+    private final List<PlayableEntity> activePlayersScratch = new ArrayList<>(4);
+    private final List<ObjectSpawn> newSpawnsScratch = new ArrayList<>();
+    private final List<ObjectInstance> postPlayerHooksScratch = new ArrayList<>();
+    // Cached spawn-order comparators (built lazily; placement is constructor-set).
+    private Comparator<ObjectSpawn> forwardSpawnOrder;
+    private Comparator<ObjectSpawn> backwardSpawnOrder;
     private final List<GLCommand> renderCommands = new ArrayList<>();
     private int frameCounter;
+    /**
+     * Models the ROM's V-int run counter -- {@code Vint_runcount} in Sonic 2
+     * ({@code docs/s2disasm/s2.asm:508}), {@code v_vblank_count} in Sonic 1
+     * ({@code docs/s1disasm/sonic.asm:682}) and {@code V_int_run_count} in
+     * Sonic 3&amp;K ({@code docs/skdisasm/sonic3k.asm:543}). In all three the
+     * increment sits at V-int exit and runs once per serviced V-blank
+     * regardless of which V-int routine the mode jump table dispatched.
+     *
+     * <p><b>Invariant: exactly one tick per serviced V-blank.</b> The
+     * gameplay row ticks it inside {@link #update} via
+     * {@link #advanceVblaCounter()}; every row where the level loop did not
+     * run but the V-int was still serviced (lag skip, bonus-stage lag,
+     * bonus-exit fade hold, title-card overlay, seamless-reload transition,
+     * trace VBLANK_ONLY / PLAYABLE_ANIMATION_ONLY) must call
+     * {@link #advanceVblaCounter()} exactly once and must not also route
+     * through {@link #update}. A new V-blank-only path that forgets the call
+     * de-phases every consumer of {@link #vblaCounter()} -- it is handed to
+     * every object instance each frame, and feeds spilled-ring floor probes,
+     * S3K bonus-stage RNG seeding and rewind snapshots.
+     *
+     * <p>Known deliberate divergences: PAUSE rows and seamless-boundary LAG
+     * rows service the V-int in the ROM but do not tick here. See
+     * {@code docs/status/known-discrepancies.md}.
+     */
     private int vblaCounter;
     private boolean updating;
+    private final InitialObjectDispatchController initialDispatch =
+            new InitialObjectDispatchController(this);
+    private final ObjectExecutionController execution = new ObjectExecutionController(this);
 
     // ROM parity: slot-ordered execution array for ExecuteObjects emulation.
-    // Populated at start of each update pass, iterated slot 0→95 in order.
+    // The dynamic slot window is game-specific and comes from ObjectRegistry.
     // When a child is spawned at a higher slot, it's placed here directly
     // so the ongoing loop reaches it naturally (same-frame execution).
-    private final ObjectInstance[] execOrder = new ObjectInstance[DYNAMIC_SLOT_COUNT];
+    private final ObjectSlotLayout slotLayout;
+    /**
+     * Per-game object load/unload windowing boundary (shared abstraction;
+     * {@link ObjectWindowingStrategy#LEGACY} for S1/S3K, the ROM-exact S2
+     * strategy for S2). Injected from the {@link ObjectRegistry} so this shared
+     * manager never depends on a game-specific package.
+     */
+    private final ObjectWindowingStrategy windowingStrategy;
+    private final ObjectInstance[] execOrder;
+    /**
+     * Parallel to {@link #execOrder}, but keyed by an object's OWN SST slot rather
+     * than the slot it executes from. Only objects that borrow a different
+     * execution slot appear here; see the retirement note in
+     * {@link #updateCounterBasedExecThenLoad}.
+     */
+    private final ObjectInstance[] ownSlotRetireOrder;
+    /** Child slots whose release is deferred to their own position in the ascending exec walk. */
+    private final java.util.BitSet pendingChildSlotRelease;
+    private final int[] playerCentreXAtSlotStart;
+    private final int[] playerCentreYAtSlotStart;
+    private final boolean[] playerCentreAtSlotStartValid;
     private int currentExecSlot = -1; // -1 when not in update loop
-    private int peakSlotCount = 0;    // Track actual peak usedSlots cardinality
+
+    /** ROM object-loop counter for the current pass; see ObjectLoopSlotBudget. */
+    private final ObjectLoopSlotBudget objectLoopBudget = new ObjectLoopSlotBudget();
+
+    /**
+     * Rewrites the remaining length of this frame's object walk from the calling
+     * object's own slot, modelling a ROM routine that writes the loop counter
+     * register. {@code remainingSlots} is the ROM's own number; callers cite
+     * where it comes from and this method invents nothing.
+     */
+    public void overrideRemainingObjectLoopSlots(ObjectInstance source, int remainingSlots) {
+        if (source instanceof AbstractObjectInstance aoi) objectLoopBudget.overrideFrom(
+                executionSlotIndex(aoi), remainingSlots);
+    }
+
+    /**
+     * Whether this frame's walk got past the managed dynamic window and so would
+     * have reached the fixed-in-level slots the ROM places straight after it --
+     * S2 {@code LevelOnly_Object_RAM} (docs/s2disasm/s2.constants.asm:1145-1150),
+     * S3K {@code Level_object_RAM}.
+     */
+    public boolean objectLoopReachedFixedInLevelSlots() {
+        return objectLoopBudget.reaches(slotLayout.lastProcessSlotExclusive());
+    }
+    private final boolean skipVerticalSpawnLoadFilterForGame;
 
     private final ObjectServices objectServices;
 
@@ -70,19 +178,27 @@ public class ObjectManager {
     @SuppressWarnings("unchecked")
     private final List<ObjectInstance>[] highPriorityBuckets = new ArrayList[BUCKET_COUNT];
     private boolean bucketsDirty = true;
+    private final ObjectRenderBucketSnapshot renderBucketSnapshot =
+            new ObjectRenderBucketSnapshot();
 
     // Cached combined active objects list to avoid allocation in getActiveObjects()
     private final List<ObjectInstance> cachedActiveObjects = new ArrayList<>();
+    private final List<ObjectInstance> cachedSolidProviderObjects = new ArrayList<>();
+    private final List<ObjectInstance> cachedTouchResponseObjects = new ArrayList<>();
+    private final ObjectCollisionResponseList collisionResponseList = new ObjectCollisionResponseList();
     private boolean activeObjectsCacheDirty = true;
+    private final Set<ObjectInstance> deferredDynamicExecThisFrame =
+            Collections.newSetFromMap(new IdentityHashMap<>());
+    private final ObjectManagerRuntimeState runtimeState = new ObjectManagerRuntimeState();
 
-
-    // ROM: Dynamic objects occupy SST slots 32-127 (96 slots total).
-    // Each slot's d7 = 127 - slotIndex, used in timing gates like
-    // (v_vbla_byte + d7) & 7 for Batbrain drop checks. Objects need
-    // unique slot indices for correct per-object timing phase offsets.
-    private static final int DYNAMIC_SLOT_BASE = 32;
-    private static final int DYNAMIC_SLOT_COUNT = 96;
-    private final BitSet usedSlots = new BitSet(DYNAMIC_SLOT_COUNT);
+    // ROM parity: dynamic object slot tracking for the current game's allocatable
+    // SST window. S1 uses 32..127, S2 uses 16..127, and S3K uses 4..92.
+    // Occupancy/allocation authority; ObjectManager retains execOrder + objectIdInSlot
+    // as the slot->occupant identity authority.
+    private final SlotAllocator slotAllocator;
+    private int s2LatchedObjectManagerCameraX = Integer.MIN_VALUE;
+    private int twoAxisCameraYCoarse = Integer.MIN_VALUE;
+    private int vIntRunCounterPhaseOffset;
 
     // ROM parity: Tracks child slots reserved by objects with getReservedChildSlotCount() > 0.
     // In S1, ring objects (obj25) allocate child ring slots via FindFreeObj. These slots
@@ -90,9 +206,59 @@ public class ObjectManager {
     // slot numbers (affecting timing gates like (v_vbla_byte + d7) & 7).
     private final Map<ObjectSpawn, int[]> reservedChildSlots = new IdentityHashMap<>();
 
+    // Rewind: captured DynamicObjectEntry payloads for player-bound dynamics
+    // (Shield, Stars) that are NOT recreated by generic dynamic restore. The
+    // post-restore callback in
+    // AbstractPlayableSprite#refreshPowerUpObjectsAfterRewindRestore relinks a
+    // live matching shield when one exists, otherwise re-spawns via the power-up
+    // spawner. The spawner consumes the captured entry via
+    // {@link #consumePendingPlayerBoundEntry(Class)} so the new instance lands
+    // at the same slot the reference run had AND has the captured field surface
+    // restored on top of its fresh-construction state. Without that restore,
+    // animation cursors and similar non-construction-set scalars would reset to
+    // zero on every rewind.
+    private final Map<Class<?>, java.util.ArrayDeque<
+            com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.DynamicObjectEntry>>
+            pendingPlayerBoundEntries = new java.util.HashMap<>();
+
+    // Rewind: in-place restore support. Matching live instances are reused by the
+    // snapshot restore instead of destroy/recreate when the class passes the
+    // non-captured-field audit (see isRewindInPlaceReuseSafeClass). The scratch map
+    // indexes live instances by spawn identity for one restore pass; the
+    // side-effect map latches classes whose constructors spawn children / reserve
+    // child slots during an in-restore recreate (observed per session) onto the
+    // recreate path, because reuse would skip those construction side effects.
+    private boolean rewindInPlaceRestoreEnabled = true;
+    private final Map<ObjectSpawn, ObjectInstance> rewindRestoreReuseScratch = new IdentityHashMap<>();
+    private final Map<Class<?>, Boolean> rewindRestoreConstructionSideEffects = new HashMap<>();
+
+    // Rewind: monotonically-increasing counter assigned once per object when it is
+    // added to the live object set (activeObjects or dynamicObjects). Combined with
+    // the spawn's layoutIndex it forms a stable ObjectRefId via ObjectRefId.forObject()
+    // that survives capture→restore→re-simulation cycles because re-simulation adds
+    // objects in the same order, re-minting the same ids. Captured in the snapshot
+    // and restored so the counter never accidentally aliases a pre-restore id.
+    private int dynamicObjectIdCounter = 0;
+    // Per-object id registry: maps every live ObjectInstance to its assigned ObjectRefId
+    // so capture can build the identity table without re-scanning or re-allocating ids.
+    // Cleared on reset() and pruned when objects are removed.
+    private final IdentityHashMap<ObjectInstance, ObjectRefId> rewindObjectIds = new IdentityHashMap<>();
+
+    // Rewind: construction-spawned boss/object children produced while an active object is
+    // reconstructed during restore. The reconstructed parent wires its back-references
+    // (childComponents, named child fields) to THESE instances; the step-4 dynamic-object
+    // reconciliation loop then adopts each one in place — registering it at its captured slot
+    // and applying its EXACT captured state — instead of recreating a duplicate via generic restore.
+    // This gives exact-state fidelity for construction children while keeping the parent's
+    // back-references valid (they point at the very instances the loop restores onto), and
+    // avoids the double-spawn that generic recreate would cause. Cleared at the start and end
+    // of each restore so it never leaks instances across passes.
+    private final List<AbstractObjectInstance> rewindReconstructionChildren = new ArrayList<>();
+    private boolean rewindReconstructionChildCapture;
+    private final FixedSstObjectInstaller fixedSstObjects;
     private final PlaneSwitchers planeSwitchers;
-    private final SolidContacts solidContacts;
-    private final TouchResponses touchResponses;
+    private final ObjectSolidContactController solidContacts;
+    private final ObjectTouchResponseController touchResponses;
 
     private static final Comparator<ObjectInstance> RENDER_SLOT_DESCENDING = (a, b) -> {
         int slotA = a instanceof AbstractObjectInstance aoiA ? aoiA.getSlotIndex() : Integer.MAX_VALUE;
@@ -104,18 +270,39 @@ public class ObjectManager {
             int planeSwitcherObjectId, PlaneSwitcherConfig planeSwitcherConfig,
             TouchResponseTable touchResponseTable, GraphicsManager graphicsManager,
             Camera camera, ObjectServices objectServices) {
-        this.placement = new Placement(spawns);
         this.registry = registry;
         this.graphicsManager = graphicsManager;
         this.camera = camera;
         this.objectServices = objectServices;
+        this.slotLayout = registry != null ? registry.objectSlotLayout() : ObjectSlotLayout.SONIC_1;
+        this.windowingStrategy = registry != null
+                ? registry.objectWindowingStrategy()
+                : ObjectWindowingStrategy.LEGACY;
+        this.placement = new ObjectPlacementController(spawns,
+                camera != null ? camera::getWidth : com.openggf.level.spawn.PlacementViewportWidth::current);
+        this.placement.setTwoAxisCursorPlacement(slotLayout.twoAxisCursorPlacement());
+        this.placement.setWindowingStrategy(windowingStrategy);
+        this.execOrder = new ObjectInstance[slotLayout.dynamicSlotCount()];
+        this.ownSlotRetireOrder = new ObjectInstance[slotLayout.dynamicSlotCount()];
+        this.pendingChildSlotRelease = new java.util.BitSet(slotLayout.dynamicSlotCount());
+        this.playerCentreXAtSlotStart = new int[execOrder.length];
+        this.playerCentreYAtSlotStart = new int[execOrder.length];
+        this.playerCentreAtSlotStartValid = new boolean[execOrder.length];
+        this.slotAllocator = new SlotAllocator(slotLayout,
+                slotLayout.twoAxisCursorPlacement()
+                        ? SlotEmptyPredicate.ROUTINE_POINTER
+                        : SlotEmptyPredicate.ID_BYTE);
+        this.fixedSstObjects = new FixedSstObjectInstaller(
+                registry, objectServices, slotLayout, slotAllocator,
+                this::addDynamicObject, this::releaseSlot);
         this.planeSwitchers = planeSwitcherConfig != null
                 ? new PlaneSwitchers(placement, planeSwitcherObjectId, planeSwitcherConfig)
                 : null;
-        this.solidContacts = new SolidContacts(this);
+        this.solidContacts = new ObjectSolidContactController(this);
         this.touchResponses = touchResponseTable != null
-                ? new TouchResponses(this, touchResponseTable)
+                ? new ObjectTouchResponseController(this, touchResponseTable)
                 : null;
+        this.skipVerticalSpawnLoadFilterForGame = slotLayout == ObjectSlotLayout.SONIC_2;
         // Initialize bucket arrays
         for (int i = 0; i < BUCKET_COUNT; i++) {
             lowPriorityBuckets[i] = new ArrayList<>();
@@ -127,31 +314,133 @@ public class ObjectManager {
             int planeSwitcherObjectId, PlaneSwitcherConfig planeSwitcherConfig,
             TouchResponseTable touchResponseTable) {
         this(spawns, registry, planeSwitcherObjectId, planeSwitcherConfig, touchResponseTable,
-                GraphicsManager.getInstance(),
-                Camera.getInstance(),
                 defaultServices());
     }
 
-    private static ObjectServices defaultServices() {
-        return new DefaultObjectServices(
-                LevelManager.getInstance(),
-                Camera.getInstance(),
-                GameStateManager.getInstance(),
-                SpriteManager.getInstance(),
-                FadeManager.getInstance(),
-                WaterSystem.getInstance(),
-                ParallaxManager.getInstance());
+    private ObjectManager(List<ObjectSpawn> spawns, ObjectRegistry registry,
+            int planeSwitcherObjectId, PlaneSwitcherConfig planeSwitcherConfig,
+            TouchResponseTable touchResponseTable, ObjectServices services) {
+        this(spawns, registry, planeSwitcherObjectId, planeSwitcherConfig, touchResponseTable,
+                services.graphicsManager(),
+                services.camera(),
+                services);
     }
 
-    public void reset(int cameraX) {
-        activeObjects.clear();
+    private static ObjectServices defaultServices() {
+        var gameplayMode = SessionManager.getCurrentGameplayMode();
+        if (gameplayMode != null) {
+            return new DefaultObjectServices(gameplayMode, EngineServices.current());
+        }
+        return new BootstrapObjectServices();
+    }
+
+    private boolean isManagedDynamicSlot(int slotIndex) {
+        return slotLayout.isDynamicSlot(slotIndex);
+    }
+
+    private int execIndexForSlot(int slotIndex) {
+        return slotLayout.toExecIndex(slotIndex);
+    }
+
+    private int executionSlotIndex(AbstractObjectInstance instance) {
+        return instance.getExecutionSlotIndex();
+    }
+
+    private int slotIndexForExec(int execIndex) {
+        return slotLayout.toSlotIndex(execIndex);
+    }
+
+    /**
+     * Records an object that runs from a slot other than the one it owns, so its
+     * {@code out_of_range} retirement can still be evaluated at its OWN slot in
+     * the ascending {@code ExecuteObjects} walk.
+     */
+    private void indexOwnSlotRetirement(AbstractObjectInstance aoi) {
+        int ownSlot = aoi.getSlotIndex();
+        if (ownSlot == executionSlotIndex(aoi) || !isManagedDynamicSlot(ownSlot)) {
+            return;
+        }
+        ownSlotRetireOrder[execIndexForSlot(ownSlot)] = aoi;
+    }
+
+    /**
+     * ROM {@code ExecuteObjects} walks the SST in ascending slot order and each
+     * object's {@code out_of_range ...,DeleteObject} tail therefore frees THAT
+     * object's slot at THAT slot's position in the walk
+     * (docs/s1disasm/_inc/ExecuteObjects.asm:10-30).
+     *
+     * <p>A few engine objects consolidate a ROM parent plus its children into one
+     * instance and borrow a reserved child slot as their execution slot to get
+     * the ROM's solid-pass ordering right (S1 {@code Sonic1StaircaseObjectInstance},
+     * whose blocks share the {@code Staircase} entry that runs
+     * {@code out_of_range.w DeleteObject,stair_origX(a0)} for every block,
+     * docs/s1disasm/_incObj/"5B SLZ Staircase.asm":6-12,39-66). Retiring such an
+     * object only at the borrowed slot moved the ROM parent block's slot release
+     * far later in the walk, so lowest-free {@code FindFreeObj} allocations made
+     * between the two positions — notably {@code Ring_Main}'s per-ring children
+     * (docs/s1disasm/_incObj/"25, 37 Rings.asm":251) — saw the parent slot as
+     * still occupied and skipped it.
+     *
+     * <p>The retirement anchor is the object's own slot; where it runs is
+     * unchanged. This is safe for the same reason ROM's result is
+     * position-independent here: these objects feed {@code out_of_range} a fixed
+     * origin ({@code stair_origX}) that their routine never writes, so the check
+     * yields the same answer either side of the routine.
+     *
+     * @return {@code true} if an object was retired at this slot
+     */
+    private boolean retireBorrowedExecutionSlotOwnerAtOwnSlot(int cameraX) {
+        ObjectInstance owner = ownSlotRetireOrder[currentExecSlot];
+        if (owner == null) {
+            return false;
+        }
+        ownSlotRetireOrder[currentExecSlot] = null;
+        if (!(owner instanceof AbstractObjectInstance aoi) || owner.isDestroyed()) {
+            return false;
+        }
+        int execSlot = executionSlotIndex(aoi);
+        if (!isManagedDynamicSlot(execSlot)) {
+            return false;
+        }
+        int execIndex = execIndexForSlot(execSlot);
+        if (execOrder[execIndex] != owner) {
+            return false;
+        }
+        ObjectSpawn spawn = instanceToSpawn.get(owner);
+        if (!unloadCounterBasedOutOfRange(owner, spawn, execSlot, cameraX)) {
+            return false;
+        }
+        execOrder[execIndex] = null;
+        return true;
+    }
+
+    public void reset(int cameraX) { reset(cameraX, null); }
+
+    /**
+     * Resets this manager and reapplies a persistent respawn table before the
+     * initial placement window is materialized. Bonus-stage returns use this
+     * atomic path so remembered layout objects cannot be created during reset
+     * and left live by a later bit-only restore.
+     */
+    public void reset(int cameraX, PersistentRespawnState persistentRespawnState) {
+        clearActiveObjects();
         dynamicObjects.clear();
+        dynamicOwnership.clear();
+        deferredDynamicExecThisFrame.clear();
+        runtimeState.clearPostExecDynamicSpawns();
         reservedChildSlots.clear();
+        slotAllocator.clear();
+        Arrays.fill(execOrder, null);
+        Arrays.fill(playerCentreAtSlotStartValid, false);
         cachedActiveObjects.clear();
         activeObjectsCacheDirty = true;
         bucketsDirty = true;
         frameCounter = 0;
-        placement.reset(cameraX);
+        dynamicObjectIdCounter = 0;
+        rewindObjectIds.clear();
+        s2LatchedObjectManagerCameraX = cameraX;
+        twoAxisCameraYCoarse = Integer.MIN_VALUE;
+        placement.reset(cameraX, persistentRespawnState);
         if (registry != null) {
             registry.reportCoverage(placement.getAllSpawns());
         }
@@ -162,10 +451,68 @@ public class ObjectManager {
         if (touchResponses != null) {
             touchResponses.reset();
         }
+        fixedSstObjects.installConfiguredObjects();
+        // Materialize the current ObjectPlacementController window immediately after reset.
+        // S1 needs this for ROM parity at level start; for S2/S3K it keeps
+        // manual camera resets and headless probes from sitting on an empty
+        // active window until a later ObjectPlacementController delta occurs. The
+        // camera-Y filter is S3K-only (S2's loader has none at all, see
+        // isSpawnVerticallyEligibleForLoad), so it applies here for S3K only.
+        syncActiveSpawnsLoad(false);
     }
 
     ObjectServices services() {
         return objectServices;
+    }
+
+    /** The services this manager injects into every object it owns. */
+    public ObjectServices getObjectServices() {
+        return objectServices;
+    }
+
+    public boolean usesTwoAxisCursorPlacement() {
+        return slotLayout.twoAxisCursorPlacement();
+    }
+
+    public boolean usesCounterBasedRespawn() {
+        return placement.isCounterBasedRespawn();
+    }
+
+    /**
+     * Captures the persistent respawn-remember state (broken/collected/remembered
+     * spawns) to carry across a bonus-stage or special-stage round-trip reload. See
+     * {@link PersistentRespawnState} for the ROM {@code Respawn_table_keep} model.
+     */
+    public PersistentRespawnState capturePersistentRespawn() {
+        return placement.capturePersistentRespawn();
+    }
+
+    /**
+     * Re-establishes respawn-remember state captured by
+     * {@link #capturePersistentRespawn()} onto this (freshly reloaded) manager's
+     * placement, so stage-return respawns broken/collected objects in the state
+     * the player left them (e.g. a monitor broken before the bonus stays broken).
+     */
+    public void restorePersistentRespawn(PersistentRespawnState state) {
+        placement.restorePersistentRespawn(state);
+    }
+
+    /**
+     * Instantiates all spawns currently in the ObjectPlacementController window. Intended for
+     * trace replay and editor state restoration that need engine object
+     * instances to exist before the first {@link #update} call, so external
+     * state (ROM SST snapshots, editor bookmarks) can be hydrated onto them.
+     *
+     * <p>For S1 (counter-based respawn, {@code UNIFIED} collision model) this
+     * work is already done inside {@link #reset(int)}. For S2/S3K
+     * ({@code DUAL_PATH}) spawn→instance conversion is normally deferred until
+     * the first {@link #update} tick; calling this method brings S2/S3K in
+     * line with that ROM behavior ahead of time.
+     *
+     * <p>Idempotent: objects that already exist are not re-created.
+     */
+    public void preloadInitialSpawnsForHydration() {
+        syncActiveSpawnsLoad(skipVerticalSpawnLoadFilterForGame);
     }
 
     /**
@@ -175,10 +522,11 @@ public class ObjectManager {
      * the next frame will re-instantiate objects in the camera window.
      */
     public void resyncSpawnList(List<ObjectSpawn> newSpawns) {
-        activeObjects.clear();
+        clearActiveObjects();
         cachedActiveObjects.clear();
         activeObjectsCacheDirty = true;
         bucketsDirty = true;
+        twoAxisCameraYCoarse = Integer.MIN_VALUE;
         placement.replaceSpawnsAndReset(newSpawns);
     }
 
@@ -198,6 +546,24 @@ public class ObjectManager {
         bucketsDirty = true;
     }
 
+    /**
+     * Marks the cached render buckets dirty only when their inputs actually
+     * changed since the last rebuild. Object priority is exposed through
+     * virtual {@link ObjectInstance#isHighPriority()} /
+     * {@link ObjectInstance#getPriorityBucket()} implementations (many follow
+     * other entities' state live), so there is no central mutation hook; this
+     * cheap once-per-frame scan replaces the previous unconditional per-frame
+     * rebuild while staying immune to untracked priority changes.
+     */
+    public void refreshRenderBucketsIfChanged() {
+        if (bucketsDirty) {
+            return;
+        }
+        if (renderBucketSnapshot.inputsChanged(activeObjects.values(), dynamicObjects)) {
+            bucketsDirty = true;
+        }
+    }
+
     public void update(int cameraX, PlayableEntity player, List<? extends PlayableEntity> sidekicks, int touchFrameCounter) {
         update(cameraX, player, sidekicks, touchFrameCounter, true);
     }
@@ -208,18 +574,72 @@ public class ObjectManager {
      * after their physics but before other objects' solid checks.
      */
     public void runTouchResponsesForPlayer(PlayableEntity player, int touchFrameCounter) {
+        runTouchResponsesForPlayer(player, touchFrameCounter, false);
+    }
+
+    /**
+     * Runs the inline player-slot touch pass against the frame-start snapshot.
+     * ROM order: player slots scan before later level-object slots update.
+     */
+    public void runTouchResponsesForPlayer(PlayableEntity player, int touchFrameCounter,
+                                           boolean usePreUpdateState) {
         if (touchResponses == null) {
             return;
         }
-        touchResponses.debugState.setEnabled(
-                DebugOverlayManager.getInstance().isEnabled(DebugOverlayToggle.TOUCH_RESPONSE));
-        // ROM: CPU sidekick uses separate overlap tracking and Hurt_Sidekick handler
-        // (knockback only, no ring scatter or death). Must dispatch to updateSidekick
-        // to avoid routing through the main player's applyHurtOrDeath path.
+        touchResponses.getDebugState().setEnabled(
+                objectServices.debugOverlay().isEnabled(DebugOverlayToggle.TOUCH_RESPONSE));
+        // CPU sidekick uses separate overlap tracking and Hurt_Sidekick handling.
         if (player.isCpuControlled()) {
-            touchResponses.updateSidekick(player, touchFrameCounter);
+            touchResponses.updateSidekick(player, touchFrameCounter, usePreUpdateState);
         } else {
-            touchResponses.update(player, touchFrameCounter);
+            touchResponses.update(player, touchFrameCounter, usePreUpdateState);
+        }
+    }
+
+    /**
+     * Refreshes frame-start object/camera state for inline-order touch checks.
+     * S3K can instead preserve the previous dynamic Collision_response_list
+     * snapshot because player slots run before that list is rebuilt.
+     */
+    public void snapshotTouchResponseState() { snapshotTouchResponseState(false); }
+
+    public void snapshotTouchResponseState(boolean preservePreviousCollisionResponseList) {
+        solidContacts.clearSameFrameMonitorBreakBounces();
+        updateCameraBounds();
+        collisionResponseList.setUsePrevious(preservePreviousCollisionResponseList);
+        for (ObjectInstance inst : activeObjects.values()) {
+            refreshTouchResponseSnapshot(inst);
+        }
+        for (ObjectInstance inst : dynamicObjects) {
+            refreshTouchResponseSnapshot(inst);
+        }
+    }
+
+    private void refreshTouchResponseSnapshot(ObjectInstance inst) {
+        // ROM Touch_Loop stores object RAM POINTERS, not snapshots: `movea.w (a4)+,a1`
+        // then `x_pos(a1)` (docs/skdisasm/sonic3k.asm:20660-20663, 20674-20681; the S1
+        // ReactToItem and S2 Touch_Response forms are the same shape). Every placed
+        // object sits in a slot after the player, so the player always sees each
+        // object's END-OF-PREVIOUS-FRAME position.
+        //
+        // This runs from LevelManager.prepareTouchResponseSnapshots before any object
+        // updates this frame, so the snapshot captures exactly that position for every
+        // object, whatever phase its own update falls in. The S3K previous-list path
+        // used to skip it, leaving the cache holding whatever the object's own last
+        // update wrote -- still end-of-previous-frame for an object updated before the
+        // touch pass, but one pass older for a spawnChild-created object updated after
+        // it. Collision flags are unaffected: the previous-list path reads them live at
+        // the touch site rather than from this cache.
+        inst.snapshotTouchResponseState();
+    }
+
+    public void refreshPostCameraRenderState() {
+        updateCameraBounds();
+        for (ObjectInstance inst : activeObjects.values()) {
+            inst.refreshPostCameraRenderState();
+        }
+        for (ObjectInstance inst : dynamicObjects) {
+            inst.refreshPostCameraRenderState();
         }
     }
 
@@ -231,56 +651,215 @@ public class ObjectManager {
     public void update(int cameraX, PlayableEntity player, List<? extends PlayableEntity> sidekicks,
             int touchFrameCounter, boolean enableTouchResponses,
             boolean inlineSolidResolution, boolean solidPostMovement) {
+        update(cameraX, player, sidekicks, touchFrameCounter, enableTouchResponses,
+                inlineSolidResolution, solidPostMovement, null);
+    }
+
+    public void update(int cameraX, PlayableEntity player, List<? extends PlayableEntity> sidekicks,
+            int touchFrameCounter, boolean enableTouchResponses,
+            boolean inlineSolidResolution, boolean solidPostMovement,
+            Runnable afterExecBeforePlacement) {
+        List<? extends PlayableEntity> activeSidekicks = sidekicks != null ? sidekicks : List.of();
         frameCounter++;
-        vblaCounter++;
+        // Gameplay row of the "exactly one tick per serviced V-blank"
+        // invariant documented on the vblaCounter field. Every V-blank-only
+        // row calls advanceVblaCounter() directly instead of reaching here.
+        advanceVblaCounter();
+        // Inline-physics path: snapshotTouchResponseState() ran earlier this
+        // frame and already refreshed the cached camera bounds. The second
+        // call here is harmless redundancy (the post-camera-step bounds
+        // haven't shifted between snapshot and update) -- it's kept so the
+        // non-inline path (which doesn't snapshot) still gets fresh bounds
+        // before the exec loop. Do not consolidate without verifying both
+        // call paths first.
         updateCameraBounds();
-
+        // Snapshot each player's centre Y at the start of the object exec pass
+        // (post-physics, before any object re-seats him this frame). ROM objects
+        // that re-position the player (e.g. the SLZ staircase ride-seat) run in
+        // their own slot; an object reading the player's position before that
+        // re-seat (because its slot is lower than the re-seating object) sees
+        // this pre-seat value. The engine folds the staircase into a lower slot
+        // than the fan, so the fan would otherwise read the already-seated Y.
+        // Objects that need ROM's "player position when my slot ran, before
+        // later-slot objects moved him" read this via getPlayerCentreYAtExecStart.
+        solidContacts.captureExecStartPlayerCentreY(player, activeSidekicks);
+        SolidExecutionRegistry solidExecutionRegistry = objectServices.solidExecutionRegistry();
+        solidExecutionRegistry.beginFrame(
+                frameCounter,
+                execution.collectActivePlayers(player, activeSidekicks, activePlayersScratch));
         boolean counterBased = placement.isCounterBasedRespawn();
+        boolean execThenLoad = placement.usesExecThenLoadPlacement();
 
-        if (counterBased) {
-            preAllocateReservedChildSlots();
-            updateCounterBasedExecThenLoad(cameraX, player);
-        } else {
-            syncActiveSpawnsUnload();
-            // ROM parity: In the ROM, ExecuteObjects runs BEFORE ObjPosLoad.
-            // Dynamic children (e.g. GlassBlock reflections) whose parent was just
-            // unloaded in syncActiveSpawnsUnload may now be marked destroyed (via
-            // the parent's onUnload()). Free their slots before the load phase so
-            // FindFreeObj sees the same available slots as the ROM's ObjPosLoad.
-            cleanupDestroyedDynamicObjects();
-            syncActiveSpawnsLoad();
-            if (inlineSolidResolution) {
-                solidContacts.beginInlineFrame(player, sidekicks, solidPostMovement);
-            }
-            try {
-                runExecLoop(cameraX, player, sidekicks, inlineSolidResolution, solidPostMovement);
-            } finally {
-                if (inlineSolidResolution) {
-                    solidContacts.finishInlineFrame(player, sidekicks);
+        if (inlineSolidResolution) {
+            solidContacts.beginInlineFrame(player, activeSidekicks, solidPostMovement);
+        }
+        try {
+            if (counterBased) {
+                updateCounterBasedExecThenLoad(
+                        cameraX,
+                        player,
+                        activeSidekicks,
+                        inlineSolidResolution,
+                        solidPostMovement);
+            } else if (execThenLoad) {
+                if (slotLayout.twoAxisCursorPlacement()) {
+                    // S3K Load_Sprites runs before Process_Sprites and performs
+                    // the X-cursor pass before the Y-camera pass
+                    // (docs/skdisasm/sonic3k.asm:7884-7894, 37640-37762).
+                    // S3K stays load-then-exec.
+                    runTwoAxisLoadThenExecutePlacement(cameraX, false);
                 }
+                // S2: NO pre-exec load. ROM S2 is RunObjects (s2.asm:5095) then
+                // exactly one ObjectsManager (s2.asm:5112) = exec -> one load.
+                // The single S2 load runs in the post-block below
+                // (RunObjects -> ObjectsManager position), after runExecLoop has
+                // applied the object-side MarkObjGone self-deletes.
+                cleanupDestroyedDynamicObjects();
+                runExecLoop(cameraX, player, activeSidekicks, inlineSolidResolution, solidPostMovement);
+                runAfterExecBeforePlacement(afterExecBeforePlacement);
+            } else {
+                syncActiveSpawnsUnload();
+                cleanupDestroyedDynamicObjects();
+                syncActiveSpawnsLoad(true);
+                runExecLoop(cameraX, player, activeSidekicks, inlineSolidResolution, solidPostMovement);
             }
+            flushPostExecDynamicSpawns();
+        } finally {
+            if (inlineSolidResolution) {
+                solidContacts.finishInlineFrame(player, activeSidekicks);
+            }
+            solidExecutionRegistry.finishFrame();
         }
 
-        // Note: solidContacts.update() is now called during SpriteManager.update(),
-        // after movement but before animation. This ensures pushing flag is set correctly
-        // for both terrain and solid objects before animation resolves.
+        // Solid contacts now resolve during SpriteManager.update(), before animation.
         if (enableTouchResponses && touchResponses != null) {
-            touchResponses.debugState.setEnabled(
-                    DebugOverlayManager.getInstance().isEnabled(DebugOverlayToggle.TOUCH_RESPONSE));
+            touchResponses.getDebugState().setEnabled(
+                    objectServices.debugOverlay().isEnabled(DebugOverlayToggle.TOUCH_RESPONSE));
             touchResponses.update(player, touchFrameCounter);
-            // ROM: Both players participate in touch responses.
-            // Each sidekick uses separate overlap tracking and special hurt handling.
-            for (PlayableEntity sk : sidekicks) {
+            for (PlayableEntity sk : activeSidekicks) {
                 touchResponses.updateSidekick(sk, touchFrameCounter);
             }
         }
 
-        // Stream object placement for the NEXT frame.
-        // ROM parity: S1's ObjPosLoad runs AFTER DeformLayers (camera update).
-        // Counter-based respawn depends on seeing the post-camera X to assign
-        // the same counter values as the ROM. Defer to postCameraPlacementUpdate().
+        // Stream objects for the next frame; counter-based S1 defers to the
+        // post-camera placement pass, while S2 keeps its single exec->load pass.
         if (!counterBased) {
-            placement.update(cameraX);
+            if (!execThenLoad || !slotLayout.twoAxisCursorPlacement()) {
+                placement.update(cameraX);
+            }
+            if (execThenLoad && !slotLayout.twoAxisCursorPlacement()) {
+                cleanupDestroyedDynamicObjects();
+                syncActiveSpawnsLoad(true);
+            }
+        }
+        captureCollisionResponseListForNextFrame();
+    }
+
+    public InitialObjectDispatchScope beginInitialProcessSprites(
+            int cameraX, PlayableEntity player,
+            List<? extends PlayableEntity> sidekicks) {
+        return initialDispatch.begin(cameraX, player, sidekicks);
+    }
+
+    public void loadInitialDynamicSlots(InitialObjectDispatchScope scope) {
+        initialDispatch.loadDynamicSlots(scope);
+    }
+
+    public void processInitialAbsoluteDynamicSlot3(InitialObjectDispatchScope scope) {
+        initialDispatch.processAbsoluteDynamicSlot3(scope);
+    }
+
+    public void processInitialDynamicSlots(InitialObjectDispatchScope scope) {
+        initialDispatch.processDynamicSlots(scope);
+    }
+
+    public void finishInitialProcessSprites(InitialObjectDispatchScope scope) {
+        initialDispatch.finish(scope);
+    }
+
+    public void freezeInitialCollisionResponseReadView() {
+        initialDispatch.freezeCollisionReadView();
+    }
+
+    public void resetInitialCollisionResponseBuild() {
+        initialDispatch.resetCollisionBuild();
+    }
+
+    public void markInitialDynamicCollisionBuildComplete() {
+        initialDispatch.markDynamicCollisionBuildComplete();
+    }
+
+    public void captureInitialCollisionResponseBuild() {
+        initialDispatch.captureCollisionBuild();
+    }
+
+    SolidExecutionRegistry beginInitialSolidExecution(
+            PlayableEntity player, List<? extends PlayableEntity> sidekicks) {
+        frameCounter++;
+        updateCameraBounds();
+        solidContacts.captureExecStartPlayerCentreY(player, sidekicks);
+        SolidExecutionRegistry registry = objectServices.solidExecutionRegistry();
+        registry.beginFrame(
+                frameCounter,
+                execution.collectActivePlayers(player, sidekicks, activePlayersScratch));
+        return registry;
+    }
+
+    int firstDynamicSlot() {
+        return slotLayout.firstDynamicSlot();
+    }
+
+    ObjectCollisionResponseList initialCollisionResponseList() {
+        return collisionResponseList;
+    }
+
+    void runTwoAxisLoadThenExecutePlacement(int cameraX, boolean observeSetupOrder) {
+        placement.update(cameraX);
+        syncActiveSpawnsLoad(false);
+    }
+
+    private void runAfterExecBeforePlacement(Runnable afterExecBeforePlacement) {
+        if (afterExecBeforePlacement != null) {
+            afterExecBeforePlacement.run();
+        }
+    }
+
+    void executeObjectWithSolidContext(ObjectInstance instance, PlayableEntity player,
+            List<? extends PlayableEntity> sidekicks,
+            boolean inlineSolidResolution, boolean solidPostMovement) {
+        execution.execute(
+                instance, player, sidekicks, inlineSolidResolution, solidPostMovement);
+    }
+
+    SolidExecutionRegistry solidExecutionRegistry() {
+        return objectServices.solidExecutionRegistry();
+    }
+
+    int vblaCounter() {
+        return vblaCounter;
+    }
+
+    SolidCheckpointBatch processManualSolidCheckpoint(
+            ObjectInstance instance,
+            PlayableEntity player,
+            List<? extends PlayableEntity> sidekicks,
+            boolean solidPostMovement) {
+        return solidContacts.processManualCheckpoint(
+                instance, player, sidekicks, solidPostMovement);
+    }
+
+    SolidCheckpointBatch processCompatibilitySolidCheckpoint(
+            ObjectInstance instance,
+            PlayableEntity player,
+            List<? extends PlayableEntity> sidekicks,
+            boolean solidPostMovement) {
+        return solidContacts.processCompatibilityCheckpoint(
+                instance, player, sidekicks, solidPostMovement);
+    }
+
+    void publishInitialCollisionResponse(ObjectInstance instance) {
+        if (initialDispatch.isActive()) {
+            collisionResponseList.addToCurrentBuild(instance);
         }
     }
 
@@ -301,7 +880,9 @@ public class ObjectManager {
      * then loaded new objects before exec. New objects could fill freed slots that should
      * have been available for child allocations, causing cumulative slot offset drift.
      */
-    private void updateCounterBasedExecThenLoad(int cameraX, PlayableEntity player) {
+    private void updateCounterBasedExecThenLoad(int cameraX, PlayableEntity player,
+            List<? extends PlayableEntity> sidekicks,
+            boolean inlineSolidResolution, boolean solidPostMovement) {
         // Phase 1: Snapshot positions and build exec order from EXISTING objects.
         for (ObjectInstance inst : activeObjects.values()) {
             inst.snapshotPreUpdatePosition();
@@ -311,123 +892,182 @@ public class ObjectManager {
         }
 
         Arrays.fill(execOrder, null);
-        Map<ObjectInstance, ObjectSpawn> instanceToSpawn = new IdentityHashMap<>();
-        for (Map.Entry<ObjectSpawn, ObjectInstance> e : activeObjects.entrySet()) {
-            ObjectInstance inst = e.getValue();
-            instanceToSpawn.put(inst, e.getKey());
-            if (inst instanceof AbstractObjectInstance aoi && aoi.getSlotIndex() >= DYNAMIC_SLOT_BASE) {
-                execOrder[aoi.getSlotIndex() - DYNAMIC_SLOT_BASE] = inst;
+        Arrays.fill(ownSlotRetireOrder, null);
+        Arrays.fill(playerCentreAtSlotStartValid, false);
+        // Per-pass scratch: which managed slots were freed during THIS object
+        // pass. Reset here for the same reason runExecLoop resets it -- bits
+        // left over from an earlier frame would make a later reallocation see
+        // a slot as freed-this-pass when it was not.
+        slotsFreedDuringObjectPass.clear();
+        pendingChildSlotRelease.clear();
+        for (ObjectInstance inst : activeObjects.values()) {
+            if (initialDispatch.excludesFromDynamicPass(inst)) {
+                continue;
+            }
+            if (inst instanceof AbstractObjectInstance aoi && isManagedDynamicSlot(executionSlotIndex(aoi))) {
+                execOrder[execIndexForSlot(executionSlotIndex(aoi))] = inst;
+                indexOwnSlotRetirement(aoi);
             }
         }
         for (ObjectInstance inst : dynamicObjects) {
-            if (inst instanceof AbstractObjectInstance aoi && aoi.getSlotIndex() >= DYNAMIC_SLOT_BASE) {
-                execOrder[aoi.getSlotIndex() - DYNAMIC_SLOT_BASE] = inst;
+            if (initialDispatch.excludesFromDynamicPass(inst)) {
+                continue;
+            }
+            if (inst instanceof AbstractObjectInstance aoi && isManagedDynamicSlot(executionSlotIndex(aoi))) {
+                execOrder[execIndexForSlot(executionSlotIndex(aoi))] = inst;
+                indexOwnSlotRetirement(aoi);
             }
         }
-        int currentSlotCount = usedSlots.cardinality();
-        if (currentSlotCount > peakSlotCount) peakSlotCount = currentSlotCount;
-
         // Phase 2: ExecuteObjects — run objects in slot order with inline out_of_range.
         updating = true;
         boolean objectsRemoved = false;
+        objectLoopBudget.reset();
         try {
-            for (currentExecSlot = 0; currentExecSlot < DYNAMIC_SLOT_COUNT; currentExecSlot++) {
+            for (currentExecSlot = 0; currentExecSlot < execOrder.length; currentExecSlot++) {
+                if (objectLoopBudget.walkEndedBefore(slotIndexForExec(currentExecSlot))) break;
+                capturePlayerCentreAtSlotStart(player);
+                if (pendingChildSlotRelease.get(currentExecSlot)) {
+                    pendingChildSlotRelease.clear(currentExecSlot);
+                    releaseSlot(slotIndexForExec(currentExecSlot));
+                }
+                if (retireBorrowedExecutionSlotOwnerAtOwnSlot(cameraX)) {
+                    objectsRemoved = true;
+                }
                 ObjectInstance instance = execOrder[currentExecSlot];
                 if (instance == null) continue;
 
-                // ROM parity: each object checks out_of_range at the start of its
-                // routine during ExecuteObjects. Freeing the slot here (not in a
-                // batch pre-pass) ensures child allocations from higher slots see
-                // the correct set of available slots.
+                // ROM parity: most S1 objects check out_of_range at the START of
+                // their routine during ExecuteObjects (static scenery / fixed
+                // anchors), so the pre-execute check on the previous frame's
+                // position matches ROM. Freeing the slot here (not in a batch
+                // pre-pass) ensures child allocations from higher slots see the
+                // correct set of available slots.
+                //
+                // Objects that move then check out_of_range at the END of their
+                // routine (RememberState-after-SpeedToPos badniks) opt out via
+                // checksOutOfRangeAfterRoutine(); for them the check runs
+                // post-execute below, on the moved position, matching ROM
+                // (docs/s1disasm/_incObj/sub RememberState.asm:9). Checking such
+                // an object before its routine runs unloaded it one frame late
+                // (S1 LZ2 Jaws f196 -> f1068 slot cascade).
                 ObjectSpawn spawn = instanceToSpawn.get(instance);
-                if (spawn != null && !instance.isPersistent()
-                        && isOutOfRangeS1(instance.getX(), cameraX)) {
-                    int slotIndex = currentExecSlot + DYNAMIC_SLOT_BASE;
-                    if (instance instanceof AbstractObjectInstance aoi
-                            && aoi.getSlotIndex() == slotIndex) {
-                        releaseSlot(slotIndex);
-                    }
-                    freeAllReservedChildSlots(spawn);
-                    placement.clearCounterForSpawn(spawn);
-                    placement.removeFromActiveForUnload(spawn);
-                    instance.onUnload();
+                boolean checksOutOfRangeAfter = instance.checksOutOfRangeAfterRoutine();
+                if (!checksOutOfRangeAfter
+                        && unloadCounterBasedOutOfRange(instance, spawn,
+                                slotIndexForExec(currentExecSlot), cameraX)) {
                     execOrder[currentExecSlot] = null;
-                    instanceToSpawn.remove(instance);
-                    activeObjects.remove(spawn);
                     objectsRemoved = true;
                     continue;
                 }
 
-                instance.update(vblaCounter, player);
+                executeObjectWithSolidContext(
+                        instance, player, sidekicks, inlineSolidResolution, solidPostMovement);
+
+                if (checksOutOfRangeAfter
+                        && !instance.isDestroyed()
+                        && unloadCounterBasedOutOfRange(instance, spawn,
+                                slotIndexForExec(currentExecSlot), cameraX)) {
+                    execOrder[currentExecSlot] = null;
+                    objectsRemoved = true;
+                    continue;
+                }
 
                 if (instance.isDestroyed()) {
-                    int slotIndex = currentExecSlot + DYNAMIC_SLOT_BASE;
+                    int slotIndex = slotIndexForExec(currentExecSlot);
+                    // Release the instance's OWN SST slot; the exec-slot comparison
+                    // only confirms this entry belongs to it. See the note in
+                    // unloadCounterBasedOutOfRange -- an object executing from a
+                    // reserved child slot owns a different slot than it runs from.
                     if (instance instanceof AbstractObjectInstance aoi3
-                            && aoi3.getSlotIndex() == slotIndex) {
-                        releaseSlot(slotIndex);
+                            && executionSlotIndex(aoi3) == slotIndex
+                            && isManagedDynamicSlot(aoi3.getSlotIndex())) {
+                        releaseSlot(aoi3.getSlotIndex());
                     }
                     instance.onUnload();
                     execOrder[currentExecSlot] = null;
 
                     if (spawn != null) {
-                        instanceToSpawn.remove(instance);
                         freeAllReservedChildSlots(spawn);
                         placement.clearStayActive(spawn);
-                        placement.removeFromActive(spawn);
-                        activeObjects.remove(spawn);
+                        resetRespawnStateForOffscreenSelfDelete(instance, spawn);
+                        dispatchDestroyRemoveFromActive(instance, spawn);
+                        removeActiveObject(spawn);
                     } else {
-                        dynamicObjects.remove(instance);
+                        removeDynamicObjectInstance(instance);
                     }
                     objectsRemoved = true;
                 }
             }
 
             // Fallback: process dynamic objects without valid slots
-            for (ObjectInstance inst : new ArrayList<>(dynamicObjects)) {
-                if (inst instanceof AbstractObjectInstance aoi2
-                        && aoi2.getSlotIndex() >= DYNAMIC_SLOT_BASE) {
+            populateDynamicFallbackScratch();
+            for (ObjectInstance inst : dynamicFallbackScratch) {
+                if (initialDispatch.excludesFromDynamicPass(inst)) {
                     continue;
                 }
                 if (inst.isDestroyed()) {
+                    releaseSlotIfManaged(inst);
                     inst.onUnload();
-                    dynamicObjects.remove(inst);
+                    removeDynamicObjectInstance(inst);
                     objectsRemoved = true;
                     continue;
                 }
-                inst.update(vblaCounter, player);
+                executeObjectWithSolidContext(
+                        inst, player, sidekicks, inlineSolidResolution, solidPostMovement);
+                if (unloadCounterBasedOutOfRange(inst, null, -1, cameraX)) {
+                    objectsRemoved = true;
+                    continue;
+                }
                 if (inst.isDestroyed()) {
+                    releaseSlotIfManaged(inst);
                     inst.onUnload();
-                    dynamicObjects.remove(inst);
+                    removeDynamicObjectInstance(inst);
                     objectsRemoved = true;
                 }
             }
             // Fallback: process active objects without valid slots
-            for (var entry : new ArrayList<>(activeObjects.entrySet())) {
-                ObjectInstance inst = entry.getValue();
-                if (inst instanceof AbstractObjectInstance aoi2
-                        && aoi2.getSlotIndex() >= DYNAMIC_SLOT_BASE) {
+            populateActiveFallbackScratch();
+            for (ObjectInstance inst : activeFallbackScratch) {
+                if (initialDispatch.excludesFromDynamicPass(inst)) {
+                    continue;
+                }
+                ObjectSpawn spawn = instanceToSpawn.get(inst);
+                if (spawn == null) {
                     continue;
                 }
                 if (inst.isDestroyed()) {
                     inst.onUnload();
-                    placement.clearStayActive(entry.getKey());
-                    placement.removeFromActive(entry.getKey());
-                    activeObjects.remove(entry.getKey());
+                    placement.clearStayActive(spawn);
+                    resetRespawnStateForOffscreenSelfDelete(inst, spawn);
+                    dispatchDestroyRemoveFromActive(inst, spawn);
+                    removeActiveObject(spawn);
                     objectsRemoved = true;
                     continue;
                 }
-                inst.update(vblaCounter, player);
+                executeObjectWithSolidContext(
+                        inst, player, sidekicks, inlineSolidResolution, solidPostMovement);
+                if (unloadCounterBasedOutOfRange(inst, spawn, -1, cameraX)) {
+                    objectsRemoved = true;
+                    continue;
+                }
                 if (inst.isDestroyed()) {
                     inst.onUnload();
-                    placement.clearStayActive(entry.getKey());
-                    placement.removeFromActive(entry.getKey());
-                    activeObjects.remove(entry.getKey());
+                    placement.clearStayActive(spawn);
+                    resetRespawnStateForOffscreenSelfDelete(inst, spawn);
+                    dispatchDestroyRemoveFromActive(inst, spawn);
+                    removeActiveObject(spawn);
                     objectsRemoved = true;
                 }
             }
         } finally {
+            for (int e = pendingChildSlotRelease.nextSetBit(0); e >= 0;
+                    e = pendingChildSlotRelease.nextSetBit(e + 1)) {
+                releaseSlot(slotIndexForExec(e));
+            }
+            pendingChildSlotRelease.clear();
             currentExecSlot = -1;
             updating = false;
+            deferredDynamicExecThisFrame.clear();
             if (objectsRemoved) {
                 bucketsDirty = true;
                 activeObjectsCacheDirty = true;
@@ -436,25 +1076,19 @@ public class ObjectManager {
 
         // Phase 3: ObjPosLoad — load new objects AFTER ExecuteObjects.
         // Slots freed during the exec loop and child slots allocated during exec
-        // are now reflected in usedSlots. New objects get the correct slot numbers.
-        syncActiveSpawnsLoad();
+        // are now reflected in the allocator. New objects get the correct slot numbers.
+        syncActiveSpawnsLoad(false);
 
-        // Phase 4: Run newly loaded objects immediately.
-        // ROM parity compensation: In the ROM, objects loaded by ObjPosLoad don't
-        // execute until the next frame's ExecuteObjects. But the engine has a
-        // 1-frame pipeline delay (spawns added by postCameraPlacementUpdate are
-        // instantiated the next frame). Running new objects now compensates for
-        // this delay, keeping object behavior in sync with the trace.
-        runNewlyLoadedObjects(player);
     }
 
     /**
      * Runs the standard exec loop for non-counter-based respawn (S2/S3K).
      * This preserves the existing behavior where unload and load happen before exec.
      */
-    private void runExecLoop(int cameraX, PlayableEntity player,
+    void runExecLoop(int cameraX, PlayableEntity player,
             List<? extends PlayableEntity> sidekicks,
             boolean inlineSolidResolution, boolean solidPostMovement) {
+        int unloadCameraX = objectUnloadCameraX(cameraX);
         // ROM parity: Snapshot all objects' positions BEFORE their updates run.
         for (ObjectInstance inst : activeObjects.values()) {
             inst.snapshotPreUpdatePosition();
@@ -464,119 +1098,157 @@ public class ObjectManager {
         }
 
         // ROM parity: Build slot-ordered execution array.
+        slotsFreedDuringObjectPass.clear();
         Arrays.fill(execOrder, null);
-        Map<ObjectInstance, ObjectSpawn> instanceToSpawn = new IdentityHashMap<>();
-        for (Map.Entry<ObjectSpawn, ObjectInstance> e : activeObjects.entrySet()) {
-            ObjectInstance inst = e.getValue();
-            instanceToSpawn.put(inst, e.getKey());
-            if (inst instanceof AbstractObjectInstance aoi && aoi.getSlotIndex() >= DYNAMIC_SLOT_BASE) {
-                execOrder[aoi.getSlotIndex() - DYNAMIC_SLOT_BASE] = inst;
+        Arrays.fill(ownSlotRetireOrder, null);
+        Arrays.fill(playerCentreAtSlotStartValid, false);
+        pendingChildSlotRelease.clear();
+        for (ObjectInstance inst : activeObjects.values()) {
+            if (initialDispatch.excludesFromDynamicPass(inst)) {
+                continue;
+            }
+            if (inst instanceof AbstractObjectInstance aoi && isManagedDynamicSlot(executionSlotIndex(aoi))) {
+                execOrder[execIndexForSlot(executionSlotIndex(aoi))] = inst;
+                indexOwnSlotRetirement(aoi);
             }
         }
         for (ObjectInstance inst : dynamicObjects) {
-            if (inst instanceof AbstractObjectInstance aoi && aoi.getSlotIndex() >= DYNAMIC_SLOT_BASE) {
-                execOrder[aoi.getSlotIndex() - DYNAMIC_SLOT_BASE] = inst;
+            if (initialDispatch.excludesFromDynamicPass(inst)) {
+                continue;
+            }
+            if (inst instanceof AbstractObjectInstance aoi && isManagedDynamicSlot(executionSlotIndex(aoi))) {
+                execOrder[execIndexForSlot(executionSlotIndex(aoi))] = inst;
+                indexOwnSlotRetirement(aoi);
             }
         }
-        int currentSlotCount = usedSlots.cardinality();
-        if (currentSlotCount > peakSlotCount) peakSlotCount = currentSlotCount;
-
         updating = true;
         boolean objectsRemoved = false;
-        boolean counterBased = placement.isCounterBasedRespawn();
         // Track objects processed by the slot-based loop so the fallback loop
         // doesn't double-update objects that lost their slot mid-frame.
-        Set<ObjectInstance> processedInExecLoop = Collections.newSetFromMap(new IdentityHashMap<>());
+        // Reused per frame; cleared in the finally block below.
+        Set<ObjectInstance> processedInExecLoop = processedInExecLoopScratch;
+        objectLoopBudget.reset();
         try {
             // ROM parity: Iterate slots in ascending order, matching ExecuteObjects.
-            for (currentExecSlot = 0; currentExecSlot < DYNAMIC_SLOT_COUNT; currentExecSlot++) {
+            for (currentExecSlot = 0; currentExecSlot < execOrder.length; currentExecSlot++) {
+                if (objectLoopBudget.walkEndedBefore(slotIndexForExec(currentExecSlot))) break;
+                capturePlayerCentreAtSlotStart(player);
+                // A reserved child slot freed earlier in this pass is released
+                // here, at the exec position its own ROM object would have
+                // reached in the ascending ExecuteObjects walk
+                // (docs/s1disasm/_inc/ExecuteObjects.asm:10-30) -- see
+                // releaseChildSlotAtItsOwnExecPosition. Without this (and the
+                // finally-block flush below) the deferred bit set by
+                // releaseChildSlotAtItsOwnExecPosition was never acted on in
+                // this loop, so every parent unloaded on this path leaked its
+                // whole reserved child block for the rest of the act.
+                if (pendingChildSlotRelease.get(currentExecSlot)) {
+                    pendingChildSlotRelease.clear(currentExecSlot);
+                    releaseSlot(slotIndexForExec(currentExecSlot));
+                }
+                // A consolidated parent that runs from a borrowed child slot is
+                // retired at its OWN slot's position in the ascending walk -- see
+                // retireBorrowedExecutionSlotOwnerAtOwnSlot. S2/S3K use the same
+                // ascending ExecuteObjects walk as S1, and S3K's consolidated
+                // Obj_AIZGiantRideVine is exactly the S1 staircase shape: the ROM
+                // root's range check and DeleteChain run at the START of
+                // AIZGiantRideVine_Main at the PARENT slot on an x_pos the
+                // routine never writes (docs/skdisasm/sonic3k.asm:46813-46822),
+                // while the engine executes the consolidated object at the handle
+                // child slot for solid-pass ordering. Without this the parent slot
+                // was released later in the walk than ROM, so lowest-free
+                // allocations between the two positions saw it as occupied.
+                if (retireBorrowedExecutionSlotOwnerAtOwnSlot(unloadCameraX)) {
+                    objectsRemoved = true;
+                }
                 ObjectInstance instance = execOrder[currentExecSlot];
                 if (instance == null) continue;
                 processedInExecLoop.add(instance);
 
-                instance.update(vblaCounter, player);
-
-                if (inlineSolidResolution && !instance.isDestroyed()) {
-                    solidContacts.processInlineObject(instance, player, sidekicks, solidPostMovement);
-                }
+                executeObjectWithSolidContext(
+                        instance, player, sidekicks, inlineSolidResolution, solidPostMovement);
 
                 // ROM parity: each object calls RememberState / out_of_range
-                // at the END of its routine, AFTER updating position. Check
-                // post-update position so objects moving toward the camera
-                // survive (matching ROM behavior where obX reflects movement).
-                if (counterBased && !instance.isDestroyed()) {
+                // at the END of its routine, AFTER updating position. S2/S3K
+                // objects end their routines with `jmpto JmpTo_MarkObjGone_P1`
+                // (docs/s2disasm/s2.asm MarkObjGone_P1 line ~30080), which
+                // checks the object's CURRENT x_pos(a0) — not its spawn x —
+                // against the camera window. Moving objects (e.g. Buzzer
+                // flying 174 px west of spawn) survive as long as their
+                // current position is in range. This check runs for both
+                // counter-based (S1) and non-counter (S2/S3K) placement.
+                if (!instance.isDestroyed()) {
                     ObjectSpawn oorSpawn = instanceToSpawn.get(instance);
-                    if (oorSpawn != null && !instance.isPersistent()
-                            && isOutOfRangeS1(instance.getX(), cameraX)) {
-                        int slotIndex = currentExecSlot + DYNAMIC_SLOT_BASE;
-                        if (instance instanceof AbstractObjectInstance aoi
-                                && aoi.getSlotIndex() == slotIndex) {
-                            releaseSlot(slotIndex);
-                        }
-                        freeAllReservedChildSlots(oorSpawn);
-                        placement.clearCounterForSpawn(oorSpawn);
-                        // ROM parity: mark dormant instead of removing from active.
-                        // The spawn stays in placement.active but syncActiveSpawnsLoad
-                        // skips dormant spawns. Only the cursor system clears dormant
-                        // when it naturally re-processes this position.
-                        placement.markDormant(oorSpawn);
-                        instance.onUnload();
+                    if (unloadCounterBasedOutOfRange(instance, oorSpawn,
+                            slotIndexForExec(currentExecSlot), unloadCameraX)) {
                         execOrder[currentExecSlot] = null;
-                        instanceToSpawn.remove(instance);
-                        activeObjects.remove(oorSpawn);
                         objectsRemoved = true;
                         continue;
                     }
                 }
 
                 if (instance.isDestroyed()) {
-                    int slotIndex = currentExecSlot + DYNAMIC_SLOT_BASE;
+                    int slotIndex = slotIndexForExec(currentExecSlot);
+                    // Release the instance's OWN SST slot; the exec-slot comparison
+                    // only confirms this entry belongs to it. See the note in
+                    // unloadCounterBasedOutOfRange -- an object executing from a
+                    // reserved child slot owns a different slot than it runs from.
                     if (instance instanceof AbstractObjectInstance aoi3
-                            && aoi3.getSlotIndex() == slotIndex) {
-                        releaseSlot(slotIndex);
+                            && executionSlotIndex(aoi3) == slotIndex
+                            && isManagedDynamicSlot(aoi3.getSlotIndex())) {
+                        releaseSlot(aoi3.getSlotIndex());
                     }
                     instance.onUnload();
                     execOrder[currentExecSlot] = null;
 
-                    ObjectSpawn spawn = instanceToSpawn.remove(instance);
+                    ObjectSpawn spawn = instanceToSpawn.get(instance);
                     if (spawn != null) {
                         freeAllReservedChildSlots(spawn);
                         placement.clearStayActive(spawn);
-                        placement.removeFromActive(spawn);
-                        activeObjects.remove(spawn);
+                        resetRespawnStateForOffscreenSelfDelete(instance, spawn);
+                        dispatchDestroyRemoveFromActive(instance, spawn);
+                        removeActiveObject(spawn);
                     } else {
-                        dynamicObjects.remove(instance);
+                        removeDynamicObjectInstance(instance);
                     }
                     objectsRemoved = true;
                 }
             }
 
             // Fallback: process objects without valid slots
-            for (ObjectInstance inst : new ArrayList<>(dynamicObjects)) {
-                if (inst instanceof AbstractObjectInstance aoi2
-                        && aoi2.getSlotIndex() >= DYNAMIC_SLOT_BASE) {
+            populateDynamicFallbackScratch();
+            for (ObjectInstance inst : dynamicFallbackScratch) {
+                if (initialDispatch.excludesFromDynamicPass(inst)) {
                     continue;
                 }
                 if (inst.isDestroyed()) {
+                    releaseSlotIfManaged(inst);
                     inst.onUnload();
-                    dynamicObjects.remove(inst);
+                    removeDynamicObjectInstance(inst);
                     objectsRemoved = true;
                     continue;
                 }
-                inst.update(vblaCounter, player);
-                if (inlineSolidResolution && !inst.isDestroyed()) {
-                    solidContacts.processInlineObject(inst, player, sidekicks, solidPostMovement);
+                executeObjectWithSolidContext(
+                        inst, player, sidekicks, inlineSolidResolution, solidPostMovement);
+                if (!inst.isDestroyed()
+                        && unloadCounterBasedOutOfRange(inst, null, -1, unloadCameraX)) {
+                    objectsRemoved = true;
+                    continue;
                 }
                 if (inst.isDestroyed()) {
+                    releaseSlotIfManaged(inst);
                     inst.onUnload();
-                    dynamicObjects.remove(inst);
+                    removeDynamicObjectInstance(inst);
                     objectsRemoved = true;
                 }
             }
-            for (var entry : new ArrayList<>(activeObjects.entrySet())) {
-                ObjectInstance inst = entry.getValue();
-                if (inst instanceof AbstractObjectInstance aoi2
-                        && aoi2.getSlotIndex() >= DYNAMIC_SLOT_BASE) {
+            populateActiveFallbackScratch();
+            for (ObjectInstance inst : activeFallbackScratch) {
+                if (initialDispatch.excludesFromDynamicPass(inst)) {
+                    continue;
+                }
+                ObjectSpawn spawn = instanceToSpawn.get(inst);
+                if (spawn == null) {
                     continue;
                 }
                 // Skip objects already processed in the slot-based exec loop.
@@ -586,27 +1258,42 @@ public class ObjectManager {
                 }
                 if (inst.isDestroyed()) {
                     inst.onUnload();
-                    placement.clearStayActive(entry.getKey());
-                    placement.removeFromActive(entry.getKey());
-                    activeObjects.remove(entry.getKey());
+                    placement.clearStayActive(spawn);
+                    resetRespawnStateForOffscreenSelfDelete(inst, spawn);
+                    dispatchDestroyRemoveFromActive(inst, spawn);
+                    removeActiveObject(spawn);
                     objectsRemoved = true;
                     continue;
                 }
-                inst.update(vblaCounter, player);
-                if (inlineSolidResolution && !inst.isDestroyed()) {
-                    solidContacts.processInlineObject(inst, player, sidekicks, solidPostMovement);
+                executeObjectWithSolidContext(
+                        inst, player, sidekicks, inlineSolidResolution, solidPostMovement);
+                if (!inst.isDestroyed()
+                        && unloadCounterBasedOutOfRange(inst, spawn, -1, unloadCameraX)) {
+                    objectsRemoved = true;
+                    continue;
                 }
                 if (inst.isDestroyed()) {
                     inst.onUnload();
-                    placement.clearStayActive(entry.getKey());
-                    placement.removeFromActive(entry.getKey());
-                    activeObjects.remove(entry.getKey());
+                    placement.clearStayActive(spawn);
+                    resetRespawnStateForOffscreenSelfDelete(inst, spawn);
+                    dispatchDestroyRemoveFromActive(inst, spawn);
+                    removeActiveObject(spawn);
                     objectsRemoved = true;
                 }
             }
         } finally {
+            // Child slots whose exec position the walk had already passed when
+            // the parent unloaded: ROM has no remaining position in this frame's
+            // walk at which to free them, so they are released as the pass ends.
+            for (int e = pendingChildSlotRelease.nextSetBit(0); e >= 0;
+                    e = pendingChildSlotRelease.nextSetBit(e + 1)) {
+                releaseSlot(slotIndexForExec(e));
+            }
+            pendingChildSlotRelease.clear();
             currentExecSlot = -1;
             updating = false;
+            deferredDynamicExecThisFrame.clear();
+            processedInExecLoopScratch.clear();
             if (objectsRemoved) {
                 bucketsDirty = true;
                 activeObjectsCacheDirty = true;
@@ -614,141 +1301,115 @@ public class ObjectManager {
         }
     }
 
-    /**
-     * Runs update() on objects that were just created by syncActiveSpawnsLoad.
-     * <p>
-     * These objects were loaded AFTER the exec loop (matching ROM's ObjPosLoad timing).
-     * In the ROM, objects loaded by ObjPosLoad don't execute until the next frame.
-     * But the engine compensates for its pipeline delay by running them immediately.
-     * They run in slot order for consistency.
-     */
-    private void runNewlyLoadedObjects(PlayableEntity player) {
-        // Build a slot-ordered list of newly loaded objects.
-        // These are objects in activeObjects that are NOT in execOrder (they weren't
-        // present during the exec loop) and have valid slots.
-        boolean objectsRemoved = false;
-        for (int slot = 0; slot < DYNAMIC_SLOT_COUNT; slot++) {
-            if (execOrder[slot] != null) continue; // Already processed in exec loop
-            if (!usedSlots.get(slot)) continue; // No object at this slot
-
-            // Find the object at this slot
-            ObjectInstance instance = null;
-            ObjectSpawn spawn = null;
-            for (Map.Entry<ObjectSpawn, ObjectInstance> e : activeObjects.entrySet()) {
-                if (e.getValue() instanceof AbstractObjectInstance aoi
-                        && aoi.getSlotIndex() == slot + DYNAMIC_SLOT_BASE) {
-                    instance = e.getValue();
-                    spawn = e.getKey();
-                    break;
-                }
-            }
-            if (instance == null) {
-                for (ObjectInstance di : dynamicObjects) {
-                    if (di instanceof AbstractObjectInstance aoi
-                            && aoi.getSlotIndex() == slot + DYNAMIC_SLOT_BASE) {
-                        instance = di;
-                        break;
-                    }
-                }
-            }
-            if (instance == null) continue;
-
-            instance.snapshotPreUpdatePosition();
-            instance.update(vblaCounter, player);
-
-            if (instance.isDestroyed()) {
-                int slotIndex = slot + DYNAMIC_SLOT_BASE;
-                if (instance instanceof AbstractObjectInstance aoi
-                        && aoi.getSlotIndex() == slotIndex) {
-                    releaseSlot(slotIndex);
-                }
-                instance.onUnload();
-                if (spawn != null) {
-                    freeAllReservedChildSlots(spawn);
-                    placement.clearStayActive(spawn);
-                    placement.removeFromActive(spawn);
-                    activeObjects.remove(spawn);
-                } else {
-                    dynamicObjects.remove(instance);
-                }
-                objectsRemoved = true;
-            }
+    private int objectUnloadCameraX(int cameraX) {
+        if (slotLayout != ObjectSlotLayout.SONIC_2) {
+            return cameraX;
         }
-        if (objectsRemoved) {
-            bucketsDirty = true;
-            activeObjectsCacheDirty = true;
-        }
+        // S2 RunObjects consumes Camera_X_pos_coarse from the previous
+        // ObjectsManager pass. ObjectsManager_Main rewrites that coarse value
+        // after BuildSprites (docs/s2disasm/s2.asm:5111-5112, 33033-33036),
+        // so object-side MarkObjGone/MarkObjGone2 checks in the next
+        // RunObjects pass must use the latched post-camera value rather than
+        // recomputing from the live pre-camera value.
+        return s2LatchedObjectManagerCameraX != Integer.MIN_VALUE
+                ? s2LatchedObjectManagerCameraX
+                : cameraX;
     }
 
     /**
-     * Extend the placement active set using the post-camera X position.
+     * Extend the ObjectPlacementController active set using the post-camera X position.
      * <p>
      * ROM parity: {@code ObjPosLoad} runs <b>after</b> {@code DeformLayers}
      * (camera update), so it sees the camera's post-update position. The primary
      * {@code placement.update()} inside {@link #update} uses the pre-camera
-     * position. When the camera advance crosses a 128px chunk boundary between
-     * those two positions, the post-camera spawn window is wider on the right
-     * side. Objects in that gap are delayed by one extra frame, breaking the
-     * engine's normal compensation (pipeline delay vs post-move touch check)
-     * and creating a 4px collision offset.
+     * position. When the camera crosses a 128px chunk boundary between those
+     * two positions, the post-camera spawn window exposes a right-side gap
+     * while moving forward or a left-side gap while moving backward. Objects in
+     * that gap must materialize before the frame ends, matching ROM ObjPosLoad
+     * timing.
      * <p>
      * This method scans the gap region (between the old and new window right
-     * edges) and adds any eligible spawns to the active set, WITHOUT updating
-     * the placement's internal state (cursor, lastCameraChunk). This ensures
-     * that the primary placement pass in the next frame still processes the
-     * chunk boundary normally (including left-edge removal), while the gap
-     * spawns are already in the active set for {@code syncActiveSpawns()}.
+     * edges) and materializes any eligible spawns into the current frame's
+     * object table, WITHOUT updating the ObjectPlacementController's internal state
+     * (cursor, lastCameraChunk). This ensures that the primary ObjectPlacementController pass
+     * in the next frame still processes the chunk boundary normally
+     * (including left-edge removal), while the gap spawns already exist with
+     * ROM-accurate end-of-frame timing. Because this runs after
+     * {@code ObjectManager.update(...)} for the current frame, the newly
+     * created instances do not execute until the following frame's
+     * ExecuteObjects pass.
      *
      * @param postCameraX camera X position after the camera update step
      */
     public void postCameraPlacementUpdate(int postCameraX) {
-        placement.extendForPostCamera(postCameraX);
+        if (slotLayout == ObjectSlotLayout.SONIC_2) {
+            s2LatchedObjectManagerCameraX = postCameraX;
+        }
+        if (slotLayout.twoAxisCursorPlacement()) {
+            // S3K Load_Sprites runs at the start of LevelLoop before
+            // Process_Sprites/DeformBgLayer, so post-camera ObjectPlacementController catch-up
+            // would create objects one ROM loader call early
+            // (docs/skdisasm/sonic3k.asm:7884-7895).
+            return;
+        }
+        placement.extendForPostCamera(postCameraX, this::inlineCreateObject);
     }
 
     /**
      * Inline creation callback for ROM-accurate ObjPosLoad.
-     * Called during placement cursor advancement to create instances immediately.
+     * Called during ObjectPlacementController cursor advancement to create instances immediately.
+     * <p>
+     * This is the post-camera ({@link #postCameraPlacementUpdate}) gap-scan
+     * creation path. It must apply the SAME vertical-eligibility policy as the
+     * primary {@link #syncActiveSpawnsLoad}{@code (true)} load so that a spawn
+     * entering the horizontal load window on a chunk-crossing frame is
+     * materialized on the SAME frame in both paths. For S2 the ROM
+     * {@code ObjectsManager_GoingForward}/{@code GoingBackward} calls
+     * {@code ChkLoadObj} immediately after the X-window scan with no
+     * {@code Camera_Y_pos} filter (docs/s2disasm/s2.asm:33095-33136), so S2 loads
+     * bypass the vertical filter ({@code allowVerticalLoadBypassForS2 = true}).
+     * Passing {@code false} here previously deferred a horizontally-in-window
+     * but not-yet-vertically-near spawn to the next frame's pre-camera load,
+     * costing the object one update relative to the ROM (e.g. CNZ {@code ObjD4}
+     * arriving 1px behind, s2.asm:58759-58799).
      */
     private boolean inlineCreateObject(ObjectSpawn spawn, int counterValue) {
         if (activeObjects.containsKey(spawn)) {
             return true; // Already exists
         }
+        if (!isSpawnVerticallyEligibleForLoad(spawn, true)) {
+            return false;
+        }
         int preSlot = allocateSlot();
         if (preSlot < 0) {
             return false; // FindFreeObj failure equivalent
         }
-        AbstractObjectInstance.PRE_ALLOCATED_SLOT.set(preSlot);
-        AbstractObjectInstance.CONSTRUCTION_CONTEXT.set(objectServices);
-        try {
-            ObjectInstance instance = registry != null ? registry.create(spawn) : null;
-            if (instance != null) {
-                if (instance instanceof AbstractObjectInstance aoi) {
-                    aoi.setServices(objectServices);
-                    if (aoi.getSlotIndex() < 0) {
-                        aoi.setSlotIndex(preSlot);
-                    }
-                    if (counterValue >= 0) {
-                        aoi.setRespawnStateIndex(counterValue);
-                    }
-                } else {
-                    releaseSlot(preSlot);
+        ObjectInstance instance = ObjectConstructionContext.with(objectServices, preSlot,
+                () -> registry != null ? registry.create(spawn) : null);
+        if (instance != null) {
+            if (instance instanceof AbstractObjectInstance aoi) {
+                aoi.setServices(objectServices);
+                if (aoi.getSlotIndex() < 0) {
+                    aoi.setSlotIndex(preSlot);
                 }
-                activeObjects.put(spawn, instance);
-                bucketsDirty = true;
-                activeObjectsCacheDirty = true;
-                return true;
+                if (counterValue >= 0) {
+                    aoi.setRespawnStateIndex(counterValue);
+                }
             } else {
                 releaseSlot(preSlot);
-                return false;
             }
-        } finally {
-            AbstractObjectInstance.CONSTRUCTION_CONTEXT.remove();
-            AbstractObjectInstance.PRE_ALLOCATED_SLOT.remove();
+            registerActiveObject(spawn, instance);
+            bucketsDirty = true;
+            activeObjectsCacheDirty = true;
+            return true;
+        } else {
+            releaseSlot(preSlot);
+            return false;
         }
     }
 
     /**
-     * Returns placement cursor diagnostics for ROM↔engine comparison.
+     * Returns ObjectPlacementController cursor diagnostics for ROM↔engine comparison.
      * Only meaningful for S1 counter-based respawn mode.
      */
     public int[] getPlacementCursorState() {
@@ -763,10 +1424,17 @@ public class ObjectManager {
     }
 
     public void applyPlaneSwitchers(PlayableEntity player) {
-        // ROM: CPU Tails does not interact with plane switchers in 1P mode.
-        // Only the main player triggers layer/priority changes.
-        if (planeSwitchers != null && !player.isCpuControlled()) {
+        // Sonic 2 Obj03 tracks separate crossover state for MainCharacter and
+        // Sidekick (objoff_34 / objoff_35) and updates both each frame.
+        if (planeSwitchers != null) {
             planeSwitchers.update(player);
+        }
+    }
+
+    /** Applies one loaded ROM plane-switch object at its ExecuteObjects slot. */
+    public void applyPlaneSwitcher(ObjectSpawn spawn, PlayableEntity player) {
+        if (planeSwitchers != null) {
+            planeSwitchers.update(spawn, player);
         }
     }
 
@@ -833,6 +1501,8 @@ public class ObjectManager {
             lowPriorityBuckets[i].sort(RENDER_SLOT_DESCENDING);
             highPriorityBuckets[i].sort(RENDER_SLOT_DESCENDING);
         }
+
+        renderBucketSnapshot.capture(activeObjects.values(), dynamicObjects);
     }
 
     public void drawPriorityBucket(int bucket, boolean highPriority) {
@@ -840,28 +1510,7 @@ public class ObjectManager {
         int targetBucket = RenderPriority.clamp(bucket);
         int idx = targetBucket - RenderPriority.MIN;
         List<ObjectInstance>[] buckets = highPriority ? highPriorityBuckets : lowPriorityBuckets;
-        List<ObjectInstance> instances = buckets[idx];
-
-        if (instances.isEmpty()) {
-            return;
-        }
-
-        enableVerticalWrapIfNeeded();
-        try {
-            renderCommands.clear();
-            for (ObjectInstance instance : instances) {
-                instance.appendRenderCommands(renderCommands);
-            }
-
-            if (renderCommands.isEmpty()) {
-                return;
-            }
-            graphicsManager.enqueueDebugLineState();
-            graphicsManager.registerCommand(new GLCommandGroup(GL_LINES, renderCommands));
-            graphicsManager.enqueueDefaultShaderState();
-        } finally {
-            graphicsManager.disableVerticalWrapAdjust();
-        }
+        drawBucketInstancesWithPriority(buckets[idx], graphicsManager);
     }
 
     /**
@@ -937,10 +1586,9 @@ public class ObjectManager {
         ensureBucketsPopulated();
         int idx = RenderPriority.clamp(bucket) - RenderPriority.MIN;
 
-        // The BatchedPatternRenderer uses a single global priority uniform for
-        // the entire batch — it cannot vary per-instance. We must flush and
-        // restart the batch at each LOW→HIGH transition so that each group
-        // gets its own batch with the correct priority.
+        // The BatchedPatternRenderer uses a single tile-occlusion uniform for
+        // the entire batch — it cannot vary per-instance. The helper flushes
+        // at every mask transition while retaining SST slot order.
         // (The InstancedPatternRenderer bakes priority per-instance and doesn't
         // need the flush, but it's harmless — empty flushes are no-ops.)
 
@@ -948,18 +1596,18 @@ public class ObjectManager {
             gfx.flushPatternBatch();
             gfx.setCurrentSpriteHighPriority(false);
             gfx.beginPatternBatch();
-            drawBucketInstancesWithPriority(lowPriorityBuckets[idx]);
+            drawBucketInstancesWithPriority(lowPriorityBuckets[idx], gfx);
         }
 
         if (!highPriorityBuckets[idx].isEmpty()) {
             gfx.flushPatternBatch();
             gfx.setCurrentSpriteHighPriority(true);
             gfx.beginPatternBatch();
-            drawBucketInstancesWithPriority(highPriorityBuckets[idx]);
+            drawBucketInstancesWithPriority(highPriorityBuckets[idx], gfx);
         }
     }
 
-    private void drawBucketInstancesWithPriority(List<ObjectInstance> instances) {
+    private void drawBucketInstancesWithPriority(List<ObjectInstance> instances, GraphicsManager gfx) {
         if (instances.isEmpty()) {
             return;
         }
@@ -968,6 +1616,12 @@ public class ObjectManager {
         try {
             renderCommands.clear();
             for (ObjectInstance instance : instances) {
+                int mask = instance.getTileOcclusionPaletteMask();
+                if (gfx.getCurrentSpriteTileOcclusionPaletteMask() != mask) {
+                    gfx.flushPatternBatch();
+                    gfx.setCurrentSpriteTileOcclusionPaletteMask(mask);
+                    gfx.beginPatternBatch();
+                }
                 instance.appendRenderCommands(renderCommands);
             }
 
@@ -982,26 +1636,300 @@ public class ObjectManager {
     }
 
     public Collection<ObjectInstance> getActiveObjects() {
+        rebuildActiveObjectCaches();
+        return cachedActiveObjects;
+    }
+
+    /**
+     * ROM-parity slot dereference: returns the object-pointer-table id byte of
+     * the object currently occupying SST slot {@code slot}, or {@code -1} when
+     * no live object occupies it.
+     *
+     * <p>This models the 68000 pointer arithmetic in S2
+     * {@code TailsCPU_CheckDespawn} / {@code TailsCPU_UpdateObjInteract}
+     * (docs/s2disasm/s2.asm:39409-39419,39435-39446) and the S3K analogue
+     * {@code sub_13EFC} (docs/skdisasm/sonic3k.asm:26816-26833):
+     * {@code a3 = Object_RAM + interact(a0)*object_size}; {@code id(a3)} is the
+     * byte at the slot. When ROM {@code DeleteObject} (s2.asm:30324-30339) has
+     * zeroed the slot, {@code id(a3)} reads {@code 0}; the engine has no
+     * persistent zeroed bytes, so an empty engine slot returns {@code -1} here.
+     * The sidekick despawn comparator maps that {@code -1} back to ROM id
+     * {@code 0} (an emptied/deleted slot is a real id change, not "slot
+     * unchanged"), so an off-screen {@code DeleteObject} of the ridden object
+     * fires {@code TailsCPU_Despawn} exactly as ROM does
+     * (s2.asm:39403-39429). A still-loaded same-id object returns its real id
+     * and matches the snapshot, deferring to the off-screen respawn timer.
+     */
+    public int objectIdInSlot(int slot) {
+        if (slot < 0) {
+            return -1;
+        }
+        for (ObjectInstance instance : getActiveObjects()) {
+            if (instance instanceof AbstractObjectInstance aoi
+                    && aoi.getSlotIndex() == slot
+                    && !instance.isDestroyed()
+                    && instance.getSpawn() != null) {
+                return instance.getSpawn().objectId() & 0xFF;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Read-only snapshot of every live dynamic-slot occupant as {@code slot ->
+     * (spawn.objectId() & 0xFF)}. This is the bulk analogue of
+     * {@link #objectIdInSlot(int)}: it walks the same {@link #getActiveObjects()}
+     * scan and applies the same liveness predicate (non-destroyed,
+     * spawn-backed), but restricts the result to managed dynamic slots
+     * ({@link ObjectSlotLayout#isDynamicSlot(int)}) so it lines up with the
+     * SST window the {@link SlotAllocator} owns.
+     *
+     * <p>It is the engine side of the comparison-only occupancy oracle's
+     * extra-occupant detection: a slot present here but absent from the ROM
+     * trace timeline means the engine kept an object loaded that the ROM had
+     * already unloaded (the MTZ off-screen-unload failure mode). The returned
+     * map is freshly built and never aliases internal state, so callers cannot
+     * mutate manager state through it.
+     */
+    public java.util.Map<Integer, Integer> occupiedDynamicSlotIds() {
+        java.util.Map<Integer, Integer> occupancy = new java.util.HashMap<>();
+        for (ObjectInstance instance : getActiveObjects()) {
+            if (instance instanceof AbstractObjectInstance aoi
+                    && !instance.isDestroyed()
+                    && instance.getSpawn() != null) {
+                int slot = aoi.getSlotIndex();
+                if (slotLayout.isDynamicSlot(slot)) {
+                    // The LIVE obID, not the spawn id: ROM objects that rewrite obID(a0) in
+                    // place (S1 BossSpikeball_Explode -> id_Explosion) keep their slot and
+                    // report the new id in the SST. See AbstractObjectInstance#getLiveObjectId.
+                    int liveId = aoi.getLiveObjectId();
+                    occupancy.put(slot, liveId >= 0 ? liveId : (instance.getSpawn().objectId() & 0xFF));
+                }
+            }
+        }
+        return occupancy;
+    }
+
+    /** Sentinel id for a dynamic slot held by a parent's child reservation with no live instance yet. */
+    public static final int SLOT_STATE_RESERVED_CHILD = -2;
+
+    /** Sentinel id for a dynamic slot the allocator holds that no live instance or reservation explains. */
+    public static final int SLOT_STATE_UNATTRIBUTED = -3;
+
+    /**
+     * Read-only occupancy snapshot that folds in the two non-instance states the
+     * {@link SlotAllocator} bitset tracks but {@link #occupiedDynamicSlotIds()}
+     * cannot see: parent-held child reservations (ROM {@code FindFreeObj} /
+     * {@code FindNextFreeObj} has already consumed the slot even though the child
+     * object has not been constructed yet) and any residual allocator bit with no
+     * owner. Comparison-only diagnostic: mirrors the ROM SST occupancy the
+     * recorder's {@code slot_dump} samples, and never mutates manager state.
+     */
+    public java.util.Map<Integer, Integer> occupiedDynamicSlotIdsWithReservations() {
+        java.util.Map<Integer, Integer> occupancy = occupiedDynamicSlotIds();
+        for (int[] childSlots : reservedChildSlots.values()) {
+            if (childSlots == null) {
+                continue;
+            }
+            for (int slot : childSlots) {
+                if (slotLayout.isDynamicSlot(slot) && !occupancy.containsKey(slot)) {
+                    occupancy.put(slot, SLOT_STATE_RESERVED_CHILD);
+                }
+            }
+        }
+        int lastDynamic = slotLayout.firstDynamicSlot() + slotLayout.dynamicSlotCount();
+        for (int slot = slotLayout.firstDynamicSlot(); slot < lastDynamic; slot++) {
+            if (slotLayout.isDynamicSlot(slot)
+                    && !slotAllocator.isEmpty(slot)
+                    && !occupancy.containsKey(slot)) {
+                occupancy.put(slot, SLOT_STATE_UNATTRIBUTED);
+            }
+        }
+        return occupancy;
+    }
+
+    public List<ObjectInstance> snapshotPersistentDynamicObjectsForTransition() {
+        List<ObjectInstance> snapshot = new ArrayList<>();
+        for (ObjectInstance instance : dynamicObjects) {
+            if (instance == null || instance.isDestroyed() || !instance.isPersistent()) {
+                continue;
+            }
+            // ROM Load_Level clears Dynamic_object_RAM, so a boss object group does
+            // not survive a level reload. Boss component children report persistent
+            // only so they survive the off-screen cull during the fixed-arena fight
+            // (see AbstractBossChild.isPersistent); they must NOT ride a seamless act
+            // reload. Carrying them strands them un-offset in the new act — concretely
+            // the placed AIZ1 miniboss cutscene is dropped on the AIZ1->AIZ2 fire
+            // reload while its persistent body/arm/flame-barrel children were carried,
+            // leaving an art-less (invisible) body and still-hurting flame barrels
+            // partway through AIZ2.
+            if (instance instanceof BossChildComponent) {
+                continue;
+            }
+            snapshot.add(instance);
+        }
+        return snapshot;
+    }
+
+    /**
+     * Runs post-player hooks for legacy object-order modules after the main
+     * playable update has completed for the current frame.
+     */
+    public void runPostPlayerHooks(PlayableEntity player, int frameCounter) {
+        if (player == null) {
+            return;
+        }
+        // Snapshot the pre-hook population into a reused scratch list so hooks
+        // can mutate the active set without ConcurrentModification while the
+        // per-frame copy allocation is avoided. Cleared in finally; the scratch
+        // never escapes this method.
+        List<ObjectInstance> snapshot = postPlayerHooksScratch;
+        snapshot.clear();
+        snapshot.addAll(getActiveObjects());
+        try {
+            for (ObjectInstance instance : snapshot) {
+                if (instance == null || instance.isDestroyed()) {
+                    continue;
+                }
+                if (instance instanceof PostPlayerUpdateHook hook) {
+                    hook.updatePostPlayer(frameCounter, player);
+                }
+            }
+        } finally {
+            postPlayerHooksScratch.clear();
+        }
+    }
+
+    /**
+     * Applies a ROM-style level-repeat coordinate shift to active level-space
+     * objects. S3K MHZ uses this during the forced-scroll loop when the camera
+     * wraps by $200 and the ROM's helper scans dynamic object RAM for objects
+     * with {@code render_flags} bit 2 set.
+     */
+    public void applyLevelRepeatOffsetToActiveObjects(int offsetX, int offsetY) {
+        List<ObjectInstance> snapshot = new ArrayList<>(getActiveObjects());
+        for (ObjectInstance instance : snapshot) {
+            if (instance == null || instance.isDestroyed() || !instance.participatesInLevelRepeatOffset()) {
+                continue;
+            }
+            instance.applyLevelRepeatOffset(offsetX, offsetY);
+        }
+    }
+
+    List<ObjectInstance> getSolidProviderObjects() {
+        rebuildActiveObjectCaches();
+        return cachedSolidProviderObjects;
+    }
+
+    List<ObjectInstance> getTouchResponseObjects() {
+        rebuildActiveObjectCaches();
+        return collisionResponseList.touchResponseObjects(cachedTouchResponseObjects);
+    }
+
+    boolean touchUsesPreviousCollisionResponseList() { return collisionResponseList.usesPrevious(); }
+
+    /**
+     * Publishes the {@code Collision_response_list} that a <em>represented</em>
+     * (already-reconstructed, never dispatched) initial {@code Process_Sprites}
+     * pass would have built, so the first {@code LevelLoop} pass's player slots
+     * read a populated list rather than an empty one.
+     * <p>
+     * ROM: level entry runs {@code Load_Sprites} then {@code Process_Sprites}
+     * once at {@code loc_6468} (docs/skdisasm/sonic3k.asm:7848-7854), before
+     * {@code LevelLoop} begins. Every object executed in that pass tail-calls
+     * {@code Add_SpriteToCollisionResponseList}
+     * (docs/skdisasm/sonic3k.asm:21199-21207), so the list is already populated
+     * when the first {@code LevelLoop} pass's Player_1/Player_2 slots walk it in
+     * {@code Touch_Response} (docs/skdisasm/sonic3k.asm:20656).
+     * <p>
+     * Callers that <em>execute</em> the setup pass must not call this — the
+     * dispatch publishes the list itself. It exists only for entry paths that
+     * reconstruct the pass's resulting object state directly and would otherwise
+     * leave S3K's previous-list read view empty for one pass.
+     */
+    public void publishRepresentedInitialCollisionResponseList() {
+        captureCollisionResponseListForNextFrame();
+    }
+
+    private void captureCollisionResponseListForNextFrame() {
+        rebuildActiveObjectCaches();
+        collisionResponseList.captureForNextFrame(cachedTouchResponseObjects);
+    }
+
+    private void rebuildActiveObjectCaches() {
         if (activeObjectsCacheDirty) {
             cachedActiveObjects.clear();
             cachedActiveObjects.addAll(activeObjects.values());
             cachedActiveObjects.addAll(dynamicObjects);
-            // ROM parity: ReactToItem and SolidObject checks scan from lowest
-            // slot to highest (v_lvlobjspace → v_lvlobjend). Sort by slot index
-            // so the first overlapping object found matches the ROM's scan order.
-            // Objects without slots sort last.
+            // ReactToItem and SolidObject scan in SST slot order; slotless objects sort last.
             cachedActiveObjects.sort((a, b) -> {
                 int slotA = a instanceof AbstractObjectInstance aoiA ? aoiA.getSlotIndex() : Integer.MAX_VALUE;
                 int slotB = b instanceof AbstractObjectInstance aoiB ? aoiB.getSlotIndex() : Integer.MAX_VALUE;
                 return Integer.compare(slotA, slotB);
             });
+            cachedSolidProviderObjects.clear();
+            cachedTouchResponseObjects.clear();
+            for (ObjectInstance instance : cachedActiveObjects) {
+                if (instance instanceof SolidObjectProvider) {
+                    cachedSolidProviderObjects.add(instance);
+                }
+                if (instance instanceof TouchResponseProvider) {
+                    cachedTouchResponseObjects.add(instance);
+                }
+            }
             activeObjectsCacheDirty = false;
         }
-        return cachedActiveObjects;
     }
 
     public int getFrameCounter() {
         return frameCounter;
+    }
+
+    public boolean hasActiveInitialProcessSpritesDispatch() {
+        return initialDispatch.isActive();
+    }
+
+    public int getActiveObjectSlotCount() {
+        return slotAllocator.activeCount();
+    }
+
+    public int getPeakObjectSlotCount() {
+        return slotAllocator.peakSlotCount();
+    }
+
+    public int getObjectSlotCapacity() {
+        return execOrder.length;
+    }
+
+    /**
+     * Captures the live Player 1 target visible when each SST slot begins.
+     * {@code Obj_Attracted_Ring} reads Player 1 directly in its own object
+     * routine, so a carrier in an earlier slot has already moved that target
+     * while one in a later slot has not (sonic3k.asm:35710-35728,
+     * 35795-35841).
+     */
+    private void capturePlayerCentreAtSlotStart(PlayableEntity player) {
+        if (player == null) {
+            return;
+        }
+        playerCentreXAtSlotStart[currentExecSlot] = player.getCentreX();
+        playerCentreYAtSlotStart[currentExecSlot] = player.getCentreY();
+        playerCentreAtSlotStartValid[currentExecSlot] = true;
+    }
+
+    public boolean hasPlayerCentreAtObjectSlotStart(int slotIndex) {
+        int execIndex = execIndexForSlot(slotIndex);
+        return execIndex >= 0
+                && execIndex < playerCentreAtSlotStartValid.length
+                && playerCentreAtSlotStartValid[execIndex];
+    }
+
+    public int getPlayerCentreXAtObjectSlotStart(int slotIndex) {
+        return playerCentreXAtSlotStart[execIndexForSlot(slotIndex)];
+    }
+
+    public int getPlayerCentreYAtObjectSlotStart(int slotIndex) {
+        return playerCentreYAtSlotStart[execIndexForSlot(slotIndex)];
     }
 
     public Collection<ObjectSpawn> getActiveSpawns() {
@@ -1012,33 +1940,141 @@ public class ObjectManager {
         return placement.getAllSpawns();
     }
 
+    /**
+     * Test seam: drive a standalone load/trim-windowing {@link ObjectPlacementController} (native
+     * 320px viewport) under the supplied {@link ObjectWindowingStrategy} through a
+     * sequence of camera-X positions and return the sorted X positions of the
+     * spawns active after the final step.
+     * <p>
+     * Exercises the real {@code spawnForward}/{@code spawnBackwardNonCounter}/
+     * {@code trimLeftNonCounter}/{@code trimRightNonCounter} scan with the
+     * strategy's final cursor boundaries (Task 1.4b), so a unit test can pass the
+     * S2 strategy and assert the ROM <em>exclusive</em> load edge
+     * ({@code spawn.x < forwardLoadEdge}) without a ROM/level harness. Keeping the
+     * strategy a parameter means this shared seam stays game-agnostic.
+     */
+    public static int[] runWindowingScanForTest(int[] spawnXs, int[] cameraSequence,
+            ObjectWindowingStrategy strategy) {
+        List<ObjectSpawn> spawnList = new ArrayList<>(spawnXs.length);
+        for (int x : spawnXs) {
+            // respawnTracked=false so every in-window spawn re-loads on cursor
+            // entry (no remembered/destroyed latch interfering with the boundary).
+            spawnList.add(new ObjectSpawn(x, 0x100, 0x01, 0, 0, false, 0));
+        }
+        ObjectPlacementController p = new ObjectPlacementController(spawnList, () -> 320);
+        p.setWindowingStrategy(strategy);
+        for (int cameraX : cameraSequence) {
+            p.update(cameraX);
+        }
+        return p.getActiveSpawns().stream()
+                .mapToInt(ObjectSpawn::x)
+                .sorted()
+                .toArray();
+    }
+
+    public ObjectInstance getActiveObjectForRewind(ObjectSpawn spawn) {
+        return activeObjects.get(spawn);
+    }
+
     public void addDynamicObject(ObjectInstance object) {
-        addDynamicObjectInternal(object, false);
+        addDynamicObjectInternal(object, false, true);
+    }
+
+    /**
+     * True when {@code object} sits in an SST slot this frame's ExecuteObjects walk
+     * has already passed, so the object will not run until the next frame.
+     *
+     * <p>ROM parity: {@code FindFreeObj} scans the SST from the start, so a child
+     * allocated by a parent can land BELOW the parent. Callers that need the ROM's
+     * one-off catch-up for such a child (see {@code SmashObject}) ask this
+     * immediately after spawning it, while the parent is still the executing slot.
+     */
+    public boolean isSlotAlreadyExecutedThisFrame(ObjectInstance object) {
+        if (!updating || currentExecSlot < 0 || !(object instanceof AbstractObjectInstance aoi)) {
+            return false;
+        }
+        int slot = aoi.getSlotIndex();
+        if (slot < 0 || !isManagedDynamicSlot(slot)) {
+            return false;
+        }
+        int execIdx = execIndexForSlot(slot);
+        return execIdx >= 0 && execIdx <= currentExecSlot;
     }
 
     public <T extends ObjectInstance> T createDynamicObject(Supplier<T> factory) {
-        AbstractObjectInstance.CONSTRUCTION_CONTEXT.set(objectServices);
-        try {
+        return ObjectConstructionContext.construct(objectServices, () -> {
             T object = factory.get();
             addDynamicObject(object);
             return object;
-        } finally {
-            AbstractObjectInstance.CONSTRUCTION_CONTEXT.remove();
-        }
+        });
+    }
+
+    /**
+     * Constructs an object in a ROM-selected dynamic SST slot.
+     *
+     * <p>This is for fixed-slot setup paths, not ordinary {@code AllocateObject}
+     * calls. For example, S3K's {@code SpawnLevelMainSprites} writes the AIZ
+     * intro controller directly to dynamic object slot 2 (absolute SST slot 6)
+     * instead of scanning for the first free slot.
+     */
+    public <T extends ObjectInstance> T createDynamicObjectAtSlot(
+            Supplier<T> factory, int slotIndex) {
+        return fixedSstObjects.create(factory, slotIndex);
+    }
+
+    /**
+     * Constructs a dynamic object after reserving its SST slot.
+     * <p>
+     * Use only for ROM paths where the parent object already occupies {@code a0}
+     * before constructor-time side effects spawn children. Ordinary event and
+     * helper spawns should use {@link #createDynamicObject(Supplier)} so existing
+     * constructor-time child allocation remains unchanged.
+     */
+    public <T extends ObjectInstance> T createDynamicObjectWithReservedSlot(Supplier<T> factory) {
+        return ObjectConstructionContext.construct(objectServices, () -> {
+            int reservedSlot = allocateSlot();
+            if (reservedSlot < 0) {
+                return null;
+            }
+            T object;
+            try {
+                object = factory.get();
+            } catch (RuntimeException | Error ex) {
+                releaseSlot(reservedSlot);
+                throw ex;
+            }
+            if (object == null) {
+                releaseSlot(reservedSlot);
+                return null;
+            }
+            if (object instanceof AbstractObjectInstance aoi && aoi.getSlotIndex() < 0) {
+                aoi.setSlotIndex(reservedSlot);
+            } else {
+                releaseSlot(reservedSlot);
+            }
+            addDynamicObject(object);
+            return object;
+        });
     }
 
     public void removeDynamicObject(ObjectInstance object) {
         if (object == null) {
             return;
         }
-        boolean removed = dynamicObjects.remove(object);
+        boolean removed = removeDynamicObjectInstance(object);
         if (!removed) {
             return;
         }
+        deferredDynamicExecThisFrame.remove(object);
         if (object instanceof AbstractObjectInstance aoi) {
             int slot = aoi.getSlotIndex();
-            if (slot >= 0) {
+            if (isManagedDynamicSlot(slot)) {
                 releaseSlot(slot);
+                int execIdx = execIndexForSlot(slot);
+                if (execIdx >= 0 && execIdx < execOrder.length) {
+                    execOrder[execIdx] = null;
+                }
+                aoi.setSlotIndex(-1);
             }
         }
         object.onUnload();
@@ -1046,53 +2082,187 @@ public class ObjectManager {
         activeObjectsCacheDirty = true;
     }
 
+    private boolean removeDynamicObjectInstance(ObjectInstance object) {
+        boolean removed = dynamicObjects.remove(object);
+        if (removed) {
+            dynamicOwnership.remove(object);
+            rewindObjectIds.remove(object);
+            notifyObjectManagerRemoval(object);
+        }
+        return removed;
+    }
+
+    private static void notifyObjectManagerRemoval(ObjectInstance object) {
+        if (object instanceof AbstractObjectInstance instance) {
+            instance.onRemovedFromObjectManager();
+        }
+    }
+
     /**
      * Adds a dynamic object using the slot immediately after the current exec slot when
      * called from an object's update, matching ROM AllocateObjectAfterCurrent behavior.
      */
     public void addDynamicObjectAfterCurrent(ObjectInstance object) {
-        addDynamicObjectInternal(object, true);
+        addDynamicObjectInternal(object, true, true);
     }
 
-    private void addDynamicObjectInternal(ObjectInstance object, boolean allocateAfterCurrent) {
+    public void addDynamicObjectAfterCurrentNextFrame(ObjectInstance object) {
+        addDynamicObjectInternal(object, true, false);
+    }
+
+    /**
+     * Queues an allocation for the tail of the current Process_Sprites pass.
+     * S3K fixed player-effect SSTs execute after Dynamic_object_RAM, so children
+     * they create reserve slots only after every ordinary dynamic object has run.
+     */
+    public void queueDynamicObjectAfterExec(ObjectInstance object) { runtimeState.queueDynamicObjectAfterExec(object); }
+
+    /**
+     * Routes an engine-owned power-up object through its native fixed SST slot
+     * during the initial pass instead of the managed dynamic fallback.
+     */
+    public void registerInitialFixedDispatchObject(ObjectInstance object) {
+        initialDispatch.registerFixedObject(object);
+    }
+
+    public void processInitialFixedDispatchObject(
+            InitialObjectDispatchScope scope, ObjectInstance object) {
+        initialDispatch.processFixedObject(scope, object);
+    }
+
+    public void processInitialFixedDispatchObject(ObjectInstance object) {
+        initialDispatch.processFixedObject(object);
+    }
+
+    void flushPostExecDynamicSpawns() {
+        runtimeState.drainPostExecDynamicSpawns().forEach(this::addDynamicObjectNextFrame);
+    }
+
+    /**
+     * Adds a dynamic object using AllocateObjectAfterCurrent semantics anchored
+     * to an explicit parent slot. Use when ROM code calls
+     * AllocateObjectAfterCurrent from a touch/collision callback rather than
+     * from this manager's current object-execution cursor.
+     */
+    public void addDynamicObjectAfterSlot(ObjectInstance object, int parentSlot) {
+        addDynamicObjectInternal(object, true, true, parentSlot);
+    }
+
+    /**
+     * Adds a dynamic object that should reserve a real SST slot immediately but
+     * not execute until the next frame.
+     * <p>
+     * Sonic 1 ExplosionItem uses this path for spawned animal/points children:
+     * the slots exist in the same frame's slot dump, but their first update
+     * happens on the following ExecuteObjects pass.
+     */
+    public void addDynamicObjectNextFrame(ObjectInstance object) {
+        addDynamicObjectInternal(object, false, false);
+    }
+
+    /**
+     * Adds an engine-owned auxiliary dynamic object without allocating a ROM SST slot.
+     * <p>
+     * Use this only for non-standard runtime extensions that must update/render with
+     * objects but are not part of the original game's object pool, such as extra
+     * sidekick-only overlays. ROM-modeled children, projectiles, effects, shields, and
+     * other object routines must continue through {@link #addDynamicObject(ObjectInstance)}
+     * or one of the explicit slot-allocation variants so trace-visible slot pressure
+     * stays faithful to the original game.
+     */
+    public void addAuxiliaryDynamicObject(ObjectInstance object) {
+        if (dynamicOwnership.addNonRewindable(object, objectServices, dynamicObjects)) {
+            bucketsDirty = activeObjectsCacheDirty = true;
+        }
+    }
+
+    /**
+     * Adds a rewind-owned engine extension without consuming a ROM SST slot.
+     *
+     * <p>Unlike {@link #addAuxiliaryDynamicObject(ObjectInstance)}, this path is
+     * included in object rewind snapshots. Use it for extra-player gameplay
+     * objects whose lifetime must survive rewind but must not alter native slot
+     * pressure.
+     */
+    public void addRewindableAuxiliaryDynamicObject(ObjectInstance object) {
+        if (dynamicOwnership.addRewindable(object, objectServices, dynamicObjects,
+                deferredDynamicExecThisFrame, updating,
+                candidate -> assignRewindObjectId(candidate, candidate.getSpawn()))) {
+            bucketsDirty = activeObjectsCacheDirty = true;
+        }
+    }
+
+    private void addDynamicObjectInternal(ObjectInstance object,
+            boolean allocateAfterCurrent,
+            boolean allowSameFrameExec) {
+        addDynamicObjectInternal(object, allocateAfterCurrent, allowSameFrameExec, -1);
+    }
+
+    private void addDynamicObjectInternal(ObjectInstance object,
+            boolean allocateAfterCurrent,
+            boolean allowSameFrameExec,
+            int explicitParentSlot) {
         if (object instanceof AbstractObjectInstance aoi) {
             aoi.setServices(objectServices);
             // ROM parity: FindFreeObj allocates an SST slot for EVERY object,
             // including children spawned by other objects (lava balls, projectiles,
             // explosion effects, etc.). Without this, child objects don't consume
-            // slots in usedSlots, causing subsequent OPL allocations to get lower
-            // slot numbers than the ROM — shifting d7 values and breaking timing
+            // slots in the allocator, causing subsequent OPL allocations to get lower
+            // slot numbers than the ROM, shifting d7 values and breaking timing
             // gates like (v_vbla_byte + d7) & 7.
             if (aoi.getSlotIndex() < 0) {
-                int slot = allocateAfterCurrent && updating && currentExecSlot >= 0
-                        ? allocateSlotAfter(currentExecSlot + DYNAMIC_SLOT_BASE)
-                        : allocateSlot();
+                int slot;
+                if (allocateAfterCurrent && explicitParentSlot >= 0) {
+                    slot = allocateSlotAfter(explicitParentSlot);
+                } else if (allocateAfterCurrent && updating && currentExecSlot >= 0) {
+                    slot = allocateSlotAfter(slotIndexForExec(currentExecSlot));
+                } else {
+                    slot = allocateSlot();
+                }
                 if (slot >= 0) {
                     aoi.setSlotIndex(slot);
+                } else {
+                    aoi.setDestroyed(true);
+                    return;
                 }
             } else {
                 // Pre-assigned slot (e.g. from addDynamicObjectAtSlot for badnik
-                // replacement). Ensure the slot is marked as used in the BitSet —
+                // replacement). Ensure the slot is marked as used in the allocator —
                 // it may have been released when the original object was destroyed.
                 int slot = aoi.getSlotIndex();
-                if (slot >= DYNAMIC_SLOT_BASE && slot < DYNAMIC_SLOT_BASE + DYNAMIC_SLOT_COUNT) {
-                    usedSlots.set(slot - DYNAMIC_SLOT_BASE);
-                }
+                slotAllocator.reserveOrMarkUsed(slot);
             }
         }
+        assignRewindObjectId(object, object.getSpawn());
         dynamicObjects.add(object);
-        if (updating && object instanceof AbstractObjectInstance aoi2
-                && aoi2.getSlotIndex() >= DYNAMIC_SLOT_BASE) {
+        if (!allowSameFrameExec && updating) {
+            deferredDynamicExecThisFrame.add(object);
+            if (object instanceof AbstractObjectInstance aoi2) {
+                aoi2.setSkipTouchThisFrame(true);
+            }
+        }
+        if (allowSameFrameExec && updating && object instanceof AbstractObjectInstance aoi2
+                && isManagedDynamicSlot(aoi2.getSlotIndex())) {
             // ROM parity: FindFreeObj places the child directly into the SST.
             // The ExecuteObjects loop processes slots sequentially, so a child
             // at a HIGHER slot than the parent will be reached and updated in
             // the same frame. A child at a LOWER slot (already processed) won't
             // run until the next frame.
-            int execIdx = aoi2.getSlotIndex() - DYNAMIC_SLOT_BASE;
-            if (execIdx < DYNAMIC_SLOT_COUNT && execIdx > currentExecSlot) {
+            int execIdx = execIndexForSlot(aoi2.getSlotIndex());
+            if (execIdx < execOrder.length && execIdx > currentExecSlot) {
                 object.snapshotPreUpdatePosition();
                 aoi2.setSkipTouchThisFrame(true);
                 execOrder[execIdx] = object;
+            } else {
+                // Child placed into a slot at or below the parent's current
+                // execution slot: ExecuteObjects has already passed it this frame,
+                // so it will not run (nor set obRender bit 7 via DisplaySprite)
+                // until the next frame's pass. ROM ReactToItem skips objects whose
+                // obRender bit 7 is clear, so this child must stay touch-ineligible
+                // for one extra frame relative to a same-frame (higher-slot) child
+                // -- i.e. until the frame after its first own execution.
+                // (docs/s1disasm/_incObj/sub ReactToItem.asm:50-51)
+                aoi2.markAwaitingFirstTouchExecution();
             }
         }
         bucketsDirty = true;
@@ -1112,17 +2282,204 @@ public class ObjectManager {
     }
 
     /**
-     * Allocates the next available dynamic slot index (32-127).
-     * Equivalent to ROM's FindFreeObj — searches from slot 32 forward.
+     * Restores a captured dynamic SST occupant without minting a throwaway
+     * identity or advancing the next-spawn ordinal.
+     */
+    void addRestoredDynamicObjectAtSlot(
+            ObjectInstance object, int slotIndex, ObjectRefId capturedId) {
+        if (capturedId == null) {
+            throw new IllegalArgumentException("restored dynamic object identity is required");
+        }
+        rewindObjectIds.put(object, capturedId);
+        addDynamicObjectAtSlot(object, slotIndex);
+        collisionResponseList.bindRestoredObject(capturedId, object);
+    }
+
+    /**
+     * Allocates the next available dynamic slot index for the current game's layout.
+     * Equivalent to ROM's FindFreeObj — searches from the first dynamic slot forward.
      * Returns -1 if all slots are in use (overflow).
      */
     private int allocateSlot() {
-        int bit = usedSlots.nextClearBit(0);
-        if (bit >= DYNAMIC_SLOT_COUNT) {
-            return -1;
+        return slotAllocator.allocate();
+    }
+
+    /**
+     * Non-mutating ROM FindFreeObj probe: true if a free dynamic SST slot is
+     * available (an {@code allocate()} would succeed). Used by object routines
+     * that branch on FindFreeObj success/failure without spawning, for example
+     * the S1 LZ drowning countdown retries its bubble RNG when the pool is full
+     * (docs/s1disasm/_incObj/0A LZ Drowning Countdown.asm:283-284).
+     */
+    public boolean hasFreeDynamicSlot() {
+        return slotAllocator.hasFreeSlot();
+    }
+
+    /** Non-mutating {@code FindFreeObj} result for ROM owner-boundary decisions. */
+    public int firstFreeDynamicSlot() {
+        return slotAllocator.firstFreeSlot();
+    }
+
+    /**
+     * Reserves the next available dynamic slot for non-ObjectInstance systems
+     * that still occupy ROM SST slots. Equivalent to S3K AllocateObject
+     * (sonic3k.asm:37906-37909), used by attracted rings whose logic is owned
+     * by {@code RingManager} rather than {@code ObjectManager}.
+     */
+    public int allocateDynamicSlot() {
+        return slotAllocator.allocate();
+    }
+
+    /**
+     * Returns whether a newly reserved SST slot is behind the live object-loop
+     * cursor and therefore cannot execute until the next Process_Sprites pass.
+     */
+    public boolean reservedSlotWaitsForNextObjectPass(int slotIndex) {
+        return placement.reservedSlotWaitsForNextObjectPass(
+                slotIndex, updating, currentExecSlot, slotLayout);
+    }
+
+    /**
+     * Whether a live spilled-ring object currently occupies {@code slotIndex}.
+     *
+     * <p>Read-only. The ring manager uses it to clear the legacy pool entry that
+     * mirrors a {@link com.openggf.level.rings.LostRingObjectInstance} once the
+     * object has gone; the pair share one reserved slot, so the object's absence
+     * from that slot is the retirement signal. This does not release anything --
+     * the slot belongs to the object.
+     */
+    public boolean hasLiveLostRingAtSlot(int slotIndex) {
+        if (slotIndex < 0) {
+            return false;
         }
-        usedSlots.set(bit);
-        return DYNAMIC_SLOT_BASE + bit;
+        for (ObjectInstance inst : dynamicObjects) {
+            if (inst instanceof com.openggf.level.rings.LostRingObjectInstance ring
+                    && !ring.isDestroyed()
+                    && ring.getSlotIndex() == slotIndex) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Reassigns an already-loaded placement object through the ROM's first-free
+     * allocator. This is used when a widened engine placement window materializes
+     * an initializer before its native camera gate; once that gate succeeds, the
+     * object must occupy the slot it would have received from the native load pass.
+     */
+    public void reallocateToFirstFreeDynamicSlot(AbstractObjectInstance object) {
+        if (placement.reallocateToFirstFreeDynamicSlot(
+                object, slotAllocator, slotLayout, execOrder,
+                updating, slotsFreedDuringObjectPass)) {
+            bucketsDirty = true;
+            activeObjectsCacheDirty = true;
+        }
+    }
+
+    /**
+     * Reserves the next free dynamic slot for a deferred S2 Obj37 owner. S2
+     * {@code HurtCharacter} calls {@code AllocateObject} before later dynamic slots
+     * finish and delete themselves; reserving the owner slot immediately captures
+     * the first slot that is free at the ROM hurt instant.
+     * Slots already freed earlier in the pass are visible to the ROM allocator, so
+     * the scan must use the live allocator state instead of the per-pass freed-slot
+     * ledger. {@code Obj37_Init} can then use later holes for child rings via ordinary
+     * {@code AllocateObject}
+     * (docs/s2disasm/s2.asm:85444-85461, 25125-25146).
+     */
+    public int allocateDynamicSlotAvoidingCurrentPassFrees() {
+        return allocateDynamicSlot();
+    }
+
+    /**
+     * Re-reserves a specific dynamic slot while restoring a subsystem-owned SST
+     * occupant from a rewind snapshot.
+     */
+    public boolean reserveDynamicSlot(int slotIndex) {
+        return slotAllocator.reserve(slotIndex);
+    }
+
+    /**
+     * Registers a spilled lost-ring object (ROM Obj37) into the dynamic-object exec
+     * loop on a slot that was <em>already reserved</em> by the caller via
+     * {@link #allocateDynamicSlot()} or {@link #allocateSlotAfter(int)}.
+     * <p>
+     * Unlike {@link #addDynamicObjectAtSlot}, this does NOT re-allocate or
+     * mark-used the slot — {@code RingManager.LostRingPool} reserves the slot
+     * up-front so the legacy {@code LostRing[]}
+     * twin and the object share the same slot during the parallel cutover stage
+     * (total slot consumption unchanged from today).
+     * <p>
+     * The ring is added to {@link #dynamicObjects} (NOT {@code activeObjects}):
+     * rewind capture restores {@code dynamicObjects} entries through the
+     * {@code LostRingObjectInstance} generic recreate path, whereas
+     * {@code activeObjects} entries are restored through the placement registry —
+     * a lost ring placed in {@code activeObjects} would be recreated by the wrong
+     * path. {@code execOrder} is wired only when same-frame execution is needed.
+     */
+    public void spawnLostRingObjectAtSlot(AbstractObjectInstance ring, int reservedSlot) {
+        if (ring == null) {
+            return;
+        }
+        ring.setServices(objectServices);
+        // Slot is already reserved by RingManager — do NOT re-allocate.
+        ring.setSlotIndex(reservedSlot);
+        assignRewindObjectId(ring, ring.getSpawn());
+        dynamicObjects.add(ring);
+        if (updating && isManagedDynamicSlot(reservedSlot)) {
+            int execIdx = execIndexForSlot(reservedSlot);
+            if (execIdx >= 0 && execIdx < execOrder.length && execIdx > currentExecSlot) {
+                ring.snapshotPreUpdatePosition();
+                ring.setSkipTouchThisFrame(true);
+                execOrder[execIdx] = ring;
+            }
+        }
+        bucketsDirty = true;
+        activeObjectsCacheDirty = true;
+    }
+
+    /**
+     * Registers an Obj37 continuation that has no distinct Java allocator slot.
+     * S3K's after-current spill ordering can outlive the engine's managed-slot
+     * projection when other native SST occupants are represented by consolidated
+     * Java objects. The ring remains ordered logically by the caller, executes in
+     * the slotless fallback, and neither consumes nor releases a physical slot.
+     */
+    public void spawnLogicalLostRingOverflow(AbstractObjectInstance ring) {
+        if (ring == null) {
+            return;
+        }
+        ring.setServices(objectServices);
+        ring.setSlotIndex(-1);
+        assignRewindObjectId(ring, ring.getSpawn());
+        dynamicObjects.add(ring);
+        bucketsDirty = true;
+        activeObjectsCacheDirty = true;
+    }
+
+    /**
+     * Returns all live objects of the given concrete type, in ascending slot order.
+     */
+    public <T extends ObjectInstance> List<T> activeObjectsOfType(Class<T> type) {
+        return ObjectInstanceQueries.activeObjectsOfType(activeObjects, dynamicObjects, type);
+    }
+
+    /**
+     * Test helper: reserve dynamic slots (from the front of the pool) until exactly
+     * {@code freeSlots} remain free. Used by the spilled-ring atomic-allocation tests
+     * to drive {@code allocateSlotAfter} into returning {@code -1} (slot exhaustion)
+     * after a known number of successful ring allocations. No-op once the pool already
+     * has {@code <= freeSlots} free.
+     */
+    public void reserveAllButNFreeSlots(int freeSlots) {
+        int target = Math.max(0, freeSlots);
+        while ((slotLayout.dynamicSlotCount() - slotAllocator.activeCount()) > target) {
+            int slot = slotAllocator.allocate();
+            if (slot < 0) {
+                break;
+            }
+        }
     }
 
     /**
@@ -1135,22 +2492,41 @@ public class ObjectManager {
      * @return the allocated slot index, or -1 if no slot is available
      */
     public int allocateSlotAfter(int parentSlot) {
-        int startBit = Math.max(0, parentSlot - DYNAMIC_SLOT_BASE + 1);
-        int bit = usedSlots.nextClearBit(startBit);
-        if (bit >= DYNAMIC_SLOT_COUNT) {
-            return -1;
-        }
-        usedSlots.set(bit);
-        return DYNAMIC_SLOT_BASE + bit;
+        return slotAllocator.allocateAfter(parentSlot);
     }
 
     /**
      * Releases a previously allocated dynamic slot index.
      */
     private void releaseSlot(int slotIndex) {
-        if (slotIndex >= DYNAMIC_SLOT_BASE && slotIndex < DYNAMIC_SLOT_BASE + DYNAMIC_SLOT_COUNT) {
-            int bit = slotIndex - DYNAMIC_SLOT_BASE;
-            usedSlots.clear(bit);
+        if (updating && isManagedDynamicSlot(slotIndex)) {
+            slotsFreedDuringObjectPass.set(slotIndex);
+        }
+        slotAllocator.release(slotIndex);
+    }
+
+    private void releaseSlotIfManaged(ObjectInstance instance) {
+        if (instance instanceof AbstractObjectInstance aoi) {
+            int slot = aoi.getSlotIndex();
+            if (isManagedDynamicSlot(slot)) {
+                releaseSlot(slot);
+            }
+        }
+    }
+
+    /**
+     * Releases a dynamic slot that was reserved outside the normal object lifecycle.
+     * Used by systems such as spilled lost rings that occupy SST slots without
+     * existing as {@link ObjectInstance} entries in this manager.
+     */
+    public void releaseDynamicSlot(int slotIndex) {
+        if (!isManagedDynamicSlot(slotIndex)) {
+            return;
+        }
+        releaseSlot(slotIndex);
+        int execIdx = execIndexForSlot(slotIndex);
+        if (execIdx >= 0 && execIdx < execOrder.length) {
+            execOrder[execIdx] = null;
         }
     }
 
@@ -1162,12 +2538,36 @@ public class ObjectManager {
     }
 
     /**
-     * Adjusts the placement system's tracking state after a camera wrap-back.
+     * Enables ROM object-order semantics for games that do not use the S1
+     * counter table: ExecuteObjects runs first, then ObjPosLoad materializes
+     * newly streamed spawns for the following frame.
+     */
+    public void enableExecThenLoadPlacement() {
+        placement.enableExecThenLoadPlacement();
+    }
+
+    /**
+     * Enables the permanent destroy-latch on {@code destroyedInWindow}, matching
+     * S3K's ROM behavior where bit 7 of {@code Object_respawn_table} stays set
+     * for the rest of the level after a player kill (see
+     * {@link ObjectPlacementController#permanentDestroyLatch}).
+     * <p>
+     * Call this once at level setup when the active game module is S3K. S1 and
+     * S2 must NOT enable it because their ROM only latches respawn-tracked
+     * spawns (modeled by the engine's {@code remembered} flag); non-tracked
+     * spawns must be allowed to re-spawn on cursor re-entry.
+     */
+    public void enablePermanentDestroyLatch() {
+        placement.enablePermanentDestroyLatch();
+    }
+
+    /**
+     * Adjusts the ObjectPlacementController system's tracking state after a camera wrap-back.
      * <p>
      * ROM parity: when Level_repeat_offset is non-zero, the ROM's ObjPosLoad
      * adjusts its cursor boundaries by the wrap distance so that the forward/backward
      * scan sees a continuous camera motion instead of a discontinuous jump.
-     * Without this adjustment, the engine's placement system detects a negative
+     * Without this adjustment, the engine's ObjectPlacementController system detects a negative
      * camera delta, triggering a full {@code refreshWindow()} that can re-spawn
      * objects already in the scene (e.g., the AIZ2 end boss during the bombing
      * sequence camera loop).
@@ -1186,7 +2586,7 @@ public class ObjectManager {
     }
 
     private int getDynamicObjectCount() {
-        return dynamicObjects.size();
+        return dynamicOwnership.nativeCount(dynamicObjects.size());
     }
 
     /**
@@ -1201,11 +2601,11 @@ public class ObjectManager {
     public void releaseSlot(ObjectInstance object) {
         if (object instanceof AbstractObjectInstance aoi) {
             int slot = aoi.getSlotIndex();
-            if (slot >= DYNAMIC_SLOT_BASE) {
+            if (isManagedDynamicSlot(slot)) {
                 releaseSlot(slot);
                 // Clear execOrder so the slot can be reused
-                int execIdx = slot - DYNAMIC_SLOT_BASE;
-                if (execIdx >= 0 && execIdx < DYNAMIC_SLOT_COUNT) {
+                int execIdx = execIndexForSlot(slot);
+                if (execIdx >= 0 && execIdx < execOrder.length) {
                     execOrder[execIdx] = null;
                 }
                 // Clear the object's slot index to prevent double-release.
@@ -1214,7 +2614,7 @@ public class ObjectManager {
                 // or unloaded, would release the slot AGAIN — potentially
                 // corrupting a different object that reused the slot number.
                 // With slotIndex=-1, the object falls through to the fallback
-                // activeObjects loop for continued updates (slotIndex < DYNAMIC_SLOT_BASE).
+                // activeObjects loop for continued updates outside the managed slot window.
                 aoi.setSlotIndex(-1);
             }
         }
@@ -1233,7 +2633,7 @@ public class ObjectManager {
      */
     public void releaseParentSlot(AbstractObjectInstance instance) {
         int slot = instance.getSlotIndex();
-        if (slot >= DYNAMIC_SLOT_BASE) {
+        if (isManagedDynamicSlot(slot)) {
             releaseSlot(slot);
             instance.setSlotIndex(-1);
         }
@@ -1253,29 +2653,9 @@ public class ObjectManager {
         int[] childSlots = reservedChildSlots.get(spawn);
         if (childSlots != null && index >= 0 && index < childSlots.length) {
             int slot = childSlots[index];
-            if (slot >= DYNAMIC_SLOT_BASE) {
+            if (isManagedDynamicSlot(slot)) {
                 releaseSlot(slot);
                 childSlots[index] = -1; // Mark as freed
-            }
-        }
-    }
-
-    /**
-     * ROM parity: pre-allocate reserved child slots for objects that declare them.
-     * <p>
-     * In the ROM, ExecuteObjects runs BEFORE ObjPosLoad. Objects that allocate
-     * child slots via FindFreeObj during ExecuteObjects get lower slot numbers
-     * than objects loaded by ObjPosLoad in the same frame. This method restores
-     * that ordering by allocating child slots before syncActiveSpawnsLoad runs.
-     */
-    private void preAllocateReservedChildSlots() {
-        for (ObjectInstance inst : activeObjects.values()) {
-            if (!inst.needsPreAllocatedChildSlots()) {
-                continue;
-            }
-            int childCount = inst.getReservedChildSlotCount();
-            if (childCount > 0 && !reservedChildSlots.containsKey(inst.getSpawn())) {
-                allocateChildSlots(inst.getSpawn(), childCount);
             }
         }
     }
@@ -1284,8 +2664,8 @@ public class ObjectManager {
      * Adds a dynamic child object using a pre-allocated reserved slot.
      * <p>
      * ROM parity: when ring parent objects spawn children during ExecuteObjects,
-     * those children must occupy the same slot numbers that were pre-allocated
-     * via {@link #preAllocateReservedChildSlots()} / {@link #allocateChildSlots}.
+     * those children must occupy the same slot numbers allocated during the
+     * parent's update via {@link #allocateChildSlots(ObjectSpawn, int)}.
      * This method places the child into the pre-allocated slot at {@code childIndex},
      * replacing the phantom reservation with a real object.
      *
@@ -1297,20 +2677,21 @@ public class ObjectManager {
         int[] childSlots = reservedChildSlots.get(parentSpawn);
         if (childSlots != null && childIndex >= 0 && childIndex < childSlots.length) {
             int reservedSlot = childSlots[childIndex];
-            if (reservedSlot >= DYNAMIC_SLOT_BASE) {
+            if (isManagedDynamicSlot(reservedSlot)) {
                 if (object instanceof AbstractObjectInstance aoi) {
                     aoi.setServices(objectServices);
                     aoi.setSlotIndex(reservedSlot);
-                    // Slot is already marked used in usedSlots from pre-allocation;
+                    // Slot is already marked used in the allocator from pre-allocation;
                     // no need to call allocateSlot() again.
                 }
                 // Mark slot as consumed in the reservation table so freeAllReservedChildSlots
                 // won't double-free this slot (the real child object now owns it).
                 childSlots[childIndex] = -1;
+                assignRewindObjectId(object, object.getSpawn());
                 dynamicObjects.add(object);
                 if (updating) {
-                    int execIdx = reservedSlot - DYNAMIC_SLOT_BASE;
-                    if (execIdx >= 0 && execIdx < DYNAMIC_SLOT_COUNT && execIdx > currentExecSlot) {
+                    int execIdx = execIndexForSlot(reservedSlot);
+                    if (execIdx >= 0 && execIdx < execOrder.length && execIdx > currentExecSlot) {
                         object.snapshotPreUpdatePosition();
                         execOrder[execIdx] = object;
                     }
@@ -1322,8 +2703,8 @@ public class ObjectManager {
         }
         // Fallback: no pre-allocated slot, use normal allocation.
         // Record a consumed sentinel in the reservation table so that
-        // preAllocateReservedChildSlots() won't attempt to allocate phantom
-        // slots for this parent in subsequent frames.
+        // subsequent calls won't attempt to allocate phantom slots for this
+        // parent in later frames.
         if (childSlots == null) {
             reservedChildSlots.put(parentSpawn, new int[]{-1});
         }
@@ -1384,7 +2765,27 @@ public class ObjectManager {
      * Returns peak dynamic slot count seen during this level.
      */
     public int getPeakSlotCount() {
-        return peakSlotCount;
+        return slotAllocator.peakSlotCount();
+    }
+
+    public int getAllocatedSlotCount() {
+        return slotAllocator.activeCount();
+    }
+
+    public int getLastDynamicSlotExclusive() {
+        return slotLayout.lastDynamicSlotExclusive();
+    }
+
+    public int getLastProcessSlotExclusive() {
+        return slotLayout.lastProcessSlotExclusive();
+    }
+
+    public boolean preallocatesLostRingOwnerSlot() {
+        return slotLayout.preallocatesLostRingOwnerSlot();
+    }
+
+    public boolean lostRingRemainderAllocatesAfterOwnerSlot() {
+        return slotLayout.lostRingRemainderAllocatesAfterOwnerSlot();
     }
 
     /**
@@ -1395,11 +2796,48 @@ public class ObjectManager {
         int[] childSlots = reservedChildSlots.remove(spawn);
         if (childSlots != null) {
             for (int slot : childSlots) {
-                if (slot >= DYNAMIC_SLOT_BASE) {
-                    releaseSlot(slot);
+                if (isManagedDynamicSlot(slot)) {
+                    releaseChildSlotAtItsOwnExecPosition(slot);
                 }
             }
         }
+    }
+
+    /**
+     * Releases a reserved child slot at the position its ROM object would have
+     * reached in the ascending {@code ExecuteObjects} walk.
+     *
+     * <p>ROM parity: an engine instance that consolidates a ROM parent plus its
+     * {@code FindNextFreeObj} children is <em>one</em> object holding several SST
+     * slots, but in ROM each of those slots holds a separate object with its own
+     * {@code out_of_range ...,DeleteObject} tail. {@code ExecuteObjects} walks the
+     * SST in ascending slot order (docs/s1disasm/_inc/ExecuteObjects.asm:10-30), so
+     * a group whose blocks share one origin (S1 {@code Staircase} feeds every block
+     * {@code stair_origX(a0)}, docs/s1disasm/_incObj/"5B SLZ Staircase.asm":6-12,
+     * 39-66) goes out of range on the same frame but frees each slot at that
+     * slot's own position in the walk -- the parent slot early, the child slots
+     * later. Allocations made in between (the parent-slot {@code FindNextFreeObj}
+     * of a group loaded further right, {@code Ring_Main}'s per-ring
+     * {@code FindFreeObj}) therefore still see the child slots as occupied.
+     *
+     * <p>Freeing every child slot at the parent's position made those in-between
+     * allocations land in slots ROM still had filled (SLZ1 f2522: the 0xE90
+     * staircase took 51/52/54 instead of ROM's 56/57/58, shifting the 0xEC0
+     * group's four slots down by three).
+     *
+     * <p>Outside the exec pass, or for a slot the walk has already passed this
+     * frame, the release is immediate -- ROM has no remaining position in this
+     * frame's walk at which to free it.
+     */
+    private void releaseChildSlotAtItsOwnExecPosition(int slot) {
+        if (updating) {
+            int execIndex = execIndexForSlot(slot);
+            if (execIndex > currentExecSlot && execIndex < execOrder.length) {
+                pendingChildSlotRelease.set(execIndex);
+                return;
+            }
+        }
+        releaseSlot(slot);
     }
 
     /**
@@ -1410,7 +2848,15 @@ public class ObjectManager {
     }
 
     /**
-     * Advances the VBla counter by one, mirroring ROM's v_vbla_byte increment.
+     * Advances the VBla counter by one, mirroring the ROM's V-int-exit
+     * increment ({@code docs/s2disasm/s2.asm:508},
+     * {@code docs/s1disasm/sonic.asm:682},
+     * {@code docs/skdisasm/sonic3k.asm:543}).
+     *
+     * <p>This is the single mutation point for the counter. Call it exactly
+     * once per serviced V-blank -- see the invariant on the
+     * {@code vblaCounter} field. Rows that run the level loop get their tick
+     * from {@link #update}; V-blank-only rows must call this directly.
      */
     public void advanceVblaCounter() {
         this.vblaCounter++;
@@ -1423,8 +2869,67 @@ public class ObjectManager {
         return vblaCounter;
     }
 
+    /**
+     * Initializes the low-bit V-int phase observed by spilled-ring floor probes.
+     * Trace recorders capture this independently because legacy S3K CSV fixtures
+     * stored the adjacent V-int word rather than {@code V_int_run_count+2}.
+     */
+    public void initRingFloorCheckCounterPhase(int phase) { runtimeState.initRingFloorCheckCounterPhase(phase); }
+
+    public void inheritRingFloorCheckCounterPhase(int phase) { runtimeState.inheritRingFloorCheckCounterPhase(phase); }
+
+    public int getRingFloorCheckCounterPhase() { return runtimeState.ringFloorCheckCounterPhase(); }
+
+    public boolean hasInheritedRingCounterPhase() { return runtimeState.hasInheritedRingCounterPhase(); }
+
+    /**
+     * Sets the phase difference between the general object-update clock and
+     * S3K's {@code V_int_run_count}. They normally advance together, but old
+     * trace schemas captured the adjacent life-count word instead of the
+     * run counter and therefore need an independently reconstructed low bit.
+     */
+    public void initVIntRunCounterPhaseOffset(int phaseOffset) {
+        vIntRunCounterPhaseOffset = phaseOffset;
+    }
+
+    public int getVIntRunCounterPhaseOffset() {
+        return vIntRunCounterPhaseOffset;
+    }
+
     public boolean isRemembered(ObjectSpawn spawn) {
         return placement.isRemembered(spawn);
+    }
+
+    public boolean isDormant(ObjectSpawn spawn) {
+        return placement.isDormant(spawn);
+    }
+
+    public int getSpawnCounter(ObjectSpawn spawn) {
+        return placement.getCounterForSpawn(spawn);
+    }
+
+    public boolean isSpawnStateBitSet(ObjectSpawn spawn, int bit) {
+        return placement.isCounterStateBitSet(spawn, bit);
+    }
+
+    public void setSpawnStateBit(ObjectSpawn spawn, int bit) {
+        placement.setCounterStateBit(spawn, bit);
+    }
+
+    public void clearSpawnCounterActiveBit(ObjectSpawn spawn) {
+        placement.clearCounterForSpawn(spawn);
+    }
+
+    /**
+     * Mirrors an object-local S1 {@code bclr #7,2(a2,d0.w)} while preserving
+     * ObjPosLoad cursor cadence until the cursor naturally reprocesses the entry.
+     */
+    public void clearSpawnCounterActiveBitAndMarkDormant(ObjectSpawn spawn) {
+        if (!placement.isCounterBasedRespawn()) {
+            return;
+        }
+        placement.clearCounterForSpawn(spawn);
+        placement.markDormant(spawn);
     }
 
     public void markRemembered(ObjectSpawn spawn) {
@@ -1461,6 +2966,38 @@ public class ObjectManager {
         placement.removeFromActive(spawn);
     }
 
+    /**
+     * Clears a placement's loaded/active bit while leaving its current object
+     * instance alive.
+     * <p>
+     * Some ROM objects transform their original SST slot into a fragment and
+     * then clear {@code respawn_addr} bit 7. Object placement may therefore
+     * create a fresh copy while the transformed instance is still falling.
+     * This is deliberately different from {@link #removeFromActiveSpawns},
+     * which records an in-window destruction latch.
+     */
+    public void releaseSpawnForRespawn(ObjectInstance transformedInstance, ObjectSpawn spawn) {
+        if (placement.releaseSpawnForRespawn(transformedInstance, spawn,
+                activeObjects, instanceToSpawn, dynamicObjects)) {
+            bucketsDirty = true;
+            activeObjectsCacheDirty = true;
+        }
+    }
+
+    /**
+     * The player's centre Y at the start of this frame's object exec pass —
+     * post-physics, before any object re-seated him. Objects whose ROM slot runs
+     * before a player-re-seating object (e.g. the SLZ Fan reading Sonic's Y
+     * before the higher-slot staircase ride-seat lifts him) should read this
+     * instead of the live centre Y, so the engine's folded-into-a-lower-slot
+     * re-seating object does not feed them an already-updated position. Falls
+     * back to the live centre Y when no snapshot exists (player absent at
+     * exec-start, e.g. spawned mid-pass).
+     */
+    public int getPlayerCentreYAtExecStart(PlayableEntity player) {
+        return solidContacts.getPlayerCentreYAtExecStart(player);
+    }
+
     /** Is this player riding any object? */
     public boolean isRidingObject(PlayableEntity player) {
         return solidContacts.isRidingObject(player);
@@ -1469,6 +3006,20 @@ public class ObjectManager {
     /** Is this specific player riding this specific object? */
     public boolean isRidingObject(PlayableEntity player, ObjectInstance instance) {
         return solidContacts.isPlayerRiding(player, instance);
+    }
+
+    /** Returns whether this object currently owns ROM's standing bit for the player. */
+    public boolean hasObjectStandingBit(PlayableEntity player, ObjectInstance instance) {
+        return solidContacts.hasStandingLatch(player, instance);
+    }
+
+    /**
+     * Returns whether a solid object's native per-player pushing latch is live.
+     * This distinguishes a Status_Push bit owned by SolidObject processing from
+     * stale player-only residue without inspecting an object id or zone.
+     */
+    public boolean hasObjectPushingBit(PlayableEntity player) {
+        return solidContacts.hasPushingLatch(player);
     }
 
     /** Is ANY player riding anything? */
@@ -1481,9 +3032,74 @@ public class ObjectManager {
         return solidContacts.isAnyPlayerRiding(instance);
     }
 
+    public boolean isActiveObjectInstance(ObjectInstance instance) {
+        return instance != null && activeObjects.containsValue(instance);
+    }
+
     /** Clear this player's riding state. */
     public void clearRidingObject(PlayableEntity player) {
         solidContacts.clearRidingObject(player);
+    }
+
+    /**
+     * Run the shared ROM {@code CheckPlayerReleaseFromObj} terrain-release
+     * operation for the player's current solid-object ride.
+     */
+    public boolean checkPlayerReleaseFromObjectFloor(PlayableEntity player) {
+        return solidContacts.checkPlayerReleaseFromObjectFloor(player);
+    }
+
+    /**
+     * Clear support established by an earlier solid slot after a later controller
+     * object has made the player airborne in the same ExecuteObjects pass.
+     */
+    public void clearRidingObjectAfterControllerAirborneRelease(
+            PlayableEntity player, ObjectInstance formerSupport) {
+        solidContacts.clearRidingObjectAfterControllerAirborneRelease(player, formerSupport);
+    }
+
+    /**
+     * One-time native bootstrap for route starts that begin with the player
+     * already riding a ROM solid object.
+     *
+     * <p>This must only be used before the first replay/gameplay frame. It
+     * publishes the same standing/riding state that SolidObject would have
+     * established during the title-card object prelude; it does not copy
+     * per-frame trace comparison data into the engine.
+     */
+    public void forceRidingObjectForBootstrap(PlayableEntity player, ObjectInstance instance) {
+        solidContacts.forceRidingObjectForBootstrap(player, instance);
+    }
+
+    /**
+     * Clear riding state for Sonic_Jump's status-bit release.
+     * <p>
+     * Most engine ride records can be removed immediately. Objects whose ROM
+     * routine still applies {@code MvSonicOnPtfm2} after {@code ExitPlatform}
+     * keep the record until their own inline checkpoint consumes the release.
+     */
+    public void clearRidingObjectForJump(PlayableEntity player) {
+        solidContacts.clearRidingObjectForJump(player);
+    }
+
+    public void forceAirOnStaleObjectSupportLoss(PlayableEntity player) {
+        solidContacts.forceAirOnStaleObjectSupportLoss(player);
+    }
+
+    public boolean hasPendingStaleObjectSupportLoss(PlayableEntity player) { return solidContacts.hasPendingStaleObjectSupportLoss(player); }
+
+    public ObjectSolidContactController solidContacts() { return solidContacts; }
+
+    /**
+     * Preserves a non-solid object's ownership of the player's on-object state for the
+     * current inline ExecuteObjects pass.
+     * <p>
+     * Some ROM objects (for example S2 Obj06 spiral) set {@code status.player.on_object}
+     * without going through SolidObject. Inline solid cleanup must not clear that state at
+     * frame end, so these objects can mark the player as supported for the current pass.
+     */
+    public void markObjectSupportThisFrame(PlayableEntity player) {
+        solidContacts.markObjectSupportThisFrame(player);
     }
 
     /**
@@ -1513,12 +3129,29 @@ public class ObjectManager {
         return solidContacts.getHeadroomDistance(player, hexAngle);
     }
 
+    /** Player y-radius captured before the currently executing solid checkpoint. */
+    public int getPreContactYRadius() {
+        return solidContacts.getPreContactYRadius();
+    }
+
+    public boolean latestStandingSnapshot(PlayableEntity player) {
+        return solidContacts.latestStandingSnapshot(player);
+    }
+
+    public boolean hasGroundingObjectSupport(PlayableEntity player) {
+        return solidContacts.hasGroundingObjectSupport(player);
+    }
+
+    public int latestHeadroomSnapshot(PlayableEntity player, int hexAngle) {
+        return solidContacts.latestHeadroomSnapshot(player, hexAngle);
+    }
+
     /**
      * Run solid contacts resolution for a player sprite.
      * This is called by the CollisionSystem as part of the unified collision pipeline.
      */
     public void updateSolidContacts(PlayableEntity player) {
-        solidContacts.deferSideToPostMovement = false;
+        solidContacts.setDeferSideToPostMovement(false);
         solidContacts.update(player, false);
     }
 
@@ -1537,12 +3170,30 @@ public class ObjectManager {
      */
     public void updateSolidContacts(PlayableEntity player, boolean postMovement,
                                      boolean deferSideToPostMovement) {
-        solidContacts.deferSideToPostMovement = deferSideToPostMovement;
+        solidContacts.setDeferSideToPostMovement(deferSideToPostMovement);
         solidContacts.update(player, postMovement);
     }
 
     /**
-     * Refresh the SolidContacts riding tracking position for an object after it has moved itself.
+     * Resolves a newly-created ROM helper's inline solid checkpoint immediately.
+     * <p>
+     * Some S3K event routines allocate an object from a background/event path after
+     * this engine's normal object pass has already run for the frame, while the ROM
+     * object still executes its {@code SolidObjectTop} call in that same frame. The
+     * AIZ transition floor is allocated at docs/skdisasm/sonic3k.asm:104685-104687,
+     * then its object routine calls {@code SolidObjectTop} at 104777-104790.
+     */
+    public void processImmediateInlineSolidCheckpoint(ObjectInstance object,
+            PlayableEntity player, List<? extends PlayableEntity> sidekicks) {
+        if (object == null) {
+            return;
+        }
+        List<? extends PlayableEntity> activeSidekicks = sidekicks != null ? sidekicks : List.of();
+        solidContacts.processCompatibilityCheckpoint(object, player, activeSidekicks, true);
+    }
+
+    /**
+     * Refresh the ObjectSolidContactController riding tracking position for an object after it has moved itself.
      * Prevents the delta from that movement being double-applied to riding players.
      */
     public void refreshRidingTrackingPosition(ObjectInstance object) {
@@ -1561,24 +3212,29 @@ public class ObjectManager {
     /** Pre-contact player rolling state, before landing clears it. */
     public boolean getPreContactRolling() { return solidContacts.getPreContactRolling(); }
 
+    /** Pre-contact player animation ID, before solid contact resolution can change it. */
+    public int getPreContactAnimationId() { return solidContacts.getPreContactAnimationId(); }
+
     public TouchResponseDebugState getTouchResponseDebugState() {
         return touchResponses != null ? touchResponses.getDebugState() : null;
     }
 
+    boolean hadSpecialTouchThisFrame(PlayableEntity player) {
+        return touchResponses != null && touchResponses.hadSpecialTouchThisFrame(player);
+    }
+
     /**
-     * Phase 1 of spawn window sync: unload objects that left the placement window.
+     * Phase 1 of spawn window sync for non-counter placement.
      * <p>
-     * ROM parity: Release slots for departing objects BEFORE the exec loop runs.
-     * For counter-based respawn (S1), objects are also checked against the ROM's
-     * {@code out_of_range} macro for objects whose spawns are still in the
-     * placement active set but whose position is beyond the ROM's 640px threshold.
+     * For S2/S3K-style ObjectPlacementController, {@code activeSpawns} only tracks the current
+     * ObjPosLoad candidate window. Live objects are retired by their own
+     * RememberState/out_of_range-equivalent code paths during execution, not by
+     * leaving the spawn candidate set.
      */
     private void syncActiveSpawnsUnload() {
-        Collection<ObjectSpawn> activeSpawns = placement.getActiveSpawns();
-        boolean changed = false;
-        boolean counterBased = placement.isCounterBasedRespawn();
-        int cameraX = camera.getX();
-
+        // Intentionally empty. For non-counter ObjectPlacementController, live objects are kept
+        // alive until their own execution tail path retires them.
+        /*
         Iterator<Map.Entry<ObjectSpawn, ObjectInstance>> iterator = activeObjects.entrySet().iterator();
         while (iterator.hasNext()) {
             Map.Entry<ObjectSpawn, ObjectInstance> entry = iterator.next();
@@ -1618,6 +3274,7 @@ public class ObjectManager {
                     placement.removeFromActiveForUnload(spawn);
                 }
                 instance.onUnload();
+                instanceToSpawn.remove(instance);
                 iterator.remove();
                 changed = true;
             }
@@ -1627,6 +3284,7 @@ public class ObjectManager {
             bucketsDirty = true;
             activeObjectsCacheDirty = true;
         }
+        */
     }
 
     /**
@@ -1638,7 +3296,7 @@ public class ObjectManager {
      * are freed, matching the ROM's ExecuteObjects behavior where these objects
      * would delete themselves before ObjPosLoad runs.
      */
-    private void cleanupDestroyedDynamicObjects() {
+    void cleanupDestroyedDynamicObjects() {
         boolean changed = false;
         Iterator<ObjectInstance> iter = dynamicObjects.iterator();
         while (iter.hasNext()) {
@@ -1651,6 +3309,10 @@ public class ObjectManager {
                     }
                 }
                 inst.onUnload();
+                solidContacts.evictLatchForDestroyedInstance(inst);
+                dynamicOwnership.remove(inst);
+                rewindObjectIds.remove(inst);
+                notifyObjectManagerRemoval(inst);
                 iter.remove();
                 changed = true;
             }
@@ -1662,6 +3324,26 @@ public class ObjectManager {
     }
 
     /**
+     * Pure-function limit for the viewport-scaled {@code out_of_range} variant:
+     * {@code 128 (behind-camera) + viewportWidth (screen) + 192 (ahead)}.
+     * <p>
+     * At native viewport width (320 px, {@code DISPLAY_ASPECT = NATIVE_4_3}) this
+     * returns exactly {@code 640}, reproducing the ROM {@code cmpi.w #$280,d0}
+     * constant bit-for-bit.  At widescreen widths the limit widens with the
+     * configured viewport so objects near the visible right edge are not
+     * incorrectly despawned (declared divergence — see
+     * docs/status/known-discrepancies.md "Object Despawn and Visibility Windows", entry #14).
+     * <p>
+     * Used by {@link #isOutOfRangeS1} for non-S1-counter placement and mirrored
+     * in {@link AbstractObjectInstance#isInRange()}.
+     */
+    private static final int S1_NATIVE_OUT_OF_RANGE_LIMIT = 128 + 320 + 192;
+
+    static int outOfRangeLimit(int viewportWidth) {
+        return 128 + viewportWidth + 192;
+    }
+
+    /**
      * ROM parity: S1 {@code out_of_range} macro (Macros.asm line 261).
      * <p>
      * Computes unsigned 16-bit distance between object and screen position:
@@ -1669,35 +3351,260 @@ public class ObjectManager {
      *   d0 = obX & 0xFF80
      *   d1 = (v_screenposx - 128) & 0xFF80
      *   distance = (d0 - d1) & 0xFFFF   (unsigned 16-bit)
-     *   out_of_range when distance > 640  (bhi = unsigned greater)
+     *   out_of_range when distance > limit  (bhi = unsigned greater)
      * </pre>
-     * 640 = 128 + 320 + 192 pixels (behind-camera + screen width + ahead).
+     * S1 counter-based placement uses the ROM's fixed limit
+     * {@code 128 + 320 + 192}; other legacy paths keep the viewport-scaled
+     * declared divergence so objects near a wider visible right edge are not
+     * incorrectly despawned (see KNOWN_DISCREPANCIES.md entry #14
+     * "Object Despawn and Visibility Windows").
      * Catches both left (negative wraps to large unsigned) and right out of range.
      */
-    private static boolean isOutOfRangeS1(int objX, int cameraX) {
+    private boolean isOutOfRangeS1(int objX, int cameraX) {
         int objRounded = objX & 0xFF80;
         int screenRounded = (cameraX - 128) & 0xFF80;
         int distance = (objRounded - screenRounded) & 0xFFFF;
-        return distance > 640;
+        int limit = placement.isCounterBasedRespawn()
+                ? S1_NATIVE_OUT_OF_RANGE_LIMIT
+                : outOfRangeLimit(camera.getWidth());
+        return distance > limit;
     }
 
     /**
-     * Phase 2 of spawn window sync: load new objects from the placement window.
+     * Shared out-of-range delete decision used by the standard (non-custom)
+     * unload path.
+     * <p>
+     * S2 routes the per-instance off-screen unload through the ROM object-side
+     * {@code MarkObjGone} window (the injected {@link ObjectWindowingStrategy},
+     * base {@code (Camera_X_pos - $80) & $FF80}, first deleting bucket {@code $300};
+     * docs/s2disasm/s2.asm MarkObjGone). S1/S3K use the {@link ObjectWindowingStrategy#LEGACY}
+     * strategy and keep the S1 {@code out_of_range} macro ({@link #isOutOfRangeS1}).
+     * The two share the same reference X.
+     * <p>
+     * <b>Coordinate semantics:</b> ROM {@code MarkObjGone} (and {@code out_of_range})
+     * read {@code x_pos(a0)} — the object's ROM centre X. Both branches consume
+     * {@link #outOfRangeReferenceX(ObjectInstance, ObjectSpawn)} (the object's
+     * explicit ROM reference X, defaulting to its centre-aligned {@code getX()}),
+     * never a sprite top-left bound, so the window is not shifted by half-width.
+     */
+    private boolean isObjectOutOfRange(ObjectInstance instance, ObjectSpawn spawn, int cameraX) {
+        int referenceX = outOfRangeReferenceX(instance, spawn);
+        if (windowingStrategy.overridesUnloadWindow()) {
+            return windowingStrategy.isOutsideUnloadWindow(referenceX, cameraX);
+        }
+        return isOutOfRangeS1(referenceX, cameraX);
+    }
+
+    /**
+     * ROM parity dispatcher for the destroy-from-active path.
+     *
+     * <p>When an object self-destroys via an off-screen check
+     * (Sprite_OnScreen_Test family in sonic3k.asm -- see loc_1B5A0 at
+     * sonic3k.asm:37271), ROM clears bit 7 of the respawn-table entry
+     * ({@code bclr #7,(a2)} at sonic3k.asm:37275) so the ObjectPlacementController system
+     * can re-spawn the object when the camera returns. The engine mirrors
+     * this by routing those destroys to {@link ObjectPlacementController#removeFromActiveForUnload}
+     * which leaves {@code destroyedInWindow} cleared.
+     *
+     * <p>All other destroy reasons (player kills via Touch_EnemyNormal /
+     * Obj_Explosion, monitor breaks, etc.) latch through
+     * {@link ObjectPlacementController#removeFromActive} so {@code permanentDestroyLatch}
+     * (S3K) can lock the spawn out for the rest of the level. This matches
+     * ROM's loc_1BA40 / loc_1BA64 pattern where bit 7 stays set after
+     * routing through {@code Delete_Current_Sprite} without going through
+     * Sprite_OnScreen_Test.
+     */
+    private void dispatchDestroyRemoveFromActive(ObjectInstance instance, ObjectSpawn spawn) {
+        boolean latchedDestroy = placement.dispatchDestroyRemoveFromActive(
+                instance, spawn, slotLayout == ObjectSlotLayout.SONIC_2);
+        if (latchedDestroy) {
+            solidContacts.evictLatchForDestroyedSpawn(spawn);
+        }
+    }
+
+    /**
+     * Mirror of the S1 {@code RememberState}/{@code Cat_Despawn} respawn-table
+     * bit-7 clear for objects that delete themselves off-screen instead of
+     * routing through {@link #unloadCounterBasedOutOfRange}.
+     * <p>
+     * Some S1 objects own their {@code out_of_range} tail (they set
+     * {@link ObjectInstance#usesCustomOutOfRangeCheck()} with a no-op
+     * {@link ObjectInstance#isCustomOutOfRange(int)}) and instead call
+     * {@code setDestroyedByOffscreen()} from their own routine — e.g. the
+     * Caterkiller, whose {@code Cat_Despawn} (docs/s1disasm/_incObj/78 Badnik -
+     * Caterkiller.asm:139-148) runs after its fragment-entry check and clears
+     * {@code bit 7} of its {@code v_objstate} entry so the placement cursor
+     * re-spawns it when the player returns. Those self-deletes reach the
+     * destroyed-removal path, which previously only called
+     * {@code clearStayActive} and left the counter bit latched, so the badnik
+     * never respawned. Reset the placement counter exactly as the
+     * out_of_range path does, but only for off-screen self-deletes
+     * ({@code destroyedRespawnable}); player kills keep the bit set and must
+     * not respawn.
+     */
+    private void resetRespawnStateForOffscreenSelfDelete(ObjectInstance instance, ObjectSpawn spawn) {
+        if (spawn == null
+                || !placement.isCounterBasedRespawn()
+                || !instance.isDestroyedRespawnable()
+                || !instance.clearsRespawnStateOnCounterBasedOutOfRange()) {
+            return;
+        }
+        placement.clearCounterForSpawn(spawn);
+        // ROM parity: bit 7 is cleared but the cursor may still sit between this
+        // spawn's entry and the window edge, so keep it dormant until ObjPosLoad
+        // reprocesses it (matches unloadCounterBasedOutOfRange).
+        placement.markDormant(spawn);
+    }
+
+    private boolean unloadCounterBasedOutOfRange(ObjectInstance instance, ObjectSpawn spawn,
+            int expectedSlotIndex, int cameraX) {
+        ObjectSpawn positionSpawn = spawn != null ? spawn : instance.getSpawn();
+        // Fallback dynamic children may exist briefly without any spawn-backed
+        // identity. They still need update() calls, but cannot participate in
+        // S1's out_of_range unload check.
+        if (positionSpawn == null) {
+            return false;
+        }
+        boolean persistent;
+        try {
+            persistent = instance.isPersistent();
+        } catch (NullPointerException e) {
+            throw new IllegalStateException(describeCounterBasedUnloadObject(instance, spawn), e);
+        }
+        boolean outOfRange = instance.usesCustomOutOfRangeCheck()
+                ? instance.isCustomOutOfRange(cameraX)
+                : isObjectOutOfRange(instance, spawn, cameraX);
+        if (persistent || !outOfRange) {
+            return false;
+        }
+        if (instance instanceof AbstractObjectInstance aoi) {
+            int slotIndex = aoi.getSlotIndex();
+            // expectedSlotIndex identifies WHICH exec entry is being retired, so it
+            // must be matched against the instance's EXECUTION slot, not its own SST
+            // slot. The two differ for parents that run from a reserved child slot
+            // (ROM Stair_Main keeps the parent block in a0 while its three children
+            // occupy the FindNextFreeObj slots after it,
+            // docs/s1disasm/_incObj/5B SLZ Staircase.asm:30-66), and comparing against
+            // getSlotIndex() silently skipped the release for exactly those objects --
+            // leaking one SST slot per staircase unload for the rest of the act.
+            if (isManagedDynamicSlot(slotIndex)
+                    && (expectedSlotIndex < 0
+                            || executionSlotIndex(aoi) == expectedSlotIndex)) {
+                releaseSlot(slotIndex);
+            }
+        }
+        instance.onUnload();
+        if (spawn != null) {
+            freeAllReservedChildSlots(spawn);
+            boolean clearsRespawnState = instance.clearsRespawnStateOnCounterBasedOutOfRange();
+            if (clearsRespawnState) {
+                placement.clearCounterForSpawn(spawn);
+                // ROM parity: RememberState clears bit 7 but the cursor may
+                // still be between this spawn's entry and the current window
+                // edge, so keep it dormant until ObjPosLoad reprocesses it.
+                placement.markDormant(spawn);
+            } else {
+                // ROM parity: direct DeleteObject tails skip RememberState,
+                // leaving ObjPosLoad's bset-tested counter bit latched. Remove
+                // the stale placement entry so the later bset-skip cannot be
+                // materialized by syncActiveSpawnsLoad.
+                placement.forgetCounterForSpawn(spawn);
+                placement.removeFromActivePreservingCounterState(spawn);
+            }
+            removeActiveObject(spawn);
+        } else {
+            removeDynamicObjectInstance(instance);
+        }
+        return true;
+    }
+
+    private int outOfRangeReferenceX(ObjectInstance instance, ObjectSpawn spawn) {
+        try {
+            // ROM parity: most objects feed obX(a0) to out_of_range, but some
+            // S1 objects store an alternate anchor/origin in objoff_30/32/3A.
+            // Use the object's explicit ROM reference X when provided.
+            return instance.getOutOfRangeReferenceX();
+        } catch (NullPointerException e) {
+            throw new IllegalStateException(describeCounterBasedUnloadObject(instance, spawn), e);
+        }
+    }
+
+    private static String describeCounterBasedUnloadObject(ObjectInstance instance, ObjectSpawn spawn) {
+        StringBuilder sb = new StringBuilder("Counter-based out_of_range check failed for ");
+        sb.append(instance.getClass().getName());
+        if (instance instanceof AbstractObjectInstance aoi) {
+            sb.append(" slot=").append(aoi.getSlotIndex());
+            sb.append(" name=").append(aoi.getName());
+        }
+        sb.append(" managerSpawn=");
+        if (spawn == null) {
+            sb.append("null");
+        } else {
+            sb.append(String.format("0x%04X,0x%04X id=0x%02X",
+                    spawn.x() & 0xFFFF, spawn.y() & 0xFFFF, spawn.objectId() & 0xFF));
+        }
+        ObjectSpawn instanceSpawn = instance.getSpawn();
+        sb.append(" instanceSpawn=");
+        if (instanceSpawn == null) {
+            sb.append("null");
+        } else {
+            sb.append(String.format("0x%04X,0x%04X id=0x%02X",
+                    instanceSpawn.x() & 0xFFFF, instanceSpawn.y() & 0xFFFF, instanceSpawn.objectId() & 0xFF));
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Phase 2 of spawn window sync: load new objects from the ObjectPlacementController window.
      * <p>
      * ROM parity: ObjPosLoad runs AFTER ExecuteObjects. By loading new objects
      * after the exec loop, children allocated during the exec loop (Ring_Main,
-     * CStom_Main, etc.) get slots BEFORE new placement objects, matching the
+     * CStom_Main, etc.) get slots BEFORE new ObjectPlacementController objects, matching the
      * ROM's slot assignment order. Objects loaded here don't execute until the
      * next frame, matching ROM timing where ObjPosLoad objects first run during
      * the following frame's ExecuteObjects.
      */
-    private void syncActiveSpawnsLoad() {
+    private void syncActiveSpawnsLoad(boolean allowVerticalLoadBypassForS2) {
         Collection<ObjectSpawn> activeSpawns = placement.getActiveSpawns();
         boolean changed = false;
 
-        // ROM parity: OPL processes objects in X-sorted order (left-to-right),
-        // calling FindFreeObj for each. Sort new spawns by ascending X.
-        List<ObjectSpawn> sortedNewSpawns = new ArrayList<>();
+        if (slotLayout.twoAxisCursorPlacement()) {
+            // S3K Load_Sprites advances the X cursor before the Camera_Y pass
+            // (sonic3k.asm:37640-37656, 37675-37758). X-pass entries use the
+            // broad camera-Y band from loc_1B7F2/loc_1BA92; the later Y pass
+            // runs only when Camera_Y_pos_coarse changes and scans the one
+            // newly exposed chunk strip (sonic3k.asm:37545-37588, 37723-37771).
+            int previousYCoarse = twoAxisCameraYCoarse;
+            int currentYCoarse = currentCameraYCoarseForTwoAxisPlacement();
+            if (previousYCoarse == Integer.MIN_VALUE) {
+                previousYCoarse = currentYCoarse;
+            }
+            for (ObjectSpawn spawn : placement.pendingCursorLoadSpawns()) {
+                changed |= tryLoadPlacementSpawn(spawn, allowVerticalLoadBypassForS2);
+            }
+            placement.finishPendingCursorLoadBatch();
+            if (currentYCoarse != previousYCoarse) {
+                for (ObjectSpawn spawn : placement.getDeferredVerticalLoadSpawns()) {
+                    changed |= tryLoadPlacementSpawnForTwoAxisYPass(spawn, previousYCoarse, currentYCoarse);
+                }
+            }
+            twoAxisCameraYCoarse = currentYCoarse;
+            if (changed) {
+                bucketsDirty = true;
+                activeObjectsCacheDirty = true;
+            }
+            return;
+        }
+
+        // ROM parity: OPL/ObjectManager forward scans process entries
+        // left-to-right (a0 += 6), while backward scans process right-to-left
+        // (a0 -= 6). Preserve that direction so FindFreeObj assigns the same
+        // slot numbers the ROM would have used.
+        // Reused scratch list + cached comparators: no constructor runs from
+        // this loop ever re-enters syncActiveSpawnsLoad, and the list is
+        // cleared in finally so it never leaks past this call.
+        List<ObjectSpawn> sortedNewSpawns = newSpawnsScratch;
+        sortedNewSpawns.clear();
         for (ObjectSpawn spawn : activeSpawns) {
             if (!activeObjects.containsKey(spawn)
                     && !(placement.isRemembered(spawn) && !placement.isStayActive(spawn))
@@ -1705,7 +3612,17 @@ public class ObjectManager {
                 sortedNewSpawns.add(spawn);
             }
         }
-        sortedNewSpawns.sort(Comparator.comparingInt(ObjectSpawn::x));
+        if (forwardSpawnOrder == null) {
+            forwardSpawnOrder = Comparator
+                    .comparingInt(ObjectSpawn::x)
+                    .thenComparingInt(placement::getSpawnIndex);
+            backwardSpawnOrder = Comparator
+                    .comparingInt(ObjectSpawn::x)
+                    .reversed()
+                    .thenComparing(Comparator.comparingInt(placement::getSpawnIndex).reversed());
+        }
+        sortedNewSpawns.sort(
+                placement.isLastScrollBackward() ? backwardSpawnOrder : forwardSpawnOrder);
 
         // Allocate parent slots for all new objects (matching ObjPosLoad).
         // ROM parity: ObjPosLoad assigns one slot per object in X order.
@@ -1713,14 +3630,19 @@ public class ObjectManager {
         // if the constructor spawns children (e.g., GlassBlock's reflection),
         // getSlotIndex() returns the correct value and allocateSlotAfter()
         // gives the child a HIGHER slot (matching ROM's FindNextFreeObj).
-        for (ObjectSpawn spawn : sortedNewSpawns) {
-            // Pre-allocate parent slot — consumed by AbstractObjectInstance's
-            // constructor via the PRE_ALLOCATED_SLOT ThreadLocal.
-            int preSlot = allocateSlot();
-            AbstractObjectInstance.PRE_ALLOCATED_SLOT.set(preSlot >= 0 ? preSlot : null);
-            AbstractObjectInstance.CONSTRUCTION_CONTEXT.set(objectServices);
-            try {
-                ObjectInstance instance = registry != null ? registry.create(spawn) : null;
+        try {
+            for (ObjectSpawn spawn : sortedNewSpawns) {
+                if (!isSpawnVerticallyEligibleForLoad(spawn, allowVerticalLoadBypassForS2)) {
+                    if (slotLayout.twoAxisCursorPlacement()) {
+                        placement.markDeferredVerticalLoad(spawn);
+                    }
+                    continue;
+                }
+                // Pre-allocate parent slot — consumed by AbstractObjectInstance's
+                // constructor via the PRE_ALLOCATED_SLOT ThreadLocal.
+                int preSlot = allocateSlot();
+                ObjectInstance instance = ObjectConstructionContext.with(objectServices, preSlot,
+                        () -> registry != null ? registry.create(spawn) : null);
                 if (instance != null) {
                     if (instance instanceof AbstractObjectInstance aoi) {
                         aoi.setServices(objectServices);
@@ -1743,7 +3665,7 @@ public class ObjectManager {
                             releaseSlot(preSlot);
                         }
                     }
-                    activeObjects.put(spawn, instance);
+                    registerActiveObject(spawn, instance);
                     changed = true;
                 } else {
                     // Creation failed: release pre-allocated slot
@@ -1751,10 +3673,9 @@ public class ObjectManager {
                         releaseSlot(preSlot);
                     }
                 }
-            } finally {
-                AbstractObjectInstance.CONSTRUCTION_CONTEXT.remove();
-                AbstractObjectInstance.PRE_ALLOCATED_SLOT.remove();
             }
+        } finally {
+            newSpawnsScratch.clear();
         }
 
         if (changed) {
@@ -1763,7 +3684,146 @@ public class ObjectManager {
         }
     }
 
+    private int currentCameraYCoarseForTwoAxisPlacement() {
+        return camera != null ? (camera.getY() & 0xFF80) : 0;
+    }
 
+    private boolean tryLoadPlacementSpawn(ObjectSpawn spawn, boolean allowVerticalLoadBypassForS2) {
+        if (spawn == null
+                || activeObjects.containsKey(spawn)
+                || (placement.isRemembered(spawn) && !placement.isStayActive(spawn))
+                || placement.isDormant(spawn)) {
+            placement.completePendingCursorLoad(spawn);
+            return false;
+        }
+        if (!isSpawnVerticallyEligibleForLoad(spawn, allowVerticalLoadBypassForS2)) {
+            if (slotLayout.twoAxisCursorPlacement()) {
+                placement.markDeferredVerticalLoad(spawn);
+            }
+            placement.completePendingCursorLoad(spawn);
+            return false;
+        }
+        // Pre-allocate parent slot — consumed by AbstractObjectInstance's
+        // constructor via the PRE_ALLOCATED_SLOT ThreadLocal.
+        int preSlot = allocateSlot();
+        if (preSlot < 0) {
+            return false;
+        }
+        ObjectInstance instance = ObjectConstructionContext.with(objectServices, preSlot,
+                () -> registry != null ? registry.create(spawn) : null);
+        if (instance != null) {
+            if (instance instanceof AbstractObjectInstance aoi) {
+                aoi.setServices(objectServices);
+                if (aoi.getSlotIndex() < 0 && preSlot >= 0) {
+                    aoi.setSlotIndex(preSlot);
+                }
+                if (placement.isCounterBasedRespawn()) {
+                    int counter = placement.getCounterForSpawn(spawn);
+                    if (counter >= 0) {
+                        aoi.setRespawnStateIndex(counter);
+                    }
+                }
+            } else if (preSlot >= 0) {
+                releaseSlot(preSlot);
+            }
+            registerActiveObject(spawn, instance);
+            placement.clearDeferredVerticalLoad(spawn);
+            placement.completePendingCursorLoad(spawn);
+            return true;
+        }
+        if (preSlot >= 0) {
+            releaseSlot(preSlot);
+        }
+        placement.completePendingCursorLoad(spawn);
+        return false;
+    }
+
+    private boolean tryLoadPlacementSpawnForTwoAxisYPass(ObjectSpawn spawn, int previousYCoarse, int currentYCoarse) {
+        if (spawn == null
+                || activeObjects.containsKey(spawn)
+                || (placement.isRemembered(spawn) && !placement.isStayActive(spawn))
+                || placement.isDormant(spawn)) {
+            return false;
+        }
+        if (!isSpawnVerticallyEligibleForTwoAxisYPass(spawn, previousYCoarse, currentYCoarse)) {
+            placement.markDeferredVerticalLoad(spawn);
+            return false;
+        }
+        int preSlot = allocateSlot();
+        if (preSlot < 0) {
+            return false;
+        }
+        ObjectInstance instance = ObjectConstructionContext.with(objectServices, preSlot,
+                () -> registry != null ? registry.create(spawn) : null);
+        if (instance != null) {
+            if (instance instanceof AbstractObjectInstance aoi) {
+                aoi.setServices(objectServices);
+                if (aoi.getSlotIndex() < 0 && preSlot >= 0) {
+                    aoi.setSlotIndex(preSlot);
+                }
+                if (placement.isCounterBasedRespawn()) {
+                    int counter = placement.getCounterForSpawn(spawn);
+                    if (counter >= 0) {
+                        aoi.setRespawnStateIndex(counter);
+                    }
+                }
+            } else if (preSlot >= 0) {
+                releaseSlot(preSlot);
+            }
+            registerActiveObject(spawn, instance);
+            placement.clearDeferredVerticalLoad(spawn);
+            return true;
+        }
+        if (preSlot >= 0) {
+            releaseSlot(preSlot);
+        }
+        return false;
+    }
+
+    private boolean isSpawnVerticallyEligibleForTwoAxisYPass(ObjectSpawn spawn,
+            int previousYCoarse, int currentYCoarse) {
+        return placement.isSpawnVerticallyEligibleForTwoAxisYPass(
+                spawn, previousYCoarse, currentYCoarse, camera);
+    }
+
+
+        private boolean isSpawnVerticallyEligibleForLoad(ObjectSpawn spawn, boolean allowVerticalLoadBypassForS2) {
+            if (spawn == null || placement.isCounterBasedRespawn() || camera == null) {
+                return true;
+            }
+            if (skipVerticalSpawnLoadFilterForGame) {
+                // S2 has NO camera-Y load filter anywhere in its object loader.
+                // ObjectsManager_Init falls straight through into
+                // ObjectsManager_Main (docs/s2disasm/s2.asm:33062-33068 falls into
+                // ObjectsManager_Main at s2.asm:33032), and both
+                // ObjectsManager_GoingForward (s2.asm:33101-33124) and
+                // GoingBackward (s2.asm:33047-33075) call ChkLoadObj immediately
+                // after the X-window scan with no Camera_Y_pos test at all. There is
+                // only one loader path, so this holds for the level-start / post-
+                // special-stage reload exactly as it does for the running per-frame
+                // load. Applying the S3K Load_Sprites vertical band at reset dropped
+                // every layout entry whose y sat outside the initial camera band and
+                // re-loaded it later, which reordered FindFreeObj slot assignment.
+                // SCZ depends on the same rule: high-Y badniks are spawned while the
+                // scripted camera is still at y=$0000, then survive until the Tornado
+                // route descends into them.
+                return true;
+            }
+            int wrapRange = camera.isVerticalWrapEnabled() ? camera.getVerticalWrapRange() : 0;
+            return ObjectPlacementController.isNonCounterSpawnVerticallyEligible(
+                    spawn, camera.getY(), camera.getMinY(), wrapRange);
+        }
+
+        static boolean isNonCounterSpawnVerticallyEligible(ObjectSpawn spawn, int cameraY, int cameraMinY) {
+            return ObjectPlacementController.isNonCounterSpawnVerticallyEligible(
+                    spawn, cameraY, cameraMinY, 0);
+        }
+
+        static boolean isNonCounterSpawnVerticallyEligible(ObjectSpawn spawn, int cameraY, int cameraMinY,
+                int verticalWrapRange) {
+            return ObjectPlacementController.isNonCounterSpawnVerticallyEligible(
+                    spawn, cameraY, cameraMinY, verticalWrapRange);
+        }
 
     /**
      * Enables vertical wrap Y adjustment on GraphicsManager if the camera has
@@ -1772,7 +3832,120 @@ public class ObjectManager {
      */
     private void enableVerticalWrapIfNeeded() {
         if (camera.isVerticalWrapEnabled()) {
-            graphicsManager.enableVerticalWrapAdjust(Camera.VERTICAL_WRAP_RANGE, camera.getY());
+            graphicsManager.enableVerticalWrapAdjust(camera.getVerticalWrapRange(), camera.getY());
+        }
+    }
+
+    private void registerActiveObject(ObjectSpawn spawn, ObjectInstance instance) {
+        activeObjects.put(spawn, instance);
+        instanceToSpawn.put(instance, spawn);
+        assignRewindObjectId(instance, spawn);
+    }
+
+    private void removeActiveObject(ObjectSpawn spawn) {
+        // ROM parity: an object leaving the SST releases its whole slot block. A
+        // parent that pre-reserved child slots via the ROM's FindNextFreeObj chain
+        // (Stair_Main's four blocks, docs/s1disasm/_incObj/5B SLZ Staircase.asm:30-66)
+        // is deleted together with those children by its out_of_range/DeleteObject
+        // tail (line 11), so the reservation can never outlive the parent. Only the
+        // two "destroyed inside the exec loop" branches used to free them, so every
+        // parent unloaded through unloadCounterBasedOutOfRange leaked its block
+        // permanently -- SLZ1 accumulated 30+ dead reservations by frame 5667, which
+        // pushed every later FindFreeObj pick above ROM's slot. Freeing here covers
+        // all removal paths: this is the single point at which a spawn leaves
+        // activeObjects.
+        freeAllReservedChildSlots(spawn);
+        ObjectInstance removed = activeObjects.remove(spawn);
+        if (removed != null) {
+            if (planeSwitchers != null) {
+                planeSwitchers.remove(spawn);
+            }
+            instanceToSpawn.remove(removed);
+            // ROM parity: an object's per-player pushing bits live in its SST
+            // slot's status byte, and every game's delete routine zeroes the
+            // whole slot -- S2 DeleteObject/DeleteObject2 (s2.asm:30329-30345),
+            // S1 DeleteObject/DeleteChild (_incObj/sub DeleteObject.asm:10-20),
+            // S3K Delete_Current_Sprite/Delete_Referenced_Sprite
+            // (sonic3k.asm:36108-36125). So a solid that unloads and is later
+            // reloaded from the same layout entry comes back with its pushing
+            // bits CLEAR, and its first SolidObject_TestClearPush takes the
+            // `beq SolidObject_NoCollision` exit (s2.asm:35462-35466) without
+            // writing the Walk/Run animation word. The engine keys that bit on
+            // the persistent ObjectSpawn record, which outlives the instance, so
+            // without this the stale bit survives the unload and the reloaded
+            // object publishes a release the ROM never performs.
+            solidContacts.releaseObjectPushLatchForAllPlayers(removed);
+            // Same delete-routine citation, standing half. The object-side
+            // standing bit is in that same zeroed status byte, so a reloaded
+            // solid must not answer "this player is standing on me" on the
+            // strength of a bit its predecessor set. Object-side only: none of
+            // the three routines touches the player's slot, so the player's own
+            // Status_OnObj and the engine's riding state are left alone.
+            solidContacts.releaseObjectStandingLatchForAllPlayers(removed);
+            notifyObjectManagerRemoval(removed);
+            // Prune the live-map so rewindObjectIds stays lean during normal play.
+            // (Not strictly required — stale entries are harmless since rewindCaptureContext
+            //  only iterates activeObjects/dynamicObjects, but trimming prevents unbounded growth.)
+            rewindObjectIds.remove(removed);
+        }
+    }
+
+    private void clearActiveObjects() {
+        activeObjects.clear();
+        instanceToSpawn.clear();
+        if (planeSwitchers != null) {
+            planeSwitchers.reset();
+        }
+    }
+
+    /**
+     * Assigns a stable rewind identity to {@code instance} the first time it enters
+     * the live object set. The id encodes the spawn's layout index plus the current
+     * {@link #dynamicObjectIdCounter} value (incremented after assignment), making
+     * it unique within a session and re-mintable in the same order on re-simulation.
+     *
+     * <p>Internally-constructed dynamics such as player-bound power-up SST owners
+     * have no placement spawn. They still receive a stable dynamic identity using
+     * their allocated slot plus the monotonic dynamic ordinal. Their captured
+     * dynamic entry carries that identity through recreation.
+     */
+    private void assignRewindObjectId(ObjectInstance instance, ObjectSpawn spawn) {
+        if (!rewindObjectIds.containsKey(instance)) {
+            if (spawn != null) {
+                SpawnRefId spawnRef = SpawnRefId.fromSpawn(spawn);
+                rewindObjectIds.put(
+                        instance, ObjectRefId.forObject(spawnRef, dynamicObjectIdCounter++));
+            } else {
+                int slot = instance instanceof AbstractObjectInstance object
+                        ? object.getSlotIndex() : -1;
+                rewindObjectIds.put(
+                        instance, ObjectRefId.dynamic(slot, 0, dynamicObjectIdCounter++));
+            }
+        }
+    }
+
+    private void populateDynamicFallbackScratch() {
+        dynamicFallbackScratch.clear();
+        for (ObjectInstance inst : dynamicObjects) {
+            if (deferredDynamicExecThisFrame.contains(inst)) {
+                continue;
+            }
+            if (inst instanceof AbstractObjectInstance aoi && (isManagedDynamicSlot(executionSlotIndex(aoi))
+                    || FixedRuntimeObjectInstance.ownsFixedPass(aoi, slotLayout))) {
+                continue;
+            }
+            dynamicFallbackScratch.add(inst);
+        }
+    }
+
+    private void populateActiveFallbackScratch() {
+        activeFallbackScratch.clear();
+        for (ObjectInstance inst : activeObjects.values()) {
+            if (inst instanceof AbstractObjectInstance aoi
+                    && isManagedDynamicSlot(executionSlotIndex(aoi))) {
+                continue;
+            }
+            activeFallbackScratch.add(inst);
         }
     }
 
@@ -1781,7 +3954,7 @@ public class ObjectManager {
         int top = camera.getY();
         int right = left + camera.getWidth();
         int bottom = top + camera.getHeight();
-        int wrapRange = camera.isVerticalWrapEnabled() ? Camera.VERTICAL_WRAP_RANGE : 0;
+        int wrapRange = camera.isVerticalWrapEnabled() ? camera.getVerticalWrapRange() : 0;
         AbstractObjectInstance.updateCameraBounds(left, top, right, bottom, wrapRange);
     }
 
@@ -1813,736 +3986,890 @@ public class ObjectManager {
         return PlaneSwitchers.formatPriority(highPriority);
     }
 
-    static final class Placement extends AbstractPlacementManager<ObjectSpawn> {
-        private static final Logger LOGGER = Logger.getLogger(Placement.class.getName());
-        // ROM: ObjectsManager_GoingForward (s2.asm) uses addi.w #$280,d6 for forward load range.
-        // Behind-window unload range is one chunk ($80) for forward movement.
-        private static final int LOAD_AHEAD = 0x280;
-        private static final int UNLOAD_BEHIND = 0x80;
-        private static final int CHUNK_MASK = 0xFF80;
-        /** ROM: OPL_Next advances v_opl_screen by one chunk (0x80) per frame. */
-        private static final int CHUNK_STEP = 0x80;
+    // -------------------------------------------------------------------------
+    // Rewind snapshot adapter
+    // -------------------------------------------------------------------------
 
-        private final BitSet remembered = new BitSet();
-        /** Tracks spawns that should stay in active even when remembered (e.g. broken monitors). */
-        private final BitSet stayActive = new BitSet();
-        /** Tracks spawns destroyed while in the window - prevents respawn until they leave the window. */
-        private final BitSet destroyedInWindow = new BitSet();
-        /**
-         * ROM parity: tracks spawns whose instance was deleted via out_of_range
-         * during ExecuteObjects but whose cursor position hasn't changed.
-         * In the ROM, DeleteObject zeroes the SST slot but ObjPosLoad's cursors
-         * are unaware. The spawn stays "between cursors" as a dead slot. It is
-         * NOT re-created until the cursor naturally retreats past it and then
-         * re-advances (via the backward/forward scan cycle).
-         * <p>
-         * syncActiveSpawnsLoad must skip dormant spawns — only the cursor system
-         * can clear dormant (when it re-processes the spawn position).
-         */
-        private final BitSet dormant = new BitSet();
-        private int cursorIndex = 0;
-        private int lastCameraX = Integer.MIN_VALUE;
-        private int lastCameraChunk = Integer.MIN_VALUE;
-
-        private boolean counterBasedRespawn;
-        private java.util.function.IntSupplier usedSlotCounter;
-        private int maxDynamicSlots = 96;
-
-        /**
-         * ROM parity: tracks scroll direction from last Placement.update().
-         * S1 ObjPosLoad backward scan (camera scrolling left) processes objects
-         * in DESCENDING X order (a0 -= 6), while forward scan uses ascending X.
-         * syncActiveSpawnsLoad uses this to sort new spawns accordingly.
-         */
-        private boolean lastScrollBackward;
-
-        /**
-         * Callback for inline instance creation during cursor advancement.
-         * ROM parity: ObjPosLoad creates objects immediately via FindFreeObj
-         * during cursor scans. This callback eliminates the 1-frame pipeline
-         * delay between cursor advancement and instance creation.
-         */
-        @FunctionalInterface
-        interface SpawnCallback {
-            /**
-             * @param spawn the spawn to create
-             * @param counterValue the counter assigned (-1 for non-tracked)
-             * @return true if created successfully (false = FindFreeObj failure → stop scan)
-             */
-            boolean tryCreate(ObjectSpawn spawn, int counterValue);
-        }
-
-        /** Set during updateAndLoad to enable inline creation. Null = deferred mode. */
-        private SpawnCallback inlineCallback;
-
-        // ================================================================
-        // S1 counter-based respawn state (ROM: v_objstate system)
-        // ================================================================
-        // ROM: v_opl_data+4 cursor; engine equivalent is leftCursorIndex.
-        private int leftCursorIndex;
-        // ROM: v_objstate[0] = forward counter, v_objstate[1] = backward counter.
-        // Both start at 1 after OPL_Main init.
-        private int fwdCounter;
-        private int bwdCounter;
-        // ROM: v_objstate[2..255] — per-counter-slot state.
-        // Bit 7: set = object loaded or permanently destroyed.
-        private final int[] objState = new int[256];
-        // Maps active spawn (identity) → counter value assigned during load.
-        // Used to clear objState bit when the object is normally unloaded.
-        private final IdentityHashMap<ObjectSpawn, Integer> spawnToCounter = new IdentityHashMap<>();
-
-        Placement(List<ObjectSpawn> spawns) {
-            super(spawns, LOAD_AHEAD, UNLOAD_BEHIND);
-        }
-
-        /**
-         * Adjusts tracking state after a camera wrap-back so that the next
-         * {@link #update(int)} call sees a small positive delta instead of a
-         * large negative one, preventing a spurious {@link #refreshWindow(int)}.
-         *
-         * @param wrapDelta positive distance the camera X was decreased
-         */
-        void adjustForWrap(int wrapDelta) {
-            if (lastCameraX != Integer.MIN_VALUE) {
-                lastCameraX -= wrapDelta;
-                lastCameraChunk = toCoarseChunk(lastCameraX);
-            }
-        }
-
-        void enableCounterBasedRespawn() {
-            this.counterBasedRespawn = true;
-        }
-
-        void enforceSlotLimit(java.util.function.IntSupplier counter) {
-            this.usedSlotCounter = counter;
-        }
-
-        /** Replaces spawns and clears all tracking state. */
-        void replaceSpawnsAndReset(List<ObjectSpawn> newSpawns) {
-            replaceSpawns(newSpawns);
-            remembered.clear();
-            stayActive.clear();
-            destroyedInWindow.clear();
-            dormant.clear();
-            cursorIndex = 0;
-            leftCursorIndex = 0;
-            lastCameraX = Integer.MIN_VALUE;
-            lastCameraChunk = Integer.MIN_VALUE;
-            fwdCounter = 1;
-            bwdCounter = 1;
-            Arrays.fill(objState, 0);
-            spawnToCounter.clear();
-        }
-
-        void reset(int cameraX) {
-            active.clear();
-            remembered.clear();
-            stayActive.clear();
-            destroyedInWindow.clear();
-            dormant.clear();
-            spawnToCounter.clear();
-            cursorIndex = 0;
-            leftCursorIndex = 0;
-            fwdCounter = 1;
-            bwdCounter = 1;
-            Arrays.fill(objState, 0);
-
-            if (counterBasedRespawn) {
-                resetCounterBased(cameraX);
-            } else {
-                lastCameraX = cameraX;
-                lastCameraChunk = toCoarseChunk(cameraX);
-                refreshWindow(cameraX);
-            }
-        }
-
-        /**
-         * ROM: OPL_Main + first OPL_Next forward pass.
-         * <p>
-         * Positions both cursors and counters to match the ROM's initialization,
-         * then performs the first-frame forward scan to load all objects in the
-         * initial camera window.
-         */
-        private void resetCounterBased(int cameraX) {
-            int cameraChunk = cameraX & CHUNK_MASK;
-            // ROM: d6 = max(0, cameraX - 0x80) & 0xFF80
-            int initD6 = Math.max(0, cameraX - 0x80) & CHUNK_MASK;
-
-            // OPL_Main: Right cursor scan — skip past objects before initD6,
-            // counting respawn-tracked entries to build fwdCounter.
-            while (cursorIndex < spawns.size() && spawns.get(cursorIndex).x() < initD6) {
-                if (spawns.get(cursorIndex).respawnTracked()) {
-                    fwdCounter = (fwdCounter + 1) & 0xFF;
-                }
-                cursorIndex++;
+    /**
+     * Returns a {@link com.openggf.game.rewind.RewindSnapshottable} adapter for
+     * this ObjectManager.
+     *
+     * <p><strong>Capture</strong> records the current slot inventory (the
+     * {@link SlotAllocator} occupancy BitSet as {@code long[]}), per-instance state for every active ObjectPlacementController-managed
+     * object (via {@link AbstractObjectInstance#captureRewindState()}), scalar counters
+     * ({@code frameCounter}, {@code vblaCounter}, {@code currentExecSlot},
+     * {@code peakSlotCount}), the render-cache dirty flag, and reserved child-slot entries.
+     *
+     * <p><strong>Restore</strong>:
+     * <ol>
+     *   <li>Clears the current active object table (without triggering ObjectPlacementController state
+     *       side-effects).</li>
+     *   <li>Restores scalar counters and {@link SlotAllocator} occupancy.</li>
+     *   <li>Reuses the live instance in place when the snapshot entry matches it on
+     *       (spawn identity, slot index, class) and the class passes the
+     *       non-captured-field audit ({@link #isRewindInPlaceReuseSafeClass});
+     *       otherwise re-instantiates from its {@link ObjectSpawn} using the
+     *       same {@link ObjectRegistry#create} pipeline used by {@code syncActiveSpawnsLoad},
+     *       with the slot pre-assigned from the snapshot.</li>
+     *   <li>Calls {@link AbstractObjectInstance#restoreRewindState} on each restored
+     *       instance to hydrate the captured field surface.</li>
+     *   <li>Restores {@code reservedChildSlots} entries.</li>
+     * </ol>
+     *
+     * <p><strong>Holder re-resolution contract:</strong> Holders of direct
+     * {@link ObjectInstance} references (Camera target, {@code LevelEventManager} boss
+     * reference, etc.) <em>must</em> re-resolve their references after restore — an
+     * instance may be a fresh Java object even though it represents the same logical
+     * slot (in-place reuse keeps identities only for audited matching entries).
+     * Camera already re-resolves its target via {@code SpriteManager} on each snapshot
+     * restore (Track C). Other subsystems should do the same.
+     *
+     * <p>ObjectPlacementController-managed objects are restored through their original spawn.
+     * Non-ObjectPlacementController dynamic objects are restored when their class implements
+     * {@link RewindRecreatable}; unsupported entries remain diagnostic-only.
+     */
+    public com.openggf.game.rewind.RewindSnapshottable<com.openggf.game.rewind.snapshot.ObjectManagerSnapshot> rewindSnapshottable() {
+        return new com.openggf.game.rewind.RewindSnapshottable<>() {
+            @Override
+            public String key() {
+                return "object-manager";
             }
 
-            // OPL_Main: Left cursor scan — skip past objects before (initD6 - 0x80),
-            // counting respawn-tracked entries to build bwdCounter.
-            int leftD6 = initD6 - 0x80;
-            if (leftD6 > 0) {
-                while (leftCursorIndex < spawns.size()
-                        && spawns.get(leftCursorIndex).x() < leftD6) {
-                    if (spawns.get(leftCursorIndex).respawnTracked()) {
-                        bwdCounter = (bwdCounter + 1) & 0xFF;
-                    }
-                    leftCursorIndex++;
-                }
-            }
-
-            // First OPL_Next forward scan: load objects from right cursor to
-            // cameraChunk + LOAD_AHEAD, assigning counter values.
-            int windowEnd = cameraChunk + LOAD_AHEAD;
-            while (cursorIndex < spawns.size()
-                    && spawns.get(cursorIndex).x() < windowEnd) {
-                spawnForwardEntry(cursorIndex);
-                cursorIndex++;
-            }
-
-            // First OPL_Next left cursor trim: advance to cameraChunk - 0x80.
-            int leftTrimEdge = cameraChunk - 0x80;
-            if (leftTrimEdge > 0) {
-                while (leftCursorIndex < spawns.size()
-                        && spawns.get(leftCursorIndex).x() < leftTrimEdge) {
-                    if (spawns.get(leftCursorIndex).respawnTracked()) {
-                        bwdCounter = (bwdCounter + 1) & 0xFF;
-                    }
-                    leftCursorIndex++;
-                }
-            }
-
-            lastCameraX = cameraX;
-            lastCameraChunk = cameraChunk;
-        }
-
-        /**
-         * ROM-accurate combined cursor advancement + inline instance creation.
-         * Eliminates the 1-frame pipeline delay between cursor scan and instance creation.
-         */
-        void updateAndLoad(int cameraX, SpawnCallback callback) {
-            this.inlineCallback = callback;
-            try {
-                update(cameraX);
-            } finally {
-                this.inlineCallback = null;
-            }
-        }
-
-        void update(int cameraX) {
-            if (spawns.isEmpty()) {
-                return;
-            }
-            if (lastCameraX == Integer.MIN_VALUE) {
-                reset(cameraX);
-                return;
-            }
-
-            int cameraChunk = toCoarseChunk(cameraX);
-            if (cameraChunk == lastCameraChunk) {
-                lastCameraX = cameraX;
-                return;
-            }
-
-            if (counterBasedRespawn) {
-                // S1 mode: two-cursor system with counter tracking.
-                // ROM processes exactly one chunk step per frame via v_opl_screen.
-                if (cameraChunk > lastCameraChunk) {
-                    lastScrollBackward = false;
-                    spawnForwardCountered(cameraX);
-                    trimLeftCountered(cameraX);
-                } else {
-                    lastScrollBackward = true;
-                    spawnBackwardCountered(cameraX);
-                    trimRightCountered(cameraX);
-                }
-            } else {
-                int delta = cameraX - lastCameraX;
-                if (delta < 0 || delta > (getLoadAhead() + getUnloadBehind())) {
-                    refreshWindow(cameraX);
-                } else {
-                    spawnForward(cameraX);
-                    trimActive(cameraX);
-                }
-            }
-
-            lastCameraX = cameraX;
-            lastCameraChunk = cameraChunk;
-        }
-
-        public List<ObjectSpawn> getAllSpawns() {
-            return spawns;
-        }
-
-        void markRemembered(ObjectSpawn spawn) {
-            int index = getSpawnIndex(spawn);
-            if (index < 0) {
-                LOGGER.warning(() -> "markRemembered: spawn not found in placement list at ("
-                        + spawn.x() + "," + spawn.y() + ") id=0x" + Integer.toHexString(spawn.objectId()));
-                return;
-            }
-            remembered.set(index);
-        }
-
-        void markRemembered(ObjectSpawn spawn, ObjectInstance instance) {
-            // Some objects (monitors, capsules) need to stay active to complete their
-            // destruction/animation sequence even after being marked as remembered
-            if (!instance.shouldStayActiveWhenRemembered()) {
-                active.remove(spawn);
-            }
-
-            int index = getSpawnIndex(spawn);
-            if (index < 0) {
-                LOGGER.warning(() -> "markRemembered: spawn not found in placement list at ("
-                        + spawn.x() + "," + spawn.y() + ") id=0x" + Integer.toHexString(spawn.objectId()));
-                return;
-            }
-            remembered.set(index);
-            if (instance.shouldStayActiveWhenRemembered()) {
-                stayActive.set(index);
-            }
-        }
-
-        boolean isRemembered(ObjectSpawn spawn) {
-            int index = getSpawnIndex(spawn);
-            return index >= 0 && remembered.get(index);
-        }
-
-        boolean isStayActive(ObjectSpawn spawn) {
-            int index = getSpawnIndex(spawn);
-            return index >= 0 && stayActive.get(index);
-        }
-
-        /**
-         * Clears the stayActive flag for a spawn. Called when a stayActive object
-         * (e.g. EggPrison) self-destructs, so the remembered flag alone prevents respawn.
-         */
-        void clearStayActive(ObjectSpawn spawn) {
-            int index = getSpawnIndex(spawn);
-            if (index >= 0) {
-                stayActive.clear(index);
-            }
-        }
-
-        void clearRemembered() {
-            remembered.clear();
-        }
-
-        /**
-         * Removes a spawn from the active set without marking it as remembered.
-         * The spawn won't respawn until it leaves the camera window entirely.
-         * Used for badniks which should respawn on camera re-entry but not immediately.
-         */
-        void removeFromActive(ObjectSpawn spawn) {
-            active.remove(spawn);
-            int index = getSpawnIndex(spawn);
-            if (index >= 0) {
-                destroyedInWindow.set(index);
-            }
-        }
-
-        /**
-         * Removes a spawn from the active set for normal out-of-range unloading.
-         * <p>
-         * Unlike {@link #removeFromActive}, does NOT set {@code destroyedInWindow}.
-         * The object left naturally (ROM's out_of_range fired), so it can be
-         * respawned when it comes back into the placement window.
-         * <p>
-         * ROM parity: When an object self-destructs via out_of_range, it calls
-         * DeleteObject which zeroes the SST slot. If the object has RememberState,
-         * it clears its objState bit before deleting. The cursor system's counters
-         * are already correct (trimRightCountered/trimLeftCountered adjusted them).
-         * The spawn just needs to be removed from the engine's active set so
-         * future placement scans can re-create it.
-         */
-        void removeFromActiveForUnload(ObjectSpawn spawn) {
-            active.remove(spawn);
-        }
-
-        /**
-         * Marks a spawn as dormant after its instance was deleted via out_of_range.
-         * The spawn stays in {@code active} but syncActiveSpawnsLoad will skip it.
-         * Only the cursor system clears dormant when it naturally re-processes
-         * the spawn position (via forward/backward scan or cursor trim).
-         */
-        void markDormant(ObjectSpawn spawn) {
-            int index = getSpawnIndex(spawn);
-            if (index >= 0) {
-                dormant.set(index);
-            }
-        }
-
-        boolean isDormant(ObjectSpawn spawn) {
-            int index = getSpawnIndex(spawn);
-            return index >= 0 && dormant.get(index);
-        }
-
-        private void spawnForward(int cameraX) {
-            int spawnLimit = getWindowEnd(cameraX);
-            // ROM parity: ObjPosLoad forward scan uses `bls` (branch if lower or same)
-            // on the comparison `cmp.w (a0), d6` where d6 = right_edge. This means
-            // the loop continues when right_edge > object_x, i.e., object_x < right_edge.
-            // Objects exactly AT the right boundary are NOT loaded — strict less-than.
-            while (cursorIndex < spawns.size() && spawns.get(cursorIndex).x() < spawnLimit) {
-                trySpawn(cursorIndex);
-                cursorIndex++;
-            }
-        }
-
-        private void trimActive(int cameraX) {
-            int windowStart = getWindowStart(cameraX);
-            int windowEnd = getWindowEnd(cameraX);
-            // ROM parity: window is [windowStart, windowEnd) — objects at windowEnd
-            // are outside the window (strict < on right boundary).
-            Iterator<ObjectSpawn> iterator = active.iterator();
-            while (iterator.hasNext()) {
-                ObjectSpawn spawn = iterator.next();
-                if (spawn.x() < windowStart || spawn.x() >= windowEnd) {
-                    iterator.remove();
-                }
-            }
-            clearDestroyedLatchOutsideWindow(windowStart, windowEnd);
-        }
-
-        private void refreshWindow(int cameraX) {
-            int windowStart = getWindowStart(cameraX);
-            int windowEnd = getWindowEnd(cameraX);
-            int start = lowerBound(windowStart);
-            // ROM parity: objects exactly AT the right edge are excluded (strict <).
-            // lowerBound(windowEnd) gives the first index where x >= windowEnd,
-            // so indices [start, end) have windowStart <= x < windowEnd.
-            int end = lowerBound(windowEnd);
-            cursorIndex = end;
-            active.clear();
-            for (int i = start; i < end; i++) {
-                trySpawn(i);
-            }
-            clearDestroyedLatchOutsideWindow(windowStart, windowEnd);
-        }
-
-        private void trySpawn(int index) {
-            ObjectSpawn spawn = spawns.get(index);
-            if (remembered.get(index) && !stayActive.get(index)) {
-                return;
-            }
-            // Don't respawn if destroyed while still in the window
-            if (destroyedInWindow.get(index)) {
-                return;
-            }
-            active.add(spawn);
-        }
-
-        // ================================================================
-        // S1 counter-based respawn methods
-        // ================================================================
-
-        /**
-         * Forward scan with counters (ROM: loc_D9F6 forward path, loc_DA02 loop).
-         * Advances the right cursor to cameraChunk + LOAD_AHEAD, spawning
-         * new objects entering from the right.
-         */
-        private void spawnForwardCountered(int cameraX) {
-            int windowEnd = toCoarseChunk(cameraX) + LOAD_AHEAD;
-            while (cursorIndex < spawns.size()
-                    && spawns.get(cursorIndex).x() < windowEnd) {
-                spawnForwardEntry(cursorIndex);
-                cursorIndex++;
-            }
-        }
-
-        /**
-         * Helper: process one entry during forward scan.
-         * ROM: assigns d2 = fwdCounter, then fwdCounter++ for respawn-tracked.
-         */
-        private void spawnForwardEntry(int index) {
-            // Clear dormant: the cursor is re-scanning this position, matching
-            // ROM behavior where ObjPosLoad re-processes the spawn entry.
-            dormant.clear(index);
-            ObjectSpawn spawn = spawns.get(index);
-            if (spawn.respawnTracked()) {
-                int counter = fwdCounter & 0xFF;
-                fwdCounter = (fwdCounter + 1) & 0xFF;
-                trySpawnCountered(index, counter);
-            } else {
-                // Non-tracked objects always spawn (ROM: loc_DA3C bpl → OPL_MakeItem)
-                if (!destroyedInWindow.get(index)) {
-                    active.add(spawn);
-                    if (inlineCallback != null) {
-                        inlineCallback.tryCreate(spawn, -1);
+            @Override
+            public com.openggf.game.rewind.snapshot.ObjectManagerSnapshot capture() {
+                com.openggf.game.rewind.schema.RewindCaptureContext rewindContext = rewindCaptureContext();
+                // Capture per-active-slot state
+                List<com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.PerSlotEntry> slots = new ArrayList<>();
+                for (Map.Entry<ObjectSpawn, ObjectInstance> entry : activeObjects.entrySet()) {
+                    ObjectSpawn spawn = entry.getKey();
+                    ObjectInstance inst = entry.getValue();
+                    if (inst instanceof AbstractObjectInstance aoi) {
+                        slots.add(new com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.PerSlotEntry(
+                                aoi.getSlotIndex(),
+                                spawn,
+                                aoi.getClass().getName(),
+                                ObjectRewindTypeSafety.capture(aoi, rewindContext),
+                                rewindObjectIds.get(inst)
+                        ));
                     }
                 }
-            }
-        }
+                // Memoized sort keys: a plain extractor would rebuild the
+                // spawn-key string per comparison (O(n log n) string builds
+                // per capture). Keys are computed once per entry; the sorted
+                // order — part of snapshot determinism — is unchanged.
+                Map<Object, String> slotSpawnKeys = new java.util.IdentityHashMap<>();
+                slots.sort(Comparator
+                        .comparingInt(com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.PerSlotEntry::slotIndex)
+                        .thenComparing(entry -> slotSpawnKeys.computeIfAbsent(
+                                entry, e -> stableSpawnKey(entry.spawn()))));
 
-        /**
-         * Left cursor trim during forward movement (ROM: loc_DA24 loop).
-         * Advances left cursor past objects that have left the window from
-         * the left side, incrementing bwdCounter for respawn-tracked entries.
-         * <p>
-         * ROM parity: loc_DA24 ONLY advances the cursor and increments
-         * bwdCounter. It does NOT destroy or unload the loaded objects.
-         * Objects remain alive in the SST until they self-destruct via
-         * their own out_of_range check in ExecuteObjects.
-         * <p>
-         * This is critical for moving objects (e.g. Batbrains) whose current
-         * position (obX) differs from their spawn position. The engine's
-         * cursor trim uses the spawn X, but the ROM's out_of_range uses the
-         * object's current position. If a Batbrain has flown toward Sonic,
-         * its current position may still be in range even though its spawn
-         * position has passed the cursor boundary. Removing from active here
-         * would prematurely unload the Batbrain.
-         */
-        private void trimLeftCountered(int cameraX) {
-            int leftEdge = toCoarseChunk(cameraX) - UNLOAD_BEHIND;
-            if (leftEdge <= 0) return;
-            // ROM: `cmp.w (a0),d6; bls.s stop` → continues when leftEdge > entry.x
-            while (leftCursorIndex < spawns.size()
-                    && spawns.get(leftCursorIndex).x() < leftEdge) {
-                ObjectSpawn spawn = spawns.get(leftCursorIndex);
-                if (spawn.respawnTracked()) {
-                    bwdCounter = (bwdCounter + 1) & 0xFF;
+                // Capture reservedChildSlots
+                List<com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.ChildSpawnEntry> childSpawns = new ArrayList<>();
+                for (Map.Entry<ObjectSpawn, int[]> entry : reservedChildSlots.entrySet()) {
+                    int[] slotArray = entry.getValue();
+                    childSpawns.add(new com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.ChildSpawnEntry(
+                            entry.getKey(),
+                            Arrays.copyOf(slotArray, slotArray.length)
+                    ));
                 }
-                // ROM: loc_DA24 only advances cursor and bwdCounter.
-                // Do NOT remove from active — objects stay alive until out_of_range.
-                if (destroyedInWindow.get(leftCursorIndex)) {
-                    destroyedInWindow.clear(leftCursorIndex);
-                }
-                // Spawn leaving the cursor window — clear dormant so it can
-                // be normally re-loaded when the cursor re-enters this region.
-                dormant.clear(leftCursorIndex);
-                leftCursorIndex++;
-            }
-        }
+                Map<Object, String> childParentKeys = new java.util.IdentityHashMap<>();
+                Map<Object, String> childSlotKeys = new java.util.IdentityHashMap<>();
+                childSpawns.sort(Comparator
+                        .comparing((com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.ChildSpawnEntry entry) ->
+                                childParentKeys.computeIfAbsent(
+                                        entry, e -> stableSpawnKey(entry.parentSpawn())))
+                        .thenComparing(entry -> childSlotKeys.computeIfAbsent(
+                                entry, e -> Arrays.toString(entry.reservedSlots()))));
 
-        /**
-         * Backward scan with counters (ROM: loc_D9A6 loop).
-         * Retreats the left cursor to spawn objects entering the window
-         * from the left as the camera scrolls backward.
-         */
-        private void spawnBackwardCountered(int cameraX) {
-            int leftEdge = toCoarseChunk(cameraX) - UNLOAD_BEHIND;
-            // ROM: `cmp.w -6(a0),d6; bge.s stop` → continues when leftEdge < prev.x
-            while (leftCursorIndex > 0) {
-                ObjectSpawn prev = spawns.get(leftCursorIndex - 1);
-                if (leftEdge >= prev.x()) break;
-                // Retreat cursor
-                leftCursorIndex--;
-                dormant.clear(leftCursorIndex); // cursor re-processing this entry
-                if (prev.respawnTracked()) {
-                    bwdCounter = (bwdCounter - 1) & 0xFF;
-                    int counter = bwdCounter & 0xFF;
-                    boolean spawned = trySpawnCountered(leftCursorIndex, counter);
-                    if (!spawned) {
-                        // ROM: loc_D9C6 — if bset blocked or FindFreeObj failed,
-                        // undo counter and cursor retreat, then stop.
-                        // (bset skip returns d0=0 → NOT treated as failure in ROM,
-                        // but FindFreeObj failure IS. We only stop on FindFreeObj
-                        // failure equivalent. bset skip continues the loop.)
-                        //
-                        // In the ROM, bset-skip returns d0=0 (success), so the
-                        // loop continues. Only FindFreeObj failure stops the loop.
-                        // The engine doesn't have FindFreeObj failure, so always
-                        // continue.
+                List<com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.DynamicObjectEntry> dynamicEntries =
+                        new ArrayList<>();
+                for (ObjectInstance inst : dynamicObjects) {
+                    if (dynamicOwnership.excludesFromRewind(inst)) {
+                        continue;
                     }
-                } else {
-                    if (!destroyedInWindow.get(leftCursorIndex)) {
-                        active.add(prev);
+                    if (inst instanceof AbstractObjectInstance aoi) {
+                        dynamicEntries.add(
+                                new com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.DynamicObjectEntry(
+                                        inst.getClass().getName(),
+                                        inst.getSpawn(),
+                                        aoi.getSlotIndex(),
+                                        ObjectRewindTypeSafety.capture(aoi, rewindContext),
+                                        playerBoundOwner(inst),
+                                        rewindObjectIds.get(inst),
+                                        dynamicOwnership.isRewindableAuxiliary(inst)));
                     }
                 }
-            }
-        }
 
-        /**
-         * Right cursor trim during backward movement (ROM: loc_D9DE loop).
-         * Retreats the right cursor past objects that have left the window
-         * from the right side, decrementing fwdCounter for respawn-tracked.
-         * <p>
-         * ROM parity: loc_D9DE ONLY retreats the cursor and adjusts fwdCounter.
-         * It does NOT destroy or unload the objects. The loaded ring/object
-         * instances remain alive in the SST and continue executing during
-         * ExecuteObjects until they self-destruct via their own out_of_range
-         * check (e.g., Ring_Animate → out_of_range → Ring_Delete).
-         * <p>
-         * Previously, the engine removed spawns from the active set here,
-         * which caused syncActiveSpawnsUnload to force-unload objects. This
-         * freed their SST slots too early, causing downstream slot assignment
-         * differences (e.g., Batbrain timing gates firing 1 frame early).
-         * Objects are now kept active and unloaded via the separate
-         * out_of_range check in syncActiveSpawnsUnload.
-         */
-        private void trimRightCountered(int cameraX) {
-            int rightEdge = toCoarseChunk(cameraX) + LOAD_AHEAD;
-            // ROM: `cmp.w -6(a0),d6; bgt.s stop` → continues when rightEdge <= prev.x
-            while (cursorIndex > 0) {
-                ObjectSpawn prev = spawns.get(cursorIndex - 1);
-                if (rightEdge > prev.x()) break;
-                // Retreat cursor
-                cursorIndex--;
-                if (prev.respawnTracked()) {
-                    fwdCounter = (fwdCounter - 1) & 0xFF;
+                long[] bits = captureOwnedUsedSlotBits();
+                com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.SolidContactState solidContactState =
+                        solidContacts.captureRewindState();
+
+                // No List.copyOf wrappers here: the ObjectManagerSnapshot
+                // compact constructor already copies its list components.
+                return new com.openggf.game.rewind.snapshot.ObjectManagerSnapshot(
+                        bits,
+                        slots,
+                        frameCounter,
+                        vblaCounter,
+                        currentExecSlot,
+                        slotAllocator.peakSlotCount(),
+                        bucketsDirty,
+                        childSpawns,
+                        dynamicEntries,
+                        placement.captureRewindState(twoAxisCameraYCoarse,
+                                s2LatchedObjectManagerCameraX),
+                        solidContactState.riding(),
+                        solidContactState,
+                        planeSwitchers != null
+                                ? planeSwitchers.captureRewindState()
+                                : com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.PlaneSwitcherSnapshot.empty(),
+                        touchResponses != null
+                                ? touchResponses.captureRewindState()
+                                : com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.TouchResponseOverlapState.empty(),
+                        dynamicObjectIdCounter,
+                        collisionResponseList.captureRewindState(rewindObjectIds::get)
+                );
+            }
+
+            @Override
+            public void restore(com.openggf.game.rewind.snapshot.ObjectManagerSnapshot s) {
+                // The restore is TWO-PHASE so object-reference resolution is order-independent.
+                //   Phase 1 recreates (reuse / adopt / genericRecreate / registry) every
+                //           captured object — active and dynamic — and registers each under its
+                //           captured ObjectRefId in a fresh restore identity table, WITHOUT yet
+                //           applying any field blob.
+                //   Phase 2 applies each object's compact field blob against that fully-populated
+                //           table, so an ObjectReferenceCodec ref resolves to the RESTORED target
+                //           regardless of recreate order (forward refs included).
+                // A single-pass restore could only resolve refs whose target was recreated earlier
+                // in the loop; a forward ref to a later object resolved to the orphaned pre-restore
+                // instance (or threw). See TestTwoPhaseRestoreOrdering.
+                //
+                // The restore table registers the live players (unchanged across a restore) plus
+                // every restored object; it is the resolution table phase 2 hands to restore.
+                com.openggf.game.rewind.identity.RewindIdentityTable restoreTable =
+                        new com.openggf.game.rewind.identity.RewindIdentityTable();
+                registerPlayersInto(restoreTable);
+                com.openggf.game.rewind.schema.RewindCaptureContext rewindContext =
+                        com.openggf.game.rewind.schema.RewindCaptureContext.withIdentityTable(restoreTable);
+                // Phase-2 work item: a recreated instance paired with the entry whose field
+                // blob must be applied to it once every id is registered.
+                record RestoreStatePair<E>(AbstractObjectInstance instance, E entry) {}
+                List<RestoreStatePair<com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.PerSlotEntry>>
+                        activeStateWork = new ArrayList<>();
+                List<RestoreStatePair<com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.DynamicObjectEntry>>
+                        dynamicStateWork = new ArrayList<>();
+
+                // 0. Index live instances by spawn identity so matching snapshot entries
+                //    can reuse them in place instead of paying a full reconstruction.
+                Map<ObjectSpawn, ObjectInstance> previousActive = rewindRestoreReuseScratch;
+                previousActive.clear();
+                if (rewindInPlaceRestoreEnabled && !activeObjects.isEmpty()) {
+                    previousActive.putAll(activeObjects);
                 }
-                // ROM: loc_D9DE only retreats cursor and fwdCounter.
-                // Do NOT remove from active — objects stay alive until out_of_range.
-                if (destroyedInWindow.get(cursorIndex)) {
-                    destroyedInWindow.clear(cursorIndex);
-                }
-                // Spawn leaving the cursor window — clear dormant so it can
-                // be normally re-loaded when the cursor re-enters this region.
-                dormant.clear(cursorIndex);
-            }
-        }
+                // 1. Clear current active objects (without mutating ObjectPlacementController state).
+                //    Extra live objects absent from the snapshot are dropped here exactly as the
+                //    pre-reuse path dropped them (reference drop, no onUnload), via not being
+                //    re-registered below.
+                clearActiveObjects();
+                dynamicObjects.clear();
+                dynamicOwnership.clear();
+                Arrays.fill(execOrder, null);
+                pendingPlayerBoundEntries.clear();
+                // Capture construction-spawned children produced while active objects are
+                // reconstructed below, so the dynamic reconciliation loop can adopt them in
+                // place instead of recreating duplicates. (See registerRewindReconstructionChild.)
+                rewindReconstructionChildren.clear();
+                rewindReconstructionChildCapture = true;
 
-        /**
-         * Counter-aware spawn check (ROM: loc_DA3C with REV01 bset bug).
-         * <p>
-         * The ROM uses {@code bset #7,2(a2,d2.w)} which both TESTS and SETS
-         * bit 7 in a single instruction. This means the first load sets the bit
-         * as a side effect. If a later spawn attempt reuses the same counter
-         * value (due to counter wrapping or camera backtracking through a
-         * different object set), the bit is already set and the spawn is blocked.
-         * <p>
-         * This is the REV01 "remember sprite" bug documented at:
-         * https://info.sonicretro.org/SCHG_How-to:Fix_a_remember_sprite_related_bug
-         *
-         * @param index   spawn list index
-         * @param counter counter value (d2 register in ROM)
-         * @return true if the object was added to the active set
-         */
-        private boolean trySpawnCountered(int index, int counter) {
-            ObjectSpawn spawn = spawns.get(index);
-            // ROM: bset #7,2(a2,d2.w) — test AND set bit 7
-            boolean wasSet = (objState[counter & 0xFF] & 0x80) != 0;
-            objState[counter & 0xFF] |= 0x80; // Side effect: always sets bit
-            if (wasSet) {
-                return false; // Bit was already set → skip
-            }
-            if (destroyedInWindow.get(index)) {
-                return false;
-            }
-            spawnToCounter.put(spawn, counter & 0xFF);
-            active.add(spawn);
-            // ROM parity: inline instance creation during cursor scan.
-            // This eliminates the 1-frame pipeline delay between cursor
-            // advancement (placement.update) and instance creation (syncActiveSpawnsLoad).
-            if (inlineCallback != null) {
-                return inlineCallback.tryCreate(spawn, counter & 0xFF);
-            }
-            return true;
-        }
+                // 2. Restore scalar counters and slot occupancy
+                slotAllocator.restoreFromLongArray(s.usedSlotsBits());
+                frameCounter = s.frameCounter();
+                vblaCounter = s.vblaCounter();
+                currentExecSlot = s.currentExecSlot();
+                slotAllocator.restorePeakSlotCount(s.peakSlotCount());
+                bucketsDirty = s.bucketsDirty();
+                activeObjectsCacheDirty = true;
+                // Restore the object-id counter so any new objects spawned after restore
+                // (in replay or fresh gameplay) do not alias the restored objects' ids.
+                dynamicObjectIdCounter = s.dynamicObjectIdCounter();
+                rewindObjectIds.clear();
 
-        /**
-         * Clears the objState bit for a normally-unloaded spawn.
-         * ROM equivalent: RememberState's {@code bclr #7,2(a2,d0.w)}.
-         * Called when an object leaves the camera window (not when destroyed).
-         */
-        private void clearCounterForSpawn(ObjectSpawn spawn) {
-            Integer counter = spawnToCounter.remove(spawn);
-            if (counter != null) {
-                objState[counter] &= ~0x80;
-            }
-        }
-
-        /**
-         * Returns the counter value assigned to a spawn during loading,
-         * or -1 if not tracked. Used by ObjectManager to set respawnStateIndex.
-         */
-        int getCounterForSpawn(ObjectSpawn spawn) {
-            Integer counter = spawnToCounter.get(spawn);
-            return counter != null ? counter : -1;
-        }
-
-        boolean isCounterBasedRespawn() {
-            return counterBasedRespawn;
-        }
-
-        /**
-         * ROM parity: true when the last chunk transition was leftward (backward).
-         * Used by syncActiveSpawnsLoad to sort new spawns in descending X order,
-         * matching S1 ObjPosLoad's backward scan direction (a0 -= 6).
-         */
-        boolean isLastScrollBackward() {
-            return lastScrollBackward;
-        }
-
-        // Diagnostic accessors for cursor state comparison
-        int getCursorIndex() { return cursorIndex; }
-        int getLeftCursorIndex() { return leftCursorIndex; }
-        int getFwdCounter() { return fwdCounter; }
-        int getBwdCounter() { return bwdCounter; }
-        int getLastCameraChunk() { return lastCameraChunk; }
-
-        private int toCoarseChunk(int cameraX) {
-            return cameraX & CHUNK_MASK;
-        }
-
-        /**
-         * Extend the active set for spawns visible with the post-camera position.
-         * <p>
-         * When the post-camera X is in a higher chunk than the last processed chunk,
-         * scans spawns in the gap between the old and new window right edges and
-         * adds eligible ones to the active set.
-         * <p>
-         * In counter mode, this is a full forward scan that advances the cursor
-         * and updates lastCameraChunk/lastCameraX, because counter values must
-         * not be assigned twice (the next frame's update would see the already-
-         * updated cursor and skip re-processing).
-         * <p>
-         * In non-counter mode, cursor and lastCameraChunk are NOT updated,
-         * preserving the primary placement pass's ability to process the chunk
-         * boundary normally on the next frame.
-         */
-        void extendForPostCamera(int postCameraX, SpawnCallback callback) {
-            if (counterBasedRespawn) {
-                // ROM parity: S1's ObjPosLoad runs AFTER DeformLayers (camera).
-                // Inline creation eliminates 1-frame pipeline delay.
-                updateAndLoad(postCameraX, callback);
-                return;
-            }
-            extendForPostCamera(postCameraX);
-        }
-
-        void extendForPostCamera(int postCameraX) {
-            if (counterBasedRespawn) {
-                update(postCameraX);
-                return;
-            }
-            int postChunk = toCoarseChunk(postCameraX);
-            if (postChunk <= lastCameraChunk) {
-                return; // Camera didn't advance to a new chunk
-            }
-            {
-                int oldWindowEnd = getWindowEnd(lastCameraX);
-                int newWindowEnd = postChunk + LOAD_AHEAD;
-                for (int i = cursorIndex; i < spawns.size(); i++) {
-                    int sx = spawns.get(i).x();
-                    if (sx >= newWindowEnd) {
-                        break;
+                // 3. PHASE 1 (active objects): reuse the live instance in place when it
+                //    is provably equivalent to a fresh reconstruction, otherwise recreate
+                //    from the spawn as before. Register the captured id into the restore table
+                //    and defer the field-blob application to phase 2. The finally-clear
+                //    guarantees the scratch map never retains stale instance refs past this
+                //    restore, even when a factory throws.
+                try {
+                    for (com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.PerSlotEntry entry : s.slots()) {
+                        ObjectSpawn spawn = entry.spawn();
+                        int targetSlot = entry.slotIndex();
+                        ObjectInstance previous = previousActive.get(spawn);
+                        ObjectInstance inst;
+                        if (previous instanceof AbstractObjectInstance previousAoi
+                                && canReuseForRewindRestore(previousAoi, entry)) {
+                            // Reused instances keep their injected services and renderer wiring.
+                            inst = previous;
+                        } else {
+                            // Use PRE_ALLOCATED_SLOT so the constructor picks up the correct slot
+                            int dynamicCountBefore = dynamicObjects.size();
+                            int reservedChildBefore = reservedChildSlots.size();
+                            int reconstructionChildBefore = rewindReconstructionChildren.size();
+                            inst = ObjectConstructionContext.withRewindActiveRestore(
+                                    () -> ObjectConstructionContext.with(objectServices, targetSlot,
+                                            () -> registry != null ? registry.create(spawn) : null));
+                            if (inst != null) {
+                                if (inst instanceof AbstractObjectInstance constructed) {
+                                    constructed.setServices(objectServices);
+                                    ObjectConstructionContext.withRewindActiveRestore(() -> {
+                                        constructed.recreateConstructionChildrenForRewind();
+                                        return null;
+                                    });
+                                }
+                                // Constructors that spawn children or reserve child slots have
+                                // restore-relevant construction side effects that in-place reuse
+                                // would skip; latch those classes onto the recreate path. Under
+                                // rewind restore, child spawns are routed to
+                                // rewindReconstructionChildren (not dynamicObjects), so count that
+                                // growth too — otherwise a child-spawning boss would look
+                                // side-effect-free and wrongly become reuse-eligible.
+                                boolean constructionSideEffects =
+                                        dynamicObjects.size() != dynamicCountBefore
+                                        || reservedChildSlots.size() != reservedChildBefore
+                                        || rewindReconstructionChildren.size() != reconstructionChildBefore;
+                                rewindRestoreConstructionSideEffects.merge(
+                                        inst.getClass(), constructionSideEffects, Boolean::logicalOr);
+                            }
+                        }
+                        if (inst instanceof AbstractObjectInstance aoi) {
+                            aoi.setServices(objectServices);
+                            if (aoi.getSlotIndex() < 0 && targetSlot >= 0) {
+                                aoi.setSlotIndex(targetSlot);
+                            }
+                            // Install a captured identity before registration so
+                            // registerActiveObject does not mint and consume a
+                            // throwaway dynamic ordinal. Legacy null-id entries
+                            // deliberately fall through and mint exactly once.
+                            if (entry.objectId() != null) {
+                                rewindObjectIds.put(inst, entry.objectId());
+                            }
+                            registerActiveObject(spawn, inst);
+                            if (entry.objectId() != null) {
+                                restoreTable.registerObject(inst, entry.objectId());
+                            }
+                            // Wire into execOrder if within the managed slot window
+                            int execIdx = execIndexForSlot(aoi.getSlotIndex());
+                            if (execIdx >= 0 && execIdx < execOrder.length) {
+                                execOrder[execIdx] = aoi;
+                            }
+                            // Defer per-instance field-blob application to phase 2.
+                            activeStateWork.add(new RestoreStatePair<>(aoi, entry));
+                        } else if (inst != null) {
+                            if (entry.objectId() != null) {
+                                rewindObjectIds.put(inst, entry.objectId());
+                            }
+                            registerActiveObject(spawn, inst);
+                            if (entry.objectId() != null) {
+                                restoreTable.registerObject(inst, entry.objectId());
+                            }
+                        }
                     }
-                    if (sx >= oldWindowEnd) {
-                        trySpawn(i);
+                } finally {
+                    previousActive.clear();
+                }
+
+                // 4. Restore reservedChildSlots
+                reservedChildSlots.clear();
+                for (com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.ChildSpawnEntry ce : s.childSpawns()) {
+                    reservedChildSlots.put(ce.parentSpawn(),
+                            Arrays.copyOf(ce.reservedSlots(), ce.reservedSlots().length));
+                }
+
+                // 5. PHASE 1 (dynamic objects): recreate each captured dynamic object and register
+                //    its captured id, still deferring field-blob application to phase 2.
+                //
+                // A captured entry can depend on a LATER entry in this same list finishing its
+                // own reconstruction first: a dynamically-spawned parent (e.g. a boss spawned by
+                // a zone event rather than the zone's static object layout table -- see
+                // Sonic1SYZBossInstance, GHZBossWreckingBall's owner, Sonic3kAIZ/MHZEvents
+                // minibosses) is itself a captured DynamicObjectEntry processed in this loop, and
+                // its OWN construction-spawned children were captured as EARLIER entries (inserted
+                // into dynamicObjects during the parent's constructor, before the parent itself was
+                // appended -- see registerRewindReconstructionChild). A first-pass attempt for such
+                // a child entry therefore used to run before the parent had been reconstructed at
+                // all: adoptRewindReconstructionChild found an empty pool (the parent hadn't run
+                // its constructor yet to populate it), and any RewindRecreatable#recreateForRewind()
+                // sibling-search fallback (e.g. nearestLiveBossForRewind) also failed (no live
+                // parent to find) -- silently discarding the child's entire captured state. A
+                // STATIC layout-spawned boss never hits this: it reconstructs in the Phase-1 ACTIVE
+                // loop above (step 3), before this dynamic loop starts, so its children's pool
+                // entries are already populated by the time this loop's adoption attempts run.
+                //
+                // reconstructDynamicEntry keeps the reconstruction-child pool active (via
+                // withRewindActiveRestore) across a dynamically-spawned parent's OWN
+                // reconstruction below, not just the pre-Phase-1 static case, so its fresh
+                // construction-spawned children land in the pool instead of live-spawning as
+                // unrelated new dynamic objects. Unresolved entries are parked and retried in a
+                // fixed-point loop (not just once): a single retry pass is not enough for a
+                // 3+-level captured chain (e.g. a grandchild whose intermediate parent entry
+                // ITSELF only resolves during the retry pass) -- the grandchild's one retry
+                // attempt would run before that intermediate parent's own retry has populated
+                // the pool with the grandchild's real captured sibling, dropping it exactly like
+                // the bug this loop exists to fix. Looping until a pass makes zero progress
+                // resolves any finite dependency depth; the parked count strictly decreases on
+                // every productive pass, so the loop terminates, and whatever remains unresolved
+                // once a pass resolves nothing has a permanently missing dependency (its owning
+                // parent could not itself reconstruct at all) and falls through to the existing
+                // clean unmatched-drop path below.
+                List<com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.DynamicObjectEntry>
+                        parkedDynamicEntries = new ArrayList<>();
+                java.util.function.Predicate<com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.DynamicObjectEntry>
+                        reconstructDynamicEntry = entry -> {
+                    // Prefer adopting the construction-spawned child the reconstructed parent
+                    // already created and back-references. Adopting it in place gives exact
+                    // captured state AND keeps the parent's child reference valid, with no
+                    // double-spawn. Routine-spawned children (no construction counterpart) fall
+                    // back to the generic recreate path.
+                    AbstractObjectInstance adopted = adoptRewindReconstructionChild(entry);
+                    ObjectInstance inst = adopted != null
+                            ? adopted
+                            : ObjectConstructionContext.withRewindActiveRestore(
+                                    () -> recreateDynamicObject(entry));
+                    if (!(inst instanceof AbstractObjectInstance aoi)) {
+                        return false;
+                    }
+                    aoi.setServices(objectServices);
+                    if (adopted != null) {
+                        // Adopt at the captured slot; the construction spawn did not allocate
+                        // one (the slot allocator is already restored from the snapshot).
+                        int slot = entry.slotIndex();
+                        if (slot >= 0) {
+                            aoi.setSlotIndex(slot);
+                        }
+                    } else {
+                        ObjectConstructionContext.withRewindActiveRestore(() -> {
+                            aoi.recreateConstructionChildrenForRewind();
+                            return null;
+                        });
+                        // Went through the generic recreateForRewind() path, not adoption --
+                        // give owners that keep their own back-reference list (e.g.
+                        // AbstractBossChild -> parent.childComponents) a chance to re-register
+                        // this instance. Adopted candidates were already registered by the
+                        // owning parent's own construction-time spawn, so this is skipped for
+                        // them (see onRecreatedForRewind()'s javadoc).
+                        aoi.onRecreatedForRewind();
+                    }
+                    // Restore the captured rewind id so the identity table built from
+                    // the next rewindCaptureContext() re-uses the pre-restore id, and
+                    // register it in the restore table so phase-2 refs resolve here.
+                    // A null captured id means the object had no identity at capture, so no
+                    // captured ref points at it — minting a fresh id is enough (and it is not
+                    // added to the restore table because nothing resolves against it).
+                    if (entry.objectId() != null) {
+                        rewindObjectIds.put(aoi, entry.objectId());
+                        restoreTable.registerObject(aoi, entry.objectId());
+                    } else {
+                        assignRewindObjectId(aoi, aoi.getSpawn());
+                    }
+                    dynamicObjects.add(aoi);
+                    if (entry.rewindableAuxiliary()) {
+                        dynamicOwnership.markRestoredRewindable(aoi);
+                    }
+                    activeObjectsCacheDirty = true;
+                    int execIdx = execIndexForSlot(aoi.getSlotIndex());
+                    if (execIdx >= 0 && execIdx < execOrder.length) {
+                        execOrder[execIdx] = aoi;
+                    }
+                    // Defer per-instance field-blob application to phase 2.
+                    dynamicStateWork.add(new RestoreStatePair<>(aoi, entry));
+                    return true;
+                };
+                for (com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.DynamicObjectEntry entry
+                        : s.dynamicObjects()) {
+                    if (!reconstructDynamicEntry.test(entry)) {
+                        parkedDynamicEntries.add(entry);
                     }
                 }
+                boolean parkedPassMadeProgress = true;
+                while (parkedPassMadeProgress && !parkedDynamicEntries.isEmpty()) {
+                    parkedPassMadeProgress = false;
+                    List<com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.DynamicObjectEntry>
+                            stillParked = new ArrayList<>();
+                    for (com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.DynamicObjectEntry entry
+                            : parkedDynamicEntries) {
+                        if (reconstructDynamicEntry.test(entry)) {
+                            parkedPassMadeProgress = true;
+                        } else {
+                            stillParked.add(entry);
+                        }
+                    }
+                    parkedDynamicEntries = stillParked;
+                }
+                // Stop routing further child spawns into the reconstruction-children scratch:
+                // any spawns triggered from here on (Phase 2 state restore,
+                // afterRewindRestoreSettled, or later gameplay) are normal wiring, not
+                // reconstruction side effects to adopt.
+                rewindReconstructionChildCapture = false;
+                // Any reconstruction children NOT matched by a captured entry after BOTH passes
+                // were spawned by a parent whose child was not in dynamicObjects at capture (e.g.
+                // a same-class sibling destroyed and pruned before capture -- see
+                // adoptRewindReconstructionChild), or by a parent that could not itself
+                // reconstruct at all (its own captured entry above also returned false from both
+                // passes, so it is dropped the very same way, and the orphaned pool children it
+                // already spawned are dropped cleanly here rather than left dangling). They are
+                // unregistered here (never added to dynamicObjects/activeObjects), but the
+                // parent's OWN back-reference to them (e.g. AbstractBossInstance.childComponents)
+                // was already set unconditionally at construction time and is otherwise never told
+                // about the drop -- notify each so an owner tracking its own child-reference list
+                // can drop it too, or it remains a live orphan that still receives update() every
+                // frame. Clearing the scratch afterward guarantees no instances leak across
+                // restore passes.
+                for (AbstractObjectInstance unmatched : rewindReconstructionChildren) {
+                    unmatched.onDroppedAsUnmatchedRewindReconstructionChild();
+                }
+                rewindReconstructionChildren.clear();
+
+                // 6. PHASE 2: every captured id is now registered in restoreTable, so applying
+                //    the field blobs resolves all object/player references — including forward
+                //    references to objects recreated later in phase 1.
+                for (RestoreStatePair<com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.PerSlotEntry>
+                        work : activeStateWork) {
+                    ObjectRewindTypeSafety.restore(
+                            work.instance(), work.entry().state(), rewindContext);
+                }
+                for (RestoreStatePair<com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.DynamicObjectEntry>
+                        work : dynamicStateWork) {
+                    ObjectRewindTypeSafety.restore(
+                            work.instance(), work.entry().state(), rewindContext);
+                }
+
+                // 6b. Every object's own field-blob restore (including any of its children's)
+                // is now settled, so owners that derive state FROM their children (e.g.
+                // AbstractBossInstance re-deriving its child-spawn ordinal counters from each
+                // live child's restored identity) can safely do so now -- doing it inline
+                // during phase 2 above would race, since restore order between a parent and
+                // its own children is not guaranteed.
+                for (RestoreStatePair<com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.PerSlotEntry>
+                        work : activeStateWork) {
+                    work.instance().afterRewindRestoreSettled();
+                }
+                for (RestoreStatePair<com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.DynamicObjectEntry>
+                        work : dynamicStateWork) {
+                    work.instance().afterRewindRestoreSettled();
+                }
+
+                if (s.placement() != null) {
+                    twoAxisCameraYCoarse = placement.restoreRewindState(s.placement());
+                    // The S2 post-camera coarse-X unload latch must rewind with the
+                    // placement cursors; a stale later-frame latch makes the first
+                    // replayed frames' MarkObjGone checks unload against a future
+                    // camera edge (legacy snapshots carry MIN_VALUE = live fallback).
+                    s2LatchedObjectManagerCameraX = s.placement().s2LatchedCameraX();
+                }
+
+                solidContacts.restoreRewindState(s.solidContactState());
+                if (planeSwitchers != null) {
+                    planeSwitchers.restoreRewindState(s.planeSwitchers());
+                }
+
+                // ObjectTouchResponseController' double-buffer overlap state must be restored
+                // AFTER object restoration so slot lookup resolves to live
+                // post-restore instances. See iter-1631 root-cause analysis in
+                // docs/architecture/plans/2026-05-07-rewind-encounter-validation.md.
+                if (touchResponses != null) {
+                    touchResponses.restoreRewindState(s.touchResponseOverlap());
+                }
+                collisionResponseList.restoreRewindState(
+                        s.collisionResponseState(), restoreTable::resolve);
+
+                bucketsDirty = true;
+                activeObjectsCacheDirty = true;
             }
+        };
+    }
+
+    /**
+     * Test hook: toggles the in-place reuse fast path of the rewind restore.
+     * When disabled, every snapshot entry is destroy/recreated (the pre-reuse
+     * behavior), which the in-place restore equivalence test uses as the
+     * reference path.
+     */
+    public void setRewindInPlaceRestoreEnabledForTest(boolean enabled) {
+        this.rewindInPlaceRestoreEnabled = enabled;
+    }
+
+    private boolean canReuseForRewindRestore(AbstractObjectInstance previous,
+            com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.PerSlotEntry entry) {
+        if (previous.getSlotIndex() != entry.slotIndex()) {
+            return false;
         }
-
-        /**
-         * Returns true if the given spawn index has the destroyedInWindow latch set.
-         */
-        boolean isDestroyedInWindow(int index) {
-            return index >= 0 && destroyedInWindow.get(index);
+        Class<?> type = previous.getClass();
+        if (entry.className() == null || !type.getName().equals(entry.className())) {
+            return false;
         }
+        // Require one observed in-restore reconstruction of this class without
+        // construction side effects before reusing instances of it.
+        Boolean observed = rewindRestoreConstructionSideEffects.get(type);
+        if (observed == null || observed) { // null = never observed in-restore, true = has side effects
+            return false;
+        }
+        return isRewindInPlaceReuseSafeClass(type);
+    }
 
+    /**
+     * Returns true when instances of {@code type} may be reused in place by the
+     * rewind restore instead of destroy/recreated.
+     *
+     * <p>The destroy/recreate path resets every non-captured field to its
+     * constructor value on each restore; in-place reuse keeps the live value.
+     * The two are equivalent only when every field declared below
+     * {@link AbstractObjectInstance} is either (a) captured by the default
+     * capture path (restored from the snapshot on both paths) or (b) a
+     * {@code final} construction-constant — an immutable value or a structural
+     * reference the constructor derives deterministically (renderer handles,
+     * mapping/sheet data, services). Classes with concrete capture/restore
+     * overrides (unprovable hand-written coverage), non-final non-captured
+     * fields (frame-coupled mutable state), or non-captured object/player
+     * references, collections, or arrays (mutable or identity-coupled content)
+     * fall back to recreate.
+     *
+     * <p>{@code AbstractObjectInstance} itself is fully covered by the base
+     * snapshot record (its only non-captured members are the final
+     * {@code spawn}/{@code name} and the intentionally retained
+     * {@code services} handle). {@code AbstractBadnikInstance} is hand-audited:
+     * its movement fields ride {@code BadnikRewindExtra}, {@code destructionConfig}
+     * is a final structural config, and the three {@code cachedDebug*} fields are
+     * self-correcting render caches (the label regenerates whenever
+     * {@code animFrame}/{@code facingLeft} change, so a stale cache is only kept
+     * when it is already correct).
+     *
+     * <p>Public for the in-place restore audit test.
+     */
+    public static boolean isRewindInPlaceReuseSafeClass(Class<?> type) {
+        return ObjectRewindTypeSafety.isSafe(type);
+    }
 
-        private void clearDestroyedLatchOutsideWindow(int windowStart, int windowEnd) {
-            // Clear destroyed-in-window latch once the spawn fully leaves the current stream window.
-            // ROM parity: window is [windowStart, windowEnd) — strict < on right boundary.
-            for (int i = destroyedInWindow.nextSetBit(0); i >= 0; i = destroyedInWindow.nextSetBit(i + 1)) {
-                ObjectSpawn spawn = spawns.get(i);
-                if (spawn.x() < windowStart || spawn.x() >= windowEnd) {
-                    destroyedInWindow.clear(i);
+    private long[] captureOwnedUsedSlotBits() {
+        BitSet owned = new BitSet(execOrder.length);
+        for (ObjectInstance inst : activeObjects.values()) {
+            markOwnedSlot(owned, inst);
+        }
+        for (ObjectInstance inst : dynamicObjects) {
+            markOwnedSlot(owned, inst);
+        }
+        for (int[] slots : reservedChildSlots.values()) {
+            if (slots == null) {
+                continue;
+            }
+            for (int slot : slots) {
+                if (isManagedDynamicSlot(slot)) {
+                    owned.set(execIndexForSlot(slot));
                 }
             }
+        }
+        return owned.toLongArray();
+    }
+
+    /**
+     * Builds a fresh {@link com.openggf.game.rewind.schema.RewindCaptureContext} reflecting
+     * the current live object + player set. The returned context's
+     * {@link com.openggf.game.rewind.identity.RewindIdentityTable} maps every live object
+     * to a stable {@link com.openggf.game.rewind.identity.ObjectRefId}.
+     *
+     * <p>This method is called internally by the capture/restore path and is also
+     * exposed publicly so test harnesses can inspect the identity table without
+     * triggering a full snapshot capture.
+     */
+    public com.openggf.game.rewind.schema.RewindCaptureContext captureIdentityContext() {
+        return rewindCaptureContext();
+    }
+
+    /**
+     * Verifies that every identity-bearing field captured by the compact default
+     * object path points at an object or player registered in the current rewind
+     * identity context.
+     */
+    public void validateRewindReferenceClosure() {
+        ObjectRewindReferenceClosureValidator.validate(
+                activeObjects.values(), dynamicObjects,
+                dynamicOwnership.nonRewindableObjects(), rewindCaptureContext());
+    }
+
+    private com.openggf.game.rewind.schema.RewindCaptureContext rewindCaptureContext() {
+        com.openggf.game.rewind.identity.RewindIdentityTable table =
+                new com.openggf.game.rewind.identity.RewindIdentityTable();
+        registerPlayersInto(table);
+        // Register every live object (placed + dynamic) so object-reference fields can
+        // be captured as stable ObjectRefIds. The id was assigned when the object entered
+        // the live set (via registerActiveObject / addDynamicObjectInternal).
+        for (ObjectInstance inst : activeObjects.values()) {
+            ObjectRefId id = rewindObjectIds.get(inst);
+            if (id != null) {
+                table.registerObject(inst, id);
+            }
+        }
+        for (ObjectInstance inst : dynamicObjects) {
+            ObjectRefId id = rewindObjectIds.get(inst);
+            if (id != null) {
+                table.registerObject(inst, id);
+            }
+        }
+        return com.openggf.game.rewind.schema.RewindCaptureContext.withIdentityTable(table);
+    }
+
+    /**
+     * Registers the live player + sidekick references into {@code table} under their stable
+     * {@link com.openggf.game.rewind.identity.PlayerRefId}s. Players are not part of the
+     * object set rebuilt by a restore, so the same registration is valid for both the capture
+     * context and the restore context — player-reference fields resolve to the live players
+     * either way.
+     */
+    private void registerPlayersInto(com.openggf.game.rewind.identity.RewindIdentityTable table) {
+        com.openggf.sprites.playable.AbstractPlayableSprite main = null;
+        List<PlayableEntity> sidekicks = List.of();
+        if (objectServices != null) {
+            var camera = objectServices.camera();
+            main = camera != null ? camera.getFocusedSprite() : null;
+            List<PlayableEntity> serviceSidekicks = objectServices.sidekicks();
+            if (serviceSidekicks != null) {
+                sidekicks = serviceSidekicks;
+            }
+        }
+        if (main != null) {
+            table.registerPlayer(main, com.openggf.game.rewind.identity.PlayerRefId.mainPlayer());
+        }
+        for (int i = 0; i < sidekicks.size(); i++) {
+            PlayableEntity sidekick = sidekicks.get(i);
+            if (sidekick == null || sidekick == main) {
+                continue;
+            }
+            table.registerPlayer(sidekick, com.openggf.game.rewind.identity.PlayerRefId.sidekick(i));
         }
     }
+
+    private void markOwnedSlot(BitSet owned, ObjectInstance inst) {
+        if (inst instanceof AbstractObjectInstance aoi && isManagedDynamicSlot(aoi.getSlotIndex())) {
+            owned.set(execIndexForSlot(aoi.getSlotIndex()));
+        }
+    }
+
+    private static String stableSpawnKey(ObjectSpawn spawn) {
+        if (spawn == null) {
+            return "";
+        }
+        return spawn.layoutIndex()
+                + ":" + spawn.objectId()
+                + ":" + spawn.x()
+                + ":" + spawn.y()
+                + ":" + spawn.subtype()
+                + ":" + spawn.renderFlags()
+                + ":" + spawn.rawYWord();
+    }
+
+    static boolean isRewindRestorableDynamicObject(ObjectInstance inst) {
+        return isRewindRestorableDynamicObject(inst, null);
+    }
+
+    static boolean isRewindRestorableDynamicObject(ObjectInstance inst, ObjectRegistry registry) {
+        return inst instanceof RewindRecreatable;
+    }
+
+    ObjectServices objectServicesForRewind() {
+        return objectServices;
+    }
+
+    /**
+     * Returns the game-specific {@link ObjectRegistry} for use by
+     * {@link ObjectRewindDynamicCodecs#genericRecreate} during rewind restore.
+     * Package-private: accessed only through {@link DynamicObjectRecreateContext#objectRegistry()}.
+     */
+    ObjectRegistry rewindObjectRegistry() {
+        return registry;
+    }
+
+    /**
+     * Enqueues a captured {@link com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.DynamicObjectEntry}
+     * for a player-bound dynamic class whose post-restore re-spawn happens
+     * after object-manager restore (currently Shield + Stars). Called by the
+     * recreate path.
+     */
+    void enqueuePendingPlayerBoundEntry(Class<?> baseType,
+            com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.DynamicObjectEntry entry) {
+        if (entry == null || entry.slotIndex() < 0) return;
+        pendingPlayerBoundEntries
+                .computeIfAbsent(baseType, k -> new java.util.ArrayDeque<>())
+                .add(entry);
+    }
+
+    /**
+     * Pops the next captured entry for the given base type, or returns
+     * {@code null} if none is pending. Called by {@code DefaultPowerUpSpawner}
+     * during the post-restore re-spawn so the freshly-constructed instance
+     * lands at the captured slot AND has its captured field surface
+     * (animation cursor, timers, visibility flags, etc.) reapplied via
+     * {@link AbstractObjectInstance#restoreRewindState}.
+     */
+    public com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.DynamicObjectEntry
+            consumePendingPlayerBoundEntry(Class<?> baseType) {
+        return consumePendingPlayerBoundEntry(baseType, entry -> true);
+    }
+
+    /**
+     * Pops the first captured entry for the given player-bound base type that
+     * satisfies {@code matcher}. Shield restore uses this to match owner and
+     * concrete class instead of consuming another player's pending same-type
+     * shield from the FIFO queue.
+     */
+    public com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.DynamicObjectEntry
+            consumePendingPlayerBoundEntry(Class<?> baseType,
+                    Predicate<com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.DynamicObjectEntry> matcher) {
+        java.util.ArrayDeque<com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.DynamicObjectEntry>
+                queue = pendingPlayerBoundEntries.get(baseType);
+        if (queue == null || queue.isEmpty()) return null;
+        Iterator<com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.DynamicObjectEntry> iterator =
+                queue.iterator();
+        while (iterator.hasNext()) {
+            com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.DynamicObjectEntry entry = iterator.next();
+            if (matcher.test(entry)) {
+                iterator.remove();
+                if (queue.isEmpty()) {
+                    pendingPlayerBoundEntries.remove(baseType);
+                }
+                return entry;
+            }
+        }
+        return null;
+    }
+
+    private static PlayableEntity playerBoundOwner(ObjectInstance inst) {
+        if (inst instanceof ShieldObjectInstance shield) {
+            return shield.getPlayer();
+        }
+        if (inst instanceof PowerUpObject powerUp && powerUp.isInvincibilityStars()) {
+            return powerUp.boundPlayer();
+        }
+        return null;
+    }
+
+    private ObjectInstance recreateDynamicObject(
+            com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.DynamicObjectEntry entry) {
+        DynamicObjectRecreateContext context = new DynamicObjectRecreateContext(this);
+        // Phase-2 generic recreate: only classes that explicitly implement
+        // RewindRecreatable opt into dynamic restore. Unsupported dynamic classes
+        // still drop on restore and remain visible in coverage diagnostics.
+        if (isRewindRecreatableClassName(entry.className())) {
+            return ObjectRewindDynamicCodecs.genericRecreate(entry, context);
+        }
+        return null;
+    }
+
+    /**
+     * Returns true if the captured class name resolves to a concrete object class that
+     * implements {@link RewindRecreatable}. Used to opt the class into the generic
+     * recreate fallback without referencing any concrete game package.
+     */
+    private static boolean isRewindRecreatableClassName(String className) {
+        if (className == null) {
+            return false;
+        }
+        try {
+            return RewindRecreatable.class.isAssignableFrom(Class.forName(className));
+        } catch (ClassNotFoundException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Records a child constructed while an active object is being reconstructed during a
+     * rewind restore. The child is NOT inserted into {@link #dynamicObjects} and is NOT given
+     * a freshly allocated slot here — the slot allocator was already restored from the
+     * snapshot in restore() step 2, and the child is registered at its captured slot when the
+     * step-4 reconciliation loop adopts it (see {@link #adoptRewindReconstructionChild}).
+     *
+     * <p>Called by {@link AbstractObjectInstance#spawnChild}/{@code spawnFreeChild} only when
+     * {@link ObjectConstructionContext#isRewindActiveRestore()} is true. The reconstructed
+     * parent still receives this instance as its back-reference, so adopting it in place keeps
+     * the parent's child references valid while giving the child its exact captured state.
+     */
+    public void registerRewindReconstructionChild(AbstractObjectInstance child) {
+        if (child != null && rewindReconstructionChildCapture) {
+            rewindReconstructionChildren.add(child);
+        }
+    }
+
+    /**
+     * Finds and removes the pending reconstruction child whose runtime class matches
+     * {@code entry.className()}, preferring an EXACT match on {@code entry.spawn().subtype()}
+     * over plain construction-order FIFO.
+     *
+     * <p>Construction order is deterministic and normally equals the dynamic-object capture
+     * order, so first-in-order FIFO alone pairs each captured
+     * {@link com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.DynamicObjectEntry} with the
+     * same logical child the parent re-spawned -- UNLESS the parent has multiple indistinguishable
+     * same-class siblings (e.g. EHZ's 3 {@code EHZBossWheel} children) and one of them was
+     * destroyed and pruned before the frame being captured: the fixed-order re-spawn still
+     * produces as many candidates as the class originally had, but there are now fewer captured
+     * entries, so FIFO silently shifts captured state onto the wrong sibling position (a mismatch
+     * invisible to the generic scalar-field restore that follows, but fatal to any {@code final}
+     * field the constructor derived from the ORIGINAL position's identity, e.g.
+     * {@code EHZBossWheel.animationState}).
+     *
+     * <p>{@link com.openggf.level.objects.boss.AbstractBossChild} threads a stable per-(parent,
+     * runtime-class) construction ordinal through {@code ObjectSpawn.subtype()} (a field it does
+     * not otherwise use) specifically so this can discriminate exactly. Object types that don't
+     * participate in that convention report {@code subtype 0} for every instance, so the "no exact
+     * match" branch below falls back to today's plain FIFO, preserving existing behavior for every
+     * other {@code spawnChild} caller (e.g. {@code SidewaysPformObjectInstance}, {@code ConveyorObjectInstance}).
+     *
+     * <p>Returns {@code null} when no construction child of that class is pending (e.g.
+     * routine-spawned children, which fall back to the generic recreate path).
+     */
+    private AbstractObjectInstance adoptRewindReconstructionChild(
+            com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.DynamicObjectEntry entry) {
+        String className = entry.className();
+        if (className == null) {
+            return null;
+        }
+        int capturedSubtype = entry.spawn() != null ? entry.spawn().subtype() : 0;
+        int fifoFallbackIndex = -1;
+        for (int i = 0; i < rewindReconstructionChildren.size(); i++) {
+            AbstractObjectInstance child = rewindReconstructionChildren.get(i);
+            if (!child.getClass().getName().equals(className)) {
+                continue;
+            }
+            if (fifoFallbackIndex < 0) {
+                fifoFallbackIndex = i;
+            }
+            ObjectSpawn childSpawn = child.getSpawn();
+            if (childSpawn != null && childSpawn.subtype() == capturedSubtype) {
+                return rewindReconstructionChildren.remove(i);
+            }
+        }
+        return fifoFallbackIndex >= 0 ? rewindReconstructionChildren.remove(fifoFallbackIndex) : null;
+    }
+
+    ObjectInstance findRestoredRidingObject(ObjectSpawn spawn, int slotIndex) {
+        if (spawn != null) {
+            ObjectInstance active = activeObjects.get(spawn);
+            if (active != null) {
+                return active;
+            }
+            for (ObjectInstance dynamic : dynamicObjects) {
+                if (dynamic != null && dynamic.getSpawn() == spawn) {
+                    return dynamic;
+                }
+            }
+        }
+        if (isManagedDynamicSlot(slotIndex)) {
+            int execIdx = execIndexForSlot(slotIndex);
+            if (execIdx >= 0 && execIdx < execOrder.length) {
+                return execOrder[execIdx];
+            }
+        }
+        return null;
+    }
+
 
     static final class PlaneSwitchers {
         private static final Logger LOGGER = Logger.getLogger(PlaneSwitchers.class.getName());
@@ -2555,12 +4882,12 @@ public class ObjectManager {
         private static final int MASK_PRIORITY_SIDE0 = 0x40;
         private static final int MASK_GROUNDED_ONLY = 0x80;
 
-        private final Placement placement;
+        private final ObjectPlacementController placement;
         private final int objectId;
         private final PlaneSwitcherConfig config;
         private final Map<ObjectSpawn, PlaneSwitcherState> states = new HashMap<>();
 
-        PlaneSwitchers(Placement placement, int objectId, PlaneSwitcherConfig config) {
+        PlaneSwitchers(ObjectPlacementController placement, int objectId, PlaneSwitcherConfig config) {
             this.placement = placement;
             this.objectId = objectId & 0xFF;
             this.config = config;
@@ -2568,6 +4895,67 @@ public class ObjectManager {
 
         void reset() {
             states.clear();
+        }
+
+        com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.PlaneSwitcherSnapshot captureRewindState() {
+            List<com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.PlaneSwitcherEntry> entries =
+                    new ArrayList<>();
+            for (Map.Entry<ObjectSpawn, PlaneSwitcherState> entry : states.entrySet()) {
+                PlaneSwitcherState state = entry.getValue();
+                List<com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.PlaneSwitcherPlayerSideEntry>
+                        playerSides = new ArrayList<>();
+                for (Map.Entry<PlayableEntity, Byte> sideEntry : state.sideStates.entrySet()) {
+                    playerSides.add(
+                            new com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.PlaneSwitcherPlayerSideEntry(
+                                    sideEntry.getKey(),
+                                    sideEntry.getValue() & 0xFF));
+                }
+                playerSides.sort(Comparator
+                        .comparing((com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.PlaneSwitcherPlayerSideEntry e)
+                                -> stablePlayerKey(e.player()))
+                        .thenComparingInt(e -> e.sideState()));
+                entries.add(new com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.PlaneSwitcherEntry(
+                        entry.getKey(),
+                        state.getLastSideState(),
+                        state.hasLastSideState(),
+                        List.copyOf(playerSides)));
+            }
+            entries.sort(Comparator.comparing(entry -> stableSpawnKey(entry.spawn())));
+            return new com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.PlaneSwitcherSnapshot(
+                    List.copyOf(entries));
+        }
+
+        void restoreRewindState(
+                com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.PlaneSwitcherSnapshot snapshot) {
+            states.clear();
+            if (snapshot == null) {
+                return;
+            }
+            for (com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.PlaneSwitcherEntry entry
+                    : snapshot.entries()) {
+                ObjectSpawn spawn = entry.spawn();
+                if (spawn == null) {
+                    continue;
+                }
+                PlaneSwitcherState state = new PlaneSwitcherState(decodeHalfSpan(spawn.subtype()));
+                if (entry.hasLastSideState()) {
+                    state.setLastSideState(entry.lastSideState());
+                }
+                for (com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.PlaneSwitcherPlayerSideEntry side
+                        : entry.playerSides()) {
+                    if (side.player() != null) {
+                        state.setSideState(side.player(), side.sideState());
+                    }
+                }
+                states.put(spawn, state);
+            }
+        }
+
+        private static String stablePlayerKey(PlayableEntity player) {
+            if (player instanceof AbstractPlayableSprite sprite) {
+                return sprite.getCode();
+            }
+            return player == null ? "" : player.getClass().getName();
         }
 
         void update(PlayableEntity player) {
@@ -2579,67 +4967,77 @@ public class ObjectManager {
                 return;
             }
 
-            int playerX = player.getCentreX();
-            int playerY = player.getCentreY();
-
             for (ObjectSpawn spawn : active) {
-                if (spawn.objectId() != objectId) {
-                    continue;
-                }
-
-                int subtype = spawn.subtype();
-                PlaneSwitcherState state = states.computeIfAbsent(spawn,
-                        key -> new PlaneSwitcherState(decodeHalfSpan(subtype)));
-
-                boolean horizontal = isHorizontal(subtype);
-                int sideNow = horizontal
-                        ? (playerY >= spawn.y() ? 1 : 0)
-                        : (playerX >= spawn.x() ? 1 : 0);
-                if (!state.seeded) {
-                    state.sideState = (byte) sideNow;
-                    state.seeded = true;
-                }
-
-                int half = state.halfSpanPixels;
-                boolean inSpan = horizontal
-                        ? (playerX >= spawn.x() - half && playerX < spawn.x() + half)
-                        : (playerY >= spawn.y() - half && playerY < spawn.y() + half);
-                boolean groundedGate = onlySwitchWhenGrounded(subtype) && player.getAir();
-
-                if (inSpan && !groundedGate && sideNow != state.sideState) {
-                    boolean skipCollisionChange = (spawn.renderFlags() & 0x1) != 0;
-                    if (!skipCollisionChange) {
-                        int path = decodePath(subtype, sideNow);
-                        player.setLayer((byte) path);
-                        if (path == 0) {
-                            player.setTopSolidBit(config.getPath0TopSolidBit());
-                            player.setLrbSolidBit(config.getPath0LrbSolidBit());
-                        } else {
-                            player.setTopSolidBit(config.getPath1TopSolidBit());
-                            player.setLrbSolidBit(config.getPath1LrbSolidBit());
-                        }
-                        LOGGER.fine(() -> String.format(
-                                "PlaneSwitcher path=%d: player(%d,%d) obj(%d,%d) sub=0x%02X side=%d→%d air=%b mode=%s",
-                                path, player.getCentreX(), player.getCentreY(),
-                                spawn.x(), spawn.y(), subtype, state.sideState, sideNow,
-                                player.getAir(), player.getGroundMode()));
-                    }
-                    boolean highPriority = decodePriority(subtype, sideNow);
-                    player.setHighPriority(highPriority);
-                }
-
-                state.sideState = (byte) sideNow;
+                update(spawn, player);
             }
 
             states.keySet().removeIf(spawn -> spawn.objectId() == objectId && !active.contains(spawn));
         }
 
+        void update(ObjectSpawn spawn, PlayableEntity player) {
+            if (spawn == null || player == null || config == null || spawn.objectId() != objectId) {
+                return;
+            }
+
+            int playerX = player.getCentreX();
+            int playerY = player.getCentreY();
+            int subtype = spawn.subtype();
+            PlaneSwitcherState state = states.computeIfAbsent(spawn,
+                    key -> new PlaneSwitcherState(decodeHalfSpan(subtype)));
+
+            boolean horizontal = isHorizontal(subtype);
+            int sideNow = horizontal
+                    ? (playerY >= spawn.y() ? 1 : 0)
+                    : (playerX >= spawn.x() ? 1 : 0);
+            int previousSide = state.getSideState(player);
+            if (previousSide < 0) {
+                state.setSideState(player, sideNow);
+                state.setLastSideState(sideNow);
+                return;
+            }
+
+            int half = state.halfSpanPixels;
+            boolean inSpan = horizontal
+                    ? (playerX >= spawn.x() - half && playerX < spawn.x() + half)
+                    : (playerY >= spawn.y() - half && playerY < spawn.y() + half);
+            boolean groundedGate = onlySwitchWhenGrounded(subtype) && player.getAir();
+
+            if (inSpan && !groundedGate && sideNow != previousSide) {
+                boolean skipCollisionChange = (spawn.renderFlags() & 0x1) != 0;
+                if (!skipCollisionChange) {
+                    int path = decodePath(subtype, sideNow);
+                    player.setLayer((byte) path);
+                    if (path == 0) {
+                        player.setTopSolidBit(config.getPath0TopSolidBit());
+                        player.setLrbSolidBit(config.getPath0LrbSolidBit());
+                    } else {
+                        player.setTopSolidBit(config.getPath1TopSolidBit());
+                        player.setLrbSolidBit(config.getPath1LrbSolidBit());
+                    }
+                    LOGGER.fine(() -> String.format(
+                            "PlaneSwitcher path=%d: player(%d,%d) obj(%d,%d) sub=0x%02X side=%d→%d air=%b mode=%s",
+                            path, player.getCentreX(), player.getCentreY(),
+                            spawn.x(), spawn.y(), subtype, previousSide, sideNow,
+                            player.getAir(), player.getGroundMode()));
+                }
+                boolean highPriority = decodePriority(subtype, sideNow);
+                player.setHighPriority(highPriority);
+            }
+
+            state.setSideState(player, sideNow);
+            state.setLastSideState(sideNow);
+        }
+
+        void remove(ObjectSpawn spawn) {
+            states.remove(spawn);
+        }
+
         int getSideState(ObjectSpawn spawn) {
             PlaneSwitcherState state = states.get(spawn);
-            if (state == null || !state.seeded) {
+            if (state == null || !state.hasLastSideState()) {
                 return -1;
             }
-            return state.sideState;
+            return state.getLastSideState();
         }
 
         static int decodeHalfSpan(int subtype) {
@@ -2678,2234 +5076,35 @@ public class ObjectManager {
 
         private static final class PlaneSwitcherState {
             private final int halfSpanPixels;
-            private byte sideState = 0;
-            private boolean seeded = false;
+            private final IdentityHashMap<PlayableEntity, Byte> sideStates = new IdentityHashMap<>();
+            private byte lastSideState = 0;
+            private boolean hasLastSideState = false;
 
             private PlaneSwitcherState(int halfSpanPixels) {
                 this.halfSpanPixels = halfSpanPixels;
             }
-        }
-    }
 
-    static final class TouchResponses {
-        private static final Logger LOGGER = Logger.getLogger(TouchResponses.class.getName());
-        private final ObjectManager objectManager;
-        private final TouchResponseTable table;
-        // Double-buffer pattern: swap buffers instead of allocating new sets each frame
-        private final Set<ObjectInstance> bufferA = Collections.newSetFromMap(new IdentityHashMap<>());
-        private final Set<ObjectInstance> bufferB = Collections.newSetFromMap(new IdentityHashMap<>());
-        private Set<ObjectInstance> overlapping = bufferA;
-        private Set<ObjectInstance> building = bufferB;
-        // Per-sidekick overlap tracking (each sidekick needs independent edge detection)
-        private static class OverlapBufferPair {
-            final Set<ObjectInstance> bufferA = Collections.newSetFromMap(new IdentityHashMap<>());
-            final Set<ObjectInstance> bufferB = Collections.newSetFromMap(new IdentityHashMap<>());
-            Set<ObjectInstance> overlapping = bufferA;
-            Set<ObjectInstance> building = bufferB;
-
-            void swap() {
-                Set<ObjectInstance> temp = overlapping;
-                overlapping = building;
-                building = temp;
-            }
-
-            void reset() {
-                bufferA.clear();
-                bufferB.clear();
-                overlapping = bufferA;
-                building = bufferB;
-            }
-        }
-
-        private final Map<PlayableEntity, OverlapBufferPair> sidekickOverlaps = new IdentityHashMap<>();
-        private final TouchResponseDebugState debugState = new TouchResponseDebugState();
-        private static final int SHIELD_TOUCH_HALF_SIZE = 0x18;
-        private static final int SHIELD_TOUCH_SIZE = SHIELD_TOUCH_HALF_SIZE * 2;
-        private static final int SHIELD_REACTION_BOUNCE_BIT = 1 << 3;
-        private int currentFrameCounter;
-        private boolean instaShieldActive;
-        private PlayableEntity currentPlayer;
-
-        TouchResponses(ObjectManager objectManager, TouchResponseTable table) {
-            this.objectManager = objectManager;
-            this.table = table;
-        }
-
-        void reset() {
-            bufferA.clear();
-            bufferB.clear();
-            overlapping = bufferA;
-            building = bufferB;
-            sidekickOverlaps.values().forEach(OverlapBufferPair::reset);
-            currentFrameCounter = 0;
-        }
-
-        void update(PlayableEntity player, int frameCounter) {
-            currentFrameCounter = frameCounter;
-            if (player == null || objectManager == null || player.getDead() || table == null) {
-                overlapping.clear();
-                debugState.clear();
-                return;
-            }
-
-            if (player.isDebugMode()) {
-                overlapping.clear();
-                debugState.clear();
-                return;
-            }
-
-            int playerX = player.getCentreX() - 8;
-            int baseYRadius = Math.max(1, player.getYRadius() - 3);
-            // ROM: playerY = y_pos - (y_radius - 3). Do NOT subtract 8 from Y (only X).
-            int playerY = player.getCentreY() - baseYRadius;
-            int playerHeight = baseYRadius * 2;
-            boolean crouching = player.getCrouching();
-            if (crouching) {
-                playerY += 12;
-                playerHeight = 20;
-            }
-            // ROM (sonic3k.asm:20620-20640): Insta-shield expands hitbox to 48x48
-            instaShieldActive = false;
-            currentPlayer = player;
-            int playerWidth = 0x10; // Normal width
-            PhysicsFeatureSet fs = player.getPhysicsFeatureSet();
-            if (fs != null && fs.instaShieldEnabled()
-                    && player.getDoubleJumpFlag() == 1
-                    && player.getShieldType() == null
-                    && player.getInvincibleFrames() == 0) {
-                instaShieldActive = true;
-                playerX = player.getCentreX() - 0x18;
-                playerY = player.getCentreY() - 0x18;
-                playerHeight = 0x30;
-                playerWidth = 0x30;
-            }
-            debugState.setPlayer(playerX, playerY, playerHeight, baseYRadius, crouching);
-            debugState.clear();
-
-            // Double-buffer pattern:
-            // - 'overlapping' contains last frame's overlapping objects
-            // - 'building' will be populated with this frame's overlapping objects
-            // Clear building to prepare for this frame's data
-            building.clear();
-
-            processCollisionLoop(player, playerX, playerY, playerHeight, playerWidth,
-                    building, overlapping, false);
-
-            // Swap buffers: building becomes overlapping for next frame
-            Set<ObjectInstance> temp = overlapping;
-            overlapping = building;
-            building = temp;
-            instaShieldActive = false;
-            currentPlayer = null;
-        }
-
-        /**
-         * Touch response check for the CPU sidekick (Tails).
-         * Uses separate overlap tracking from the main player.
-         * ROM: In 1P mode, CPU Tails interacts with objects but doesn't scatter
-         * rings when hurt and can never die from enemy contact.
-         */
-        void updateSidekick(PlayableEntity sidekick, int frameCounter) {
-            currentPlayer = null; // Sidekick doesn't get insta-shield
-            currentFrameCounter = frameCounter;
-            OverlapBufferPair buffers = sidekickOverlaps.computeIfAbsent(sidekick, k -> new OverlapBufferPair());
-            if (sidekick == null || objectManager == null || sidekick.getDead() || table == null) {
-                buffers.overlapping.clear();
-                return;
-            }
-
-            if (sidekick.isDebugMode()) {
-                buffers.overlapping.clear();
-                return;
-            }
-
-            int playerX = sidekick.getCentreX() - 8;
-            int baseYRadius = Math.max(1, sidekick.getYRadius() - 3);
-            int playerY = sidekick.getCentreY() - baseYRadius;
-            int playerHeight = baseYRadius * 2;
-            boolean crouching = sidekick.getCrouching();
-            if (crouching) {
-                playerY += 12;
-                playerHeight = 20;
-            }
-
-            buffers.building.clear();
-
-            processCollisionLoop(sidekick, playerX, playerY, playerHeight, 0x10,
-                    buffers.building, buffers.overlapping, true);
-
-            buffers.swap();
-        }
-
-        /**
-         * Shared collision loop for both main player and sidekick touch responses.
-         * Iterates active objects, checks touch regions and overlap, dispatches to the
-         * appropriate response handler. Behavioral differences are parameterized:
-         * - Player: records debug hits, breaks after first hit (ROM: bne.w branch)
-         * - Sidekick: no debug recording, continues loop after hits
-         *
-         * @param player         the playable entity to check collisions for
-         * @param playerX        hitbox left edge (centreX - 8, or insta-shield adjusted)
-         * @param playerY        hitbox top edge (centreY - yRadius adjusted)
-         * @param playerHeight   hitbox height
-         * @param playerWidth    hitbox width (0x10 normal, 0x30 insta-shield)
-         * @param buildingSet    the set being populated with this frame's overlapping objects
-         * @param overlappingSet last frame's overlapping objects (for edge-trigger detection)
-         * @param isSidekick     true for sidekick (no break-on-hit, sidekick response handler)
-         */
-        private void processCollisionLoop(PlayableEntity player,
-                int playerX, int playerY, int playerHeight, int playerWidth,
-                Set<ObjectInstance> buildingSet, Set<ObjectInstance> overlappingSet,
-                boolean isSidekick) {
-            Collection<ObjectInstance> activeObjects = objectManager.getActiveObjects();
-
-            for (ObjectInstance instance : activeObjects) {
-                if (!(instance instanceof TouchResponseProvider provider)) {
-                    continue;
-                }
-                if (instance.isSkipTouchThisFrame()) {
-                    continue;
-                }
-
-                // Multi-region providers (e.g., spiked pole helix) check each region independently
-                TouchResponseProvider.TouchRegion[] regions = provider.getMultiTouchRegions();
-                if (regions != null) {
-                    boolean hit = processMultiRegionTouch(player, playerX, playerY, playerHeight,
-                            instance, provider, regions, playerWidth,
-                            buildingSet, overlappingSet, isSidekick);
-                    if (!isSidekick && hit) {
-                        break;
-                    }
-                    continue;
-                }
-
-                // ROM parity: ReactToItem checks "tst.b obRender(a1) / bpl.s .next"
-                // for each object. If obRender bit 7 is clear (object not yet displayed
-                // by DisplaySprite), the entire object is skipped. This covers:
-                // (a) First-frame objects whose DisplaySprite hasn't run yet
-                // (b) Objects that were offscreen on the previous frame
-                // (c) Objects created by higher-slot makers that haven't run yet
-                // Use isOnScreen() as the engine's equivalent of obRender bit 7.
-                if (instance.isSkipSolidContactThisFrame()) {
-                    continue;
-                }
-                if (instance instanceof AbstractObjectInstance aoi && !aoi.isOnScreenForTouch()) {
-                    continue;
-                }
-                int preFlags = instance.getPreUpdateCollisionFlags();
-                int flags = (preFlags >= 0) ? preFlags : provider.getCollisionFlags();
-                if (flags == 0) {
-                    continue; // Skip collision for objects with no collision flags
-                }
-                int sizeIndex = flags & 0x3F;
-                int width = table.getWidthRadius(sizeIndex);
-                int height = table.getHeightRadius(sizeIndex);
-                TouchCategory category = decodeCategory(flags);
-                if (category == TouchCategory.HURT
-                        && tryShieldDeflect(player, instance, provider, width, height)) {
-                    continue;
-                }
-
-                // ROM parity: ReactToItem runs in Sonic's slot (slot 0) BEFORE other
-                // objects update. So touch collision sees objects at their pre-update
-                // positions. Use getPreUpdateX()/getPreUpdateY() which return the
-                // position snapshot taken before the object update loop ran.
-                int objX = instance.getPreUpdateX();
-                int objY = instance.getPreUpdateY();
-                boolean overlap = isOverlapping(playerX, playerY, playerHeight, objX, objY, width, height, playerWidth);
-
-                if (!isSidekick && debugState.isEnabled()) {
-                    debugState.addHit(
-                            new TouchResponseDebugHit(instance.getSpawn(), flags, sizeIndex, width, height, category, overlap));
-                }
-                if (!overlap) {
-                    continue;
-                }
-                buildingSet.add(instance);
-                // ROM touch checks run every frame for bosses. Most other objects are
-                // edge-triggered, but some special objects need per-frame polling behavior.
-                // ROM: Touch_ChkHurt runs every frame — no edge-triggering.
-                // HURT must be continuous so damage re-applies after i-frames expire
-                // while the player is still inside the hazard hitbox.
-                boolean shouldTrigger = category == TouchCategory.BOSS
-                        || category == TouchCategory.HURT
-                        || provider.requiresContinuousTouchCallbacks()
-                        || !overlappingSet.contains(instance);
-                if (shouldTrigger) {
-                    TouchResponseResult result = new TouchResponseResult(sizeIndex, width, height, category);
-                    TouchResponseListener listener = instance instanceof TouchResponseListener casted ? casted : null;
-                    if (isSidekick) {
-                        handleTouchResponseSidekick(player, instance, listener, result);
-                    } else {
-                        handleTouchResponse(player, instance, listener, result);
-                    }
-                }
-                // ROM parity: ReactToItem ALWAYS exits after the first overlapping
-                // object, regardless of category or whether a response was triggered.
-                // The ROM's handler returns via rts which exits the entire ReactToItem
-                // subroutine. Previously the engine only broke when shouldTrigger was
-                // true, allowing already-overlapping objects to be skipped and later
-                // objects to be found — a 1-frame-early bounce when a lower-slot
-                // non-enemy blocked ReactToItem in the ROM but was skipped here.
-                if (!isSidekick) {
-                    break;
-                }
-            }
-        }
-
-        /**
-         * Unified multi-region touch check for both player and sidekick.
-         * Each region is checked separately; if any overlaps, the object is treated as
-         * overlapping with the first matching region's collision flags applied.
-         * One hit per object per frame is sufficient — returns after first overlapping region.
-         */
-        private boolean processMultiRegionTouch(PlayableEntity player,
-                int playerX, int playerY, int playerHeight,
-                ObjectInstance instance, TouchResponseProvider provider,
-                TouchResponseProvider.TouchRegion[] regions, int playerWidth,
-                Set<ObjectInstance> buildingSet, Set<ObjectInstance> overlappingSet,
-                boolean isSidekick) {
-            for (TouchResponseProvider.TouchRegion region : regions) {
-                int flags = region.collisionFlags();
-                if (flags == 0) {
-                    continue;
-                }
-                int sizeIndex = flags & 0x3F;
-                int width = table.getWidthRadius(sizeIndex);
-                int height = table.getHeightRadius(sizeIndex);
-                TouchCategory category = decodeCategory(flags);
-
-                boolean overlap = isOverlappingXY(playerX, playerY, playerHeight,
-                        region.x(), region.y(), width, height, playerWidth);
-                if (!overlap) {
-                    continue;
-                }
-
-                buildingSet.add(instance);
-                // ROM: HURT is continuous (same as BOSS) — see processCollisionLoop comment
-                boolean shouldTrigger = category == TouchCategory.BOSS
-                        || category == TouchCategory.HURT
-                        || provider.requiresContinuousTouchCallbacks()
-                        || !overlappingSet.contains(instance);
-                if (shouldTrigger) {
-                    TouchResponseResult result = new TouchResponseResult(sizeIndex, width, height, category);
-                    TouchResponseListener listener = instance instanceof TouchResponseListener casted ? casted : null;
-                    if (isSidekick) {
-                        handleTouchResponseSidekick(player, instance, listener, result);
-                    } else {
-                        handleTouchResponse(player, instance, listener, result);
-                    }
-                }
-                // ROM parity: ReactToItem ALWAYS exits on first overlap, even
-                // when the response is edge-trigger suppressed. Match the
-                // single-region break-on-first-overlap behaviour.
-                return !isSidekick;
-            }
-            return false; // No region overlapped
-        }
-
-        private boolean tryShieldDeflect(PlayableEntity player, ObjectInstance instance,
-                TouchResponseProvider provider, int objectWidth, int objectHeight) {
-            if (player == null || !player.hasShield()) {
-                return false;
-            }
-            if ((provider.getShieldReactionFlags() & SHIELD_REACTION_BOUNCE_BIT) == 0) {
-                return false;
-            }
-
-            int shieldLeft = player.getCentreX() - SHIELD_TOUCH_HALF_SIZE;
-            int shieldTop = player.getCentreY() - SHIELD_TOUCH_HALF_SIZE;
-            boolean overlap = isRectOverlapping(shieldLeft, shieldTop, SHIELD_TOUCH_SIZE, SHIELD_TOUCH_SIZE,
-                    instance.getX(), instance.getY(), objectWidth, objectHeight);
-            if (!overlap) {
-                return false;
-            }
-            return provider.onShieldDeflect(player);
-        }
-
-        /**
-         * ROM: In 1P mode, CPU Tails interacts with objects but hurt handling differs:
-         * - Can destroy badniks while rolling/invincible (same as Sonic)
-         * - Gets knocked back when hurt but does NOT scatter rings or die
-         * - Special category objects still interact normally
-         */
-        private void handleTouchResponseSidekick(PlayableEntity sidekick, ObjectInstance instance,
-                TouchResponseListener listener, TouchResponseResult result) {
-            if (sidekick == null) {
-                return;
-            }
-            if (listener != null) {
-                listener.onTouchResponse(sidekick, result, currentFrameCounter);
-            }
-
-            switch (result.category()) {
-                case HURT -> applySidekickHurt(sidekick, instance);
-                case ENEMY -> {
-                    if (isPlayerAttacking(sidekick)) {
-                        // ROM: Touch_Enemy_Part2 checks collision_property BEFORE decrementing HP.
-                        int hpBeforeHit = 0;
-                        if (instance instanceof TouchResponseProvider provider2) {
-                            hpBeforeHit = provider2.getCollisionProperty();
-                        }
-                        if (instance instanceof TouchResponseAttackable attackable) {
-                            attackable.onPlayerAttack(sidekick, result);
-                        }
-                        if (hpBeforeHit > 0) {
-                            // Touch_Enemy_Part2: neg.w x_vel / neg.w y_vel
-                            sidekick.setXSpeed((short) -sidekick.getXSpeed());
-                            sidekick.setYSpeed((short) -sidekick.getYSpeed());
-                        } else {
-                            // Touch_KillEnemy: position-based bounce
-                            applyEnemyBounce(sidekick, instance);
-                        }
-                    } else {
-                        applySidekickHurt(sidekick, instance);
-                    }
-                }
-                case SPECIAL -> {
-                    // Listener handles object-specific logic.
-                }
-                case BOSS -> {
-                    if (isPlayerAttacking(sidekick)) {
-                        if (instance instanceof TouchResponseAttackable attackable) {
-                            attackable.onPlayerAttack(sidekick, result);
-                        }
-                        applyBossBounce(sidekick);
-                    } else {
-                        applySidekickHurt(sidekick, instance);
-                    }
-                }
-            }
-        }
-
-        /**
-         * ROM: Hurt_Sidekick in 1P mode - just knockback, no ring scatter, no death.
-         * From s2.asm HurtCharacter: in 1P mode, branches directly to Hurt_Sidekick
-         * which applies hurt animation without checking rings.
-         */
-        private void applySidekickHurt(PlayableEntity sidekick, ObjectInstance instance) {
-            if (sidekick.getInvulnerable()) {
-                return;
-            }
-            int sourceX = instance != null ? instance.getX() : sidekick.getCentreX();
-            // ROM: Hurt_Sidekick in 1P mode - just apply hurt knockback, no ring scatter
-            sidekick.applyHurt(sourceX);
-        }
-
-        private boolean isOverlapping(int playerX, int playerY, int playerHeight,
-                int objectX, int objectY, int objectWidth, int objectHeight, int playerWidth) {
-            int dx = objectX - objectWidth - playerX;
-            if (dx < 0) {
-                int sum = (dx & 0xFFFF) + ((objectWidth * 2) & 0xFFFF);
-                if (sum <= 0xFFFF) {
-                    return false;
-                }
-            } else if (dx > playerWidth) {
-                return false;
-            }
-
-            int dy = objectY - objectHeight - playerY;
-            if (dy < 0) {
-                int sum = (dy & 0xFFFF) + ((objectHeight * 2) & 0xFFFF);
-                if (sum <= 0xFFFF) {
-                    return false;
-                }
-            } else if (dy > playerHeight) {
-                return false;
-            }
-
-            return true;
-        }
-
-        private boolean isRectOverlapping(int playerLeft, int playerTop, int playerWidth, int playerHeight,
-                int objectX, int objectY, int objectWidth, int objectHeight) {
-            int playerRight = playerLeft + playerWidth;
-            int playerBottom = playerTop + playerHeight;
-            int objectLeft = objectX - objectWidth;
-            int objectRight = objectX + objectWidth;
-            int objectTop = objectY - objectHeight;
-            int objectBottom = objectY + objectHeight;
-            return playerRight >= objectLeft
-                    && playerLeft <= objectRight
-                    && playerBottom >= objectTop
-                    && playerTop <= objectBottom;
-        }
-
-        /**
-         * Overlap check using raw x/y coordinates instead of ObjectSpawn.
-         * Used by multi-region touch collision.
-         */
-        private boolean isOverlappingXY(int playerX, int playerY, int playerHeight,
-                int objX, int objY, int objectWidth, int objectHeight, int playerWidth) {
-            int dx = objX - objectWidth - playerX;
-            if (dx < 0) {
-                int sum = (dx & 0xFFFF) + ((objectWidth * 2) & 0xFFFF);
-                if (sum <= 0xFFFF) {
-                    return false;
-                }
-            } else if (dx > playerWidth) {
-                return false;
-            }
-
-            int dy = objY - objectHeight - playerY;
-            if (dy < 0) {
-                int sum = (dy & 0xFFFF) + ((objectHeight * 2) & 0xFFFF);
-                if (sum <= 0xFFFF) {
-                    return false;
-                }
-            } else if (dy > playerHeight) {
-                return false;
-            }
-
-            return true;
-        }
-
-        private TouchCategory decodeCategory(int flags) {
-            int categoryBits = flags & 0xC0;
-            return switch (categoryBits) {
-                case 0x00 -> TouchCategory.ENEMY;
-                case 0x40 -> TouchCategory.SPECIAL;
-                case 0x80 -> TouchCategory.HURT;
-                default -> TouchCategory.BOSS;
-            };
-        }
-
-        private void handleTouchResponse(PlayableEntity player, ObjectInstance instance,
-                TouchResponseListener listener, TouchResponseResult result) {
-            if (player == null) {
-                return;
-            }
-            if (listener != null) {
-                listener.onTouchResponse(player, result, currentFrameCounter);
-            }
-
-            switch (result.category()) {
-                case HURT -> applyHurt(player, instance);
-                case ENEMY -> {
-                    if (isPlayerAttacking(player)) {
-                        // ROM: Touch_Enemy_Part2 checks collision_property BEFORE decrementing HP.
-                        // Capture HP before onPlayerAttack (which may decrement it).
-                        int hpBeforeHit = 0;
-                        if (instance instanceof TouchResponseProvider provider2) {
-                            hpBeforeHit = provider2.getCollisionProperty();
-                        }
-                        if (instance instanceof TouchResponseAttackable attackable) {
-                            attackable.onPlayerAttack(player, result);
-                        }
-                        if (hpBeforeHit > 0) {
-                            // Touch_Enemy_Part2: neg.w x_vel(a0) / neg.w y_vel(a0)
-                            // Then clear collision_flags and decrement HP (handled by onPlayerAttack)
-                            System.err.printf("[TOUCH_NEG] frame=%d obj=%s x=0x%04X y=0x%04X hp=%d playerX=0x%04X playerY=0x%04X xSpd=%d ySpd=%d%n",
-                                    currentFrameCounter,
-                                    instance.getClass().getSimpleName(), instance.getX(), instance.getY(),
-                                    hpBeforeHit, player.getCentreX(), player.getCentreY(),
-                                    player.getXSpeed(), player.getYSpeed());
-                            player.setXSpeed((short) -player.getXSpeed());
-                            player.setYSpeed((short) -player.getYSpeed());
-                        } else {
-                            // Touch_KillEnemy: position-based bounce (one-hit kill)
-                            applyEnemyBounce(player, instance);
-                        }
-                    } else {
-                        applyHurt(player, instance);
-                    }
-                }
-                case SPECIAL -> {
-                    // Listener handles object-specific logic.
-                }
-                case BOSS -> {
-                    if (isPlayerAttacking(player)) {
-                        if (instance instanceof TouchResponseAttackable attackable) {
-                            attackable.onPlayerAttack(player, result);
-                        }
-                        applyBossBounce(player);
-                    } else {
-                        applyHurt(player, instance);
-                    }
-                }
-            }
-        }
-
-        private boolean isPlayerAttacking(PlayableEntity player) {
-            return player.isSuperSonic()
-                    || player.getInvincibleFrames() > 0
-                    || player.getRolling()
-                    || player.getSpindash()
-                    || (instaShieldActive && player == currentPlayer);
-        }
-
-        private void applyEnemyBounce(PlayableEntity player, ObjectInstance instance) {
-            // ROM-accurate: React_Enemy (s1.asm) only modifies obVelY, it does NOT
-            // set the air flag. Letting the collision system handle air state naturally
-            // preserves rolling through enemy bounces (ground roll into badnik).
-            short ySpeed = player.getYSpeed();
-            // TEMPORARY DIAGNOSTIC
-            System.err.printf("[ENEMY_BOUNCE] frame=%d vbla=%d obj=%s objX=0x%04X objY=0x%04X playerX=0x%04X playerY=0x%04X ySpd=0x%04X%n",
-                currentFrameCounter, objectManager.vblaCounter,
-                instance != null ? instance.getClass().getSimpleName() : "null",
-                instance != null ? instance.getX() : 0,
-                instance != null ? instance.getY() : 0,
-                player.getCentreX(), player.getCentreY(),
-                ySpeed & 0xFFFF);
-            if (ySpeed < 0) {
-                player.setYSpeed((short) (ySpeed + 0x100));
-                return;
-            }
-            // Use center coordinates to match ROM y_pos behavior
-            int playerY = player.getCentreY();
-            // ROM: cmp.w y_pos(a1),d0 — use current position, not spawn
-            int enemyY = instance != null ? instance.getY() : playerY;
-            if (playerY < enemyY) {
-                player.setYSpeed((short) -ySpeed);
-            } else {
-                player.setYSpeed((short) (ySpeed - 0x100));
-            }
-        }
-
-        /**
-         * ROM-accurate boss bounce: negate both X and Y velocities.
-         * From s2.asm Touch_Enemy_Part2 lines 84806-84807.
-         * Does not set air flag - ROM only modifies velocities here.
-         */
-        private void applyBossBounce(PlayableEntity player) {
-            player.setXSpeed((short) -player.getXSpeed());
-            player.setYSpeed((short) -player.getYSpeed());
-        }
-
-        private void applyHurt(PlayableEntity player, ObjectInstance instance) {
-            if (player.getInvulnerable()) {
-                return;
-            }
-
-            if (instance != null) {
-                String className = instance.getClass().getSimpleName();
-                int objectId = instance.getSpawn().objectId();
-                LOGGER.fine(() -> "Touch hurt by: " + className + " (ID: 0x" + Integer.toHexString(objectId) + ")");
-            }
-
-            int sourceX = instance != null ? instance.getX() : player.getCentreX();
-            boolean spikeHit = instance != null && instance.getSpawn().objectId() == 0x36;
-
-            // S3K shield_reaction bit 4: fire shield blocks fire damage
-            boolean fireHit = !spikeHit && instance instanceof TouchResponseProvider trp
-                    && (trp.getShieldReactionFlags() & 0x10) != 0;
-
-            DamageCause cause = spikeHit
-                    ? DamageCause.SPIKE
-                    : fireHit ? DamageCause.FIRE
-                    : DamageCause.NORMAL;
-
-            boolean hadRings = player.getRingCount() > 0;
-            if (hadRings && !player.hasShield()) {
-                // Escape hatch: LevelManager.spawnLostRings needs concrete type for RingManager
-                if (player instanceof AbstractPlayableSprite aps) {
-                    LevelManager.getInstance().spawnLostRings(aps, currentFrameCounter);
-                }
-            }
-            player.applyHurtOrDeath(sourceX, cause, hadRings);
-        }
-
-        TouchResponseDebugState getDebugState() {
-            return debugState;
-        }
-    }
-
-    static final class SolidContacts {
-        private static final Logger LOGGER = Logger.getLogger(SolidContacts.class.getName());
-        private static final int OBJ85_ID = 0x85;
-        private final ObjectManager objectManager;
-        private int frameCounter;
-
-        // Per-player riding state (ROM: each player object has its own SST interact field $3E)
-        private record RidingState(ObjectInstance object, int x, int y, int pieceIndex) {}
-        private final Map<PlayableEntity, RidingState> ridingStates = new IdentityHashMap<>(2);
-        private final Set<PlayableEntity> inlineSupportedPlayers =
-                Collections.newSetFromMap(new IdentityHashMap<>());
-        private PlayableEntity currentPlayer; // set during update() for internal use
-
-        // ROM: objects like Obj_AIZLRZEMZRock save player velocity/anim BEFORE calling
-        // SolidObjectFull, then check the saved values after. Our engine runs contact
-        // resolution (which zeroes velocity, clears rolling) before onSolidContact fires.
-        // Snapshot the player's pre-contact state so objects can read the "before" values.
-        private short preContactXSpeed;
-        private short preContactYSpeed;
-        private boolean preContactRolling;
-
-        // When true, the velocity classification adjustment in resolveContactInternal is
-        // skipped. Set when this pass runs AFTER movement (S1 UNIFIED post-movement pass),
-        // since the player's position already reflects their velocity.
-        private boolean postMovement;
-
-        // When true, this is a pre-movement pass for a game that will have a post-movement
-        // pass (S1 UNIFIED). Side collision effects (speed zeroing, position correction)
-        // should be deferred to the post-movement pass, because in the ROM, objects check
-        // Sonic's position AFTER he has moved (his slot runs first in ExecuteObjects).
-        // Standing/riding contacts still apply in pre-movement for platform delta tracking.
-        private boolean deferSideToPostMovement;
-
-        SolidContacts(ObjectManager objectManager) {
-            this.objectManager = objectManager;
-        }
-
-        void reset() {
-            frameCounter = 0;
-            ridingStates.clear();
-        }
-
-        boolean isRidingObject(PlayableEntity player) {
-            if (player == null) return false;
-            RidingState state = ridingStates.get(player);
-            return state != null && state.object != null;
-        }
-
-        boolean isAnyPlayerRiding() {
-            for (RidingState state : ridingStates.values()) {
-                if (state != null && state.object != null) return true;
-            }
-            return false;
-        }
-
-        boolean isPlayerRiding(PlayableEntity player, ObjectInstance instance) {
-            if (player == null) return false;
-            RidingState state = ridingStates.get(player);
-            return state != null && state.object == instance;
-        }
-
-        boolean isAnyPlayerRiding(ObjectInstance instance) {
-            for (RidingState state : ridingStates.values()) {
-                if (state != null && state.object == instance) return true;
-            }
-            return false;
-        }
-
-        void clearRidingObject(PlayableEntity player) {
-            if (player != null) {
-                ridingStates.remove(player);
-            }
-        }
-
-        /**
-         * Update the riding tracking position for a specific object without applying any delta.
-         * This is used when an object moves itself (e.g. Tornado horizontal follow) AFTER
-         * the player is already standing on it, to prevent SolidContacts from double-applying
-         * that movement as a riding delta on the next frame.
-         *
-         * In the ROM, SolidObject runs inline during the object's update (before the horizontal
-         * follow), so it never sees the follow delta. In our engine, SolidContacts runs after
-         * all objects update, so we need this to synchronize the tracking position.
-         */
-        void refreshRidingTrackingPosition(ObjectInstance object) {
-            for (var entry : ridingStates.entrySet()) {
-                RidingState state = entry.getValue();
-                if (state != null && state.object == object) {
-                    entry.setValue(new RidingState(object, object.getX(), object.getY(), state.pieceIndex));
-                }
-            }
-        }
-
-        ObjectInstance getRidingObject(PlayableEntity player) {
-            if (player == null) return null;
-            RidingState state = ridingStates.get(player);
-            return state != null ? state.object : null;
-        }
-
-        /** Get the piece index this player is riding, or -1 if not riding a multi-piece object. */
-        int getRidingPieceIndex(PlayableEntity player) {
-            if (player == null) return -1;
-            RidingState state = ridingStates.get(player);
-            return state != null ? state.pieceIndex : -1;
-        }
-
-        /** Check if the current player (set during update()) is riding the given object. Used by internal resolve methods. */
-        private boolean isRidingCurrentPlayerObject(ObjectInstance instance) {
-            if (currentPlayer == null) return false;
-            RidingState state = ridingStates.get(currentPlayer);
-            return state != null && state.object == instance;
-        }
-
-        /** Get the piece index the current player is riding. Used by internal resolve methods. */
-        private int getCurrentPlayerRidingPieceIndex() {
-            if (currentPlayer == null) return -1;
-            RidingState state = ridingStates.get(currentPlayer);
-            return state != null ? state.pieceIndex : -1;
-        }
-
-        /** Player X speed captured before any solid contact resolution modified it. */
-        short getPreContactXSpeed() { return preContactXSpeed; }
-        /** Player Y speed captured before any solid contact resolution modified it. */
-        short getPreContactYSpeed() { return preContactYSpeed; }
-        /** Player rolling state captured before any solid contact resolution modified it. */
-        boolean getPreContactRolling() { return preContactRolling; }
-
-        void beginInlineFrame(PlayableEntity player, List<? extends PlayableEntity> sidekicks,
-                boolean postMovement) {
-            this.postMovement = postMovement;
-            frameCounter++;
-            inlineSupportedPlayers.clear();
-            if (player != null && isCurrentlySupported(player)) {
-                inlineSupportedPlayers.add(player);
-            }
-            for (PlayableEntity sidekick : sidekicks) {
-                if (sidekick != null && isCurrentlySupported(sidekick)) {
-                    inlineSupportedPlayers.add(sidekick);
-                }
-            }
-        }
-
-        void finishInlineFrame(PlayableEntity player, List<? extends PlayableEntity> sidekicks) {
-            finalizeInlinePlayer(player);
-            for (PlayableEntity sidekick : sidekicks) {
-                finalizeInlinePlayer(sidekick);
-            }
-            currentPlayer = null;
-        }
-
-        private boolean isCurrentlySupported(PlayableEntity player) {
-            if (player == null || player.getDead() || player.isDebugMode()) {
-                return false;
-            }
-            RidingState state = ridingStates.get(player);
-            return (state != null && state.object != null) || player.isOnObject();
-        }
-
-        private void finalizeInlinePlayer(PlayableEntity player) {
-            if (player == null) {
-                return;
-            }
-            if (player.getDead() || player.isDebugMode()) {
-                ridingStates.remove(player);
-                return;
-            }
-            if (!inlineSupportedPlayers.contains(player)) {
-                ridingStates.remove(player);
-                player.setOnObject(false);
-            }
-        }
-
-        void processInlineObject(ObjectInstance instance, PlayableEntity player,
-                List<? extends PlayableEntity> sidekicks, boolean postMovement) {
-            this.postMovement = postMovement;
-            processInlineObjectForPlayer(instance, player);
-            for (PlayableEntity sidekick : sidekicks) {
-                processInlineObjectForPlayer(instance, sidekick);
-            }
-        }
-
-        private void processInlineObjectForPlayer(ObjectInstance instance, PlayableEntity player) {
-            if (player == null || objectManager == null || player.getDead()) {
-                if (player != null) {
-                    ridingStates.remove(player);
-                }
-                return;
-            }
-            if (player.isDebugMode()) {
-                ridingStates.remove(player);
-                return;
-            }
-
-            currentPlayer = player;
-            preContactXSpeed = player.getXSpeed();
-            preContactYSpeed = player.getYSpeed();
-            preContactRolling = player.getRolling();
-
-            RidingState state = ridingStates.get(player);
-            ObjectInstance ridingObject = state != null ? state.object : null;
-            int ridingX = state != null ? state.x : 0;
-            int ridingY = state != null ? state.y : 0;
-            int ridingPieceIndex = state != null ? state.pieceIndex : -1;
-
-            if (ridingObject != null && player.getAir()) {
-                ridingStates.remove(player);
-                ridingObject = null;
-                ridingPieceIndex = -1;
-                player.setOnObject(false);
-            }
-
-            if (instance == ridingObject && ridingObject instanceof SolidObjectProvider provider) {
-                processInlineRidingObject(player, instance, provider, ridingX, ridingY, ridingPieceIndex);
-                if (!(provider instanceof MultiPieceSolidProvider)) {
-                    currentPlayer = null;
-                    return;
-                }
-                // ROM parity for staircase-style multi-piece objects: after carrying Sonic
-                // on the currently ridden piece, later sibling pieces of the same logical
-                // object must still get a chance to apply side/top/bottom collision.
-                // Returning early here skips the "next block in the staircase" wall hit.
-            }
-
-            if (!(instance instanceof SolidObjectProvider provider)) {
-                currentPlayer = null;
-                return;
-            }
-            if (!provider.isSolidFor(player)) {
-                currentPlayer = null;
-                return;
-            }
-            if (player.isObjectControlled()) {
-                currentPlayer = null;
-                return;
-            }
-            if (instance.isSkipSolidContactThisFrame()) {
-                currentPlayer = null;
-                return;
-            }
-
-            if (provider instanceof MultiPieceSolidProvider multiPiece) {
-                MultiPieceContactResult result = processMultiPieceCollision(
-                        player, multiPiece, instance, frameCounter, provider.usesStickyContactBuffer());
-                if (result.pushing) {
-                    player.setPushing(true);
-                    provider.setPlayerPushing(player, true);
-                }
-                if (result.standing) {
-                    ridingStates.put(player, new RidingState(
-                            instance, result.ridingX, result.ridingY, result.pieceIndex));
-                    inlineSupportedPlayers.add(player);
-                }
-                currentPlayer = null;
-                return;
-            }
-
-            SolidObjectParams params = provider.getSolidParams();
-            int anchorX = instance.getX() + params.offsetX();
-            int anchorY = instance.getY() + params.offsetY();
-            int halfHeight = params.airHalfHeight();
-            boolean useStickyBuffer = provider.usesStickyContactBuffer();
-
-            SolidContact contact;
-            byte[] slopeData = null;
-            if (instance instanceof SlopedSolidProvider sloped) {
-                slopeData = sloped.getSlopeData();
-            }
-
-            if (slopeData != null && instance instanceof SlopedSolidProvider sloped) {
-                int slopeHalfHeight = params.groundHalfHeight();
-                contact = resolveSlopedContact(player, anchorX, anchorY, params.halfWidth(), slopeHalfHeight,
-                        slopeData, sloped.isSlopeFlipped(), provider.isTopSolidOnly(),
-                        useStickyBuffer, instance, true, sloped);
-            } else {
-                contact = resolveContact(player, anchorX, anchorY, params.halfWidth(), halfHeight,
-                        provider.isTopSolidOnly(), provider.hasMonitorSolidity(),
-                        useStickyBuffer, instance, true);
-            }
-
-            if (contact == null) {
-                currentPlayer = null;
-                return;
-            }
-            if (contact.pushing()) {
-                player.setPushing(true);
-                provider.setPlayerPushing(player, true);
-            }
-            if (contact.standing()) {
-                ridingStates.put(player, new RidingState(instance, instance.getX(), instance.getY(), -1));
-                inlineSupportedPlayers.add(player);
-            }
-            if (instance instanceof SolidObjectListener listener) {
-                listener.onSolidContact(player, contact, frameCounter);
-            }
-            currentPlayer = null;
-        }
-
-        private void processInlineRidingObject(PlayableEntity player, ObjectInstance instance,
-                SolidObjectProvider provider, int ridingX, int ridingY, int ridingPieceIndex) {
-            int currentX;
-            int currentY;
-            SolidObjectParams params;
-
-            if (ridingPieceIndex >= 0 && instance instanceof MultiPieceSolidProvider multiPiece) {
-                currentX = multiPiece.getPieceX(ridingPieceIndex);
-                currentY = multiPiece.getPieceY(ridingPieceIndex);
-                params = multiPiece.getPieceParams(ridingPieceIndex);
-            } else {
-                currentX = instance.getX();
-                currentY = instance.getY();
-                params = provider.getSolidParams();
+            private int getSideState(PlayableEntity player) {
+                Byte value = sideStates.get(player);
+                return value != null ? value & 0xFF : -1;
             }
 
-            int halfWidth = params.halfWidth();
-            int configuredTopHalfWidth = provider.getTopLandingHalfWidth(player, halfWidth);
-            int ridingHalfWidth = (configuredTopHalfWidth < halfWidth)
-                    ? configuredTopHalfWidth
-                    : halfWidth;
-
-            int boundsX = currentX + params.offsetX();
-            int relX = player.getCentreX() - boundsX + ridingHalfWidth;
-            boolean isSloped = (instance instanceof SlopedSolidProvider);
-            int stickyX = (!isSloped && !postMovement && provider.usesStickyContactBuffer()
-                    && ridingHalfWidth == halfWidth) ? 16 : 0;
-            int minRelX = -stickyX;
-            int maxRelXExclusive = (ridingHalfWidth * 2) + stickyX;
-            boolean inBounds = relX >= minRelX && relX < maxRelXExclusive;
-
-            if (inBounds && provider.isSolidFor(player) && !player.isObjectControlled()) {
-                int deltaX = currentX - ridingX;
-                if (deltaX != 0) {
-                    player.shiftX(deltaX);
-                }
-                int surfaceOffset;
-                if (instance instanceof SlopedSolidProvider sloped) {
-                    int slopeY = sampleSlopeY(player, currentX, params.halfWidth(), sloped);
-                    surfaceOffset = (slopeY != Integer.MIN_VALUE) ? slopeY : params.groundHalfHeight();
-                } else {
-                    surfaceOffset = params.groundHalfHeight();
-                }
-                int newCentreY = currentY + params.offsetY() - surfaceOffset - player.getYRadius();
-                int newY = newCentreY - (player.getHeight() / 2);
-                player.setY((short) newY);
-                ridingStates.put(player, new RidingState(instance, currentX, currentY, ridingPieceIndex));
-
-                if (provider.dropOnFloor()) {
-                    TerrainCheckResult floorCheck = ObjectTerrainUtils.checkFloorDist(
-                            player.getCentreX(), player.getCentreY(), player.getYRadius());
-                    if (floorCheck.distance() <= 0) {
-                        ridingStates.remove(player);
-                        player.setOnObject(false);
-                        player.setAir(true);
-                        return;
-                    }
-                }
-
-                inlineSupportedPlayers.add(player);
-                if (instance instanceof SolidObjectListener listener) {
-                    listener.onSolidContact(player, SolidContact.STANDING, frameCounter);
-                }
-                return;
-            }
-
-            ridingStates.remove(player);
-            player.setOnObject(false);
-            player.setAir(true);
-        }
-
-        boolean hasStandingContact(PlayableEntity player) {
-            if (player == null || objectManager == null || player.getDead()) {
-                return false;
-            }
-            if (player.isDebugMode()) {
-                return false;
-            }
-            if (player.getYSpeed() < 0) {
-                return false;
-            }
-            PlayableEntity savedPlayer = currentPlayer;
-            currentPlayer = player;
-            try {
-                Collection<ObjectInstance> activeObjects = objectManager.getActiveObjects();
-                for (ObjectInstance instance : activeObjects) {
-                    if (!(instance instanceof SolidObjectProvider provider)) {
-                        continue;
-                    }
-                    if (!provider.isSolidFor(player)) {
-                        continue;
-                    }
-
-                    if (provider instanceof MultiPieceSolidProvider multiPiece) {
-                        if (hasStandingContactMultiPiece(player, multiPiece, instance)) {
-                            return true;
-                        }
-                        continue;
-                    }
-
-                    SolidObjectParams params = provider.getSolidParams();
-                    int anchorX = instance.getX() + params.offsetX();
-                    int anchorY = instance.getY() + params.offsetY();
-                    // ROM always uses airHalfHeight (d2) for the overlap test — d3 is
-                    // overwritten by playerYRadius before it is read.
-                    int halfHeight = params.airHalfHeight();
-                    boolean useStickyBuffer = provider.usesStickyContactBuffer();
-                    byte[] slopeData = null;
-                    if (instance instanceof SlopedSolidProvider sloped) {
-                        slopeData = sloped.getSlopeData();
-                    }
-                    SolidContact contact;
-                    if (slopeData != null && instance instanceof SlopedSolidProvider sloped) {
-                        int slopeHalfHeight = params.groundHalfHeight();
-                        contact = resolveSlopedContact(player, anchorX, anchorY, params.halfWidth(), slopeHalfHeight,
-                                slopeData, sloped.isSlopeFlipped(), provider.isTopSolidOnly(),
-                                useStickyBuffer, instance, false, sloped);
-                    } else {
-                        contact = resolveContact(player, anchorX, anchorY, params.halfWidth(), halfHeight,
-                                provider.isTopSolidOnly(), provider.hasMonitorSolidity(),
-                                useStickyBuffer, instance, false);
-                    }
-                    if (contact != null && contact.standing()) {
-                        return true;
-                    }
-                }
-                return false;
-            } finally {
-                currentPlayer = savedPlayer;
-            }
-        }
-
-        private boolean hasStandingContactMultiPiece(PlayableEntity player,
-                MultiPieceSolidProvider multiPiece, ObjectInstance instance) {
-            int pieceCount = multiPiece.getPieceCount();
-            for (int i = 0; i < pieceCount; i++) {
-                SolidObjectParams params = multiPiece.getPieceParams(i);
-                int anchorX = multiPiece.getPieceX(i) + params.offsetX();
-                int anchorY = multiPiece.getPieceY(i) + params.offsetY();
-                int halfHeight = player.getAir() ? params.airHalfHeight() : params.groundHalfHeight();
-                boolean useStickyBuffer = multiPiece.usesStickyContactBuffer();
-
-                // Multi-piece solids don't use monitor solidity
-                SolidContact contact = resolveContact(player, anchorX, anchorY, params.halfWidth(), halfHeight,
-                        multiPiece.isTopSolidOnly(), false, useStickyBuffer, instance, false);
-                if (contact != null && contact.standing()) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        int getHeadroomDistance(PlayableEntity player, int hexAngle) {
-            if (player == null || objectManager == null || player.getDead()) {
-                return Integer.MAX_VALUE;
-            }
-            if (player.isDebugMode()) {
-                return Integer.MAX_VALUE;
-            }
-
-            int overheadAngle = (hexAngle + 0x80) & 0xFF;
-            int quadrant = (overheadAngle + 0x20) & 0xC0;
-
-            int minDistance = Integer.MAX_VALUE;
-            int playerCenterX = player.getCentreX();
-            int playerCenterY = player.getCentreY();
-            int playerXRadius = player.getXRadius();
-            int playerYRadius = player.getYRadius();
-
-            Collection<ObjectInstance> activeObjects = objectManager.getActiveObjects();
-            for (ObjectInstance instance : activeObjects) {
-                if (!(instance instanceof SolidObjectProvider provider)) {
-                    continue;
-                }
-                if (!provider.isSolidFor(player)) {
-                    continue;
-                }
-                if (provider.isTopSolidOnly()) {
-                    continue;
-                }
-                SolidObjectParams params = provider.getSolidParams();
-                int anchorX = instance.getX() + params.offsetX();
-                int anchorY = instance.getY() + params.offsetY();
-                int halfWidth = params.halfWidth();
-                int halfHeight = params.groundHalfHeight();
-
-                int distance = calculateOverheadDistance(quadrant, playerCenterX, playerCenterY,
-                        playerXRadius, playerYRadius, anchorX, anchorY, halfWidth, halfHeight);
-                if (distance >= 0 && distance < minDistance) {
-                    minDistance = distance;
-                }
-            }
-            return minDistance;
-        }
-
-        private int calculateOverheadDistance(int quadrant, int playerCenterX, int playerCenterY,
-                int playerXRadius, int playerYRadius, int objX, int objY, int objHalfWidth, int objHalfHeight) {
-            switch (quadrant) {
-                case 0x40 -> {
-                    int objRight = objX + objHalfWidth;
-                    int playerLeft = playerCenterX - playerXRadius;
-                    if (playerLeft < objRight) {
-                        return -1;
-                    }
-                    int objTop = objY - objHalfHeight;
-                    int objBottom = objY + objHalfHeight;
-                    int playerTop = playerCenterY - playerYRadius;
-                    int playerBottom = playerCenterY + playerYRadius;
-                    if (playerBottom < objTop || playerTop > objBottom) {
-                        return -1;
-                    }
-                    return playerLeft - objRight;
-                }
-                case 0x80 -> {
-                    int objBottom = objY + objHalfHeight;
-                    int playerTop = playerCenterY - playerYRadius;
-                    if (playerTop < objBottom) {
-                        return -1;
-                    }
-                    int objLeft = objX - objHalfWidth;
-                    int objRight = objX + objHalfWidth;
-                    int playerLeft = playerCenterX - playerXRadius;
-                    int playerRight = playerCenterX + playerXRadius;
-                    if (playerRight < objLeft || playerLeft > objRight) {
-                        return -1;
-                    }
-                    return playerTop - objBottom;
-                }
-                case 0xC0 -> {
-                    int objLeft = objX - objHalfWidth;
-                    int playerRight = playerCenterX + playerXRadius;
-                    if (playerRight > objLeft) {
-                        return -1;
-                    }
-                    int objTop = objY - objHalfHeight;
-                    int objBottom = objY + objHalfHeight;
-                    int playerTop = playerCenterY - playerYRadius;
-                    int playerBottom = playerCenterY + playerYRadius;
-                    if (playerBottom < objTop || playerTop > objBottom) {
-                        return -1;
-                    }
-                    return objLeft - playerRight;
-                }
-                default -> {
-                    return Integer.MAX_VALUE;
-                }
-            }
-        }
-
-        // KNOWN ARCHITECTURAL DIFFERENCE: The ROM processes solid object contacts inline
-        // during each object's update routine, so each subsequent object sees the player's
-        // position as updated by earlier solid contacts within the same frame. This engine
-        // instead batches all solid contacts in a single pass after object updates, meaning
-        // every object sees the player's position from the START of the pass. This can cause
-        // differences with adjacent or sandwiching solid objects and with crush detection
-        // timing, since the cumulative position adjustments don't propagate between objects
-        // within the same frame. The sticky buffer and subpixel workarounds partially
-        // compensate for this, but a full fix would require per-object inline resolution
-        // integrated into the object update loop.
-        void update(PlayableEntity player, boolean postMovement) {
-            this.postMovement = postMovement;
-            frameCounter++;
-            if (player == null || objectManager == null || player.getDead()) {
-                if (player != null) ridingStates.remove(player);
-                return;
-            }
-
-            if (player.isDebugMode()) {
-                ridingStates.remove(player);
-                return;
-            }
-
-            // Set currentPlayer so internal resolveContact/resolveSlopedContact can check
-            // this player's riding state via isRidingCurrentPlayerObject()
-            currentPlayer = player;
-
-            // Snapshot pre-contact state before any resolveContact can modify the player.
-            preContactXSpeed = player.getXSpeed();
-            preContactYSpeed = player.getYSpeed();
-            preContactRolling = player.getRolling();
-
-            // Note: Do NOT clear pushing here. Terrain collision handles pushing for terrain walls,
-            // and solid object collision sets pushing when appropriate. Clearing here would
-            // override the pushing flag set by terrain collision earlier in the same frame.
-
-            Collection<ObjectInstance> activeObjects = objectManager.getActiveObjects();
-
-            // Extract this player's riding state
-            RidingState state = ridingStates.get(player);
-            ObjectInstance ridingObject = state != null ? state.object : null;
-            int ridingX = state != null ? state.x : 0;
-            int ridingY = state != null ? state.y : 0;
-            int ridingPieceIndex = state != null ? state.pieceIndex : -1;
-            ObjectInstance dropOnFloorExclude = null;
-
-            // ROM: Sonic_Jump does "bclr #sta_onObj,obStatus(a0)" before any
-            // platform's SolidObject routine runs.  If the player is airborne,
-            // they must not be repositioned by a stale riding record.
-            if (ridingObject != null && player.getAir()) {
-                ridingStates.remove(player);
-                ridingObject = null;
-                ridingPieceIndex = -1;
-                player.setOnObject(false);
-            }
-            if (ridingObject != null && ridingObject instanceof SolidObjectProvider provider) {
-                int currentX;
-                int currentY;
-                SolidObjectParams params;
-
-                if (ridingPieceIndex >= 0 && ridingObject instanceof MultiPieceSolidProvider multiPiece) {
-                    currentX = multiPiece.getPieceX(ridingPieceIndex);
-                    currentY = multiPiece.getPieceY(ridingPieceIndex);
-                    params = multiPiece.getPieceParams(ridingPieceIndex);
-                } else {
-                    currentX = ridingObject.getX();
-                    currentY = ridingObject.getY();
-                    params = provider.getSolidParams();
-                }
-
-                int halfWidth = params.halfWidth();
-                // Continued riding normally uses the full collision width, but some
-                // objects expose a deliberately narrower standable top surface than
-                // their side/body collision box. When a provider opts into that via
-                // getTopLandingHalfWidth(), use the narrower width for ExitPlatform-style
-                // walk-off checks as well so the riding state clears at the visible edge.
-                int configuredTopHalfWidth = provider.getTopLandingHalfWidth(player, halfWidth);
-                int ridingHalfWidth = (configuredTopHalfWidth < halfWidth)
-                        ? configuredTopHalfWidth
-                        : halfWidth;
-
-                // ROM: Bounds check uses collision-offset X (anchorX = obX + offsetX),
-                // while delta tracking uses raw object X for movement following.
-                int boundsX = currentX + params.offsetX();
-                int relX = player.getCentreX() - boundsX + ridingHalfWidth;
-                // ROM: ExitPlatform uses exact bounds (relX in [0, width*2)).
-                // The sticky buffer is for engine-side jitter compensation on moving
-                // platforms (S2/S3K), but S1 UNIFIED processes objects after movement
-                // so there's no jitter to compensate. Sloped objects also use exact bounds.
-                boolean isSloped = (ridingObject instanceof SlopedSolidProvider);
-                int stickyX = (!isSloped && !postMovement && provider.usesStickyContactBuffer()
-                        && ridingHalfWidth == halfWidth) ? 16 : 0;
-                int minRelX = -stickyX;
-                int maxRelXExclusive = (ridingHalfWidth * 2) + stickyX;
-                boolean inBounds = relX >= minRelX && relX < maxRelXExclusive;
-
-                // ROM: s2.asm:35387 — skip repositioning if obj_control bit 7 set
-                if (inBounds && provider.isSolidFor(player) && !player.isObjectControlled()) {
-                    // ROM: s2.asm:35377-35401 — X uses delta tracking, Y uses absolute positioning
-                    int deltaX = currentX - ridingX;
-                    if (deltaX != 0) {
-                        player.shiftX(deltaX);
-                    }
-                    // ROM: Sloped objects use SlopeObject2 for riding updates,
-                    // which re-samples the slope heightmap at the player's X each
-                    // frame: surfaceY = obY - slopeSample; playerY = surfaceY - yRadius.
-                    // Flat objects use MvSonicOnPtfm: y = obY - d3 - yRadius.
-                    // d3 is the GROUND half-height (walking), NOT d2 (air/jumping).
-                    // ROM: MvSonicOnPtfm uses d3 which was set by the caller before
-                    // SolidObject was called. For spikes d3=$11, push blocks d3=$11,
-                    // platforms d3=$10, etc.
-                    int surfaceOffset;
-                    if (ridingObject instanceof SlopedSolidProvider sloped) {
-                        int slopeY = sampleSlopeY(player, currentX, params.halfWidth(), sloped);
-                        surfaceOffset = (slopeY != Integer.MIN_VALUE) ? slopeY : params.groundHalfHeight();
-                    } else {
-                        surfaceOffset = params.groundHalfHeight();
-                    }
-                    int newCentreY = currentY + params.offsetY() - surfaceOffset - player.getYRadius();
-                    int newY = newCentreY - (player.getHeight() / 2);
-                    player.setY((short) newY);
-                    ridingX = currentX;
-                    ridingY = currentY;
-                    // Update state with new tracking position
-                    ridingStates.put(player, new RidingState(ridingObject, ridingX, ridingY, ridingPieceIndex));
-
-                    // ROM: DropOnFloor (s2.asm:35810) — after repositioning the player
-                    // on a platform, check if terrain is at or above the player's feet.
-                    // If so, detach the player so terrain collision takes over next frame.
-                    if (provider.dropOnFloor()) {
-                        TerrainCheckResult floorCheck = ObjectTerrainUtils.checkFloorDist(
-                                player.getCentreX(), player.getCentreY(), player.getYRadius());
-                        if (floorCheck.distance() <= 0) {
-                            dropOnFloorExclude = ridingObject;
-                            ridingStates.remove(player);
-                            ridingObject = null;
-                            ridingPieceIndex = -1;
-                            player.setOnObject(false);
-                            player.setAir(true);
-                        }
-                    }
-                } else {
-                    ridingStates.remove(player);
-                    ridingObject = null;
-                    ridingPieceIndex = -1;
-                }
-            }
-
-            // ROM parity: the riding section above is the ExitPlatform equivalent.
-            // In the ROM, SolidObject runs ExitPlatform first and returns BEFORE
-            // Solid_ChkEnter — the two paths are mutually exclusive. If we don't
-            // skip the riding object here, the collision loop re-evaluates it with
-            // different math (airHalfHeight vs groundHalfHeight, different vertical
-            // offsets) causing the riding state to be spuriously removed and re-added
-            // on alternating frames. This is most visible on monitors where
-            // groundHalfHeight > airHalfHeight — the player jitters vertically.
-            ObjectInstance ridingMaintained = ridingObject;
-            ObjectInstance nextRidingObject = null;
-            int nextRidingX = 0;
-            int nextRidingY = 0;
-            int nextRidingPieceIndex = -1;
-            for (ObjectInstance instance : activeObjects) {
-                // DropOnFloor detached the player from this object — don't re-land on it
-                // this frame. Terrain collision will handle the player next frame.
-                if (instance == dropOnFloorExclude) {
-                    continue;
-                }
-                // ROM: riding section already handled this via ExitPlatform.
-                // Solid_ChkEnter is never reached for the standing object. Keep as standing
-                // and fire callback, but skip resolveContact which would misclassify.
-                if (instance == ridingMaintained) {
-                    if (instance instanceof MultiPieceSolidProvider) {
-                        // Keep the ROM-style ExitPlatform carry step above, but still let
-                        // sibling pieces of the same logical staircase resolve side/top/bottom
-                        // contact in this pass. Skipping here prevents "run into the next block"
-                        // wall collisions while already riding the current block.
-                    } else {
-                        nextRidingObject = instance;
-                        nextRidingX = instance.getX();
-                        nextRidingY = instance.getY();
-                        nextRidingPieceIndex = ridingPieceIndex;
-                        if (instance instanceof SolidObjectListener listener) {
-                            listener.onSolidContact(player, SolidContact.STANDING, frameCounter);
-                        }
-                        continue;
-                    }
-                }
-                if (!(instance instanceof SolidObjectProvider provider)) {
-                    continue;
-                }
-                if (!provider.isSolidFor(player)) {
-                    continue;
-                }
-
-                // ROM: SolidObject_ChkBounds (s2.asm:35175-35176) — when obj_control bit 7
-                // is set, SolidObject returns "no collision". This prevents captured/spring-locked
-                // players from interacting with other solid objects (avoids crush death, position
-                // shifts, and state corruption while the controlling object manages the player).
-                if (player.isObjectControlled()) {
-                    continue;
-                }
-
-                // ROM parity: Objects skip SolidObject on their first frame because
-                // obRender bit 7 hasn't been set yet (DisplaySprite hasn't run).
-                // Exception: the currently-ridden object must not be skipped, since
-                // the ROM's ExitPlatform path (top of SolidObject) doesn't check
-                // obRender — it always processes the standing player.
-                if (instance.isSkipSolidContactThisFrame() && instance != ridingObject) {
-                    continue;
-                }
-
-                if (provider instanceof MultiPieceSolidProvider multiPiece) {
-                    MultiPieceContactResult result = processMultiPieceCollision(
-                            player, multiPiece, instance, frameCounter, provider.usesStickyContactBuffer());
-                    if (result.pushing) {
-                        player.setPushing(true);
-                        // ROM: s2.asm:35220-35226 — also set pushing bit on the object
-                        provider.setPlayerPushing(player, true);
-                    }
-                    if (result.standing) {
-                        nextRidingObject = instance;
-                        nextRidingX = result.ridingX;
-                        nextRidingY = result.ridingY;
-                        nextRidingPieceIndex = result.pieceIndex;
-                    }
-                    continue;
-                }
-
-                SolidObjectParams params = provider.getSolidParams();
-                int anchorX = instance.getX() + params.offsetX();
-                int anchorY = instance.getY() + params.offsetY();
-                // ROM always uses airHalfHeight (d2) for the overlap test — d3 is
-                // overwritten by playerYRadius before it is read.
-                int halfHeight = params.airHalfHeight();
-                boolean useStickyBuffer = provider.usesStickyContactBuffer();
-
-                SolidContact contact;
-                byte[] slopeData = null;
-                if (instance instanceof SlopedSolidProvider sloped) {
-                    slopeData = sloped.getSlopeData();
-                }
-
-                if (slopeData != null && instance instanceof SlopedSolidProvider sloped) {
-                    // ROM parity: when already riding a sloped object, the ROM does NOT
-                    // re-run SolidObject2F. It only runs ExitPlatform + SlopeObject2,
-                    // which is handled by the riding update above. Re-running the full
-                    // collision check can produce false SIDE contacts when Sonic is near
-                    // the platform edge (absDistX <= absDistY), causing premature
-                    // detachment. Skip the collision check and preserve the riding state.
-                    if (instance == ridingObject) {
-                        nextRidingObject = instance;
-                        nextRidingX = instance.getX();
-                        nextRidingY = instance.getY();
-                        nextRidingPieceIndex = -1;
-                        if (instance instanceof SolidObjectListener listener) {
-                            listener.onSolidContact(player, SolidContact.STANDING, frameCounter);
-                        }
-                        continue;
-                    }
-                    int slopeHalfHeight = params.groundHalfHeight();
-                    contact = resolveSlopedContact(player, anchorX, anchorY, params.halfWidth(), slopeHalfHeight,
-                            slopeData, sloped.isSlopeFlipped(), provider.isTopSolidOnly(),
-                            useStickyBuffer, instance, true, sloped);
-                } else {
-                    contact = resolveContact(player, anchorX, anchorY, params.halfWidth(), halfHeight,
-                            provider.isTopSolidOnly(), provider.hasMonitorSolidity(),
-                            useStickyBuffer, instance, true);
-                }
-
-                if (contact == null) {
-                    continue;
-                }
-                if (contact.pushing()) {
-                    player.setPushing(true);
-                    // ROM: s2.asm:35220-35226 — also set pushing bit on the object
-                    provider.setPlayerPushing(player, true);
-                }
-                if (contact.standing()) {
-                    nextRidingObject = instance;
-                    nextRidingX = instance.getX();
-                    nextRidingY = instance.getY();
-                    nextRidingPieceIndex = -1;
-                }
-                if (instance instanceof SolidObjectListener listener) {
-                    listener.onSolidContact(player, contact, frameCounter);
-                }
-            }
-
-            if (nextRidingObject != null) {
-                ridingStates.put(player, new RidingState(nextRidingObject, nextRidingX, nextRidingY, nextRidingPieceIndex));
-            } else {
-                ridingStates.remove(player);
-            }
-
-            // ROM: bclr #status.player.on_object when not standing on any object
-            // Also clear when player becomes airborne (jumping/falling off) - s2.asm has many instances
-            // of this paired with bset #status.player.in_air
-            if (nextRidingObject == null) {
-                player.setOnObject(false);
-            }
-
-            currentPlayer = null;
-        }
-
-        private record MultiPieceContactResult(boolean standing, boolean pushing, int ridingX, int ridingY, int pieceIndex) {}
-
-        private MultiPieceContactResult processMultiPieceCollision(PlayableEntity player,
-                MultiPieceSolidProvider multiPiece, ObjectInstance instance, int frameCounter,
-                boolean useStickyBuffer) {
-            int pieceCount = multiPiece.getPieceCount();
-
-            boolean anyStanding = false;
-            boolean anyPushing = false;
-            boolean anyTouchTop = false;
-            boolean anyTouchBottom = false;
-            boolean anyTouchSide = false;
-
-            int standingPieceIndex = -1;
-            int standingPieceX = 0;
-            int standingPieceY = 0;
-
-            for (int i = 0; i < pieceCount; i++) {
-                SolidObjectParams params = multiPiece.getPieceParams(i);
-                int pieceX = multiPiece.getPieceX(i);
-                int pieceY = multiPiece.getPieceY(i);
-                int anchorX = pieceX + params.offsetX();
-                int anchorY = pieceY + params.offsetY();
-                int halfHeight = player.getAir() ? params.airHalfHeight() : params.groundHalfHeight();
-
-                // Multi-piece solids don't use monitor solidity
-                // Pass piece index so sticky buffer only applies to the piece being ridden
-                SolidContact contact = resolveContact(player, anchorX, anchorY, params.halfWidth(), halfHeight,
-                        multiPiece.isTopSolidOnly(), false, useStickyBuffer, instance, i, true);
-
-                if (contact == null) {
-                    continue;
-                }
-
-                if (contact.standing()) {
-                    anyStanding = true;
-                    if (standingPieceIndex < 0) {
-                        standingPieceIndex = i;
-                        standingPieceX = pieceX;
-                        standingPieceY = pieceY;
-                    }
-                }
-                if (contact.touchTop()) {
-                    anyTouchTop = true;
-                }
-                if (contact.touchBottom()) {
-                    anyTouchBottom = true;
-                }
-                if (contact.touchSide()) {
-                    anyTouchSide = true;
-                }
-                if (contact.pushing()) {
-                    anyPushing = true;
-                }
-
-                multiPiece.onPieceContact(i, player, contact, frameCounter);
-            }
-
-            if (anyStanding || anyTouchTop || anyTouchBottom || anyTouchSide || anyPushing) {
-                if (instance instanceof SolidObjectListener listener) {
-                    SolidContact aggregateContact = new SolidContact(
-                            anyStanding, anyTouchSide, anyTouchBottom, anyTouchTop, anyPushing);
-                    listener.onSolidContact(player, aggregateContact, frameCounter);
-                }
-            }
-
-            return new MultiPieceContactResult(anyStanding, anyPushing, standingPieceX, standingPieceY, standingPieceIndex);
-        }
-
-        /**
-         * Resolve contact for single-piece objects (backwards compatibility).
-         */
-        private SolidContact resolveContact(PlayableEntity player,
-                int anchorX, int anchorY, int halfWidth, int halfHeight, boolean topSolidOnly,
-                boolean monitorSolidity, boolean useStickyBuffer, ObjectInstance instance, boolean apply) {
-            return resolveContact(player, anchorX, anchorY, halfWidth, halfHeight, topSolidOnly,
-                    monitorSolidity, useStickyBuffer, instance, -1, apply);
-        }
-
-        /**
-         * Resolve contact with piece index support for multi-piece objects.
-         * @param pieceIndex The piece index being checked, or -1 for single-piece objects
-         */
-        private SolidContact resolveContact(PlayableEntity player,
-                int anchorX, int anchorY, int halfWidth, int halfHeight, boolean topSolidOnly,
-                boolean monitorSolidity, boolean useStickyBuffer, ObjectInstance instance, int pieceIndex, boolean apply) {
-            int playerCenterX = player.getCentreX();
-            int playerCenterY = player.getCentreY();
-
-            int width2 = halfWidth * 2;
-            int relXRaw = playerCenterX - anchorX + halfWidth;
-
-            int playerYRadius = player.getYRadius();
-            int maxTop = halfHeight + playerYRadius;
-            // SPG: Monitors don't add +4 during vertical overlap check
-            int verticalOffset = monitorSolidity ? 0 : 4;
-            // ROM: s2.asm:35147 — mask with $7FF to handle edge cases near y_pos=0
-            int relY = ((playerCenterY - anchorY + verticalOffset + maxTop) & 0x7FF);
-
-            boolean riding = useStickyBuffer && isRidingCurrentPlayerObject(instance);
-            // For multi-piece objects, only apply sticky buffer (-16px) when checking
-            // the specific piece being ridden, not all pieces of the same object.
-            // pieceIndex < 0 means single-piece object (always apply sticky buffer if riding)
-            int currentRidingPieceIndex = getCurrentPlayerRidingPieceIndex();
-            boolean ridingThisPiece = riding && (pieceIndex < 0 || pieceIndex == currentRidingPieceIndex);
-            // Sticky solids approximate SolidObject's old/new X handoff behavior in the
-            // original engine by allowing a small horizontal retention window on the
-            // ridden piece. Without this, fast moving platforms (ObjB2 Tornado, etc.)
-            // can drop contact for one frame at edges.
-            int stickyX = ridingThisPiece ? 16 : 0;
-            if (relXRaw < -stickyX || relXRaw >= width2 + stickyX) {
-                return null;
-            }
-            // Clamp back into the normal box before side/top resolution so all existing
-            // distance math keeps its established behavior.
-            int relX = relXRaw;
-            if (relX < 0) {
-                relX = 0;
-            } else if (relX >= width2) {
-                relX = width2 - 1;
-            }
-
-            int minRelY = ridingThisPiece ? -16 : 0;
-
-            if (relY < minRelY || relY >= maxTop * 2) {
-                return null;
-            }
-
-            if (monitorSolidity) {
-                return resolveMonitorContact(player, relX, relY, halfWidth, maxTop, playerCenterX, playerCenterY,
-                        anchorX, riding, apply);
-            }
-            return resolveContactInternal(player, relX, relY, halfWidth, maxTop, playerCenterX, playerCenterY,
-                    topSolidOnly, riding, apply, instance);
-        }
-
-        /**
-         * Monitor-specific collision resolution (SPG: "Item Monitor").
-         * Differences from normal solid objects:
-         * - Landing only if playerY - topCombinedBox < 16 AND within monitor X ± (halfWidth + 4)
-         * - Never pushes player downward, only to sides
-         */
-        private SolidContact resolveMonitorContact(PlayableEntity player, int relX, int relY,
-                int halfWidth, int maxTop, int playerCenterX, int playerCenterY, int anchorX,
-                boolean sticky, boolean apply) {
-            // ROM: Mon_Solid / SolidObject_Monitor_Sonic — rolling check runs AFTER
-            // Mon_SolidSides geometry detection, not as an external gate.
-            // When the player is rolling AND velY >= 0 (not moving upward), skip
-            // the solid response entirely so the touch system can break the monitor.
-            // When velY < 0 (moving upward), always handle as solid (side push / landing)
-            // regardless of rolling state — this is the S1 "always solid when moving up" rule.
-            // When standing on the monitor (sticky), always handle as solid (ride mode,
-            // ROM: ob2ndRout=2 bypasses Mon_SolidSides entirely).
-            if (!sticky && player.getRolling() && player.getYSpeed() >= 0) {
-                return null;
-            }
-
-            // Calculate distances from center
-            int distX;
-            int absDistX;
-            if (relX >= halfWidth) {
-                distX = relX - (halfWidth * 2);
-                absDistX = -distX;
-            } else {
-                distX = relX;
-                absDistX = distX;
-            }
-
-            int distY;
-            if (relY <= maxTop) {
-                distY = relY;
-            } else {
-                // No +4 offset for monitor bottom collision (since we didn't add it in overlap)
-                distY = relY - (maxTop * 2);
-            }
-
-            // ROM: Mon_SolidSides checks cmpi.w #$10,d3 — relY < 16 means near-top zone
-            boolean canLand = distY >= 0 && distY < 16;
-
-            // ROM: Mon_SolidSides narrow top landing zone uses obActWid+4, NOT
-            // the full collision halfWidth. obActWid = halfWidth - $B (the $B comes
-            // from the "addi.w #$B,d1" that creates the collision box from obActWid).
-            // So the landing margin = (halfWidth - $B) + 4 = halfWidth - 7.
-            int xFromCenter = relX - halfWidth;
-            int landingXMargin = halfWidth - 7;
-            boolean withinLandingX = Math.abs(xFromCenter) <= landingXMargin;
-
-            if (canLand && withinLandingX) {
-                // Landing on top
-                if (player.getYSpeed() < 0) {
-                    return null;
-                }
-
-                if (apply) {
-                    int newCenterY = playerCenterY - distY + 3;
-                    int newY = newCenterY - (player.getHeight() / 2);
-                    player.setY((short) newY);
-                    // ROM: Solid_ResetFloor unconditionally sets these.
-                    player.setAngle((byte) 0);
-                    player.setYSpeed((short) 0);
-                    player.setGSpeed(player.getXSpeed());
-                    if (player.getAir()) {
-                        LOGGER.fine(() -> "Monitor landing at (" + player.getX() + "," + player.getY() +
-                            ") distY=" + distY);
-                        player.setAir(false);
-                        clearRollingOnLanding(player);
-                        player.setGroundMode(GroundMode.GROUND);
-                    }
-                    // ROM: bset #status.player.on_object (s2.asm:35739)
-                    player.setOnObject(true);
-                }
-                return SolidContact.STANDING;
-            }
-
-            // ROM loc_A220: Monitors never push player downward, only to sides.
-            // The positional push and velocity zeroing ONLY happen when the player
-            // is actively moving INTO the monitor. When d0=0 (centered) or moving
-            // away, the ROM skips the push entirely (falls through to loc_A246).
-            boolean leftSide = playerCenterX <= anchorX;
-            boolean movingInto = leftSide ? player.getXSpeed() > 0 : player.getXSpeed() < 0;
-            boolean pushing = !player.getAir() && movingInto;
-            boolean skipMonitorSide = deferSideToPostMovement && player.getAir();
-            if (apply && movingInto && !skipMonitorSide) {
-                player.setXSpeed((short) 0);
-                player.setGSpeed((short) 0);
-                int pushDist = leftSide ? -absDistX : absDistX;
-                if (postMovement) {
-                    // ROM: sub.w d0,obX(a1) — pixel-only, subpixel preserved
-                    player.move((short) (pushDist * 256), (short) 0);
-                } else {
-                    player.setCentreX((short) (playerCenterX + pushDist));
-                }
-            }
-            return pushing ? SolidContact.SIDE_PUSH : SolidContact.SIDE_NO_PUSH;
-        }
-
-        private SolidContact resolveSlopedContact(PlayableEntity player, int anchorX, int anchorY, int halfWidth,
-                int halfHeight, byte[] slopeData, boolean xFlip, boolean topSolidOnly, boolean useStickyBuffer,
-                ObjectInstance instance, boolean apply, SlopedSolidProvider slopedProvider) {
-            if (slopeData == null || slopeData.length == 0) {
-                return null;
-            }
-            int playerCenterX = player.getCentreX();
-            int playerCenterY = player.getCentreY();
-
-            int relX = playerCenterX - anchorX + halfWidth;
-            int width2 = halfWidth * 2;
-            if (relX < 0 || relX >= width2) {
-                return null;
-            }
-
-            int sampleX = relX;
-            if (xFlip) {
-                sampleX = width2 - sampleX;
-            }
-            sampleX = sampleX >> 1;
-            if (sampleX < 0 || sampleX >= slopeData.length) {
-                return null;
-            }
-
-            int slopeSample = (byte) slopeData[sampleX];
-            int slopeBase = slopedProvider.getSlopeBaseline();
-            boolean riding = useStickyBuffer && isRidingCurrentPlayerObject(instance);
-            int minRelY = riding ? -16 : 0;
-
-            int slopeOffset = slopeSample - slopeBase;
-            int baseY = anchorY - slopeOffset;
-
-            int playerYRadius = player.getYRadius();
-            int maxTop = halfHeight + playerYRadius;
-            int relY = playerCenterY - baseY + 4 + maxTop;
-
-            if (relY < minRelY || relY >= maxTop * 2) {
-                return null;
-            }
-
-            // ROM parity: SlopedSolid_SingleCharacter (s2.asm:34902) when the standing
-            // bit is already set (player is riding the slope) does NOT use the generic
-            // side-vs-top classification. It only checks:
-            //   1. Is the player in the air? → unseat
-            //   2. Is the player outside X range? → unseat (already checked above)
-            //   3. Otherwise → keep standing, adjust Y via MvSonicOnSlope
-            // The engine equivalent of "standing bit already set" is riding=true.
-            // Bypass resolveContactInternal to avoid the side misclassification that
-            // occurs when horizontal penetration < vertical penetration on slopes.
-            if (riding && !player.getAir()) {
-                if (apply) {
-                    int rawSample = sampleSlopeY(player, anchorX, halfWidth, slopedProvider);
-                    if (rawSample != Integer.MIN_VALUE) {
-                        int targetCentreY = anchorY - (rawSample & 0xFF) - playerYRadius;
-                        int newY = targetCentreY - (player.getHeight() / 2);
-                        player.setY((short) newY);
-                    }
-                }
-                return SolidContact.STANDING;
+            private void setSideState(PlayableEntity player, int sideState) {
+                sideStates.put(player, (byte) sideState);
             }
 
-            SolidContact result = resolveContactInternal(player, relX, relY, halfWidth, maxTop,
-                    playerCenterX, playerCenterY, topSolidOnly, riding, apply, instance);
-
-            // ROM parity: SlopeObject2 uses absolute Y positioning for continued riding.
-            // The generic resolveContactInternal formula (playerCenterY - distY + 3) is a
-            // relative adjustment that is 1px too high for sloped contacts when
-            // slopeData[0] == halfHeight. Override with the ROM's absolute formula:
-            //   playerCentreY = objectY - slopeData[idx] - playerYRadius
-            // This only applies to continued riding (sticky=true); initial landing uses
-            // Solid_Landed which the generic formula approximates correctly.
-            if (result == SolidContact.STANDING && apply && riding) {
-                int rawSample = sampleSlopeY(player, anchorX, halfWidth, slopedProvider);
-                if (rawSample != Integer.MIN_VALUE) {
-                    int targetCentreY = anchorY - (rawSample & 0xFF) - playerYRadius;
-                    int newY = targetCentreY - (player.getHeight() / 2);
-                    player.setY((short) newY);
-                }
-            }
-
-            return result;
-        }
-
-        private SolidContact resolveContactInternal(PlayableEntity player, int relX, int relY, int halfWidth,
-                int maxTop, int playerCenterX, int playerCenterY, boolean topSolidOnly, boolean sticky, boolean apply,
-                ObjectInstance instance) {
-            int distX;
-            int absDistX;
-            if (relX >= halfWidth) {
-                distX = relX - (halfWidth * 2);
-                absDistX = -distX;
-            } else {
-                distX = relX;
-                absDistX = distX;
-            }
-
-            int distY;
-            int absDistY;
-            if (relY <= maxTop) {
-                distY = relY;
-                absDistY = distY;
-            } else {
-                distY = relY - 4 - (maxTop * 2);
-                absDistY = Math.abs(distY);
-            }
-
-            // Sonic 1 top-solid objects use PlatformObject/SlopeObject semantics:
-            // top-landing is resolved purely by X-range + top Y-window (no side-priority compare).
-            if (topSolidOnly && usesUnifiedCollisionModel(player)) {
-                if (player.getYSpeed() < 0) {
-                    return null;
-                }
-                if (distY < 0 || distY >= 0x10) {
-                    return null;
-                }
-                // ROM: Solid_Landed uses narrow obActWid for NEW landings only.
-                // When sticky (already riding), ROM uses ExitPlatform's full collision width.
-                if (!sticky && !isWithinTopLandingWidth(instance, player, relX, halfWidth)) {
-                    return null;
-                }
-                if (apply) {
-                    int newCenterY = playerCenterY - distY + 3;
-                    int newY = newCenterY - (player.getHeight() / 2);
-                    player.setY((short) newY);
-                    // ROM: Solid_ResetFloor / PlatformObject loc_74DC unconditionally
-                    // sets these three values for ALL new platform landings, regardless
-                    // of air state. This handles terrain-to-platform transitions (air=false)
-                    // where the platform surface angle (0) differs from terrain angle.
-                    //   move.b  #0,obAngle(a1)
-                    //   move.w  #0,obVelY(a1)
-                    //   move.w  obVelX(a1),obInertia(a1)
-                    player.setAngle((byte) 0);
-                    player.setYSpeed((short) 0);
-                    player.setGSpeed(player.getXSpeed());
-                    // ROM: Sonic_ResetOnFloor is only called when Sonic is airborne
-                    // (btst #1,obStatus(a1) / beq.s .notinair). This clears the air
-                    // flag, resets rolling, and sets ground mode.
-                    if (player.getAir()) {
-                        player.setAir(false);
-                        clearRollingOnLanding(player);
-                        player.setGroundMode(GroundMode.GROUND);
-                    }
-                    player.setOnObject(true);
-                }
-                return SolidContact.STANDING;
-            }
-
-            // ROM velocity classification adjustment:
-            // In the ROM, Sonic (slot 0) runs his physics first within
-            // ExecuteObjects — xSpeed is applied to position BEFORE other
-            // objects execute SolidObject checks. Our engine runs objects
-            // before physics, so solid checks see the pre-physics position.
-            // Adjust the side-vs-topbottom classification to account for
-            // the pending X velocity. Only applied when the adjustment
-            // INCREASES absDistX (shifting Side→TopBottom), never when it
-            // decreases it (TopBottom→Side), since we don't compensate
-            // ySpeed/gravity which would offset the decrease in the ROM.
-            //
-            // Skip when postMovement=true (S1 UNIFIED post-movement pass):
-            // the player's position already reflects their velocity, so
-            // the adjustment would double-count and misclassify side contacts.
-            int classifyAbsDistX = absDistX;
-            int velocityAdjustX = postMovement ? 0 : (player.getXSpeed() >> 8);
-            if (velocityAdjustX != 0) {
-                int adjustedRelX = relX + velocityAdjustX;
-                if (adjustedRelX >= 0 && adjustedRelX < halfWidth * 2) {
-                    int adjusted;
-                    if (adjustedRelX >= halfWidth) {
-                        adjusted = (halfWidth * 2) - adjustedRelX;
-                    } else {
-                        adjusted = adjustedRelX;
-                    }
-                    // Only apply when it increases absDistX (Side→TopBottom).
-                    if (adjusted > absDistX) {
-                        classifyAbsDistX = adjusted;
-                    }
-                }
-            }
-
-            // ROM: SolidObjectTop is a separate routine that ONLY checks for top
-            // landing — it has no side/vertical classification at all (sonic3k.asm
-            // SolidObjectTop_1P, lines 41793-41819).  Skip the side path entirely
-            // for topSolidOnly so contacts always reach the vertical landing check.
-            //
-            // For SolidObjectFull (not topSolidOnly):
-            // ROM: cmp.w d1,d5; bhi.w SolidObject_TopBottom
-            //      cmpi.w #4,d1; bls.w SolidObject_TopBottom
-            // Side resolution only when horizontal penetration <= vertical AND
-            // vertical penetration > 4.
-            if (!topSolidOnly && classifyAbsDistX <= absDistY && absDistY > 4) {
-                if (instance != null
-                        && instance.getSpawn().objectId() == OBJ85_ID
-                        && instance.getSpawn().subtype() == 0
-                        && player.getYSpeed() >= 0) {
-                    int anchorX = playerCenterX - (relX - halfWidth);
-                    int anchorY = playerCenterY - (relY - 4 - maxTop);
-                    int landingThreshold = 0x14; // ROM: Obj85 uses 0x14 in SolidObject_TopBottom
-                    int landingFrame = 0;
-                    int landingPrevRelX = 0;
-                    int landingPrevRelY = 0;
-                    boolean landingCrossedTop = false;
-                    int[] prevRelX = new int[3];
-                    int[] prevRelY = new int[3];
-                    for (int framesBehind = 1; framesBehind <= 3; framesBehind++) {
-                        short prevCenterX = player.getCentreX(framesBehind);
-                        short prevCenterY = player.getCentreY(framesBehind);
-                        int idx = framesBehind - 1;
-                        prevRelX[idx] = prevCenterX - anchorX + halfWidth;
-                        prevRelY[idx] = prevCenterY - anchorY + 4 + maxTop;
-                        if (landingFrame == 0
-                                && prevRelX[idx] >= 0 && prevRelX[idx] <= halfWidth * 2
-                                && prevRelY[idx] < landingThreshold) {
-                            boolean withinTop = prevRelY[idx] >= 0 && prevRelY[idx] <= maxTop;
-                            boolean crossedTop = prevRelY[idx] < 0 && relY >= 0;
-                            if (!withinTop && !crossedTop) {
-                                continue;
-                            }
-                            landingFrame = framesBehind;
-                            landingPrevRelX = prevRelX[idx];
-                            landingPrevRelY = prevRelY[idx];
-                            landingCrossedTop = crossedTop;
-                        }
-                    }
-                    if (landingFrame > 0) {
-                        // ROM: Solid_Landed narrow width only for NEW landings
-                        if (!sticky && !isWithinTopLandingWidth(instance, player, relX, halfWidth)) {
-                            return null;
-                        }
-                        if (apply) {
-                            int newCenterY = anchorY - maxTop - 1;
-                            int newY = newCenterY - (player.getHeight() / 2);
-                            player.setY((short) newY);
-                            // ROM: Solid_ResetFloor unconditionally sets these.
-                            player.setAngle((byte) 0);
-                            player.setYSpeed((short) 0);
-                            player.setGSpeed(player.getXSpeed());
-                            if (player.getAir()) {
-                                player.setAir(false);
-                                clearRollingOnLanding(player);
-                                player.setGroundMode(GroundMode.GROUND);
-                            }
-                            player.setOnObject(true);
-                        }
-                        return SolidContact.STANDING;
-                    }
-                }
-
-                // Determine which side player is on based on relX, not distX.
-                // When distX=0 (at exact edge), distX>0 would be false for both sides,
-                // causing incorrect movingInto detection for left side pushes.
-                boolean leftSide = relX < halfWidth;
-                // Only set pushing if player is on ground AND actively pressing into the object
-                boolean movingInto = leftSide ? player.getXSpeed() > 0 : player.getXSpeed() < 0;
-                boolean pushing = !player.getAir() && movingInto;
-                // ROM: sub SolidObject.asm lines 173-196
-                // When d0==0 (distX==0), ROM branches to Solid_Centre which does
-                // "sub.w d0,obX(a1)" (no-op) — NO speed zeroing, NO position change.
-                // When d0!=0 AND movingInto, ROM hits Solid_Left which zeros obInertia
-                // and obVelX, then falls through to Solid_Centre (position correction).
-                // When d0!=0 AND NOT movingInto, ROM goes to Solid_Centre directly
-                // (position correction only, no speed zeroing).
-                // deferSideToPostMovement: only defer when player is airborne.
-                // Airborne side collision is handled more accurately by post-movement pass
-                // (ROM processes objects after Sonic moves). Ground side collision keeps
-                // pre-movement behavior for wall alignment consistency.
-                boolean skipSideEffects = deferSideToPostMovement && player.getAir();
-                if (apply && !skipSideEffects) {
-                    if (postMovement) {
-                        // Post-movement pass (S1 UNIFIED): ROM-accurate behavior.
-                        // ROM: Solid_Left zeros speed BEFORE the airborne check.
-                        // Speed is zeroed when movingInto regardless of air state.
-                        // The airborne check only affects the PUSH flag, not speed.
-                        if (distX != 0 && movingInto) {
-                            player.setXSpeed((short) 0);
-                            player.setGSpeed((short) 0);
-                        }
-                        if (distX != 0) {
-                            player.move((short) (-distX * 256), (short) 0);
-                        }
-                    } else {
-                        // Pre-movement pass (S2/S3K): compensate for batched processing architecture.
-                        // Push-driven objects (preserveSubpixels=true) skip the distX==0 block
-                        // to preserve ROM push cadence.
-                        boolean preserveSubpixels = preservesEdgeSubpixelMotion(instance);
-                        if (distX == 0 && !preserveSubpixels) {
-                            player.setCentreX((short) playerCenterX);
-                            if (movingInto) {
-                                player.setXSpeed((short) 0);
-                                player.setGSpeed((short) 0);
-                            }
-                        }
-                        if (distX != 0 && movingInto) {
-                            player.setXSpeed((short) 0);
-                            player.setGSpeed((short) 0);
-                        }
-                        if (distX != 0) {
-                            if (preserveSubpixels) {
-                                player.move((short) (-distX * 256), (short) 0);
-                            } else {
-                                player.setCentreX((short) (playerCenterX - distX));
-                            }
-                        }
-                    }
-                }
-                return SolidContact.side(pushing, distX);
-            }
-
-            if (distY >= 0 || (sticky && distY >= -16)) {
-                if (player.getYSpeed() < 0) {
-                    return null;
-                }
-
-
-                if (topSolidOnly && player.getYSpeed() < 0) {
-                    return null;
-                }
-
-                // ROM: SolidObjectFull uses "cmpi.w #$10,d3; blo" → d3 < $10 (strict).
-                // SolidObjectTop uses "cmpi.w #-$10,d0; blo" → d0 ≥ -$10, i.e. distY ≤ $10.
-                // The one-pixel difference matters for buttons placed flush with terrain.
-                if (topSolidOnly ? distY > 0x10 : distY >= 0x10) {
-                    return null;
-                }
-                // ROM: SolidObjectFull's Solid_Landed re-reads the narrower obActWid
-                // for NEW landings. SolidObjectTop uses full d1 (same as the initial
-                // collision box we already passed), so no further width check needed.
-                // When sticky (already riding), ROM uses ExitPlatform's full collision width.
-                if (!sticky && !topSolidOnly
-                        && !isWithinTopLandingWidth(instance, player, relX, halfWidth)) {
-                    return null;
-                }
-
-                if (apply) {
-                    int newCenterY = playerCenterY - distY + 3;
-                    int newY = newCenterY - (player.getHeight() / 2);
-                    player.setY((short) newY);
-                    // ROM: Solid_ResetFloor / PlatformObject loc_74DC unconditionally
-                    // sets angle, ySpeed, and gSpeed for ALL platform landings.
-                    player.setAngle((byte) 0);
-                    player.setYSpeed((short) 0);
-                    player.setGSpeed(player.getXSpeed());
-                    if (player.getAir()) {
-                        LOGGER.fine(() -> "Solid object landing at (" + player.getX() + "," + player.getY() +
-                            ") distY=" + distY);
-                        player.setAir(false);
-                        clearRollingOnLanding(player);
-                        player.setGroundMode(GroundMode.GROUND);
-                    }
-                    // ROM: bset #status.player.on_object (s2.asm:35739)
-                    player.setOnObject(true);
-                }
-                return SolidContact.STANDING;
-            }
-
-            if (topSolidOnly) {
-                return null;
-            }
-
-            // ROM: SolidObject_InsideBottom (s2.asm:35307-35333)
-            // When y_vel == 0 and player is on ground, the ROM branches to SolidObject_Squash
-            // which checks horizontal overlap and kills the player if sandwiched.
-            if (player.getYSpeed() == 0 && !player.getAir()) {
-                // ROM: SolidObject_Squash (s2.asm:35336-35361)
-                // mvabs.w d0,d4; cmpi.w #$10,d4; blo.w SolidObject_LeftRight
-                // If player is near the horizontal edge (absDistX < 16), push sideways instead.
-                if (absDistX < 0x10) {
-                    boolean leftSide = relX < halfWidth;
-                    boolean movingInto = leftSide ? player.getXSpeed() > 0 : player.getXSpeed() < 0;
-                    boolean pushing = !player.getAir() && movingInto;
-                    boolean skipSquashSide = deferSideToPostMovement && player.getAir();
-                    if (apply && !skipSquashSide) {
-                        if (postMovement) {
-                            if (distX != 0 && movingInto) {
-                                player.setXSpeed((short) 0);
-                                player.setGSpeed((short) 0);
-                            }
-                            if (distX != 0) {
-                                player.move((short) (-distX * 256), (short) 0);
-                            }
-                        } else {
-                            if (movingInto) {
-                                player.setXSpeed((short) 0);
-                                player.setGSpeed((short) 0);
-                            }
-                            if (distX != 0) {
-                                player.setCentreX((short) (playerCenterX - distX));
-                            }
-                        }
-                    }
-                    return SolidContact.side(pushing, distX);
-                }
-                // Player is well inside horizontally - crush death.
-                // ROM: KillCharacter (s2.asm:84995) - unconditional death.
-                if (apply) {
-                    LOGGER.fine(() -> "SolidObject crush: player sandwiched (absDistX=" + absDistX + ")");
-                    player.applyCrushDeath();
-                }
-                return SolidContact.CEILING;
-            }
-
-            // ROM: Solid_Below — only correct position when ySpeed < 0 (moving upward into object).
-            // When ySpeed > 0 (falling) or ySpeed == 0 with air, ROM's Solid_TopBtmAir returns
-            // d4=-1 without correcting position or zeroing speed. This lets the player fall
-            // through the bottom of the object naturally, preventing spikes from trapping Sonic
-            // by continuously pushing him back into the collision box.
-            if (apply && player.getYSpeed() < 0) {
-                int newCenterY = playerCenterY - distY;
-                int newY = newCenterY - (player.getHeight() / 2);
-                player.setY((short) newY);
-                LOGGER.fine(() -> "Solid object ceiling hit, zeroing ySpeed from " + player.getYSpeed());
-                player.setYSpeed((short) 0);
-            }
-            return SolidContact.CEILING;
-        }
-
-        private boolean isWithinTopLandingWidth(ObjectInstance instance, PlayableEntity player, int relX,
-                int collisionHalfWidth) {
-            if (!(instance instanceof SolidObjectProvider provider)) {
-                return true;
+            private void setLastSideState(int sideState) {
+                this.lastSideState = (byte) sideState;
+                this.hasLastSideState = true;
             }
 
-            int configuredHalfWidth = provider.getTopLandingHalfWidth(player, collisionHalfWidth);
-            int allowedHalfWidth;
-            if (configuredHalfWidth < collisionHalfWidth) {
-                // Provider explicitly set a narrower landing width
-                allowedHalfWidth = configuredHalfWidth;
-            } else {
-                // ROM: SolidObjectFull's Solid_Landed re-reads obActWid (= width_pixels),
-                // which is narrower than collision halfWidth (= width_pixels + $B).
-                allowedHalfWidth = Math.max(0, collisionHalfWidth - 0x0B);
-            }
-
-            // ROM: Solid_Landed checks: d1 = playerX + obActWid - objX,
-            // bmi.s Solid_Miss (d1 < 0), cmp.w d2,d1 / bhs.s Solid_Miss (d1 >= width*2).
-            // Range for d1: [0, allowedHalfWidth*2) — inclusive left, exclusive right.
-            // Using abs() would be symmetric and include the right boundary, causing
-            // false landings at the exact right edge.
-            int xFromCenter = relX - collisionHalfWidth;
-            int d1 = xFromCenter + allowedHalfWidth;
-            return d1 >= 0 && d1 < allowedHalfWidth * 2;
-        }
-
-        private boolean usesUnifiedCollisionModel(PlayableEntity player) {
-            if (player == null) {
-                return false;
-            }
-            PhysicsFeatureSet featureSet = player.getPhysicsFeatureSet();
-            return featureSet != null && featureSet.collisionModel() == CollisionModel.UNIFIED;
-        }
-
-        private boolean preservesEdgeSubpixelMotion(ObjectInstance instance) {
-            if (!(instance instanceof SolidObjectProvider provider)) {
-                return false;
-            }
-            return provider.preservesEdgeSubpixelMotion();
-        }
-
-        /**
-         * ROM: SlopeObject2 / MvSonicOnSlope slope sampling for riding updates.
-         * Returns the raw slope sample (surface offset from object Y), matching
-         * the ROM formula: surfaceY = obY - slopeSample.
-         *
-         * Important: unlike resolveSlopedContact (landing path) which normalises
-         * slope values via getSlopeBaseline(), the riding path uses the raw sample
-         * exactly as the ROM does — no baseline subtraction.
-         *
-         * Shift/flip ordering matches the ROM: shift first (lsr.w #1), then flip
-         * (not.w + add.w halfWidth). This differs from SlopeObject (landing) which
-         * flips the full relX before shifting.
-         */
-        private int sampleSlopeY(PlayableEntity player, int objectX,
-                int halfWidth, SlopedSolidProvider sloped) {
-            byte[] slopeData = sloped.getSlopeData();
-            if (slopeData == null || slopeData.length == 0) {
-                return Integer.MIN_VALUE;
-            }
-            int playerCenterX = player.getCentreX();
-            int relX = playerCenterX - objectX + halfWidth;
-            int width2 = halfWidth * 2;
-            // Clamp relX to the valid collision width. The riding bounds check
-            // allows a sticky buffer (up to 16px beyond the collision edge),
-            // so the player can be slightly outside the slope data range.
-            if (relX < 0) {
-                relX = 0;
-            } else if (relX >= width2) {
-                relX = width2 - 1;
-            }
-            // ROM: lsr.w #1,d0 — shift BEFORE flip (matches SlopeObject2/MvSonicOnSlope)
-            int sampleX = relX >> 1;
-            if (sloped.isSlopeFlipped()) {
-                // ROM: not.w d0 / add.w d1,d0 — where d1 = halfWidth
-                // not.w gives ~sampleX = -sampleX - 1, then + halfWidth
-                sampleX = halfWidth - sampleX - 1;
-            }
-            if (sampleX < 0) {
-                sampleX = 0;
-            } else if (sampleX >= slopeData.length) {
-                sampleX = slopeData.length - 1;
+            private boolean hasLastSideState() {
+                return hasLastSideState;
             }
-            // ROM: move.b (a2,d0.w),d1 / ext.w d1 (S2) or moveq #0,d1 / move.b (S1)
-            // Java byte is signed, matching S2's ext.w. S1 values are positive so no difference.
-            return (byte) slopeData[sampleX];
-        }
 
-        private void clearRollingOnLanding(PlayableEntity player) {
-            if (player == null || player.getPinballMode() || !player.getRolling()) {
-                return;
+            private int getLastSideState() {
+                return lastSideState & 0xFF;
             }
-            player.setRolling(false);
-            player.setY((short) (player.getY() - player.getRollHeightAdjustment()));
         }
     }
 }

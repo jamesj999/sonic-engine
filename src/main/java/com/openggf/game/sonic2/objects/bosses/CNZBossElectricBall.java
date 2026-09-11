@@ -7,8 +7,11 @@ import com.openggf.game.sonic2.constants.Sonic2ObjectIds;
 import com.openggf.game.sonic2.Sonic2ObjectArtKeys;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
+import com.openggf.level.objects.ObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.ObjectTerrainUtils;
@@ -26,7 +29,7 @@ import java.util.List;
  * - FALL: Ball drops toward floor
  * - SPLIT: Ball splits into two after hitting floor
  */
-public class CNZBossElectricBall extends AbstractObjectInstance implements TouchResponseProvider {
+public class CNZBossElectricBall extends AbstractObjectInstance implements TouchResponseProvider, RewindRecreatable {
 
     // Routine states
     private static final int BALL_ATTACH = 0;
@@ -39,13 +42,14 @@ public class CNZBossElectricBall extends AbstractObjectInstance implements Touch
     private static final int DELETE_Y = 0x705;
 
     // Animation constants
-    // Frame 17 = Map_obj51_0144 = 3x3 spiked ball (24x24 pixels)
-    // Frame 18 = Map_obj51_014E = 1x1 small orb 1 (8x8 pixels)
-    // Frame 19 = Map_obj51_0158 = 1x1 small orb 2 (8x8 pixels)
-    private static final int FRAME_SPIKED_BALL = 17;
-    private static final int FRAME_ORB_1 = 18;
-    private static final int FRAME_ORB_2 = 19;
-    private final Sonic2CNZBossInstance mainBoss;
+    // Obj51 preserves frame 0 as a null frame, so these are the ROM mapping_frame values.
+    // Frame $12 = Map_obj51_0144 = 3x3 spiked ball (24x24 pixels)
+    // Frame $13 = Map_obj51_014E = 1x1 small orb 1 (8x8 pixels)
+    // Frame $14 = Map_obj51_0158 = 1x1 small orb 2 (8x8 pixels)
+    private static final int FRAME_SPIKED_BALL = 0x12;
+    private static final int FRAME_ORB_1 = 0x13;
+    private static final int FRAME_ORB_2 = 0x14;
+    private Sonic2CNZBossInstance mainBoss;
 
     // Position
     private int x;
@@ -60,7 +64,10 @@ public class CNZBossElectricBall extends AbstractObjectInstance implements Touch
     private int ballRiseOffset;
     private boolean exploding;
     private int renderFlags;
-    private int lastFrameCounter;
+    private int lastVIntRunCount;
+    private int positiveSplitPrePhysicsX;
+    private int positiveSplitPrePhysicsY;
+    private boolean positiveSplitPrePhysicsReady;
 
     /**
      * Create electric ball attached to boss.
@@ -70,11 +77,14 @@ public class CNZBossElectricBall extends AbstractObjectInstance implements Touch
         super(spawn, "CNZ Boss Ball");
         this.mainBoss = mainBoss;
 
-        // ROM: loc_31F48 - position = parent (x, y+0x30) during init
+        // ROM: loc_31F48 - position = parent (x, y+0x30) during init.
+        // The engine spawn records the parent SST x_pos visible when Obj51 is
+        // allocated. Keep that published coordinate: Boss_MoveObject no longer
+        // runs during loc_31BA8, so every later loc_31F96 parent read is equal.
         // Then immediately advances to attach routine where objoff_28 starts at 0
         // So ball position becomes parent.y + 0 on first frame of attach
         // This matches the ROM behavior where the ball "appears" at parent position
-        this.x = mainBoss.getX();
+        this.x = spawn.x();
         this.y = mainBoss.getY();  // Will be adjusted by ballRiseOffset in attach
         this.xFixed = x << 16;
         this.yFixed = y << 16;
@@ -85,6 +95,35 @@ public class CNZBossElectricBall extends AbstractObjectInstance implements Touch
         this.ballRiseOffset = 0;  // ROM: objoff_28 starts at 0
         this.exploding = false;
         this.renderFlags = 0;
+    }
+
+    @Override
+    public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        Sonic2CNZBossInstance parent = findClosestLiveParent(ctx);
+        return parent == null ? null : new CNZBossElectricBall(ctx.spawn(), parent);
+    }
+
+    private static Sonic2CNZBossInstance findClosestLiveParent(RewindRecreateContext ctx) {
+        if (ctx == null || ctx.spawn() == null || ctx.objectServices() == null
+                || ctx.objectServices().objectManager() == null) {
+            return null;
+        }
+        Sonic2CNZBossInstance best = null;
+        long bestDistance = Long.MAX_VALUE;
+        int childX = ctx.spawn().x();
+        int childY = ctx.spawn().y();
+        for (ObjectInstance inst : ctx.objectServices().objectManager().getActiveObjects()) {
+            if (inst instanceof Sonic2CNZBossInstance boss && !boss.isDestroyed()) {
+                long dx = (long) boss.getX() - childX;
+                long dy = (long) boss.getY() - childY;
+                long distance = dx * dx + dy * dy;
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    best = boss;
+                }
+            }
+        }
+        return best;
     }
 
     /**
@@ -105,12 +144,12 @@ public class CNZBossElectricBall extends AbstractObjectInstance implements Touch
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) {
             return;
         }
-        lastFrameCounter = frameCounter;
+        lastVIntRunCount = vIntRunCount;
 
         // Check if parent boss is defeated - delete ball
         if (mainBoss.isInDefeatSequence()) {
@@ -119,7 +158,7 @@ public class CNZBossElectricBall extends AbstractObjectInstance implements Touch
         }
 
         switch (routineState) {
-            case BALL_ATTACH -> updateBallAttach();
+            case BALL_ATTACH -> updateBallAttach(vIntRunCount);
             case BALL_FALL -> updateBallFall();
             case BALL_SPLIT -> updateBallSplit();
         }
@@ -130,8 +169,10 @@ public class CNZBossElectricBall extends AbstractObjectInstance implements Touch
      * objoff_28 starts at 0, increments by 1 per frame, caps at $2E.
      * Position = parent.y + objoff_28
      */
-    private void updateBallAttach() {
-        x = mainBoss.getX();
+    private void updateBallAttach(int vIntRunCount) {
+        // ROM loc_31F96 recopies the stationary parent x_pos. The equivalent
+        // engine value was captured by the allocation spawn; re-reading the
+        // live boss would expose a different fixed-accumulator phase.
         y = mainBoss.getY() + ballRiseOffset;
 
         // ROM: addi_.w #1,d0 / cmpi.w #$2E,d0 / blt.s + / move.w #$2E,d0
@@ -146,7 +187,7 @@ public class CNZBossElectricBall extends AbstractObjectInstance implements Touch
 
         // ROM: tst.w (Boss_Countdown).w / bne.w DisplaySprite
         // Wait for main boss countdown to reach 0
-        if (mainBoss.getBossCountdown() <= 0) {
+        if (mainBoss.getBossCountdownVisibleToBall(vIntRunCount) == 0) {
             routineState = BALL_FALL;
             xVel = 0;
             yVel = 0;
@@ -155,15 +196,16 @@ public class CNZBossElectricBall extends AbstractObjectInstance implements Touch
 
     /**
      * ROM: loc_31FDC - Ball falling.
-     * Uses ObjCheckFloorDist, triggers split when d1 (distance) is negative or zero.
+     * Uses ObjCheckFloorDist and splits only when d1 is negative.
      */
     private void updateBallFall() {
         applyBallPhysics();
 
-        // ROM: jsr (ObjCheckFloorDist).l / tst.w d1 / bpl.w DisplaySprite
-        // Triggers when d1 <= 0 (at or below floor)
+        // ROM: jsr (ObjCheckFloorDist).l / tst.w d1 / bpl.w DisplaySprite.
+        // bpl includes zero, so exact surface contact remains in BALL_FALL;
+        // only a negative penetration reaches loc_32030 and splits the ball.
         TerrainCheckResult floor = ObjectTerrainUtils.checkFloorDist(x, y, Y_RADIUS);
-        if (floor.hasCollision() && floor.distance() <= 0) {
+        if (floor.foundSurface() && floor.distance() < 0) {
             y += floor.distance();
             yFixed = y << 16;
             explodeAndSplit();
@@ -186,8 +228,17 @@ public class CNZBossElectricBall extends AbstractObjectInstance implements Touch
      * Apply physics to ball (ROM: loc_31FF8).
      */
     private void applyBallPhysics() {
-        xFixed += (xVel << 8);
-        yFixed += (yVel << 8);
+        if (routineState == BALL_SPLIT && xVel > 0) {
+            // AllocateObjectAfterCurrent lets the copied positive half execute
+            // after both player slots have already run. Retain the coordinate
+            // from before that immediate loc_31FF8 step for the next ordinary
+            // single-region touch scan.
+            positiveSplitPrePhysicsX = x;
+            positiveSplitPrePhysicsY = y;
+            positiveSplitPrePhysicsReady = true;
+        }
+        xFixed = (x << 16) + (xVel << 8);
+        yFixed = (y << 16) + (yVel << 8);
         yVel += GRAVITY;
         x = xFixed >> 16;
         y = yFixed >> 16;
@@ -211,8 +262,9 @@ public class CNZBossElectricBall extends AbstractObjectInstance implements Touch
         if (services().objectManager() == null) {
             return;
         }
-        CNZBossElectricBall clone = new CNZBossElectricBall(x, y, 0x100, -0x300, mainBoss);
-        services().objectManager().addDynamicObject(clone);
+        // ROM loc_32030 copies this object into an AllocateObjectAfterCurrent slot,
+        // then negates the clone's x_vel. Preserve that after-current slot order.
+        spawnChild(() -> new CNZBossElectricBall(x, y, 0x100, -0x300, mainBoss));
     }
 
     @Override
@@ -241,7 +293,7 @@ public class CNZBossElectricBall extends AbstractObjectInstance implements Touch
     private int getBallMappingFrame() {
         if (exploding) {
             // Cycle between FRAME_ORB_1 (18) and FRAME_ORB_2 (19) every 4 frames
-            return FRAME_ORB_1 + ((lastFrameCounter >> 2) & 1);
+            return FRAME_ORB_1 + ((lastVIntRunCount >> 2) & 1);
         }
         // During attach/fall phases, show the spiked ball
         return FRAME_SPIKED_BALL;
@@ -282,6 +334,37 @@ public class CNZBossElectricBall extends AbstractObjectInstance implements Touch
         }
         // ROM: collision_flags = $98 (harmful)
         return 0x98;
+    }
+
+    @Override
+    public TouchResponseProvider.TouchRegion[] getMultiTouchRegions() {
+        if (isDestroyed()) {
+            return null;
+        }
+        return null;
+    }
+
+    @Override
+    public int getPreUpdateX() {
+        if (routineState == BALL_SPLIT && xVel > 0 && positiveSplitPrePhysicsReady) {
+            return positiveSplitPrePhysicsX;
+        }
+        return super.getPreUpdateX();
+    }
+
+    @Override
+    public int getPreUpdateY() {
+        if (routineState == BALL_SPLIT && xVel > 0 && positiveSplitPrePhysicsReady) {
+            return positiveSplitPrePhysicsY;
+        }
+        return super.getPreUpdateY();
+    }
+
+    @Override
+    public boolean requiresRenderFlagForTouch() {
+        // S2 Touch_Boss scans Obj51 child collision_flags directly while the
+        // boss is active; there is no render/on-screen touch gate in that path.
+        return false;
     }
 
     /**

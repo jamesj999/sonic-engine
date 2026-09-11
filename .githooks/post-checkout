@@ -1,0 +1,179 @@
+#!/bin/bash
+# post-checkout hook: auto-link machine-local resources in git worktrees
+#
+# When `git worktree add` creates a new worktree, gitignored files (ROMs,
+# config.yaml, and optional local disassemblies) are missing. This hook detects
+# worktree context and creates symlinks back to the main working tree. Tracked
+# submodule gitlinks are left alone for `git submodule update --init`.
+#
+# Works on macOS (native bash) and Windows (Git Bash with Developer Mode).
+#
+# A tracked copy lives at .githooks/post-checkout
+
+# Only run on branch checkouts ($3=1), not file-level checkouts
+[ "$3" = "1" ] || exit 0
+
+GIT_DIR="$(git rev-parse --git-dir 2>/dev/null)"
+GIT_COMMON_DIR="$(git rev-parse --git-common-dir 2>/dev/null)"
+
+# Only run in worktrees — in the main repo, git-dir == git-common-dir
+[ "$GIT_DIR" != "$GIT_COMMON_DIR" ] || exit 0
+
+# Resolve paths: main working tree root and current worktree root
+MAIN_TREE="$(cd "$GIT_COMMON_DIR/.." && pwd)"
+WORK_TREE="$(git rev-parse --show-toplevel 2>/dev/null)"
+
+echo "[post-checkout] Worktree detected — linking shared resources from main tree"
+
+relative_main_tree() {
+    local destination_parent="$1"
+    local relative_common_dir
+    local git_parent="$destination_parent"
+    local relative_parent=""
+    local remaining_parent
+    if [ ! -d "$destination_parent" ]; then
+        relative_parent="${destination_parent#"$WORK_TREE"/}"
+        if [ "$relative_parent" = "$destination_parent" ]; then
+            echo "[post-checkout] Destination parent is outside the worktree: $destination_parent" >&2
+            return 1
+        fi
+        git_parent="$WORK_TREE"
+    fi
+    relative_common_dir="$(cd "$git_parent" && git rev-parse --path-format=relative --git-common-dir)" || {
+        echo "[post-checkout] Failed to read the common Git directory from $git_parent" >&2
+        return 1
+    }
+    if [ -n "$relative_parent" ]; then
+        remaining_parent="$relative_parent"
+        while [ -n "$remaining_parent" ]; do
+            relative_common_dir="../$relative_common_dir"
+            case "$remaining_parent" in
+                */*) remaining_parent="${remaining_parent#*/}" ;;
+                *) remaining_parent="" ;;
+            esac
+        done
+    fi
+    if [ "$(basename "$relative_common_dir")" != ".git" ]; then
+        echo "[post-checkout] Unsupported common Git directory layout: $relative_common_dir" >&2
+        return 1
+    fi
+    dirname "$relative_common_dir"
+}
+
+absolute_link_target() {
+    case "$1" in
+        /*|[A-Za-z]:[\\/]*|\\\\*)
+            return 0
+            ;;
+    esac
+    return 1
+}
+
+canonical_existing_path() {
+    local path="$1"
+    local parent
+    local leaf
+    [ -e "$path" ] || return 1
+    if [ -d "$path" ]; then
+        (cd "$path" && pwd -P)
+        return
+    fi
+    parent="$(dirname "$path")"
+    leaf="$(basename "$path")"
+    parent="$(cd "$parent" && pwd -P)" || return 1
+    printf '%s/%s\n' "$parent" "$leaf"
+}
+
+# Replace only an absolute link that resolves to the resource this hook owns.
+# Unknown, broken, relative, or user-authored links remain untouched.
+migrate_legacy_link() {
+    local resource="$1"
+    local src="$2"
+    local dst="$3"
+    local old_target
+    local resolved_target
+    local resolved_source
+    local relative_main
+    local replacement
+
+    old_target="$(readlink "$dst")" || return 1
+    absolute_link_target "$old_target" || return 0
+    resolved_target="$(canonical_existing_path "$old_target" 2>/dev/null)" || return 0
+    resolved_source="$(canonical_existing_path "$src" 2>/dev/null)" || return 0
+    [ "$resolved_target" = "$resolved_source" ] || return 0
+
+    relative_main="$(relative_main_tree "$(dirname "$dst")")" || return 1
+    replacement="$dst.policy-link.$$"
+    [ ! -e "$replacement" ] && [ ! -L "$replacement" ] || {
+        echo "[post-checkout] Temporary migration path already exists: $replacement" >&2
+        return 1
+    }
+    ln -s "$relative_main/$resource" "$replacement" || return 1
+    if ! rm "$dst"; then
+        rm "$replacement" 2>/dev/null
+        return 1
+    fi
+    if ! mv "$replacement" "$dst"; then
+        ln -s "$old_target" "$dst" 2>/dev/null
+        rm "$replacement" 2>/dev/null
+        return 1
+    fi
+    echo "  Migrated legacy link: $resource"
+}
+
+# Link a single file (idempotent, never clobbers)
+link_file() {
+    local src="$MAIN_TREE/$1"
+    local dst="$WORK_TREE/$1"
+    local relative_main
+    [ -e "$src" ] || return 0           # Source doesn't exist
+    if [ -L "$dst" ]; then
+        migrate_legacy_link "$1" "$src" "$dst"
+        return
+    fi
+    [ -e "$dst" ] && return 0           # Real file exists — don't clobber
+    relative_main="$(relative_main_tree "$(dirname "$dst")")" || return 1
+    ln -s "$relative_main/$1" "$dst" && echo "  Linked: $1"
+}
+
+# Link a directory (idempotent, removes empty gitlink dirs before linking)
+link_dir() {
+    local src="$MAIN_TREE/$1"
+    local dst="$WORK_TREE/$1"
+    local relative_main
+    [ -d "$src" ] || return 0           # Source doesn't exist
+    if [ -L "$dst" ]; then
+        migrate_legacy_link "$1" "$src" "$dst"
+        return
+    fi
+    [ -e "$dst" ] && [ ! -d "$dst" ] && return 0  # Real file exists — don't clobber
+    [ -d "$dst" ] && [ -n "$(ls -A "$dst" 2>/dev/null)" ] && return 0  # Non-empty dir — don't clobber
+    relative_main="$(relative_main_tree "$(dirname "$dst")")" || return 1
+    # Git creates empty dirs for submodule gitlinks — safe to replace
+    if [ -d "$dst" ] && [ -z "$(ls -A "$dst" 2>/dev/null)" ]; then
+        rmdir "$dst" 2>/dev/null
+    fi
+    mkdir -p "$(dirname "$dst")"
+    ln -s "$relative_main/$1" "$dst" && echo "  Linked: $1"
+}
+
+is_tracked_gitlink() {
+    git ls-files --stage -- "$1" | grep -q '^160000 '
+}
+
+# --- ROMs (gitignored *.gen in project root) ---
+for rom in "$MAIN_TREE"/*.gen; do
+    [ -f "$rom" ] || continue
+    link_file "$(basename "$rom")" || exit 1
+done
+
+# --- Config (gitignored) ---
+link_file "config.yaml" || exit 1
+
+# --- Optional local disassemblies (canonical tracked submodules are skipped) ---
+for disassembly in docs/s1disasm docs/s2disasm docs/kis2disasm docs/scddisasm docs/skdisasm; do
+    is_tracked_gitlink "$disassembly" && continue
+    link_dir "$disassembly" || exit 1
+done
+
+echo "[post-checkout] Done"

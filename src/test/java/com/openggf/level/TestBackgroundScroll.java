@@ -1,11 +1,11 @@
 package com.openggf.level;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import com.openggf.data.Rom;
 import com.openggf.game.sonic2.Sonic2;
 
 import java.io.IOException;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class TestBackgroundScroll {
 
@@ -127,3 +127,5 @@ public class TestBackgroundScroll {
         assertEquals((camY >>> 2), scroll[1]);
     }
 }
+
+

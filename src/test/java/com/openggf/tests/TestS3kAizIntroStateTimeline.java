@@ -1,11 +1,10 @@
 package com.openggf.tests;
 
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import com.openggf.camera.Camera;
 import com.openggf.game.GameServices;
 import com.openggf.configuration.SonicConfiguration;
@@ -20,19 +19,15 @@ import com.openggf.level.objects.ObjectInstance;
 import com.openggf.level.objects.ObjectManager;
 import com.openggf.sprites.playable.Sonic;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
 
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @RequiresRom(SonicGame.SONIC_3K)
 public class TestS3kAizIntroStateTimeline {
-
-    @ClassRule public static RequiresRomRule romRule = new RequiresRomRule();
-
     private static final int ZONE_AIZ = 0;
     private static final int ACT_1 = 0;
 
@@ -45,7 +40,7 @@ public class TestS3kAizIntroStateTimeline {
     private static Object oldMainCharacter;
     private static SharedLevel sharedLevel;
 
-    @BeforeClass
+    @BeforeAll
     public static void loadLevel() throws Exception {
         SonicConfigurationService config = SonicConfigurationService.getInstance();
         oldSkipIntros = config.getConfigValue(SonicConfiguration.S3K_SKIP_INTROS);
@@ -56,7 +51,7 @@ public class TestS3kAizIntroStateTimeline {
         sharedLevel = SharedLevel.load(SonicGame.SONIC_3K, ZONE_AIZ, ACT_1);
     }
 
-    @AfterClass
+    @AfterAll
     public static void cleanup() {
         SonicConfigurationService config = SonicConfigurationService.getInstance();
         config.setConfigValue(SonicConfiguration.S3K_SKIP_INTROS,
@@ -69,7 +64,7 @@ public class TestS3kAizIntroStateTimeline {
     private HeadlessTestFixture fixture;
     private Sonic sonic;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         fixture = HeadlessTestFixture.builder()
                 .withSharedLevel(sharedLevel)
@@ -92,9 +87,9 @@ public class TestS3kAizIntroStateTimeline {
         GameServices.level().getObjectManager().reset(0);
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
-        // Config restore is handled by @AfterClass; nothing per-test to restore.
+        // Config restore is handled by @AfterAll; nothing per-test to restore.
     }
 
     @Test
@@ -260,32 +255,22 @@ public class TestS3kAizIntroStateTimeline {
         System.out.println(timelineDump);
 
         IntroSnapshot firstSnapshot = timeline.isEmpty() ? null : timeline.get(0);
-        assertTrue("AIZ intro object never spawned.\n" + timelineDump, sawIntro);
-        assertTrue("No transition snapshots recorded.\n" + timelineDump, !timeline.isEmpty());
-        assertTrue("AIZ intro camera start Y must clamp to AIZ1 maxY (0x390).\n" + timelineDump,
-                firstSnapshot != null && firstSnapshot.cameraY == 0x390);
-        assertTrue("AIZ intro should start off-screen top-left in ROM sprite-table space (+128 bias).\n" + timelineDump,
-                firstSnapshot != null && firstSnapshot.introX < 128 && firstSnapshot.introY < 128);
-        assertTrue("AIZ plane child (Tornado) never appeared on-screen during intro.\n" + timelineDump,
-                timeline.stream().anyMatch(s -> s.planePresent && s.planeOnScreen));
-        assertTrue("AIZ intro routine never reached Knuckles trigger stage (>= 22).\n" + timelineDump,
-                timeline.stream().anyMatch(s -> s.introRoutine >= 22));
-        assertTrue("Knuckles cutscene object never spawned.\n" + timelineDump, sawKnuckles);
-        assertTrue("AIZ intro never entered super visual phase.\n" + timelineDump, sawIntroSuperVisual);
+        assertTrue(sawIntro, "AIZ intro object never spawned.\n" + timelineDump);
+        assertTrue(!timeline.isEmpty(), "No transition snapshots recorded.\n" + timelineDump);
+        assertTrue(firstSnapshot != null && firstSnapshot.cameraY == 0x390, "AIZ intro camera start Y must clamp to AIZ1 maxY (0x390).\n" + timelineDump);
+        assertTrue(firstSnapshot != null && firstSnapshot.introX < 128 && firstSnapshot.introY < 128, "AIZ intro should start off-screen top-left in ROM sprite-table space (+128 bias).\n" + timelineDump);
+        assertTrue(timeline.stream().anyMatch(s -> s.planePresent && s.planeOnScreen), "AIZ plane child (Tornado) never appeared on-screen during intro.\n" + timelineDump);
+        assertTrue(timeline.stream().anyMatch(s -> s.introRoutine >= 22), "AIZ intro routine never reached Knuckles trigger stage (>= 22).\n" + timelineDump);
+        assertTrue(sawKnuckles, "Knuckles cutscene object never spawned.\n" + timelineDump);
+        assertTrue(sawIntroSuperVisual, "AIZ intro never entered super visual phase.\n" + timelineDump);
         // ROM behavior: camera freeze flag remains clear; intro uses Level_started_flag for flow state.
-        assertTrue("Camera was unexpectedly frozen during intro.\n" + timelineDump, !sawFrozenCamera);
-        assertTrue("Level_started_flag was never cleared during intro/cutscene.\n" + timelineDump,
-                sawLevelStartedFalseDuringIntro);
-        assertTrue("Camera never advanced during intro/cutscene while Level_started_flag was clear.\n" + timelineDump,
-                sawCameraAdvanceDuringIntro);
-        assertTrue("Sonic movement with corresponding camera advance was not observed.\n" + timelineDump,
-                sawSonicAndCameraAdvanceTogether);
-        assertTrue("Camera follow window relative to Sonic was not observed near Knuckles trigger range.\n" + timelineDump,
-                sawSonicWithinCameraFollowWindow);
-        assertTrue("Knuckles never appeared near the camera viewport after spawning.\n" + timelineDump,
-                sawKnuxNearCamera);
-        assertTrue("Level_started_flag was not restored after cutscene completion.\n" + timelineDump,
-                sawLevelStartedReenabled);
+        assertTrue(!sawFrozenCamera, "Camera was unexpectedly frozen during intro.\n" + timelineDump);
+        assertTrue(sawLevelStartedFalseDuringIntro, "Level_started_flag was never cleared during intro/cutscene.\n" + timelineDump);
+        assertTrue(sawCameraAdvanceDuringIntro, "Camera never advanced during intro/cutscene while Level_started_flag was clear.\n" + timelineDump);
+        assertTrue(sawSonicAndCameraAdvanceTogether, "Sonic movement with corresponding camera advance was not observed.\n" + timelineDump);
+        assertTrue(sawSonicWithinCameraFollowWindow, "Camera follow window relative to Sonic was not observed near Knuckles trigger range.\n" + timelineDump);
+        assertTrue(sawKnuxNearCamera, "Knuckles never appeared near the camera viewport after spawning.\n" + timelineDump);
+        assertTrue(sawLevelStartedReenabled, "Level_started_flag was not restored after cutscene completion.\n" + timelineDump);
     }
 
     private static String formatTimeline(List<IntroSnapshot> snapshots) {
@@ -446,3 +431,5 @@ public class TestS3kAizIntroStateTimeline {
         }
     }
 }
+
+

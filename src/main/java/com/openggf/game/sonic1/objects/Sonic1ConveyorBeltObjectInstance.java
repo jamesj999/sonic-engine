@@ -4,6 +4,7 @@ import com.openggf.debug.DebugRenderContext;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 import com.openggf.game.PlayableEntity;
 
@@ -39,13 +40,13 @@ import java.util.List;
  * <p>
  * Reference: docs/s1disasm/_incObj/68 Conveyor Belt.asm
  */
-public class Sonic1ConveyorBeltObjectInstance extends AbstractObjectInstance {
+public class Sonic1ConveyorBeltObjectInstance extends AbstractObjectInstance implements SpawnRewindRecreatable {
 
     /** Belt speed in pixels/frame, signed. From subtype upper nibble via ext.w/asr.w #4. */
-    private final int convSpeed;
+    private int convSpeed;
 
     /** Half-width of the activation zone in pixels. 128 or 56. */
-    private final int convWidth;
+    private int convWidth;
 
     public Sonic1ConveyorBeltObjectInstance(ObjectSpawn spawn) {
         super(spawn, "ConveyorBelt");
@@ -70,7 +71,7 @@ public class Sonic1ConveyorBeltObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (player == null) {
             return;
@@ -137,8 +138,16 @@ public class Sonic1ConveyorBeltObjectInstance extends AbstractObjectInstance {
             return;
         }
 
-        // Push player horizontally
-        player.setCentreX((short) (player.getCentreX() + convSpeed));
+        // Push player horizontally.
+        // ROM: `add.w conv_speed(a0),obX(a1)` adds the conveyor speed to the
+        // player's x_pos PIXEL word only -- x_sub is untouched, so the player's
+        // accumulated sub-pixel fraction survives the conveyor push. The engine's
+        // setCentreX() ZEROES x_sub, which discarded up to ~1px of fraction every
+        // frame the player rode a conveyor, putting him progressively behind ROM
+        // (SBZ2 f2168: x_sub 0x2800 dropped to 0, seeding the constant 0x4C00
+        // offset that read as the "subpixel RAM-gated" f2224 frontier). shiftX adds
+        // an integer pixel delta and preserves x_sub, matching the ROM add.w.
+        player.shiftX(convSpeed);
     }
 
     @Override

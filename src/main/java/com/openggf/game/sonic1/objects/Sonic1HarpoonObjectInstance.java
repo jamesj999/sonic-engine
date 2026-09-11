@@ -6,6 +6,7 @@ import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
@@ -46,7 +47,7 @@ import java.util.List;
  * Reference: docs/s1disasm/_incObj/16 Harpoon.asm
  */
 public class Sonic1HarpoonObjectInstance extends AbstractObjectInstance
-        implements TouchResponseProvider {
+        implements TouchResponseProvider, SpawnRewindRecreatable {
 
     // ---- Constants from disassembly ----
 
@@ -114,17 +115,22 @@ public class Sonic1HarpoonObjectInstance extends AbstractObjectInstance
         // addq.b #2,obRoutine(a0) - advance to routine 2 (animate)
         this.routine = 2;
 
-        // Initialize animation state for the first animation
-        this.animFrameIndex = 0;
-        this.animFrameTimer = ANIM_FRAME_DURATION;
-
-        // Set initial frame from animation sequence
+        // Harp_Main falls through into Harp_Move on the spawn frame, so the very
+        // first AnimateSprite call runs during init. Because obAnim has just been
+        // set, AnimateSprite treats the animation as changed and resets
+        // obAniFrame=0 / obTimeFrame=0, then Anim_Run immediately decrements the
+        // duration below zero, loads frame[0], reloads obTimeFrame to the duration
+        // byte (3), and advances obAniFrame to 1. Replicate that post-init state
+        // here so the first update() (the spawn-frame fall-through already happened)
+        // matches the ROM's second Harp_Move call.
         int safeAnimIndex = animIndex & 0x03;
         this.currentFrame = ANIM_SEQUENCES[safeAnimIndex][0];
+        this.animFrameIndex = 1;
+        this.animFrameTimer = ANIM_FRAME_DURATION;
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) {
             return;
@@ -160,23 +166,28 @@ public class Sonic1HarpoonObjectInstance extends AbstractObjectInstance
         int safeAnimIndex = animIndex & 0x03;
         int[] sequence = ANIM_SEQUENCES[safeAnimIndex];
 
-        // AnimateSprite timing: decrement frame timer
+        // AnimateSprite / Anim_Run: subq.b #1,obTimeFrame; bpl.s Anim_Wait
+        // Only advance when the duration counter underflows below zero. When it
+        // does, reload the duration byte first (move.b (a1),obTimeFrame), then
+        // read the next frame, write it (obFrame), and post-increment obAniFrame.
         animFrameTimer--;
-        if (animFrameTimer < 0) {
-            animFrameTimer = ANIM_FRAME_DURATION;
-            animFrameIndex++;
-
-            if (animFrameIndex >= sequence.length) {
-                // afRoutine: animation complete, advance routine
-                animFrameIndex = 0;
-                routine = 4;
-                // Keep the last frame displayed during wait
-                return;
-            }
-
-            // Update current mapping frame from animation sequence
-            currentFrame = sequence[animFrameIndex];
+        if (animFrameTimer >= 0) {
+            // Time remains on the current frame: do nothing (Anim_Wait).
+            return;
         }
+
+        // Anim_LoadNextFrame: reload duration regardless of what the next entry is.
+        animFrameTimer = ANIM_FRAME_DURATION;
+
+        if (animFrameIndex >= sequence.length) {
+            // Next script byte is afRoutine: advance routine, leave obFrame as-is.
+            routine = 4;
+            return;
+        }
+
+        // Load next frame, then advance the script index (post-increment).
+        currentFrame = sequence[animFrameIndex];
+        animFrameIndex++;
     }
 
     /**
@@ -199,11 +210,14 @@ public class Sonic1HarpoonObjectInstance extends AbstractObjectInstance
             routine = 2;
             // bchg #0,obAnim(a0): toggle bit 0 to switch between extend/retract
             animIndex ^= 1;
-            // Reset animation playback for the new sequence
+            // The bchg/routine change happens this (Harp_Wait) frame, but Harp_Move
+            // does not run until next frame. There, AnimateSprite sees the changed
+            // obAnim and resets obAniFrame=0 / obTimeFrame=0, so the first Anim_Run
+            // underflows immediately and loads frame[0]. Mirror that by zeroing the
+            // duration counter and script index; the current frame stays as the
+            // last frame of the previous animation until that next update advances.
             animFrameIndex = 0;
-            animFrameTimer = ANIM_FRAME_DURATION;
-            int safeAnimIndex = animIndex & 0x03;
-            currentFrame = ANIM_SEQUENCES[safeAnimIndex][0];
+            animFrameTimer = 0;
         }
     }
 

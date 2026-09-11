@@ -9,6 +9,8 @@ import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
@@ -38,7 +40,7 @@ import java.util.List;
  * </ul>
  */
 public class SpikyBlockObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
 
     // From disassembly: move.w #$1B,d1 / move.w #$10,d2 / move.w #$11,d3
     private static final SolidObjectParams SOLID_PARAMS = new SolidObjectParams(0x1B, 0x10, 0x11);
@@ -49,6 +51,9 @@ public class SpikyBlockObjectInstance extends AbstractObjectInstance
     // From disassembly: move.b #4,priority(a0)
     private static final int PRIORITY = 4;
 
+    // ROM Obj68_Init: move.b #4,mapping_frame(a0) for the parent block sprite.
+    private static final int BLOCK_MAPPING_FRAME = 4;
+
     private boolean childSpawned;
 
     public SpikyBlockObjectInstance(ObjectSpawn spawn, String name) {
@@ -56,10 +61,15 @@ public class SpikyBlockObjectInstance extends AbstractObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public SpikyBlockObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new SpikyBlockObjectInstance(ctx.spawn(), "SpikyBlock");
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (!childSpawned) {
-            spawnSpikeChild(frameCounter);
+            spawnSpikeChild(vIntRunCount);
             childSpawned = true;
         }
     }
@@ -69,9 +79,14 @@ public class SpikyBlockObjectInstance extends AbstractObjectInstance
      * Spawns the spike child object with initial direction synchronized to
      * the level frame counter and subtype.
      */
-    private void spawnSpikeChild(int frameCounter) {
+    private void spawnSpikeChild(int vIntRunCount) {
         // ROM: move.w (Level_frame_counter).w,d0 / lsr.w #6,d0
-        int d0 = frameCounter >> 6;
+        // ObjectManager's update argument is the VBlank-style object counter;
+        // Obj68 reads the ROM-visible level counter instead.
+        int levelFrameCounter = services().levelManager() != null
+                ? services().levelManager().getFrameCounter()
+                : vIntRunCount;
+        int d0 = levelFrameCounter >> 6;
         int d1 = d0;
 
         // ROM: andi.w #1,d0 / move.w d0,spikearoundblock_position(a1)
@@ -90,10 +105,12 @@ public class SpikyBlockObjectInstance extends AbstractObjectInstance
                 false,
                 spawn.rawYWord());
 
-        SpikyBlockSpikeInstance spike = new SpikyBlockSpikeInstance(
-                childSpawn, "SpikyBlock-Spike", initialDirection, initialPosition);
-
-        services().objectManager().addDynamicObject(spike);
+        // ROM: Obj68_Init (s2.asm:53258) spawns the spike via
+        // AllocateObjectAfterCurrent. Route through spawnChild (the engine's
+        // child-spawn helper) rather than calling addDynamicObject directly,
+        // per the object-spawning contract in CLAUDE.md.
+        spawnChild(() -> new SpikyBlockSpikeInstance(
+                childSpawn, "SpikyBlock-Spike", initialDirection, initialPosition));
     }
 
     @Override
@@ -133,8 +150,7 @@ public class SpikyBlockObjectInstance extends AbstractObjectInstance
 
         PatternSpriteRenderer renderer = renderManager.getRenderer(Sonic2ObjectArtKeys.MTZ_SPIKE_BLOCK);
         if (renderer != null && renderer.isReady()) {
-            // Frame 0 in the block sheet (corresponds to mapping frame 4 in shared Map_obj68)
-            renderer.drawFrameIndex(0, spawn.x(), spawn.y(), false, false);
+            renderer.drawFrameIndex(BLOCK_MAPPING_FRAME, spawn.x(), spawn.y(), false, false);
         }
     }
 

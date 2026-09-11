@@ -6,6 +6,8 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -16,7 +18,7 @@ import java.util.List;
  * ROM Reference: s2.asm Obj5D (ROUTINE_FLAME = 0x18)
  * Animates through flame frames while attached to the boss.
  */
-public class CPZBossFlame extends AbstractObjectInstance {
+public class CPZBossFlame extends AbstractObjectInstance implements RewindRecreatable {
 
     private static final int[] FLAME_FRAMES = {0, -1, 1};
     private final Sonic2CPZBossInstance mainBoss;
@@ -40,7 +42,13 @@ public class CPZBossFlame extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        Sonic2CPZBossInstance boss = CpzBossRewindLinks.nearestBoss(ctx);
+        return boss == null ? null : new CPZBossFlame(ctx.spawn(), boss);
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) {
             return;

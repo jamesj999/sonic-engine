@@ -8,18 +8,19 @@ public class LostRing {
     private int lifetime;
     private boolean collected;
     private int sparkleStartFrame = -1;
-    private int id;
+    private int phaseOffset;
+    private int slotIndex;
     private boolean active;
 
     public LostRing() {
     }
 
-    public LostRing(int id, int x, int y, int xVel, int yVel, int lifetime) {
-        reset(id, x, y, xVel, yVel, lifetime);
+    public LostRing(int phaseOffset, int x, int y, int xVel, int yVel, int lifetime) {
+        reset(phaseOffset, x, y, xVel, yVel, lifetime);
     }
 
-    public void reset(int id, int x, int y, int xVel, int yVel, int lifetime) {
-        this.id = id;
+    public void reset(int phaseOffset, int x, int y, int xVel, int yVel, int lifetime) {
+        this.phaseOffset = phaseOffset;
         this.xSubpixel = x << 8;
         this.ySubpixel = y << 8;
         this.xVel = xVel;
@@ -27,6 +28,7 @@ public class LostRing {
         this.lifetime = lifetime;
         this.collected = false;
         this.sparkleStartFrame = -1;
+        this.slotIndex = -1;
         this.active = true;
     }
 
@@ -38,8 +40,16 @@ public class LostRing {
         this.active = false;
     }
 
-    public int getId() {
-        return id;
+    public int getPhaseOffset() {
+        return phaseOffset;
+    }
+
+    public int getSlotIndex() {
+        return slotIndex;
+    }
+
+    public void setSlotIndex(int slotIndex) {
+        this.slotIndex = slotIndex;
     }
 
     public int getX() {
@@ -105,5 +115,23 @@ public class LostRing {
 
     public int getSparkleStartFrame() {
         return sparkleStartFrame;
+    }
+
+    /**
+     * Rewind-restore path: repopulates all fields from a snapshot entry.
+     * Separate from {@link #reset} to avoid the coordinate-shift in reset's
+     * {@code xSubpixel = x << 8} contract.
+     */
+    public void restoreFromSnapshot(com.openggf.game.rewind.snapshot.RingSnapshot.LostRingEntry entry) {
+        this.active = entry.active();
+        this.xSubpixel = entry.xSubpixel();
+        this.ySubpixel = entry.ySubpixel();
+        this.xVel = entry.xVel();
+        this.yVel = entry.yVel();
+        this.lifetime = entry.lifetime();
+        this.collected = entry.collected();
+        this.sparkleStartFrame = entry.sparkleStartFrame();
+        this.phaseOffset = entry.phaseOffset();
+        this.slotIndex = entry.slotIndex();
     }
 }

@@ -1,12 +1,12 @@
 # Sonic 2 Object Implementation Checklist
 
-Generated: 2026-04-03 23:34:00
+Generated: 2026-08-28 20:53:12
 
 ## Summary
 
 - **Total unique objects found:** 122
-- **Implemented:** 117 (95.9%)
-- **Unimplemented:** 5 (4.1%)
+- **Implemented:** 122 (100.0%)
+- **Unimplemented:** 0 (0.0%)
 
 ## Implemented Objects
 
@@ -46,7 +46,7 @@ Generated: 2026-04-03 23:34:00
 | 0x1F | CollapsPform | 77 | 0x19, 0x1A | ARZ1, ARZ2, MCZ1, MCZ2, OOZ1, OOZ2 |
 | 0x22 | ArrowShooter | 24 | 0x22 | ARZ1, ARZ2 |
 | 0x23 | FallingPillar | 16 |  | ARZ1, ARZ2 |
-| 0x24 | Bubbles | 20 |  | ARZ1, ARZ2 |
+| 0x24 | Bubbles | 20 | 0x23 | ARZ1, ARZ2 |
 | 0x2B | RisingPillar | 11 |  | ARZ1, ARZ2 |
 | 0x2C | LeavesGenerator | 43 | 0x22 | ARZ1, ARZ2 |
 | 0x82 | SwingingPform | 15 |  | ARZ1, ARZ2 |
@@ -92,6 +92,8 @@ Generated: 2026-04-03 23:34:00
 | 0x48 | LauncherBall | 40 | 0x18 | OOZ1, OOZ2 |
 | 0x4A | Octus | 30 | 0x19 | OOZ1, OOZ2 |
 | 0x50 | Aquis | 20 | 0x19 | OOZ1, OOZ2 |
+| 0x43 | SlidingSpike | 6 | 0x18 | OOZ2 |
+| 0x45 | OOZSpring | 5 | 0x19 | OOZ2 |
 | 0x42 | SteamSpring | 18 | 0x0C | MTZ1, MTZ2, MTZ3 |
 | 0x47 | Button | 14 | 0x0D | MTZ1, MTZ2, MTZ3 |
 | 0x64 | MTZTwinStompers | 6 |  | MTZ1, MTZ2, MTZ3 |
@@ -128,17 +130,15 @@ Generated: 2026-04-03 23:34:00
 | 0xC0 | SpeedLauncher | 8 | 0x11 | WFZ1 |
 | 0xC1 | BreakablePlating | 4 | 0x10 | WFZ1 |
 | 0xC2 | Rivet | 1 | 0x11 | WFZ1 |
+| 0xC5 | WFZBoss | 1 |  | WFZ1 |
 | 0xD9 | Grab | 3 |  | WFZ1 |
+| 0xC6 | Eggman | 1 |  | DEZ1 |
+| 0xC7 | Eggrobo | 1 |  | DEZ1 |
 
 ## Unimplemented Objects (By Usage)
 
 | ID | Category | Name | Total Uses | PLC | Zones |
 |----|----------|------|------------|-----|-------|
-| 0x43 | Object | SlidingSpike | 6 |  | OOZ2 |
-| 0x45 | Object | OOZSpring | 5 |  | OOZ2 |
-| 0xC5 | Boss | WFZBoss | 1 |  | WFZ1 |
-| 0xC6 | Boss | Eggman | 1 |  | DEZ1 |
-| 0xC7 | Boss | Eggrobo | 1 |  | DEZ1 |
 
 ---
 
@@ -274,7 +274,7 @@ Total: 182 objects | Implemented: 20 | Unimplemented: 0
 - [x] 0x1F CollapsPform (x5) [0x00]
 - [x] 0x22 ArrowShooter (x8) [0x00] PLC:0x22
 - [x] 0x23 FallingPillar (x5) [0x00]
-- [x] 0x24 Bubbles (x10) [0x80]
+- [x] 0x24 Bubbles (x10) [0x80] PLC:0x23
 - [x] 0x26 Monitor (x13) [5 subtypes]
 - [x] 0x2B RisingPillar (x4) [0x00]
 - [x] 0x2C LeavesGenerator (x34) [0x00, 0x01, 0x02] PLC:0x22
@@ -305,7 +305,7 @@ Total: 222 objects | Implemented: 20 | Unimplemented: 0
 - [x] 0x1F CollapsPform (x10) [0x00]
 - [x] 0x22 ArrowShooter (x16) [0x00] PLC:0x22
 - [x] 0x23 FallingPillar (x11) [0x00]
-- [x] 0x24 Bubbles (x10) [0x81]
+- [x] 0x24 Bubbles (x10) [0x81] PLC:0x23
 - [x] 0x26 Monitor (x18) [4 subtypes]
 - [x] 0x2B RisingPillar (x7) [0x00]
 - [x] 0x2C LeavesGenerator (x9) [0x00, 0x01, 0x02] PLC:0x22
@@ -522,7 +522,7 @@ Total: 189 objects | Implemented: 14 | Unimplemented: 0
 
 #### Act 2
 
-Total: 190 objects | Implemented: 16 | Unimplemented: 2
+Total: 190 objects | Implemented: 18 | Unimplemented: 0
 
 **Badniks:**
 - [x] 0x4A Octus (x16) [0x00] PLC:0x19
@@ -543,8 +543,8 @@ Total: 190 objects | Implemented: 16 | Unimplemented: 2
 - [x] 0x3E EggPrison (x1) [0x00]
 - [x] 0x3F Fan (x18) [4 subtypes] PLC:0x19
 - [x] 0x41 Spring (x6) [4 subtypes] PLC:0x19
-- [ ] 0x43 SlidingSpike (x6) [0x00, 0x06, 0x0C]
-- [ ] 0x45 OOZSpring (x5) [0x10, 0x30]
+- [x] 0x43 SlidingSpike (x6) [0x00, 0x06, 0x0C] PLC:0x18
+- [x] 0x45 OOZSpring (x5) [0x10, 0x30] PLC:0x19
 - [x] 0x48 LauncherBall (x24) [6 subtypes] PLC:0x18
 - [x] 0x74 InvisibleBlock (x1) [0x17]
 - [x] 0x79 Checkpoint (x3) [0x01, 0x02, 0x03] PLC:0x01
@@ -626,8 +626,8 @@ Total: 270 objects | Implemented: 29 | Unimplemented: 0
 - [x] 0xA4 Asteron (x42) [0x2E] PLC:0x0C
 
 **Bosses:**
-- [ ] 0x53 MTZBossOrb *(dynamic)* - Bouncing orb projectiles
-- [ ] 0x54 MTZBoss *(dynamic)* - Eggman's balloon machine
+- [x] 0x53 MTZBossOrb *(dynamic)* - Bouncing orb projectiles
+- [x] 0x54 MTZBoss *(dynamic)* - Eggman's balloon machine
 
 **Objects:**
 - [x] 0x06 Spiral (x2) [0x80]
@@ -679,14 +679,14 @@ Total: 60 objects | Implemented: 8 | Unimplemented: 0
 
 #### Act 1
 
-Total: 157 objects | Implemented: 24 | Unimplemented: 1
+Total: 157 objects | Implemented: 25 | Unimplemented: 0
 
 **Badniks:**
 - [x] 0xAD CluckerBase (x10) [0x42] PLC:0x10
 - [x] 0xAE Clucker (x10) [0x44] PLC:0x10
 
 **Bosses:**
-- [ ] 0xC5 WFZBoss (x1) [0x92]
+- [x] 0xC5 WFZBoss (x1) [0x92]
 
 **Objects:**
 - [x] 0x19 CPZPlatform (x16) [10 subtypes]
@@ -716,11 +716,11 @@ Total: 157 objects | Implemented: 24 | Unimplemented: 1
 
 #### Act 1
 
-Total: 5 objects | Implemented: 1 | Unimplemented: 2
+Total: 5 objects | Implemented: 3 | Unimplemented: 0
 
 **Bosses:**
-- [ ] 0xC6 Eggman (x1) [0xA6]
-- [ ] 0xC7 Eggrobo (x1) [0x02]
+- [x] 0xC6 Eggman (x1) [0xA6]
+- [x] 0xC7 Eggrobo (x1) [0x02]
 
 **Objects:**
 - [x] 0x2D Barrier (x3) [0x00] PLC:0x20

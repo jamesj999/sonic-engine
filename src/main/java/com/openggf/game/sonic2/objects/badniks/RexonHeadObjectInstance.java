@@ -9,6 +9,8 @@ import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.TouchResponseAttackable;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.objects.TouchResponseResult;
@@ -31,7 +33,7 @@ import java.util.List;
  * - DEATH_DROP: Fall off screen if parent body destroyed
  */
 public class RexonHeadObjectInstance extends AbstractObjectInstance
-        implements TouchResponseProvider, TouchResponseAttackable {
+        implements TouchResponseProvider, TouchResponseAttackable, RewindRecreatable {
 
     // Collision size from disassembly (first 4 heads: 0x0B, last head: 0x8B with HURT flag)
     private static final int COLLISION_SIZE_NORMAL = 0x0B;
@@ -119,11 +121,13 @@ public class RexonHeadObjectInstance extends AbstractObjectInstance
         NORMAL,
         DEATH_DROP
     }
-
     private final RexonBadnikInstance parent;
-    private final int headIndex;  // 0, 2, 4, 6, or 8
-    private final int headNumber; // 0-4 for array indexing
-    private final boolean xFlip;
+    // headIndex/headNumber/xFlip are non-final so GenericFieldCapturer captures them and
+    // restoreObjectRewindState reapplies them after the rewind recreate hook rebuilds this head
+    // (the hook passes placeholders; these values are not derivable from the ObjectSpawn).
+    private int headIndex;  // 0, 2, 4, 6, or 8
+    private int headNumber; // 0-4 for array indexing
+    private boolean xFlip;
 
     private State state;
     private int currentX;
@@ -177,10 +181,37 @@ public class RexonHeadObjectInstance extends AbstractObjectInstance
         // Initialize phase from byte_374BE based on head number (s2.asm:73866-73868)
         this.oscillationPhase = INITIAL_PHASES[headNumber];
         this.phaseDirection = 1;  // Start incrementing (objoff_38 = 1)
-        this.oscillationFrameCounter = 0;
+        // Obj97_Init seeds objoff_39 with the head number, not 0
+        // (s2.asm:74316-74318: d0 = objoff_2E >> 1 = headNumber, then
+        // move.b d0,objoff_39). The phase/oscillation update only runs on the
+        // frame where (objoff_39 + 1) & 3 == 0 (Obj97_Normal, s2.asm:74407-74414),
+        // so each head advances its part of the wave on a different frame of the
+        // 4-frame cycle. Seeding every head at 0 collapsed that stagger and left
+        // the wave a couple of pixels off; in HTZ2 that nudged the attackable tip
+        // head just outside Sonic's 16x16 touch band, so the rolling kill bounce
+        // the ROM lands (Touch_KillEnemy "big bounce" neg.w y_vel, s2.asm:85385)
+        // was missed (HTZ2 trace f1078: y_speed should flip +0568 -> -0568).
+        this.oscillationFrameCounter = headNumber;
         this.projectileTimer = PROJECTILE_INITIAL_DELAY;
         this.destroyed = false;
         this.linkedHead = null;
+    }
+
+    private RexonHeadObjectInstance() {
+        this(new ObjectSpawn(0, 0, 0, 0, 0, false, 0), null, 0, 0, 0, false);
+    }
+
+    @Override
+    public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        RexonBadnikInstance parent = Sonic2BadnikChildRewindLinks.nearestRexon(ctx);
+        ObjectSpawn spawn = ctx.spawn();
+        if (parent == null) {
+            return null;
+        }
+        RexonHeadObjectInstance head =
+                new RexonHeadObjectInstance(spawn, parent, spawn.x(), spawn.y(), 0, false);
+        parent.attachHeadForRewind(head);
+        return head;
     }
 
     /**
@@ -195,8 +226,12 @@ public class RexonHeadObjectInstance extends AbstractObjectInstance
         this.linkedHead = head;
     }
 
+    int rewindHeadIndex() {
+        return headIndex;
+    }
+
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (destroyed) {
             return;
@@ -206,7 +241,7 @@ public class RexonHeadObjectInstance extends AbstractObjectInstance
             case INIT -> initHead();
             case INITIAL_WAIT -> updateInitialWait();
             case RAISE_HEAD -> updateRaiseHead();
-            case NORMAL -> updateNormal(frameCounter);
+            case NORMAL -> updateNormal(vIntRunCount);
             case DEATH_DROP -> updateDeathDrop();
         }
     }
@@ -219,10 +254,9 @@ public class RexonHeadObjectInstance extends AbstractObjectInstance
     private void updateInitialWait() {
         waitTimer--;
         if (waitTimer <= 0) {
-            // Start rising - set initial velocity (s2.asm:73831-73832)
-            // Heads rise upward and outward
-            int xDir = xFlip ? 1 : -1;
-            xVelocity = xDir * 0x120;  // -$120 or +$120 (s2.asm:73831)
+            // Start rising - Obj97_StartRaise always writes -$120, regardless of x_flip
+            // (docs/s2disasm/s2.asm:73831). x_flip only changes the initial X offset.
+            xVelocity = -0x120;
             yVelocity = -0x200;        // -$200 upward (s2.asm:73832)
 
             // Set raise timer (s2.asm:73833-73837)
@@ -233,14 +267,8 @@ public class RexonHeadObjectInstance extends AbstractObjectInstance
     }
 
     private void updateRaiseHead() {
-        // Decelerate outward X velocity (s2.asm:73845-73852)
-        // Original always adds +$10 to x_vel, which decelerates from -$120 toward zero
-        // For mirrored direction (xFlip), we need to subtract $10 to decelerate from +$120
-        if (xFlip) {
-            xVelocity -= 0x10;  // Decelerate rightward motion (+$120 toward 0)
-        } else {
-            xVelocity += 0x10;  // Decelerate leftward motion (-$120 toward 0)
-        }
+        // Obj97_RaiseHead always adds +$10 to x_vel (docs/s2disasm/s2.asm:73848).
+        xVelocity += 0x10;
 
         // Decrement raise timer (s2.asm:73847)
         raiseTimer--;
@@ -267,7 +295,7 @@ public class RexonHeadObjectInstance extends AbstractObjectInstance
         }
     }
 
-    private void updateNormal(int frameCounter) {
+    private void updateNormal(int vIntRunCount) {
         // Fire projectile timer check (tip head only, headIndex == 8)
         // From s2.asm:73882-73886
         if (headIndex == 8) {
@@ -390,7 +418,7 @@ public class RexonHeadObjectInstance extends AbstractObjectInstance
         int projXVel = xDir * PROJECTILE_X_VELOCITY;
         int projYVel = PROJECTILE_Y_VELOCITY;
 
-        BadnikProjectileInstance projectile = new BadnikProjectileInstance(
+        spawnFreeChild(() -> new BadnikProjectileInstance(
                 spawn,
                 BadnikProjectileInstance.ProjectileType.REXON_FIREBALL,
                 projX,
@@ -399,9 +427,7 @@ public class RexonHeadObjectInstance extends AbstractObjectInstance
                 projYVel,
                 false,  // No gravity - original uses ObjectMove, not ObjectMoveAndFall
                 xFlip
-        );
-
-        services().objectManager().addDynamicObject(projectile);
+        ));
     }
 
     private void updateDeathDrop() {
@@ -435,7 +461,9 @@ public class RexonHeadObjectInstance extends AbstractObjectInstance
 
         state = State.DEATH_DROP;
         xVelocity = DEATH_X_VELOCITIES[headNumber];
-        yVelocity = -0x200;  // Initial upward velocity
+        // Obj97_CheckHeadIsAlive only switches routine and writes x_vel
+        // (docs/s2disasm/s2.asm:73935-73942); y_vel remains stopped.
+        yVelocity = 0;
     }
 
     @Override
@@ -469,14 +497,12 @@ public class RexonHeadObjectInstance extends AbstractObjectInstance
         setDestroyed(true);
 
         // Spawn explosion
-        ExplosionObjectInstance explosion = new ExplosionObjectInstance(0x27, currentX, currentY,
-                services().renderManager());
-        services().objectManager().addDynamicObject(explosion);
+        spawnFreeChild(() -> new ExplosionObjectInstance(0x27, currentX, currentY,
+                services().renderManager()));
 
         // Spawn animal
-        AnimalObjectInstance animal = new AnimalObjectInstance(
-                new ObjectSpawn(currentX, currentY, 0x28, 0, 0, false, 0), services());
-        services().objectManager().addDynamicObject(animal);
+        spawnFreeChild(() -> AnimalObjectInstance.deferredArtVariant(
+                new ObjectSpawn(currentX, currentY, 0x28, 0, 0, false, 0), services(), null));
 
         // Calculate and award points
         int pointsValue = 100;
@@ -486,9 +512,9 @@ public class RexonHeadObjectInstance extends AbstractObjectInstance
         }
 
         // Spawn points display
-        PointsObjectInstance points = new PointsObjectInstance(
-                new ObjectSpawn(currentX, currentY, 0x29, 0, 0, false, 0), services(), pointsValue);
-        services().objectManager().addDynamicObject(points);
+        int finalPointsValue = pointsValue;
+        spawnFreeChild(() -> new PointsObjectInstance(
+                new ObjectSpawn(currentX, currentY, 0x29, 0, 0, false, 0), services(), finalPointsValue));
 
         // Play explosion SFX
         services().playSfx(Sonic2Sfx.EXPLOSION.id);
@@ -538,5 +564,21 @@ public class RexonHeadObjectInstance extends AbstractObjectInstance
         // - Neck segments (headIndex 0-6 / headNumber 0-3): use frame 1 (circular segment)
         int frame = (headNumber == 4) ? 0 : 1;
         renderer.drawFrameIndex(frame, currentX, currentY, xFlip, false);
+    }
+
+    @Override
+    public String traceDebugDetails() {
+        return String.format("state=%s head=%d idx=%d xflip=%d vel=%04X,%04X phase=%02X dir=%d wait=%02X raise=%02X link=%d",
+                state,
+                headNumber,
+                headIndex,
+                xFlip ? 1 : 0,
+                xVelocity & 0xFFFF,
+                yVelocity & 0xFFFF,
+                oscillationPhase & 0xFF,
+                phaseDirection,
+                waitTimer & 0xFF,
+                raiseTimer & 0xFF,
+                linkedHead != null ? 1 : 0);
     }
 }

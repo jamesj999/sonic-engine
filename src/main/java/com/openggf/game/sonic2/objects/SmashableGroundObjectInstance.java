@@ -2,6 +2,7 @@ package com.openggf.game.sonic2.objects;
 import com.openggf.level.objects.BoxObjectInstance;
 
 import com.openggf.game.PlayableEntity;
+import com.openggf.game.sonic2.constants.Sonic2AnimationIds;
 
 import com.openggf.audio.GameSound;
 import com.openggf.game.sonic2.Sonic2ObjectArtKeys;
@@ -32,7 +33,7 @@ import java.util.logging.Logger;
  * - Uses level patterns (ArtTile_ArtKos_LevelArt), not dedicated object art
  */
 public class SmashableGroundObjectInstance extends BoxObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
 
     private static final Logger LOGGER = Logger.getLogger(SmashableGroundObjectInstance.class.getName());
 
@@ -66,6 +67,9 @@ public class SmashableGroundObjectInstance extends BoxObjectInstance
     // Counter 0: 10, Counter 2: 20, Counter 4: 50, Counter 6+: 100
     // Counter 32+: 1000 (max bonus)
     private static final int[] CHAIN_BONUS_SCORES = { 10, 20, 50, 100 };
+    private static final int FRAGMENT_PIECE_MASK = 0x0F;
+    private static final int FRAGMENT_FRAME_SHIFT = 4;
+    private static final int FRAGMENT_FRAME_MASK = 0x0F;
 
     // Global chain bonus counter shared across all smashable objects
     // ROM: Chain_Bonus_counter at $FFFFF7D0
@@ -77,10 +81,6 @@ public class SmashableGroundObjectInstance extends BoxObjectInstance
     private boolean jumpBreakable;
     private boolean broken;
     private int savedChainCounter;  // objoff_38 - saved counter at frame start
-
-    // Track player animation state each frame
-    private boolean player1WasRolling;
-    private boolean player2WasRolling;
 
     private boolean persistenceChecked;
 
@@ -109,6 +109,11 @@ public class SmashableGroundObjectInstance extends BoxObjectInstance
         this.savedChainCounter = 0;
     }
 
+    @Override
+    public SmashableGroundObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new SmashableGroundObjectInstance(ctx.spawn(), "SmashableGround");
+    }
+
     private void ensureInitialized() {
         if (persistenceChecked) {
             return;
@@ -123,7 +128,7 @@ public class SmashableGroundObjectInstance extends BoxObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         ensureInitialized();
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (broken) {
@@ -134,16 +139,12 @@ public class SmashableGroundObjectInstance extends BoxObjectInstance
         // Save global chain counter at frame start to restore when breaking
         savedChainCounter = globalChainBonusCounter;
 
-        // Track player animation state each frame (for both players in 2P mode)
-        if (player != null) {
-            player1WasRolling = player.getRolling();
-        }
     }
 
     @Override
     public SolidObjectParams getSolidParams() {
         // From disassembly: width_pixels = $10, use halfWidth + 11 for x check
-        return new SolidObjectParams(HALF_WIDTH + 11, yRadius, yRadius + 1);
+        return SolidObjectParams.of(HALF_WIDTH + 11, yRadius, yRadius + 1);
     }
 
     @Override
@@ -167,24 +168,33 @@ public class SmashableGroundObjectInstance extends BoxObjectInstance
 
         // Determine if this object can be broken:
         // - Jump-breakable mode: any landing breaks it
-        // - Normal mode: player must be rolling AND have solid bit = $E (from spin attack)
+        // - Normal mode: player must have roll animation AND solid bit = $E (from spin attack)
         boolean canBreak = false;
-        boolean isRolling = player1WasRolling || player.getRolling();
+        int preContactAnimationId = services().objectManager() != null
+                ? services().objectManager().getPreContactAnimationId()
+                : player.getAnimationId();
+        boolean wasRollAnimating = preContactAnimationId == Sonic2AnimationIds.ROLL.id();
 
         if (jumpBreakable) {
             // Jump-breakable mode: breaks when player lands on it
             canBreak = true;
         } else {
-            // Normal mode: check if player is rolling
+            // Normal mode: check the saved player animation
             // Original checks: cmpi.b #AniIDSonAni_Roll,objoff_32(a0)
             // and: cmpi.b #$E,(MainCharacter+top_solid_bit).w
-            if (isRolling) {
+            if (wasRollAnimating && (player.getTopSolidBit() & 0xFF) == 0x0E) {
                 canBreak = true;
             }
         }
 
         if (canBreak) {
             breakOneLayer(player);
+        } else {
+            // Obj2F_Main assigns primary solidity when the standing player did
+            // not satisfy the break branch (docs/s2disasm/s2.asm:48729-48741,
+            // 48766-48768, 48805-48807).
+            player.setTopSolidBit((byte) 0x0C);
+            player.setLrbSolidBit((byte) 0x0D);
         }
     }
 
@@ -204,12 +214,20 @@ public class SmashableGroundObjectInstance extends BoxObjectInstance
         // bset #status.player.rolling,status(a1)
         // move.b #$E,y_radius(a1)
         // move.b #7,x_radius(a1)
+        short preservedCentreY = player.getCentreY();
         player.setRolling(true);
+        // ROM writes status/radii/anim directly without moving y_pos.
+        player.setCentreYPreserveSubpixel(preservedCentreY);
 
         // Set player state to in-air
         // bset #status.player.in_air
         // bclr #status.player.on_object
         player.setAir(true);
+        player.setOnObject(false);
+        ObjectManager objectManager = services().objectManager();
+        if (objectManager != null) {
+            objectManager.clearRidingObject(player);
+        }
 
         // Spawn fragments for ALL pieces of the current frame
         // In the ROM, BreakObjectToPieces creates fragments for every piece
@@ -222,10 +240,7 @@ public class SmashableGroundObjectInstance extends BoxObjectInstance
         awardChainBonus();
 
         // Mark as broken in persistence table
-        ObjectManager objectManager = services().objectManager();
-        if (objectManager != null) {
-            objectManager.markRemembered(spawn);
-        }
+        ObjectLifetimeOps.markSpawnRemembered(objectManager, spawn);
 
         // The original object is destroyed and becomes fragments
         setDestroyed(true);
@@ -283,15 +298,16 @@ public class SmashableGroundObjectInstance extends BoxObjectInstance
             int velIndex = (i % 2) * 2;  // 0 for even pieces, 2 for odd pieces
             int velX = velocities[velIndex];
             int velY = velocities[velIndex + 1];
+            int fragmentFrameIndex = frameIndex;
+            int fragmentPieceIndex = i;
 
             // Fragment position is object position + piece offset
             // In ROM, fragments are created at object position and inherit the piece offset
             // from their mapping data for rendering
-            SmashableGroundFragmentInstance fragment = new SmashableGroundFragmentInstance(
+            spawnFreeChild(() -> new SmashableGroundFragmentInstance(
                     spawn.x(),  // Object center X
                     spawn.y(),  // Object center Y
-                    velX, velY, piece, renderer);
-            objectManager.addDynamicObject(fragment);
+                    velX, velY, piece, renderer, fragmentFrameIndex, fragmentPieceIndex));
         }
     }
 
@@ -331,10 +347,10 @@ public class SmashableGroundObjectInstance extends BoxObjectInstance
         // Spawn points display popup
         ObjectManager objectManager = services().objectManager();
         if (objectManager != null) {
-            PointsObjectInstance pointsObj = new PointsObjectInstance(
+            int finalPoints = points;
+            spawnFreeChild(() -> new PointsObjectInstance(
                     new ObjectSpawn(spawn.x(), spawn.y(), 0x29, 0, 0, false, 0),
-                    services(), points);
-            objectManager.addDynamicObject(pointsObj);
+                    services(), finalPoints));
         }
     }
 
@@ -397,7 +413,8 @@ public class SmashableGroundObjectInstance extends BoxObjectInstance
      * Fragment object that flies apart when the smashable ground breaks.
      * These are simple falling objects with initial velocity that despawn when off-screen.
      */
-    public static class SmashableGroundFragmentInstance extends AbstractObjectInstance {
+    public static class SmashableGroundFragmentInstance extends AbstractObjectInstance
+            implements RewindRecreatable {
 
         private static final int GRAVITY = 0x18;  // From disassembly: addi.w #$18,y_vel(a0)
 
@@ -407,26 +424,97 @@ public class SmashableGroundObjectInstance extends BoxObjectInstance
         private int subY;  // 8.8 fixed point
         private int velX;  // 8.8 fixed point
         private int velY;  // 8.8 fixed point
+        private int frameIndex;
+        private int pieceIndex;
         private final SpriteMappingPiece piece;
         private final PatternSpriteRenderer renderer;
         private final List<SpriteMappingPiece> pieceList;
 
         public SmashableGroundFragmentInstance(int x, int y, int velX, int velY,
                                                SpriteMappingPiece piece, PatternSpriteRenderer renderer) {
-            super(new ObjectSpawn(x, y, 0x2F, 0, 0, false, 0), "SmashFragment");
-            this.currentX = x;
-            this.currentY = y;
-            this.subX = x << 8;
-            this.subY = y << 8;
+            this(x, y, velX, velY, piece, renderer, 0, 0);
+        }
+
+        public SmashableGroundFragmentInstance(int x, int y, int velX, int velY,
+                                               SpriteMappingPiece piece, PatternSpriteRenderer renderer,
+                                               int frameIndex, int pieceIndex) {
+            this(fragmentSpawn(x, y, frameIndex, pieceIndex), velX, velY, piece, renderer,
+                    frameIndex, pieceIndex);
+        }
+
+        public SmashableGroundFragmentInstance(ObjectSpawn spawn) {
+            this(spawn, null);
+        }
+
+        private SmashableGroundFragmentInstance(ObjectSpawn spawn, ObjectRenderManager renderManager) {
+            this(spawn, 0, 0, fragmentPiece(renderManager, decodeFrameIndex(spawn), decodePieceIndex(spawn)),
+                    fragmentRenderer(renderManager), decodeFrameIndex(spawn), decodePieceIndex(spawn));
+        }
+
+        private SmashableGroundFragmentInstance(ObjectSpawn spawn, int velX, int velY,
+                                                SpriteMappingPiece piece, PatternSpriteRenderer renderer,
+                                                int frameIndex, int pieceIndex) {
+            super(spawn, "SmashFragment");
+            this.currentX = spawn.x();
+            this.currentY = spawn.y();
+            this.subX = spawn.x() << 8;
+            this.subY = spawn.y() << 8;
             this.velX = velX;
             this.velY = velY;
+            this.frameIndex = frameIndex;
+            this.pieceIndex = pieceIndex;
             this.piece = piece;
             this.renderer = renderer;
             this.pieceList = piece != null ? List.of(piece) : List.of();
         }
 
         @Override
-        public void update(int frameCounter, PlayableEntity playerEntity) {
+        public SmashableGroundFragmentInstance recreateForRewind(RewindRecreateContext ctx) {
+            ObjectRenderManager renderManager = ctx.objectServices() != null
+                    ? ctx.objectServices().renderManager()
+                    : null;
+            return new SmashableGroundFragmentInstance(ctx.spawn(), renderManager);
+        }
+
+        private static ObjectSpawn fragmentSpawn(int x, int y, int frameIndex, int pieceIndex) {
+            int subtype = (pieceIndex & FRAGMENT_PIECE_MASK)
+                    | ((frameIndex & FRAGMENT_FRAME_MASK) << FRAGMENT_FRAME_SHIFT);
+            return new ObjectSpawn(x, y, 0x2F, subtype, 0, false, 0);
+        }
+
+        private static int decodePieceIndex(ObjectSpawn spawn) {
+            return spawn.subtype() & FRAGMENT_PIECE_MASK;
+        }
+
+        private static int decodeFrameIndex(ObjectSpawn spawn) {
+            return (spawn.subtype() >> FRAGMENT_FRAME_SHIFT) & FRAGMENT_FRAME_MASK;
+        }
+
+        private static PatternSpriteRenderer fragmentRenderer(ObjectRenderManager renderManager) {
+            return renderManager != null
+                    ? renderManager.getRenderer(Sonic2ObjectArtKeys.SMASHABLE_GROUND)
+                    : null;
+        }
+
+        private static SpriteMappingPiece fragmentPiece(ObjectRenderManager renderManager, int frameIndex,
+                                                        int pieceIndex) {
+            if (renderManager == null) {
+                return null;
+            }
+            ObjectSpriteSheet sheet = renderManager.getSheet(Sonic2ObjectArtKeys.SMASHABLE_GROUND);
+            if (sheet == null || frameIndex < 0 || frameIndex >= sheet.getFrameCount()) {
+                return null;
+            }
+            SpriteMappingFrame frame = sheet.getFrame(frameIndex);
+            if (frame == null || frame.pieces() == null || pieceIndex < 0
+                    || pieceIndex >= frame.pieces().size()) {
+                return null;
+            }
+            return frame.pieces().get(pieceIndex);
+        }
+
+        @Override
+        public void update(int vIntRunCount, PlayableEntity playerEntity) {
             AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
             if (isDestroyed()) {
                 return;

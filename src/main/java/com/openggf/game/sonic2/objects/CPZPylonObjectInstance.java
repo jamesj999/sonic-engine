@@ -7,6 +7,8 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -32,7 +34,7 @@ import java.util.List;
  * This object is NOT loaded from level object data - it is created automatically
  * when CPZ loads and uses camera-relative positioning.
  */
-public class CPZPylonObjectInstance extends AbstractObjectInstance {
+public class CPZPylonObjectInstance extends AbstractObjectInstance implements RewindRecreatable {
 
     // Maximum camera X value (masked) for visibility
     private static final int VISIBILITY_THRESHOLD = 0x2E0;
@@ -48,6 +50,11 @@ public class CPZPylonObjectInstance extends AbstractObjectInstance {
 
     public CPZPylonObjectInstance(ObjectSpawn spawn, String name) {
         super(spawn, name);
+    }
+
+    @Override
+    public CPZPylonObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new CPZPylonObjectInstance(ctx.spawn(), getName());
     }
 
     @Override
@@ -93,7 +100,7 @@ public class CPZPylonObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // No update logic needed - pylon is purely decorative
     }

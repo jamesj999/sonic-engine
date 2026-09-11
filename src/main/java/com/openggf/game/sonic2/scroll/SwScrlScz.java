@@ -1,9 +1,10 @@
 package com.openggf.game.sonic2.scroll;
 
 import com.openggf.camera.Camera;
-import com.openggf.game.GameServices;
 import com.openggf.level.scroll.AbstractZoneScrollHandler;
+import com.openggf.level.scroll.CameraDrivenScrollHandler;
 import com.openggf.level.scroll.M68KMath;
+import com.openggf.level.scroll.compose.ScrollEffectComposer;
 
 /**
  * ROM-accurate implementation of SwScrl_SCZ (Sky Chase Zone scroll routine).
@@ -26,7 +27,7 @@ import com.openggf.level.scroll.M68KMath;
  *   Phase 2 (descend): when cameraY >= $500 -> velX=1, velY=0
  *   Phase 3 (resume right): when cameraX >= $1400 -> velX=0, velY=0
  */
-public class SwScrlScz extends AbstractZoneScrollHandler {
+public class SwScrlScz extends AbstractZoneScrollHandler implements CameraDrivenScrollHandler {
 
     // Tornado velocity (pixels per frame), controlled by level events
     private int tornadoVelocityX = 0;
@@ -38,6 +39,8 @@ public class SwScrlScz extends AbstractZoneScrollHandler {
 
     // Level events routine index (ROM: Dynamic_Resize_Routine)
     private int routineIndex = 0;
+
+    private final ScrollEffectComposer composer = new ScrollEffectComposer();
 
     public SwScrlScz() {
     }
@@ -53,49 +56,33 @@ public class SwScrlScz extends AbstractZoneScrollHandler {
     }
 
     @Override
+    public boolean advanceCameraForFrame(Camera camera, int actId) {
+        // ROM: LevEvents_SCZ is reached from SwScrl_SCZ before the camera words
+        // are advanced by Tornado_Velocity_X/Y. Keep this in gameplay logic so
+        // headless trace replay and rendering observe the same camera state.
+        if (actId == 0) {
+            updateLevelEvents(camera);
+        }
+
+        camera.setX((short) (camera.getX() + tornadoVelocityX));
+        camera.setY((short) (camera.getY() + tornadoVelocityY));
+
+        if (tornadoVelocityX != 0) {
+            bgXPos32 += 0x8000;
+        }
+        return true;
+    }
+
+    @Override
     public void update(int[] horizScrollBuf,
                        int cameraX,
                        int cameraY,
                        int frameCounter,
                        int actId) {
         resetScrollTracking();
+        composer.reset();
 
-        Camera camera = GameServices.camera();
-
-        // ==================== Level Events ====================
-        // ROM: LevEvents_SCZ (s2.asm lines 21793-21847)
-        // Only Act 1 has events; Act 2 (LevEvents_SCZ2) just returns
-        if (actId == 0) {
-            updateLevelEvents(camera);
-        }
-
-        // ==================== Camera Update ====================
-        // ROM: SwScrl_SCZ directly adds Tornado_Velocity to Camera_X/Y_pos
-        // This replaces the normal player-following camera logic.
-
-        // Camera_X_pos += Tornado_Velocity_X
-        short newCamX = (short) (camera.getX() + tornadoVelocityX);
-        camera.setX(newCamX);
-
-        // Camera_Y_pos += Tornado_Velocity_Y
-        short newCamY = (short) (camera.getY() + tornadoVelocityY);
-        camera.setY(newCamY);
-
-        // Re-read after modification
-        int camX = camera.getX() & 0xFFFF;
-        int camY = camera.getY() & 0xFFFF;
-
-        // ==================== BG X Accumulation ====================
-        // ROM: Camera_X_pos_diff is computed as (new - old) << 8
-        // If diff != 0, d4 = $100; else d4 = 0
-        // d4 is then ext.l; asl.l #7 -> $8000 (or 0 if no movement)
-        // SetHorizVertiScrollFlagsBG adds d4 to Camera_BG_X_pos (32-bit)
-        //
-        // So whenever there's ANY horizontal camera movement, BG X
-        // accumulates $8000 per frame = 0.5 pixels/frame in 16.16
-        if (tornadoVelocityX != 0) {
-            bgXPos32 += 0x8000;
-        }
+        int camX = cameraX & 0xFFFF;
 
         // BG Y is always 0 (d5 = 0 in SetHorizVertiScrollFlagsBG)
 
@@ -107,15 +94,11 @@ public class SwScrlScz extends AbstractZoneScrollHandler {
         short bgXWord = (short) (bgXPos32 >> 16);
         short bgScroll = M68KMath.negWord(bgXWord);
 
-        int packed = M68KMath.packScrollWords(fgScroll, bgScroll);
-        for (int line = 0; line < M68KMath.VISIBLE_LINES; line++) {
-            horizScrollBuf[line] = packed;
-        }
+        composer.fillPackedScrollWords(0, M68KMath.VISIBLE_LINES, fgScroll, bgScroll);
+        composer.copyPackedScrollWordsTo(horizScrollBuf);
 
-        // Track scroll offsets for LevelManager tile loading bounds
-        int offset = bgScroll - fgScroll;
-        minScrollOffset = offset;
-        maxScrollOffset = offset;
+        minScrollOffset = composer.getMinScrollOffset();
+        maxScrollOffset = composer.getMaxScrollOffset();
     }
 
     /**
@@ -182,5 +165,35 @@ public class SwScrlScz extends AbstractZoneScrollHandler {
      */
     public int getTornadoVelocityY() {
         return tornadoVelocityY;
+    }
+
+    /**
+     * SCZ scroll state advances in {@link #advanceCameraForFrame} (the logical
+     * frame step), not render-time {@code update()}, and is not a pure function
+     * of the frame counter — {@link #bgXPos32} integrates the tornado velocity,
+     * and {@link #routineIndex} is a monotonic level-event routine. It must be
+     * snapshotted for rewind so a restore reproduces it exactly rather than
+     * re-simulating it forward from stale values (which left the Sky Chase
+     * background drifting after a rewind).
+     */
+    private record SczScrollState(int tornadoVelocityX,
+                                  int tornadoVelocityY,
+                                  int bgXPos32,
+                                  int routineIndex) {
+    }
+
+    @Override
+    public Object captureRewindState() {
+        return new SczScrollState(tornadoVelocityX, tornadoVelocityY, bgXPos32, routineIndex);
+    }
+
+    @Override
+    public void restoreRewindState(Object state) {
+        if (state instanceof SczScrollState s) {
+            tornadoVelocityX = s.tornadoVelocityX();
+            tornadoVelocityY = s.tornadoVelocityY();
+            bgXPos32 = s.bgXPos32();
+            routineIndex = s.routineIndex();
+        }
     }
 }

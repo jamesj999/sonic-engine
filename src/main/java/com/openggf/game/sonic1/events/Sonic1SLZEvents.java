@@ -28,6 +28,7 @@ class Sonic1SLZEvents extends Sonic1ZoneEvents {
 
     @Override
     void update(int act) {
+        retryPendingPlc();
         switch (act) {
             case 0, 1 -> { /* DLE_SLZ12: rts */ }
             case 2 -> updateAct3();
@@ -92,6 +93,7 @@ class Sonic1SLZEvents extends Sonic1ZoneEvents {
 
         // ROM: QueueSound1 bgm_Boss — play boss music
         audio().playMusic(Sonic1Music.BOSS.id);
+        requestSonic1Plc(17);
 
         // ROM: f_lockscreen = 1 — gates the 64px right boundary extension in Sonic_LevelBound. Does NOT modify v_limitleft2 or v_limitright2; camera scrolls within natural level boundaries.
         gameState().setCurrentBossId(Sonic1ObjectIds.SLZ_BOSS);

@@ -1,13 +1,14 @@
 package com.openggf.game.sonic1.objects;
 import com.openggf.game.PlayableEntity;
+import com.openggf.game.CanonicalAnimation;
 
-import com.openggf.camera.Camera;
 import com.openggf.debug.DebugRenderContext;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.TrigLookupTable;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
@@ -39,7 +40,7 @@ import java.util.List;
  * <p>
  * <b>Disassembly reference:</b> docs/s1disasm/_incObj/67 Running Disc.asm
  */
-public class Sonic1RunningDiscObjectInstance extends AbstractObjectInstance {
+public class Sonic1RunningDiscObjectInstance extends AbstractObjectInstance implements SpawnRewindRecreatable {
 
     // From disassembly: move.b #4,obRender(a0) — render flags (screen-relative coords)
     // From disassembly: move.b #4,obPriority(a0)
@@ -65,17 +66,17 @@ public class Sonic1RunningDiscObjectInstance extends AbstractObjectInstance {
     private static final int SMALL_RADIUS = 0x38;
 
     // disc_origX = objoff_32, disc_origY = objoff_30
-    private final int origX;
-    private final int origY;
+    private int origX;
+    private int origY;
 
     // disc_spot_distance = objoff_34: radius for spot orbit (in 8.8 fixed: shifted left 8)
-    private final int spotDistance;
+    private int spotDistance;
 
     // disc_radius = objoff_38: detection radius for attaching Sonic
-    private final int detectionRadius;
+    private int detectionRadius;
 
     // objoff_36: angular speed (16-bit, added to angle word each frame)
-    private final int angularSpeed;
+    private int angularSpeed;
 
     // 16-bit angle accumulator (high byte used for CalcSine index)
     // Initialized from obAngle which is set from obStatus bits 0-1
@@ -145,7 +146,7 @@ public class Sonic1RunningDiscObjectInstance extends AbstractObjectInstance {
         return y;
     }
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) {
             return;
@@ -223,15 +224,20 @@ public class Sonic1RunningDiscObjectInstance extends AbstractObjectInstance {
 
             // btst #2,obStatus(a1) — check rolling status
             if (!player.getRolling()) {
-                // clr.b obAnim(a1) — reset animation
-                // (handled implicitly by the animation system when walking)
+                // clr.b obAnim(a1) — publish Walk immediately. This happens
+                // after the player's animation pass, so merely relying on the
+                // next ordinary walking update preserves the landing frame.
+                int walkAnimationId = player.resolveAnimationId(CanonicalAnimation.WALK);
+                if (walkAnimationId >= 0) {
+                    player.setAnimationId(walkAnimationId);
+                }
             }
 
             // bclr #5,obStatus(a1) — clear "pushing" status
             player.setPushing(false);
 
             // move.b #id_Run,obPrevAni(a1) — restart Sonic's animation
-            // (Forces animation restart on next frame by mismatching prevAnim)
+            player.publishRunAsPreviousAnimation();
 
             // move.b #1,stick_to_convex(a1) — set stick to convex flag
             player.setStickToConvex(true);
@@ -362,23 +368,7 @@ public class Sonic1RunningDiscObjectInstance extends AbstractObjectInstance {
     public boolean isPersistent() {
         // Disc_ChkDel: out_of_range.s .delete,disc_origX(a0)
         // Uses stored original X (not current X) for range check
-        return !isDestroyed() && isOrigXOnScreen();
-    }
-
-    /**
-     * Range check using original X position, matching the disassembly's
-     * {@code out_of_range.s} macro applied to disc_origX.
-     */
-    private boolean isOrigXOnScreen() {
-        Camera camera = services().camera();
-        if (camera == null) {
-            return true;
-        }
-        int objRounded = origX & 0xFF80;
-        int camRounded = (camera.getX() - 128) & 0xFF80;
-        int distance = (objRounded - camRounded) & 0xFFFF;
-        // out_of_range: cmpi.w #128+320+192,d0 / bhi.s exit
-        return distance <= (128 + 320 + 192);
+        return !isDestroyed() && isInRangeAt(origX);
     }
 
     // ---- Debug rendering ----

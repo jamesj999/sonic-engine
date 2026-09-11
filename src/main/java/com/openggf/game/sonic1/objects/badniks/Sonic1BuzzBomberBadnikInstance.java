@@ -8,6 +8,7 @@ import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.DestructionEffects.DestructionConfig;
 import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -26,7 +27,7 @@ import java.util.List;
  *   <li>ob2ndRout=2 (.chknearsonic): Flying, checking proximity. Stop on timer expire or Sonic detect.</li>
  * </ul>
  */
-public class Sonic1BuzzBomberBadnikInstance extends AbstractBadnikInstance {
+public class Sonic1BuzzBomberBadnikInstance extends AbstractBadnikInstance implements SpawnRewindRecreatable {
 
     // From disassembly: obColType = 8 (enemy, collision size index 8)
     // Collision size 8: width=$18 (24px), height=$0C (12px)
@@ -43,6 +44,7 @@ public class Sonic1BuzzBomberBadnikInstance extends AbstractBadnikInstance {
 
     // Proximity detection: bhi.s .notsonic (distance >= $60)
     private static final int SONIC_PROXIMITY = 0x60;     // 96 pixels horizontal distance
+    private static final int ON_SCREEN_HALF_WIDTH = 24;  // Buzz_Main: move.b #48/2,obActWid(a0)
 
     // Missile spawn offsets from disassembly .fire routine
     private static final int MISSILE_Y_OFFSET = 0x1C;    // 28 pixels below Buzz Bomber
@@ -81,11 +83,11 @@ public class Sonic1BuzzBomberBadnikInstance extends AbstractBadnikInstance {
     }
 
     @Override
-    protected void updateMovement(int frameCounter, PlayableEntity playerEntity) {
+    protected void updateMovement(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         switch (secondaryState) {
             case STATE_HOVER -> updateHover(player);
-            case STATE_FLY -> updateFly(player, frameCounter);
+            case STATE_FLY -> updateFly(player, vIntRunCount);
         }
     }
 
@@ -116,7 +118,7 @@ public class Sonic1BuzzBomberBadnikInstance extends AbstractBadnikInstance {
      * ob2ndRout=2 (.chknearsonic): Flying state.
      * Move horizontally, check proximity to Sonic.
      */
-    private void updateFly(AbstractPlayableSprite player, int frameCounter) {
+    private void updateFly(AbstractPlayableSprite player, int vIntRunCount) {
         timeDelay--;
         if (timeDelay < 0) {
             // Timer expired: change direction
@@ -138,7 +140,12 @@ public class Sonic1BuzzBomberBadnikInstance extends AbstractBadnikInstance {
             // Do NOT add getXSpeed()>>8 again — that would double-count the velocity.
             int playerX = player.getCentreX();
             int dx = Math.abs(playerX - currentX);
-            if (dx < SONIC_PROXIMITY && isOnScreenX()) {
+            // Buzz .chknearsonic gates this branch with "tst.b obRender(a0)":
+            // docs/s1disasm/.../22, 23 Badnik - Buzz Bomber and Missile.asm:104-109.
+            // BuildSprites sets bit 7 from the prior render pass using obActWid
+            // (BuildSprites.asm:38-58, 115-116), so use the engine's render-flag
+            // equivalent instead of an X-only point check.
+            if (dx < SONIC_PROXIMITY && isOnScreenForTouch()) {
                 // Near Sonic: stop and prepare to fire
                 buzzStatus = STATUS_NEAR_SONIC;
                 timeDelay = NEAR_SONIC_DELAY;
@@ -179,11 +186,13 @@ public class Sonic1BuzzBomberBadnikInstance extends AbstractBadnikInstance {
 
         int missileXVel = facingLeft ? -MISSILE_X_VEL : MISSILE_X_VEL;
 
-        Sonic1BuzzBomberMissileInstance missile = new Sonic1BuzzBomberMissileInstance(
-                missileX, missileY, missileXVel, MISSILE_Y_VEL,
-                facingLeft, this);
-
-        services().objectManager().addDynamicObject(missile);
+        final int fMissileX = missileX;
+        final int fMissileY = missileY;
+        final int fMissileXVel = missileXVel;
+        final int fParentSlot = getSlotIndex();
+        spawnFreeChild(() -> new Sonic1BuzzBomberMissileInstance(
+                fMissileX, fMissileY, fMissileXVel, MISSILE_Y_VEL,
+                facingLeft, fParentSlot));
 
         // Prevent refiring: set buzzStatus = 1
         buzzStatus = STATUS_FIRED;
@@ -192,7 +201,7 @@ public class Sonic1BuzzBomberBadnikInstance extends AbstractBadnikInstance {
     }
 
     @Override
-    protected void updateAnimation(int frameCounter) {
+    protected void updateAnimation(int vIntRunCount) {
         // ROM AnimateSprite: obTimeFrame decrements from speed value (1) to 0, then advances.
         // Per-object timer ensures independent wing flap timing for each Buzz Bomber.
         wingTimer--;
@@ -230,9 +239,16 @@ public class Sonic1BuzzBomberBadnikInstance extends AbstractBadnikInstance {
      */
     @Override
     public boolean isPersistent() {
-        // ROM MarkObjGone: ~128px left margin, ~64px right margin.
-        // We use 160px for a symmetric, generous margin.
-        return !isDestroyed() && isOnScreenX(160);
+        // Buzz_Display ends at RememberState, whose out_of_range macro deletes the
+        // object once its chunk-aligned X leaves the [camera-128, camera-128+0x280]
+        // window (docs/s1disasm/_incObj/22, 23 Badnik - Buzz Bomber and Missile.asm:38
+        // -> _incObj/sub RememberState.asm:9 -> Macros.asm:278-295).
+        return !isDestroyed() && isInRange();
+    }
+
+    @Override
+    public int getOnScreenHalfWidth() {
+        return ON_SCREEN_HALF_WIDTH;
     }
 
     @Override

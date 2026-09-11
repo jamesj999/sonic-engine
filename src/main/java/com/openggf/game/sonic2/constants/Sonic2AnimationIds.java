@@ -14,6 +14,8 @@ public enum Sonic2AnimationIds implements AnimationId {
     LOOK_UP(0x07),
     DUCK(0x08),
     SPINDASH(0x09),
+    BLINK(0x0A),         // Impatient-wait interrupt: blink before resuming control
+    GET_UP(0x0B),        // Impatient-wait interrupt: stand up from lying down
     BALANCE2(0x0C),      // Balancing on edge, more precarious (closer to falling)
     SKID(0x0D),          // Braking/halt animation
     FLOAT(0x0E),         // Suspended/floating (used by Grabber)
@@ -77,6 +79,8 @@ public enum Sonic2AnimationIds implements AnimationId {
             case LOOK_UP        -> CanonicalAnimation.LOOK_UP;
             case DUCK           -> CanonicalAnimation.DUCK;
             case SPINDASH       -> CanonicalAnimation.SPINDASH;
+            case BLINK          -> CanonicalAnimation.BLINK;
+            case GET_UP         -> CanonicalAnimation.GET_UP;
             case BALANCE2       -> CanonicalAnimation.BALANCE2;
             case SKID           -> CanonicalAnimation.SKID;
             case FLOAT          -> CanonicalAnimation.FLOAT;
@@ -87,8 +91,11 @@ public enum Sonic2AnimationIds implements AnimationId {
             case BUBBLE         -> CanonicalAnimation.BUBBLE;
             case DROWN          -> CanonicalAnimation.DROWN;
             case DEATH          -> CanonicalAnimation.DEATH;
-            case HURT           -> CanonicalAnimation.HURT;
-            case HURT2          -> CanonicalAnimation.HURT2;
+            // Hurt_Sidekick writes $1A for both characters. Keep $19
+            // addressable through HURT2 for scripts that explicitly need the
+            // other table entry (s2.asm:85497-85519).
+            case HURT           -> CanonicalAnimation.HURT2;
+            case HURT2          -> CanonicalAnimation.HURT;
             case SLIDE          -> CanonicalAnimation.SLIDE;
             case BALANCE3       -> CanonicalAnimation.BALANCE3;
             case BALANCE4       -> CanonicalAnimation.BALANCE4;

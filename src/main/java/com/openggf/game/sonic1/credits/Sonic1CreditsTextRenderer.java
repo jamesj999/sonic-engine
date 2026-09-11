@@ -1,5 +1,6 @@
 package com.openggf.game.sonic1.credits;
 
+import com.openggf.game.GameServices;
 import com.openggf.game.sonic1.titlescreen.Sonic1TitleScreenDataLoader;
 import com.openggf.graphics.GraphicsManager;
 import com.openggf.level.objects.ObjectSpriteSheet;
@@ -58,12 +59,12 @@ public class Sonic1CreditsTextRenderer {
         renderer = new PatternSpriteRenderer(sheet);
         dataLoaderRef = dataLoader;
 
-        GraphicsManager gm = GraphicsManager.getInstance();
+        GraphicsManager gm = GameServices.graphics();
         // Reset cache flags so patterns and palette are re-uploaded to GPU
         // (zone palettes will have overwritten the GPU palette since title screen)
         dataLoader.resetCache();
-        dataLoader.cacheCreditTextToGpu();
-        dataLoader.cachePalettesToGpu();
+        dataLoader.cacheCreditTextToGpu(gm);
+        dataLoader.cachePalettesToGpu(gm);
         renderer.ensurePatternsCached(gm, Sonic1TitleScreenDataLoader.CREDIT_TEXT_PATTERN_BASE);
 
         initialized = true;
@@ -85,13 +86,14 @@ public class Sonic1CreditsTextRenderer {
 
         // Re-upload patterns and palette if a zone load has dirtied the GPU cache
         if (gpuDirty && dataLoaderRef != null) {
+            GraphicsManager gm = GameServices.graphics();
             dataLoaderRef.resetCache();
-            dataLoaderRef.cacheCreditTextToGpu();
-            dataLoaderRef.cachePalettesToGpu();
+            dataLoaderRef.cacheCreditTextToGpu(gm);
+            dataLoaderRef.cachePalettesToGpu(gm);
             gpuDirty = false;
         }
 
-        GraphicsManager gm = GraphicsManager.getInstance();
+        GraphicsManager gm = GameServices.graphics();
         gm.beginPatternBatch();
         renderer.drawFrameIndex(creditsNum, SCREEN_CENTER_X, SCREEN_CENTER_Y);
         gm.flushPatternBatch();

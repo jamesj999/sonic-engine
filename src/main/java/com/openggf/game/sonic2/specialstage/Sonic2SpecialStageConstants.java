@@ -74,6 +74,10 @@ public final class Sonic2SpecialStageConstants {
     public static final long HUD_ART_OFFSET = 0x0DD48A;
     public static final int HUD_ART_SIZE = 774;
 
+    /** Overseas TAILS label for the special-stage ring HUD - ArtNem_SpecialTailsText. */
+    public static final long TAILS_TEXT_ART_OFFSET = 0x0E247E;
+    public static final int TAILS_TEXT_ART_SIZE = 128;
+
     /** START banner art - Nemesis compressed (includes checkered flag) */
     public static final long START_ART_OFFSET = 0x0DD790;
     public static final int START_ART_SIZE = 318;  // 0xDD8CE - 0xDD790
@@ -124,6 +128,23 @@ public final class Sonic2SpecialStageConstants {
 
     /** Ring requirement table - Solo mode (28 bytes: 7 stages x 4 quarters) */
     public static final long RING_REQ_SOLO_OFFSET = 0x007772;
+
+    // ========== Special-stage player dynamic art (raw ROM tables) ==========
+
+    /** Obj09_MapRUnc_345FA: 57-entry Sonic/Tails/tails-tail DPLC offset table. */
+    public static final int PLAYER_DPLC_TABLE_OFFSET = 0x0345FA;
+    public static final int SONIC_PLAYER_DPLC_FRAME_COUNT = 18;
+    public static final int TAILS_PLAYER_DPLC_FRAME_COUNT = 18;
+    public static final int TAILS_TAILS_DPLC_FRAME_COUNT = 21;
+
+    /** dword_33AA2: four Sonic special-stage decompressed-art source sections. */
+    public static final int SONIC_PLAYER_DPLC_SOURCE_TABLE_OFFSET = 0x033AA2;
+    /** dword_349B8: four Tails special-stage decompressed-art source sections. */
+    public static final int TAILS_PLAYER_DPLC_SOURCE_TABLE_OFFSET = 0x0349B8;
+    /** dword_34AA0: three Tails-tail decompressed-art source sections. */
+    public static final int TAILS_TAILS_DPLC_SOURCE_TABLE_OFFSET = 0x034AA0;
+    /** SSRAM_ArtNem_SpecialSonicAndTails, the shared decompressed source base. */
+    public static final int PLAYER_DPLC_RAM_BASE = 0xFF0000;
 
     // ========== Track frame offsets and sizes ==========
 
@@ -242,7 +263,6 @@ public final class Sonic2SpecialStageConstants {
      * Sonic's frames come first (96 patterns = 0x60), followed by Tails' frames.
      * This matches the ROM art layout where Tails' art immediately follows Sonic's.
      */
-    public static final int TAILS_PATTERN_OFFSET = 0x60;
 
     // ========== VDP tile indices for special stage UI ==========
 
@@ -315,8 +335,39 @@ public final class Sonic2SpecialStageConstants {
     public static final int VRAM_TITLE_LETTERS_BASE = 0x0002;   // Title card letters base
 
     /** Results screen timing (in frames @ 60fps) */
-    public static final int RESULTS_SLIDE_DURATION = 60;    // 1 second slide-in
-    public static final int RESULTS_WAIT_DURATION = 180;    // 3 seconds after tally
+    public static final int RESULTS_SLIDE_DURATION = 60;    // render-only slide alpha ramp
+
+    /**
+     * Frames the "Special Stage" title -- the object that owns Obj6F's routine
+     * chain -- takes to reach its target and latch the pre-tally wait.
+     *
+     * <p>ROM: the first {@code Obj6F_SubObjectMetaData} row starts the main
+     * object at {@code spriteScreenPositionX(screen_width+128)} with target
+     * {@code spriteScreenPositionXCentered(0)} (docs/s2disasm/s2.asm:28537),
+     * i.e. 320+128 = 448 down to 160, a distance of 288 px.
+     * {@code Obj34_MoveTowardsTargetPosition} steps 16 px per frame
+     * ({@code moveq #$10,d0}, docs/s2disasm/s2.asm:27494), so the object is
+     * still moving on frames 1..18 and is first seen at its target on frame 19,
+     * which is where {@code Obj6F_InitEmeraldText} writes
+     * {@code move.b #$1C,routine(a0) / move.w #$B4,anim_frame_duration(a0)}
+     * (docs/s2disasm/s2.asm:28247-28248).
+     *
+     * <p>The other results rows (score, rings, gems bonus) start further off
+     * screen and keep sliding underneath that wait; they never gate the chain.
+     */
+    public static final int RESULTS_TITLE_ARRIVAL_FRAMES = 288 / 16 + 1;
+
+    /**
+     * Frames the results screen holds after the tally empties, before it raises
+     * {@code Level_Inactive_flag} and lets the special-stage mode loop leave.
+     *
+     * <p>ROM: {@code Obj6F_TallyScore}'s exhausted branch does
+     * {@code addq.b #2,routine(a0) / move.w #$78,anim_frame_duration(a0)}
+     * (docs/s2disasm/s2.asm:28399-28400); {@code Obj6F_TimedDisplay} counts that
+     * $78 = 120 down (s2.asm:28367-28371) and {@code Obj6F_DisplayOnly} sets the
+     * flag on the following frame (s2.asm:28428-28430).
+     */
+    public static final int RESULTS_WAIT_DURATION = 0x78;
     public static final int RESULTS_TALLY_TICK_INTERVAL = 4; // Sound every 4 frames
 
     /** Results screen bonus values */

@@ -1,21 +1,18 @@
 package com.openggf.tests;
-
-import org.junit.Rule;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import com.openggf.data.Rom;
 import com.openggf.game.GameModuleRegistry;
 import com.openggf.game.PlayerCharacter;
 import com.openggf.game.WaterDataProvider;
 import com.openggf.game.sonic2.scroll.Sonic2ZoneConstants;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
 
 import java.io.IOException;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Cross-references the ROM WaterHeight table (s2.asm word_4584) against
@@ -28,9 +25,6 @@ import static org.junit.Assert.assertTrue;
  */
 @RequiresRom(SonicGame.SONIC_2)
 public class TestTodo1_WaterHeightTable {
-    @Rule
-    public RequiresRomRule romRule = new RequiresRomRule();
-
     /**
      * Base address of the compact WaterHeight table in ROM.
      * From s2.asm line 5329: "WaterHeight: ; word_4584"
@@ -68,9 +62,9 @@ public class TestTodo1_WaterHeightTable {
      */
     @Test
     public void testEngineArzAct1WaterHeightMatchesRom() throws IOException {
-        int romValue = readWaterHeight(romRule.rom(), ROM_ZONE_ARZ, 0);
+        int romValue = readWaterHeight(com.openggf.tests.TestEnvironment.currentRom(), ROM_ZONE_ARZ, 0);
         int engineValue = provider().getStartingWaterLevel(ROM_ZONE_ARZ, 0);
-        assertEquals("ARZ Act 1 engine water height must match ROM", romValue, engineValue);
+        assertEquals(romValue, engineValue, "ARZ Act 1 engine water height must match ROM");
     }
 
     /**
@@ -78,9 +72,9 @@ public class TestTodo1_WaterHeightTable {
      */
     @Test
     public void testEngineArzAct2WaterHeightMatchesRom() throws IOException {
-        int romValue = readWaterHeight(romRule.rom(), ROM_ZONE_ARZ, 1);
+        int romValue = readWaterHeight(com.openggf.tests.TestEnvironment.currentRom(), ROM_ZONE_ARZ, 1);
         int engineValue = provider().getStartingWaterLevel(ROM_ZONE_ARZ, 1);
-        assertEquals("ARZ Act 2 engine water height must match ROM", romValue, engineValue);
+        assertEquals(romValue, engineValue, "ARZ Act 2 engine water height must match ROM");
     }
 
     /**
@@ -89,9 +83,9 @@ public class TestTodo1_WaterHeightTable {
      */
     @Test
     public void testEngineCpzAct2WaterHeightMatchesRom() throws IOException {
-        int romValue = readWaterHeight(romRule.rom(), ROM_ZONE_CPZ, 1);
+        int romValue = readWaterHeight(com.openggf.tests.TestEnvironment.currentRom(), ROM_ZONE_CPZ, 1);
         int engineValue = provider().getStartingWaterLevel(ROM_ZONE_CPZ, 1);
-        assertEquals("CPZ Act 2 engine water height must match ROM", romValue, engineValue);
+        assertEquals(romValue, engineValue, "CPZ Act 2 engine water height must match ROM");
     }
 
     // ---- hasWater correctness: only water zones report water ----
@@ -101,10 +95,8 @@ public class TestTodo1_WaterHeightTable {
      */
     @Test
     public void testArzHasWater() {
-        assertTrue("ARZ Act 1 should have water",
-                provider().hasWater(ROM_ZONE_ARZ, 0, PlayerCharacter.SONIC_AND_TAILS));
-        assertTrue("ARZ Act 2 should have water",
-                provider().hasWater(ROM_ZONE_ARZ, 1, PlayerCharacter.SONIC_AND_TAILS));
+        assertTrue(provider().hasWater(ROM_ZONE_ARZ, 0, PlayerCharacter.SONIC_AND_TAILS), "ARZ Act 1 should have water");
+        assertTrue(provider().hasWater(ROM_ZONE_ARZ, 1, PlayerCharacter.SONIC_AND_TAILS), "ARZ Act 2 should have water");
     }
 
     /**
@@ -112,10 +104,8 @@ public class TestTodo1_WaterHeightTable {
      */
     @Test
     public void testCpzOnlyAct2HasWater() {
-        assertFalse("CPZ Act 1 should NOT have water",
-                provider().hasWater(ROM_ZONE_CPZ, 0, PlayerCharacter.SONIC_AND_TAILS));
-        assertTrue("CPZ Act 2 should have water",
-                provider().hasWater(ROM_ZONE_CPZ, 1, PlayerCharacter.SONIC_AND_TAILS));
+        assertFalse(provider().hasWater(ROM_ZONE_CPZ, 0, PlayerCharacter.SONIC_AND_TAILS), "CPZ Act 1 should NOT have water");
+        assertTrue(provider().hasWater(ROM_ZONE_CPZ, 1, PlayerCharacter.SONIC_AND_TAILS), "CPZ Act 2 should have water");
     }
 
     /**
@@ -132,10 +122,8 @@ public class TestTodo1_WaterHeightTable {
             ROM_ZONE_DEZ,
         };
         for (int zone : nonWaterZones) {
-            assertFalse("Zone 0x" + Integer.toHexString(zone) + " Act 1 should NOT have water",
-                    provider().hasWater(zone, 0, PlayerCharacter.SONIC_AND_TAILS));
-            assertFalse("Zone 0x" + Integer.toHexString(zone) + " Act 2 should NOT have water",
-                    provider().hasWater(zone, 1, PlayerCharacter.SONIC_AND_TAILS));
+            assertFalse(provider().hasWater(zone, 0, PlayerCharacter.SONIC_AND_TAILS), "Zone 0x" + Integer.toHexString(zone) + " Act 1 should NOT have water");
+            assertFalse(provider().hasWater(zone, 1, PlayerCharacter.SONIC_AND_TAILS), "Zone 0x" + Integer.toHexString(zone) + " Act 2 should NOT have water");
         }
     }
 
@@ -147,9 +135,9 @@ public class TestTodo1_WaterHeightTable {
      */
     @Test
     public void testRomArzWaterHeights() throws IOException {
-        Rom rom = romRule.rom();
-        assertEquals("ROM ARZ Act 1 water height", 0x0410, readWaterHeight(rom, ROM_ZONE_ARZ, 0));
-        assertEquals("ROM ARZ Act 2 water height", 0x0510, readWaterHeight(rom, ROM_ZONE_ARZ, 1));
+        Rom rom = com.openggf.tests.TestEnvironment.currentRom();
+        assertEquals(0x0410, readWaterHeight(rom, ROM_ZONE_ARZ, 0), "ROM ARZ Act 1 water height");
+        assertEquals(0x0510, readWaterHeight(rom, ROM_ZONE_ARZ, 1), "ROM ARZ Act 2 water height");
     }
 
     /**
@@ -158,9 +146,9 @@ public class TestTodo1_WaterHeightTable {
      */
     @Test
     public void testRomCpzWaterHeights() throws IOException {
-        Rom rom = romRule.rom();
-        assertEquals("ROM CPZ Act 1 water height", 0x0600, readWaterHeight(rom, ROM_ZONE_CPZ, 0));
-        assertEquals("ROM CPZ Act 2 water height", 0x0710, readWaterHeight(rom, ROM_ZONE_CPZ, 1));
+        Rom rom = com.openggf.tests.TestEnvironment.currentRom();
+        assertEquals(0x0600, readWaterHeight(rom, ROM_ZONE_CPZ, 0), "ROM CPZ Act 1 water height");
+        assertEquals(0x0710, readWaterHeight(rom, ROM_ZONE_CPZ, 1), "ROM CPZ Act 2 water height");
     }
 
     /**
@@ -169,13 +157,13 @@ public class TestTodo1_WaterHeightTable {
      */
     @Test
     public void testRomNonWaterZonesDefaultHeight() throws IOException {
-        Rom rom = romRule.rom();
+        Rom rom = com.openggf.tests.TestEnvironment.currentRom();
         int[] defaultZones = { ROM_ZONE_HPZ, ROM_ZONE_OOZ, ROM_ZONE_MCZ, ROM_ZONE_CNZ, ROM_ZONE_DEZ };
         for (int zone : defaultZones) {
-            assertEquals("ROM zone 0x" + Integer.toHexString(zone) + " Act 1",
-                    0x0600, readWaterHeight(rom, zone, 0));
-            assertEquals("ROM zone 0x" + Integer.toHexString(zone) + " Act 2",
-                    0x0600, readWaterHeight(rom, zone, 1));
+            assertEquals(0x0600, readWaterHeight(rom, zone, 0), "ROM zone 0x" + Integer.toHexString(zone) + " Act 1");
+            assertEquals(0x0600, readWaterHeight(rom, zone, 1), "ROM zone 0x" + Integer.toHexString(zone) + " Act 2");
         }
     }
 }
+
+

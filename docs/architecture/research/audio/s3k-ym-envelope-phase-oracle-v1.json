@@ -1,0 +1,80 @@
+{
+  "schema": "openggf.s3k-ym-envelope-phase-oracle.v1",
+  "event_phase": "post_fm_update",
+  "dma_stall_count": 0,
+  "provenance": {
+    "gpgx_commit": "051d430d3d1b54625f9900c8f152d7f232e06daf",
+    "gpgx_ym2612_source_sha256": "45b7b9ffc971078a4f846343b4c2ab82b694ae108cb568152cc352495abe4f5c",
+    "retained_oracle_sha256": "5115c7e2bb5443ae7ccf1fa32d3d41dc1f77d17f086405e29bd3c258e96ee7e2",
+    "retained_native_write_projection_sha256": "33cef3472ad2c9c0d0d50e27f6ae574b51e02755420cd9c542b0443996013f99",
+    "diagnostic_patch_sha256": "9c204d55e1c7524bf94180aa930d6be6a88e332d5227f187a2ed3d048b6bd375",
+    "diagnostic_core_sha256": "3e2cddbb22c93676046f980926fd14d0689bb5bfd36ee75d0d630c2289b940a3",
+    "harness_sha256": "82d61b0c5547f45a55a2d87e337494c9a1d668cd690b858db1ceba59801fdcb1",
+    "compiler": "gcc (GCC) 16.2.1 20260810",
+    "binary_sha256": "b088475fa7c394cf6f9bb3f5ad1bd182ca5a6d7402326f57fa8a4c789e15d0df"
+  },
+  "operator_order": ["SLOT1", "SLOT3", "SLOT2", "SLOT4"],
+  "harness_cycle_projection": "retained corrected native internal-ordinal delta",
+  "window_basis": "all 32 low EG counter residues x 3 EG timer residues",
+  "isolated": [
+    {
+      "name": "attack",
+      "seed_samples": 16,
+      "release_samples": 0,
+      "native_phase": "ATTACK",
+      "native_phase_code": 4,
+      "seed_attenuation": [329, 329, 329, 329],
+      "atomic_key_on_attenuation": [329, 329, 329, 329],
+      "source_timed_key_on_attenuation": [120, 112, 106, 102],
+      "source_timed_min": [111, 108, 104, 102],
+      "source_timed_max": [120, 114, 109, 107]
+    },
+    {
+      "name": "decay",
+      "seed_samples": 96,
+      "release_samples": 0,
+      "native_phase": "DECAY1",
+      "native_phase_code": 3,
+      "seed_attenuation": [40, 40, 40, 40],
+      "atomic_key_on_attenuation": [40, 40, 40, 40],
+      "source_timed_key_on_attenuation": [272, 280, 288, 296],
+      "source_timed_min": [272, 280, 288, 296],
+      "source_timed_max": [272, 282, 298, 305]
+    },
+    {
+      "name": "sustain",
+      "seed_samples": 256,
+      "release_samples": 0,
+      "native_phase": "DECAY2",
+      "native_phase_code": 2,
+      "seed_attenuation": [128, 128, 128, 128],
+      "atomic_key_on_attenuation": [128, 128, 128, 128],
+      "source_timed_key_on_attenuation": [224, 226, 226, 226],
+      "source_timed_min": [224, 224, 224, 224],
+      "source_timed_max": [224, 226, 226, 226]
+    },
+    {
+      "name": "near-release",
+      "seed_samples": 256,
+      "release_samples": 24,
+      "native_phase": "RELEASE",
+      "native_phase_code": 1,
+      "seed_attenuation": [192, 192, 192, 192],
+      "atomic_key_on_attenuation": [192, 192, 192, 192],
+      "source_timed_key_on_attenuation": [592, 592, 592, 592],
+      "source_timed_min": [592, 592, 592, 592],
+      "source_timed_max": [592, 592, 592, 592]
+    }
+  ],
+  "overlap": {
+    "second_group_offset_internal_samples": 32,
+    "seed_samples": 96,
+    "native_phase": "DECAY1",
+    "native_phase_code": 3,
+    "seed_attenuation": [40, 40, 40, 40],
+    "atomic_second_key_on_attenuation": [40, 40, 40, 40],
+    "source_timed_second_key_on_attenuation": [272, 262, 269, 277],
+    "source_timed_min": [254, 262, 269, 277],
+    "source_timed_max": [272, 282, 298, 305]
+  }
+}

@@ -7,6 +7,7 @@ import com.openggf.game.GameServices;
 import com.openggf.game.LevelSelectProvider;
 import com.openggf.game.sonic2.menu.MenuBackgroundAnimator;
 
+import com.openggf.game.sonic3k.S3kFrontendPaletteUploader;
 import com.openggf.game.sonic3k.audio.Sonic3kMusic;
 import com.openggf.game.sonic3k.audio.Sonic3kSoundTestCatalog;
 import com.openggf.graphics.GLCommand;
@@ -14,6 +15,7 @@ import com.openggf.graphics.GraphicsManager;
 import com.openggf.level.Palette;
 import com.openggf.level.Pattern;
 import com.openggf.level.PatternDesc;
+import com.openggf.sprites.playable.AbstractPlayableSprite;
 
 import java.util.logging.Logger;
 
@@ -33,7 +35,7 @@ public class Sonic3kLevelSelectManager implements LevelSelectProvider {
 
     private static Sonic3kLevelSelectManager instance;
 
-    private final SonicConfigurationService configService = SonicConfigurationService.getInstance();
+    private final SonicConfigurationService configService = GameServices.configuration();
     private final Sonic3kLevelSelectDataLoader dataLoader = new Sonic3kLevelSelectDataLoader();
     private final PatternDesc reusableDesc = new PatternDesc();
     private final PatternDesc highlightDesc = new PatternDesc();
@@ -62,7 +64,10 @@ public class Sonic3kLevelSelectManager implements LevelSelectProvider {
     /** Palette line used for icon rendering (separate from highlight line 3) */
     private static final int ICON_RENDER_PALETTE = 2;
 
-    private Sonic3kLevelSelectManager() {
+    /** Projection-space viewport width; default 320 (native). */
+    private int viewportWidth = Sonic3kLevelSelectConstants.SCREEN_WIDTH;
+
+    public Sonic3kLevelSelectManager() {
     }
 
     public static synchronized Sonic3kLevelSelectManager getInstance() {
@@ -70,6 +75,27 @@ public class Sonic3kLevelSelectManager implements LevelSelectProvider {
             instance = new Sonic3kLevelSelectManager();
         }
         return instance;
+    }
+
+    /**
+     * Sets the projection-space viewport width for widescreen centering.
+     *
+     * <p>The level select content is always 320 px wide (one VDP plane). At widths
+     * greater than 320 the content is shifted right by {@code (viewportWidth - 320) / 2}
+     * so it stays visually centered. At native width 320 the offset is 0 — byte-identical.
+     */
+    @Override
+    public void setViewportWidth(int width) {
+        this.viewportWidth = Math.max(Sonic3kLevelSelectConstants.SCREEN_WIDTH, width);
+    }
+
+    /**
+     * Returns the horizontal pixel offset to apply to all rendered elements so that
+     * the 320-px-wide content block is centered within the current viewport.
+     * Returns 0 at native width 320.
+     */
+    private int xOffset() {
+        return (viewportWidth - Sonic3kLevelSelectConstants.SCREEN_WIDTH) / 2;
     }
 
     @Override
@@ -118,7 +144,7 @@ public class Sonic3kLevelSelectManager implements LevelSelectProvider {
         int jumpKey = configService.getInt(SonicConfiguration.JUMP);
 
         // Up/Down navigation
-        if (input.isKeyDown(upKey)) {
+        if (input.isDirectionHeld(upKey, AbstractPlayableSprite.INPUT_UP)) {
             if (upHoldTimer == 0 || (upHoldTimer >= Sonic3kLevelSelectConstants.HOLD_REPEAT_DELAY
                     && upHoldTimer % Sonic3kLevelSelectConstants.HOLD_REPEAT_RATE == 0)) {
                 moveUp();
@@ -128,7 +154,7 @@ public class Sonic3kLevelSelectManager implements LevelSelectProvider {
             upHoldTimer = 0;
         }
 
-        if (input.isKeyDown(downKey)) {
+        if (input.isDirectionHeld(downKey, AbstractPlayableSprite.INPUT_DOWN)) {
             if (downHoldTimer == 0 || (downHoldTimer >= Sonic3kLevelSelectConstants.HOLD_REPEAT_DELAY
                     && downHoldTimer % Sonic3kLevelSelectConstants.HOLD_REPEAT_RATE == 0)) {
                 moveDown();
@@ -139,7 +165,7 @@ public class Sonic3kLevelSelectManager implements LevelSelectProvider {
         }
 
         // Left/Right (column switch or sound test adjustment)
-        if (input.isKeyDown(leftKey)) {
+        if (input.isDirectionHeld(leftKey, AbstractPlayableSprite.INPUT_LEFT)) {
             if (leftHoldTimer == 0 || (leftHoldTimer >= Sonic3kLevelSelectConstants.HOLD_REPEAT_DELAY
                     && leftHoldTimer % Sonic3kLevelSelectConstants.HOLD_REPEAT_RATE == 0)) {
                 moveLeft();
@@ -149,7 +175,7 @@ public class Sonic3kLevelSelectManager implements LevelSelectProvider {
             leftHoldTimer = 0;
         }
 
-        if (input.isKeyDown(rightKey)) {
+        if (input.isDirectionHeld(rightKey, AbstractPlayableSprite.INPUT_RIGHT)) {
             if (rightHoldTimer == 0 || (rightHoldTimer >= Sonic3kLevelSelectConstants.HOLD_REPEAT_DELAY
                     && rightHoldTimer % Sonic3kLevelSelectConstants.HOLD_REPEAT_RATE == 0)) {
                 moveRight();
@@ -160,7 +186,7 @@ public class Sonic3kLevelSelectManager implements LevelSelectProvider {
         }
 
         // Jump/Start to select
-        if (input.isKeyPressed(jumpKey)) {
+        if (input.isKeyPressed(jumpKey) || input.logical().menuAccept()) {
             handleSelect();
         }
 
@@ -262,12 +288,11 @@ public class Sonic3kLevelSelectManager implements LevelSelectProvider {
         if (!dataLoader.isDataLoaded()) {
             dataLoader.loadData();
         }
-        dataLoader.cacheToGpu();
-
-        GraphicsManager gm = GraphicsManager.getInstance();
+        GraphicsManager gm = GameServices.graphics();
         if (gm == null || gm.isHeadlessMode()) {
             return;
         }
+        dataLoader.cacheToGpu(gm);
 
         // Initialize SONICMILES animator on first draw
         Pattern[] smPatterns = dataLoader.getSonicMilesPatterns();
@@ -276,7 +301,7 @@ public class Sonic3kLevelSelectManager implements LevelSelectProvider {
             // DEST_TILE_OFFSET=1, so it writes to PATTERN_BASE+1..10, matching
             // the background mapping's tile indices 1-10.
             menuBackgroundAnimator = new MenuBackgroundAnimator(
-                    smPatterns, Sonic3kLevelSelectConstants.PATTERN_BASE);
+                    smPatterns, gm, Sonic3kLevelSelectConstants.PATTERN_BASE);
             menuBackgroundAnimator.prime();
         }
         if (menuBackgroundAnimator != null) {
@@ -291,19 +316,24 @@ public class Sonic3kLevelSelectManager implements LevelSelectProvider {
         if (iconIndex >= 0) {
             Palette iconPalette = dataLoader.getIconPalette(iconIndex);
             if (iconPalette != null) {
-                gm.cachePaletteTexture(iconPalette, ICON_RENDER_PALETTE);
+                S3kFrontendPaletteUploader.cacheLine(gm, iconPalette, ICON_RENDER_PALETTE);
             }
         }
 
         gm.beginPatternBatch();
 
-        // Render Plane B background (SONICMILES repeating text pattern, palette line 3)
+        // Render Plane B background (SONICMILES repeating text pattern, palette line 3).
+        // Background expands to fill the full viewport width (tiled horizontally).
+        // Do NOT apply xOffset() — background fills everything, not just the centered 320 box.
+        // At native width 320 this is identical to the previous centered draw.
         int[] bgLayout = dataLoader.getBackgroundLayout();
         if (bgLayout != null && bgLayout.length > 0) {
-            renderTilemap(gm, bgLayout, dataLoader.getBackgroundWidth(), dataLoader.getBackgroundHeight());
+            renderBackgroundTilemap(gm, bgLayout,
+                    dataLoader.getBackgroundWidth(), dataLoader.getBackgroundHeight());
         }
 
-        // Render Plane A foreground (level select tilemap — zone names, icons, borders)
+        // Render Plane A foreground (level select tilemap — zone names, icons, borders).
+        // Foreground stays centered via xOffset().
         int[] screenLayout = dataLoader.getScreenLayout();
         if (screenLayout != null && screenLayout.length > 0) {
             renderTilemap(gm, screenLayout,
@@ -333,15 +363,19 @@ public class Sonic3kLevelSelectManager implements LevelSelectProvider {
                     -1,
                     GLCommand.BlendType.ONE_MINUS_SRC_ALPHA,
                     0.0f, 0.0f, 0.0f, fadeAmount,
-                    0, 0, Sonic3kLevelSelectConstants.SCREEN_WIDTH, Sonic3kLevelSelectConstants.SCREEN_HEIGHT
+                    0, 0, viewportWidth, Sonic3kLevelSelectConstants.SCREEN_HEIGHT
             ));
         }
     }
 
     /**
      * Renders a tilemap decoded from Enigma mappings (Plane A foreground).
+     *
+     * <p>The foreground is always 320 px wide and centered within the viewport
+     * via {@link #xOffset()}.
      */
     private void renderTilemap(GraphicsManager gm, int[] map, int width, int height) {
+        int xOff = xOffset();
         for (int ty = 0; ty < height; ty++) {
             int baseIndex = ty * width;
             for (int tx = 0; tx < width; tx++) {
@@ -351,7 +385,40 @@ public class Sonic3kLevelSelectManager implements LevelSelectProvider {
                 if (word == 0) continue;
                 reusableDesc.set(word);
                 int patternId = Sonic3kLevelSelectConstants.PATTERN_BASE + reusableDesc.getPatternIndex();
-                gm.renderPatternWithId(patternId, reusableDesc, tx * 8, ty * 8);
+                gm.renderPatternWithId(patternId, reusableDesc, xOff + tx * 8, ty * 8);
+            }
+        }
+    }
+
+    /**
+     * Renders the Plane B background tilemap tiled across the full viewport width.
+     *
+     * <p>The background pattern has period {@code width} tiles (= 320 px at native).
+     * At widescreen widths the pattern is wrapped/repeated horizontally so that the
+     * entire viewport is filled from {@code x=0} to {@code x=viewportWidth}.
+     * No {@link #xOffset()} is applied — the background expands, it does not center.
+     *
+     * <p>Native parity: when {@code viewportWidth == 320} this draws exactly
+     * {@code width} columns from {@code x=0}, identical to calling
+     * {@link #renderTilemap} with {@code xOffset()==0}.
+     */
+    private void renderBackgroundTilemap(GraphicsManager gm, int[] map, int width, int height) {
+        if (width <= 0 || height <= 0) {
+            return;
+        }
+        // Number of tile columns needed to cover the full viewport width (round up).
+        int tileColumns = (viewportWidth + 7) / 8;
+        for (int ty = 0; ty < height; ty++) {
+            for (int col = 0; col < tileColumns; col++) {
+                // Wrap source column to tile the pattern horizontally.
+                int tx = col % width;
+                int idx = ty * width + tx;
+                if (idx >= map.length) continue;
+                int word = map[idx];
+                if (word == 0) continue;
+                reusableDesc.set(word);
+                int patternId = Sonic3kLevelSelectConstants.PATTERN_BASE + reusableDesc.getPatternIndex();
+                gm.renderPatternWithId(patternId, reusableDesc, col * 8, ty * 8);
             }
         }
     }
@@ -403,7 +470,7 @@ public class Sonic3kLevelSelectManager implements LevelSelectProvider {
         int adjusted = (flags & ~0x6000) | ((Sonic3kLevelSelectConstants.HIGHLIGHT_PALETTE_INDEX & 0x3) << 13) | patternIndex;
         highlightDesc.set(adjusted);
         int patternId = Sonic3kLevelSelectConstants.PATTERN_BASE + patternIndex;
-        gm.renderPatternWithId(patternId, highlightDesc, col * 8, row * 8);
+        gm.renderPatternWithId(patternId, highlightDesc, xOffset() + col * 8, row * 8);
     }
 
     /**
@@ -413,7 +480,8 @@ public class Sonic3kLevelSelectManager implements LevelSelectProvider {
      */
     private void drawSoundTestValue(GraphicsManager gm, int paletteIndex) {
         // VRAM offset $846: row = $846/128 = 16, col = ($846%128)/2 = 35
-        int x = 35 * 8;
+        // Shifted by xOffset() for widescreen centering
+        int x = xOffset() + 35 * 8;
         int y = 16 * 8;
 
         int highNibble = (soundTestValue >> 4) & 0xF;
@@ -445,8 +513,8 @@ public class Sonic3kLevelSelectManager implements LevelSelectProvider {
         int iconIdx = Sonic3kLevelSelectConstants.ICON_TABLE[selectedIndex];
         if (iconIdx < 0 || iconIdx >= 15) return;
 
-        // Icon position: pixel (216, 176) from VRAM offset $B36
-        int iconX = 216;
+        // Icon position: pixel (216, 176) from VRAM offset $B36, shifted for widescreen
+        int iconX = xOffset() + 216;
         int iconY = 176;
 
         int[] iconMappings = dataLoader.getIconMappings();

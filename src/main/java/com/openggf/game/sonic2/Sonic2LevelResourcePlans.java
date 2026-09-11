@@ -83,6 +83,46 @@ public final class Sonic2LevelResourcePlans {
     }
 
     /**
+     * Creates the resource plan for Wing Fortress Zone.
+     *
+     * <p>Like HTZ, WFZ shares its base foreground pattern art with another zone
+     * (the SCZ tileset, {@code ArtKos_SCZ}) and applies a supplement
+     * ({@code ArtKos_WFZ} / "WFZ_Supp.kos") that "overwrites several SCZ tiles"
+     * starting at tile {@code $0307} (byte offset {@code $60E0}). The ROM applies
+     * this via a hardcoded patch (s2.asm:6494-6499), the sibling of HTZ's patch;
+     * these supplement tiles build the WFZ-specific foreground, including the
+     * getaway ship the player grabs at the ending. Without the overlay the ship
+     * samples missing/garbage tiles.
+     *
+     * <p>Unlike HTZ, WFZ's chunks (16x16), blocks (128x128), and collision are
+     * single-source (its own {@code BM16_WFZ}/{@code BM128_WFZ}/{@code Col*_WFZSCZ}
+     * tables). We reuse the exact addresses the standard loader resolves for them so
+     * only the pattern supplement is added; nothing else about the level load changes.
+     *
+     * @param patternsBaseAddr standard-resolved WFZ pattern base ({@code ArtKos_SCZ})
+     * @param chunksAddr       standard-resolved WFZ 16x16 chunk table
+     * @param blocksAddr       standard-resolved WFZ 128x128 block table
+     * @param collisionAddr    standard-resolved WFZ primary collision index
+     * @param altCollisionAddr standard-resolved WFZ secondary collision index
+     */
+    public static LevelResourcePlan createWfzPlan(
+            int patternsBaseAddr, int chunksAddr, int blocksAddr,
+            int collisionAddr, int altCollisionAddr) {
+        return LevelResourcePlan.builder()
+                // Patterns (8x8): shared SCZ base + WFZ supplement overlay (s2.asm:6494-6499)
+                .addPatternOp(LoadOp.kosinskiBase(patternsBaseAddr))
+                .addPatternOp(LoadOp.kosinskiOverlay(
+                        Sonic2Constants.WFZ_PATTERNS_OVERLAY_ADDR,
+                        Sonic2Constants.WFZ_PATTERNS_OVERLAY_OFFSET))
+                // Chunks / blocks / collision: WFZ single-source tables (identical to standard load)
+                .addChunkOp(LoadOp.kosinskiBase(chunksAddr))
+                .addBlockOp(LoadOp.kosinskiBase(blocksAddr))
+                .setPrimaryCollision(LoadOp.kosinskiBase(collisionAddr))
+                .setSecondaryCollision(LoadOp.kosinskiBase(altCollisionAddr))
+                .build();
+    }
+
+    /**
      * Returns the resource plan for a zone, if it requires custom loading.
      *
      * @param romZoneId The ROM zone ID (e.g., 0x07 for HTZ)

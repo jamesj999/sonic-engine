@@ -9,7 +9,8 @@ import static org.junit.jupiter.api.Assertions.*;
  * <p>ROM refs:
  * <ul>
  *   <li>Super Sonic: sonic3k.asm:22084-22086 (max=$A00, accel=$30, decel=$100)</li>
- *   <li>Super Tails: sonic3k.asm:26325-26327 (max=$800, accel=$18, decel=$C0)</li>
+ *   <li>Super Tails: sonic3k.asm:26325-26327,28538-28541 (max=$800, accel=$18, decel=$C0, jump=$680)</li>
+ *   <li>Super Knuckles: sonic3k.asm:32611-32613,32454-32457 (max=$800, accel=$18, decel=$C0, jump=$600)</li>
  *   <li>Super Sonic water: sonic3k.asm:22230-22232 ($500/$18/$80)</li>
  *   <li>Super Tails water: sonic3k.asm:27445-27447 ($400/$C/$60)</li>
  * </ul>
@@ -35,7 +36,16 @@ class TestS3kSuperProfiles {
         assertEquals(0x800, p.max(), "Super Tails max");
         assertEquals(0x18, p.runAccel(), "Super Tails accel");
         assertEquals(0xC0, p.runDecel(), "Super Tails decel");
-        assertEquals(0x800, p.jump(), "Super Tails jump");
+        assertEquals(0x680, p.jump(), "Super Tails jump");
+    }
+
+    @Test
+    void superKnuckles_matchesRom() {
+        PhysicsProfile p = PhysicsProfile.SONIC_3K_SUPER_KNUCKLES;
+        assertEquals(0x800, p.max(), "Super Knuckles max");
+        assertEquals(0x18, p.runAccel(), "Super Knuckles accel");
+        assertEquals(0xC0, p.runDecel(), "Super Knuckles decel");
+        assertEquals(0x600, p.jump(), "Super Knuckles jump");
     }
 
     @Test
@@ -97,3 +107,4 @@ class TestS3kSuperProfiles {
                 "Normal Sonic underwater decel");
     }
 }
+

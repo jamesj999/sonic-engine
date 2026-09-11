@@ -1,28 +1,33 @@
 package com.openggf.game.sonic3k.specialstage;
 
+import com.openggf.game.session.SessionManager;
+import com.openggf.game.session.EngineServices;
+import com.openggf.tests.TestEnvironment;
+import com.openggf.tests.TestSessionOutputPaths;
+
 import com.openggf.Engine;
 import com.openggf.camera.Camera;
 import com.openggf.configuration.SonicConfiguration;
 import com.openggf.configuration.SonicConfigurationService;
 import com.openggf.data.Rom;
 import com.openggf.data.RomManager;
+import com.openggf.game.session.EngineContext;
 import com.openggf.game.GameModuleRegistry;
 import com.openggf.game.GameServices;
-import com.openggf.game.RuntimeManager;
 import com.openggf.game.GameStateManager;
 import com.openggf.game.PlayerCharacter;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.GraphicsManager;
+import com.openggf.graphics.RgbaImage;
 import com.openggf.graphics.ScreenshotCapture;
 
 import org.joml.Matrix4f;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.lwjgl.glfw.GLFWErrorCallback;
 import org.lwjgl.opengl.GL;
 
-import java.awt.image.BufferedImage;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -30,8 +35,8 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.junit.Assert.*;
-import static org.junit.Assume.assumeTrue;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.lwjgl.glfw.GLFW.*;
 import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.system.MemoryUtil.NULL;
@@ -41,31 +46,39 @@ import static org.lwjgl.system.MemoryUtil.NULL;
  * Creates the results screen directly and captures screenshots to verify
  * text, emerald indicators, and layout are rendering correctly.
  *
- * Screenshots are saved to target/ss-results-visual/ for manual inspection.
+ * Screenshots are saved to the session diagnostics ss-results-visual namespace
+ * for manual inspection.
  */
 public class TestS3kSpecialStageResultsVisual {
 
     private static final int SCREEN_WIDTH = 320;
     private static final int SCREEN_HEIGHT = 224;
-    private static final Path OUTPUT_DIR = Paths.get("target", "ss-results-visual");
+    private static final Path OUTPUT_DIR = TestSessionOutputPaths.diagnostics("ss-results-visual");
 
     private static long window;
     private static boolean initialized;
     private static final Matrix4f projectionMatrix = new Matrix4f();
     private static final float[] matrixBuffer = new float[16];
 
-    @BeforeClass
+    @BeforeAll
     public static void setUpClass() {
         try {
+            EngineServices.configure(EngineContext.fromLegacySingletonsForBootstrap());
+            SessionManager.clear();
+
             // Check for S3K ROM
             String romPath = System.getProperty("s3k.rom.path",
-                    "Sonic and Knuckles & Sonic 3 (W) [!].gen");
+                    "s3k.gen");
             File romFile = new File(romPath);
             if (!romFile.exists()) {
-                System.err.println("S3K ROM not available — visual tests skipped");
+                System.err.println("S3K ROM not available Ã¢â‚¬â€ visual tests skipped");
                 initialized = false;
                 return;
             }
+
+            // Bootstrap EngineContext once so GraphicsManager.init can reach
+            // GameServices.configuration() during the fresh-singleton init below.
+            EngineServices.configure(EngineContext.fromLegacySingletonsForBootstrap());
 
             GLFWErrorCallback.createPrint(System.err).set();
             if (!glfwInit()) {
@@ -91,7 +104,6 @@ public class TestS3kSpecialStageResultsVisual {
             // in an incompatible state. resetState() only clears per-level resources; this GPU test
             // needs shaders and the tilemap renderer fully re-initialized for correct pixel rendering.
             GraphicsManager.destroyForReinit(); // full GL teardown needed, not resetState()
-            GameServices.camera().resetState();
 
             GraphicsManager gm = GraphicsManager.getInstance();
             gm.init(Engine.RESOURCES_SHADERS_PIXEL_SHADER_GLSL);
@@ -112,9 +124,21 @@ public class TestS3kSpecialStageResultsVisual {
 
             // Load S3K ROM
             Rom rom = new Rom();
-            assertTrue("Failed to open S3K ROM", rom.open(romFile.getAbsolutePath()));
+            assertTrue(rom.open(romFile.getAbsolutePath()), "Failed to open S3K ROM");
             GameModuleRegistry.detectAndSetModule(rom);
             RomManager.getInstance().setRom(rom);
+            TestEnvironment.activeGameplayMode();
+
+            // Re-capture EngineContext now that GraphicsManager has been re-created by
+            // destroyForReinit() + getInstance() above. The earlier bootstrap captured
+            // the now-destroyed singleton; without refreshing, GameServices.graphics()
+            // (called from S3kSpecialStageResultsScreen.ensureArtCached) would write
+            // pattern/palette cache entries into the dead instance and the rendered
+            // frame would stay all-white.
+            EngineServices.configure(EngineContext.fromLegacySingletonsForBootstrap());
+
+            // Create the gameplay mode so GameServices.* accessors resolve.
+            TestEnvironment.activeGameplayMode();
 
             // Configure emerald state for tests
             GameStateManager gs = GameServices.gameState();
@@ -135,25 +159,23 @@ public class TestS3kSpecialStageResultsVisual {
         }
     }
 
-    @AfterClass
+    @AfterAll
     public static void tearDownClass() {
         if (window != NULL) {
             try { glfwDestroyWindow(window); } catch (Exception e) { /* ignore */ }
         }
         glfwTerminate();
         GraphicsManager.getInstance().resetState();
-        if (RuntimeManager.getCurrent() != null) {
-            GameServices.camera().resetState();
-        }
+        SessionManager.clear();
     }
 
     /**
-     * Test: Emerald collected, not all 7 — should show emerald indicators,
+     * Test: Emerald collected, not all 7 Ã¢â‚¬â€ should show emerald indicators,
      * ring/time bonus, and character name. Standard success case.
      */
     @Test
     public void testResultsScreen_emeraldCollected() throws Exception {
-        assumeTrue("Test environment not initialized", initialized);
+        assumeTrue(initialized, "Test environment not initialized");
 
         // Mark 3 emeralds collected (slots 0, 1, 2)
         GameStateManager gs = GameServices.gameState();
@@ -175,9 +197,9 @@ public class TestS3kSpecialStageResultsVisual {
         dumpMappingFrameTiles();
 
         // Capture two screenshots 1 frame apart (to verify emerald flicker)
-        BufferedImage frame1 = renderResultsScreen(screen, 400);
+        RgbaImage frame1 = renderResultsScreen(screen, 400);
         screen.update(401, null);
-        BufferedImage frame2 = renderResultsScreen(screen, 401);
+        RgbaImage frame2 = renderResultsScreen(screen, 401);
 
         ScreenshotCapture.savePNG(frame1, OUTPUT_DIR.resolve("emerald_collected_f400.png"));
         ScreenshotCapture.savePNG(frame2, OUTPUT_DIR.resolve("emerald_collected_f401.png"));
@@ -195,12 +217,12 @@ public class TestS3kSpecialStageResultsVisual {
     }
 
     /**
-     * Test: Failed to collect emerald — should show failure message,
+     * Test: Failed to collect emerald Ã¢â‚¬â€ should show failure message,
      * no character name, no emerald text.
      */
     @Test
     public void testResultsScreen_failed() throws Exception {
-        assumeTrue("Test environment not initialized", initialized);
+        assumeTrue(initialized, "Test environment not initialized");
 
         // No emeralds collected
         GameStateManager gs = GameServices.gameState();
@@ -215,7 +237,7 @@ public class TestS3kSpecialStageResultsVisual {
             screen.update(i, null);
         }
 
-        BufferedImage frame = renderResultsScreen(screen, 400);
+        RgbaImage frame = renderResultsScreen(screen, 400);
         ScreenshotCapture.savePNG(frame, OUTPUT_DIR.resolve("failed_f400.png"));
 
         assertNotAllWhite(frame, "Failed results screen should have visible text");
@@ -227,7 +249,7 @@ public class TestS3kSpecialStageResultsVisual {
     // Rendering helper
     // ================================================================
 
-    private BufferedImage renderResultsScreen(S3kSpecialStageResultsScreen screen, int frame) {
+    private RgbaImage renderResultsScreen(S3kSpecialStageResultsScreen screen, int frame) {
         GraphicsManager gm = GraphicsManager.getInstance();
         Camera camera = GameServices.camera();
 
@@ -244,7 +266,7 @@ public class TestS3kSpecialStageResultsVisual {
         List<GLCommand> warmup = new ArrayList<>();
         screen.appendRenderCommands(warmup);
 
-        // Render: begin batch → add patterns → end batch → flush commands
+        // Render: begin batch Ã¢â€ â€™ add patterns Ã¢â€ â€™ end batch Ã¢â€ â€™ flush commands
         gm.beginPatternBatch();
         List<GLCommand> commands = new ArrayList<>();
         screen.appendRenderCommands(commands);
@@ -296,11 +318,11 @@ public class TestS3kSpecialStageResultsVisual {
     // Assertions
     // ================================================================
 
-    private void assertNotAllWhite(BufferedImage image, String message) {
+    private void assertNotAllWhite(RgbaImage image, String message) {
         int nonWhitePixels = 0;
-        for (int y = 0; y < image.getHeight(); y++) {
-            for (int x = 0; x < image.getWidth(); x++) {
-                int rgb = image.getRGB(x, y);
+        for (int y = 0; y < image.height(); y++) {
+            for (int x = 0; x < image.width(); x++) {
+                int rgb = image.argb(x, y);
                 int r = (rgb >> 16) & 0xFF;
                 int g = (rgb >> 8) & 0xFF;
                 int b = rgb & 0xFF;
@@ -310,16 +332,15 @@ public class TestS3kSpecialStageResultsVisual {
                 }
             }
         }
-        assertTrue(message + " (found " + nonWhitePixels + " non-white pixels)",
-                nonWhitePixels > 100);
+        assertTrue(nonWhitePixels > 100, message + " (found " + nonWhitePixels + " non-white pixels)");
     }
 
-    private void assertRegionHasContent(BufferedImage image, int rx, int ry, int rw, int rh,
+    private void assertRegionHasContent(RgbaImage image, int rx, int ry, int rw, int rh,
                                          String message) {
         int nonWhitePixels = 0;
-        for (int y = ry; y < Math.min(ry + rh, image.getHeight()); y++) {
-            for (int x = rx; x < Math.min(rx + rw, image.getWidth()); x++) {
-                int rgb = image.getRGB(x, y);
+        for (int y = ry; y < Math.min(ry + rh, image.height()); y++) {
+            for (int x = rx; x < Math.min(rx + rw, image.width()); x++) {
+                int rgb = image.argb(x, y);
                 int r = (rgb >> 16) & 0xFF;
                 int g = (rgb >> 8) & 0xFF;
                 int b = rgb & 0xFF;
@@ -328,7 +349,6 @@ public class TestS3kSpecialStageResultsVisual {
                 }
             }
         }
-        assertTrue(message + " (found " + nonWhitePixels + " non-white pixels in region)",
-                nonWhitePixels > 10);
+        assertTrue(nonWhitePixels > 10, message + " (found " + nonWhitePixels + " non-white pixels in region)");
     }
 }

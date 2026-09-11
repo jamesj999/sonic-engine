@@ -3,8 +3,8 @@ package com.openggf.util;
 import com.openggf.data.Rom;
 import com.openggf.data.RomByteReader;
 import com.openggf.level.Pattern;
-import com.openggf.tools.KosinskiReader;
-import com.openggf.tools.NemesisReader;
+import com.openggf.data.compression.KosinskiReader;
+import com.openggf.data.compression.NemesisReader;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -21,9 +21,18 @@ import java.util.logging.Logger;
  *
  * <p>Convenience methods handle ROM channel setup and decompression for the
  * three compression formats used across the Sonic series: Nemesis, Kosinski,
- * and Kosinski Moduled. These methods use {@code rom.getFileChannel()} without
- * internal synchronization. Callers that share a Rom across threads (e.g.
- * Sonic2ObjectArt) must synchronize on the Rom instance externally.
+ * and Kosinski Moduled. Each seeks the shared {@link java.nio.channels.FileChannel}
+ * and then streams from it, so each holds the {@code Rom} monitor for the whole
+ * seek-and-stream, matching the lock every reader inside {@link Rom} takes.
+ *
+ * <p>These used to require the caller to synchronize instead. The Sonic 1 and
+ * Sonic 2 art loaders did; every Sonic 3 &amp; Knuckles caller did not, and the
+ * background {@code level-load-preparer} thread repositions the same channel
+ * during a level load. The observed result was a Nemesis stream that ended
+ * early ("Unexpected end of input data") because the decoder's sequential reads
+ * had been seeked out from under it. Locking here makes every caller safe by
+ * construction; the monitor is reentrant, so the callers that already
+ * synchronize are unaffected.
  */
 public final class PatternDecompressor {
 
@@ -71,10 +80,12 @@ public final class PatternDecompressor {
      * @throws IOException on decompression failure
      */
     public static Pattern[] nemesis(Rom rom, int address) throws IOException {
-        var channel = rom.getFileChannel();
-        channel.position(address);
-        byte[] data = NemesisReader.decompress(channel);
-        return fromBytes(data);
+        synchronized (rom) {
+            var channel = rom.getFileChannel();
+            channel.position(address);
+            byte[] data = NemesisReader.decompress(channel);
+            return fromBytes(data);
+        }
     }
 
     /**
@@ -125,10 +136,12 @@ public final class PatternDecompressor {
      * @throws IOException on decompression failure
      */
     public static Pattern[] kosinski(Rom rom, int address) throws IOException {
-        var channel = rom.getFileChannel();
-        channel.position(address);
-        byte[] data = KosinskiReader.decompress(channel);
-        return fromBytes(data);
+        synchronized (rom) {
+            var channel = rom.getFileChannel();
+            channel.position(address);
+            byte[] data = KosinskiReader.decompress(channel);
+            return fromBytes(data);
+        }
     }
 
     /**
@@ -140,10 +153,12 @@ public final class PatternDecompressor {
      * @throws IOException on decompression failure
      */
     public static Pattern[] kosinskiModuled(Rom rom, int address) throws IOException {
-        var channel = rom.getFileChannel();
-        channel.position(address);
-        byte[] data = KosinskiReader.decompressModuled(channel);
-        return fromBytes(data);
+        synchronized (rom) {
+            var channel = rom.getFileChannel();
+            channel.position(address);
+            byte[] data = KosinskiReader.decompressModuled(channel);
+            return fromBytes(data);
+        }
     }
 
     /**

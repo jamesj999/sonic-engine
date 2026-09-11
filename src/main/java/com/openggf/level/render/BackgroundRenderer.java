@@ -1,13 +1,18 @@
 package com.openggf.level.render;
 
+import com.openggf.configuration.SonicConfiguration;
+import com.openggf.game.GameServices;
 import com.openggf.graphics.GraphicsManager;
 import com.openggf.graphics.HScrollBuffer;
 import com.openggf.graphics.ParallaxShaderProgram;
 import com.openggf.graphics.QuadRenderer;
 import com.openggf.graphics.VScrollBuffer;
 import com.openggf.util.FboHelper;
+import com.openggf.util.IntIndexedView;
+import com.openggf.util.ShortIndexedView;
 
 import java.io.IOException;
+import java.util.Objects;
 import java.util.logging.Logger;
 
 import static org.lwjgl.opengl.GL11.*;
@@ -56,6 +61,7 @@ public class BackgroundRenderer {
     private VScrollBuffer vScrollColumnBuffer;
     private ParallaxShaderProgram parallaxShader;
     private final QuadRenderer quadRenderer = new QuadRenderer();
+    private final GraphicsManager graphicsManager;
 
     private boolean initialized = false;
     private final int[] savedViewport = new int[4];
@@ -67,6 +73,14 @@ public class BackgroundRenderer {
     private int shimmerFrameCounter = 0;
     private int shimmerStyle = 0;
     private float shimmerWaterlineScreenY = 9999.0f;
+
+    public BackgroundRenderer() {
+        this(GameServices.graphics());
+    }
+
+    public BackgroundRenderer(GraphicsManager graphicsManager) {
+        this.graphicsManager = Objects.requireNonNull(graphicsManager, "graphicsManager");
+    }
 
     /**
      * Initialize the background renderer with FBO and shader.
@@ -83,7 +97,8 @@ public class BackgroundRenderer {
         hScrollBuffer.init();
         vScrollBuffer = new VScrollBuffer();
         vScrollBuffer.init();
-        vScrollColumnBuffer = new VScrollBuffer(20);
+        vScrollColumnBuffer = new VScrollBuffer(columnCount(
+                GameServices.configuration().getInt(SonicConfiguration.SCREEN_WIDTH_PIXELS)));
         vScrollColumnBuffer.init();
 
         // Load parallax shader
@@ -91,7 +106,12 @@ public class BackgroundRenderer {
         parallaxShader.cacheUniformLocations();
         quadRenderer.init();
 
-        // Create FBO for background tile rendering
+        // Create FBO for background tile rendering.
+        // Size the initial allocation to the configured viewport width so that at
+        // native (320) the FBO starts at 320px and at widescreen presets it starts
+        // at the wider configured width. ensureCapacity() (called every frame) will
+        // grow the FBO further if a zone's BG period exceeds this initial size.
+        fboAllocWidth = GameServices.configuration().getInt(SonicConfiguration.SCREEN_WIDTH_PIXELS);
         createFBO(fboAllocWidth, fboAllocHeight);
 
         initialized = true;
@@ -147,7 +167,7 @@ public class BackgroundRenderer {
         this.renderHeight = height;
 
         // Save current viewport to restore later
-        GraphicsManager gm = GraphicsManager.getInstance();
+        GraphicsManager gm = this.graphicsManager;
         savedViewport[0] = gm.getViewportX();
         savedViewport[1] = gm.getViewportY();
         savedViewport[2] = gm.getViewportWidth();
@@ -183,6 +203,12 @@ public class BackgroundRenderer {
      * shader can sample per-scanline scroll values when PerLineScroll is active.
      */
     public void uploadHScroll(int[] hScroll) {
+        if (initialized && hScrollBuffer != null) {
+            hScrollBuffer.upload(hScroll);
+        }
+    }
+
+    public void uploadHScroll(IntIndexedView hScroll) {
         if (initialized && hScrollBuffer != null) {
             hScrollBuffer.upload(hScroll);
         }
@@ -249,6 +275,30 @@ public class BackgroundRenderer {
             vScrollColumnBuffer.upload(vScrollPerColumn);
         }
 
+        renderUploadedScroll(scrollMidpoint, extraBuffer, fboVScroll, noHScroll,
+                vScrollPerLine != null, vScrollPerColumn != null);
+    }
+
+    public void renderWithScrollWide(IntIndexedView hScroll, ShortIndexedView vScrollPerLine,
+            ShortIndexedView vScrollPerColumn, int scrollMidpoint, int extraBuffer,
+            int fboVScroll, boolean noHScroll) {
+        if (!initialized) {
+            return;
+        }
+        hScrollBuffer.upload(hScroll);
+        if (vScrollPerLine != null && vScrollBuffer != null) {
+            vScrollBuffer.upload(vScrollPerLine);
+        }
+        if (vScrollPerColumn != null && vScrollColumnBuffer != null) {
+            vScrollColumnBuffer.upload(vScrollPerColumn);
+        }
+        renderUploadedScroll(scrollMidpoint, extraBuffer, fboVScroll, noHScroll,
+                vScrollPerLine != null, vScrollPerColumn != null);
+    }
+
+    private void renderUploadedScroll(int scrollMidpoint, int extraBuffer, int fboVScroll,
+            boolean noHScroll, boolean usePerLineVScroll, boolean usePerColumnVScroll) {
+
         // Bind 1D sampler textures before shader use; macOS may validate samplers
         // at program-use time.
         hScrollBuffer.bind(1);
@@ -270,7 +320,7 @@ public class BackgroundRenderer {
         parallaxShader.setVScrollColumnTexture(3);
 
         // Get viewport for resolution independence
-        GraphicsManager gm = GraphicsManager.getInstance();
+        GraphicsManager gm = this.graphicsManager;
         float viewportX = gm.getViewportX();
         float viewportY = gm.getViewportY();
         float realWidth = gm.getViewportWidth();
@@ -279,6 +329,8 @@ public class BackgroundRenderer {
         // Set dimensions and scroll
         // BGTextureWidth = renderWidth (wrap period), FBOAllocationWidth = fboAllocWidth (UV mapping)
         parallaxShader.setScreenDimensions(realWidth, realHeight);
+        parallaxShader.setActiveDisplayWidth((float) GameServices.configuration()
+                .getInt(SonicConfiguration.SCREEN_WIDTH_PIXELS));
         parallaxShader.setBGTextureDimensions(renderWidth, renderHeight);
         parallaxShader.setFBOAllocationWidth(fboAllocWidth);
 
@@ -290,8 +342,8 @@ public class BackgroundRenderer {
         parallaxShader.setBackdropColor(backdropR, backdropG, backdropB);
         parallaxShader.setFillTransparentWithBackdrop(true);
         parallaxShader.setNoHScroll(noHScroll);
-        parallaxShader.setUsePerLineVScroll(vScrollPerLine != null);
-        parallaxShader.setUsePerColumnVScroll(vScrollPerColumn != null);
+        parallaxShader.setUsePerLineVScroll(usePerLineVScroll);
+        parallaxShader.setUsePerColumnVScroll(usePerColumnVScroll);
         parallaxShader.setShimmerParams(shimmerFrameCounter, shimmerStyle, shimmerWaterlineScreenY);
 
         // Bind textures
@@ -311,6 +363,10 @@ public class BackgroundRenderer {
             vScrollColumnBuffer.unbind(3);
         }
         glActiveTexture(GL_TEXTURE0);
+    }
+
+    private static int columnCount(int width) {
+        return (width + 15) / 16;
     }
 
     /**

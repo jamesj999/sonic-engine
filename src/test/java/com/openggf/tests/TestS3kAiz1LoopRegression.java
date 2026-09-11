@@ -8,29 +8,24 @@ import com.openggf.game.GroundMode;
 import com.openggf.game.sonic3k.objects.AizHollowTreeObjectInstance;
 import com.openggf.sprites.playable.Sonic;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Headless regression for the AIZ1 loop before the hollow log.
  *
- * <p>Scenario from {@code docs/BUGLIST_S3K_TODAY.md}: teleport Sonic beside the
+ * <p>Scenario from the retired 2026-03-25 AIZ working list (now folded into
+ * {@code docs/status/known-bugs.md}): teleport Sonic beside the
  * red spring, let the spring launch him into the loop, and verify he exits the
  * loop instead of stalling in the wall and rolling backward.
  */
 @RequiresRom(SonicGame.SONIC_3K)
 public class TestS3kAiz1LoopRegression {
-
-    @ClassRule
-    public static RequiresRomRule romRule = new RequiresRomRule();
-
     private static final int ZONE_AIZ = 0;
     private static final int ACT_1 = 0;
 
@@ -49,7 +44,7 @@ public class TestS3kAiz1LoopRegression {
     private HeadlessTestFixture fixture;
     private Sonic sprite;
 
-    @BeforeClass
+    @BeforeAll
     public static void loadLevel() throws Exception {
         SonicConfigurationService config = SonicConfigurationService.getInstance();
         oldSkipIntros = config.getConfigValue(SonicConfiguration.S3K_SKIP_INTROS);
@@ -62,7 +57,7 @@ public class TestS3kAiz1LoopRegression {
         sharedLevel = SharedLevel.load(SonicGame.SONIC_3K, ZONE_AIZ, ACT_1);
     }
 
-    @AfterClass
+    @AfterAll
     public static void cleanup() {
         SonicConfigurationService config = SonicConfigurationService.getInstance();
         config.setConfigValue(SonicConfiguration.S3K_SKIP_INTROS,
@@ -76,7 +71,7 @@ public class TestS3kAiz1LoopRegression {
         }
     }
 
-    @Before
+    @BeforeEach
     public void setUp() {
         fixture = HeadlessTestFixture.builder()
                 .withSharedLevel(sharedLevel)
@@ -91,9 +86,8 @@ public class TestS3kAiz1LoopRegression {
         teleportToLoopSpring();
 
         int springTriggerFrame = runRightUntilSpringLaunches();
-        assertTrue("Expected the red spring beside Sonic to launch him rightward."
-                        + " " + describeState(-1),
-                springTriggerFrame >= 0);
+        assertTrue(springTriggerFrame >= 0, "Expected the red spring beside Sonic to launch him rightward."
+                        + " " + describeState(-1));
 
         int startX = sprite.getX();
         int maxX = startX;
@@ -135,7 +129,7 @@ public class TestS3kAiz1LoopRegression {
             }
         }
 
-        assertTrue("Expected Sonic to clear the AIZ1 loop and exit beyond X=" + PASS_EXIT_X
+        assertTrue(sprite.getX() >= PASS_EXIT_X && momentumLossFrame < 0, "Expected Sonic to clear the AIZ1 loop and exit beyond X=" + PASS_EXIT_X
                         + " after spring launch, but loop momentum collapsed first."
                         + " springTriggerFrame=" + springTriggerFrame
                         + " maxX=" + maxX
@@ -146,8 +140,7 @@ public class TestS3kAiz1LoopRegression {
                         + " momentumLossY=" + momentumLossY
                         + " momentumLossGSpeed=" + momentumLossGSpeed
                         + " momentumLossThreshold=" + MOMENTUM_LOSS_THRESHOLD
-                        + " " + describeState(fixture.frameCount()),
-                sprite.getX() >= PASS_EXIT_X && momentumLossFrame < 0);
+                        + " " + describeState(fixture.frameCount()));
     }
 
     private void teleportToLoopSpring() {
@@ -200,3 +193,5 @@ public class TestS3kAiz1LoopRegression {
                 + " rolling=" + sprite.getRolling();
     }
 }
+
+

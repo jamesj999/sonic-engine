@@ -1,6 +1,8 @@
 package com.openggf.game.sonic3k.objects;
 
 import com.openggf.game.PlayableEntity;
+import com.openggf.game.solid.PlayerSolidContactResult;
+import com.openggf.game.solid.SolidCheckpointBatch;
 import com.openggf.game.sonic3k.Sonic3kLevelTriggerManager;
 import com.openggf.game.sonic3k.Sonic3kObjectArtKeys;
 import com.openggf.game.sonic3k.audio.Sonic3kSfx;
@@ -12,19 +14,31 @@ import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractFallingFragment;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.GravityDebrisChild;
+import com.openggf.level.objects.ObjectLifetimeOps;
+import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectRenderManager;
+import com.openggf.level.objects.ObjectPlayerParticipationPolicy;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.ObjectSpriteSheet;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.RomObjectCodePointerProvider;
 import com.openggf.level.objects.SolidContact;
+import com.openggf.level.objects.SolidExecutionMode;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.level.render.SpriteMappingFrame;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Set;
 import java.util.logging.Logger;
 
 /**
@@ -58,7 +72,8 @@ import java.util.logging.Logger;
  * Check_CollapsePlayerRelease (sonic3k.asm:45349).
  */
 public class CollapsingBridgeObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, RomObjectCodePointerProvider,
+        SpawnRewindRecreatable {
 
     private static final Logger LOG = Logger.getLogger(CollapsingBridgeObjectInstance.class.getName());
 
@@ -69,6 +84,9 @@ public class CollapsingBridgeObjectInstance extends AbstractObjectInstance
 
     // MGZ stomp priority: $80 = bucket 1 (ROM: move.w #$80,priority(a0))
     private static final int MGZ_STOMP_PRIORITY = 1;
+
+    // Obj_CollapsingBridge routines live at $00020AF6/$00020B8C; S3K CPU interact stores the high word.
+    private static final int ROM_CODE_POINTER_HIGH_WORD = 0x0002;
 
     // Collision height for SolidObjectTop: d3 = $10 (ROM: move.w #$10,d3)
     private static final int SOLID_HEIGHT = 0x10;
@@ -88,6 +106,11 @@ public class CollapsingBridgeObjectInstance extends AbstractObjectInstance
         TRIGGER,
         /** MGZ ground-pound: shatters with velocity vectors when player rolls. */
         MGZ_STOMP
+    }
+
+    @Override
+    public int romObjectCodePointerHighWord() {
+        return ROM_CODE_POINTER_HIGH_WORD;
     }
 
     // ===================================================================
@@ -303,19 +326,24 @@ public class CollapsingBridgeObjectInstance extends AbstractObjectInstance
     private int state;
     private int collapseTimer;        // $38 countdown (initialized per zone formula)
     private boolean collapseTriggered; // $3A flag
+    private boolean collapseTriggerPending;
     private boolean fragmented;
 
     // Wave collapse phase tracking (state 2)
     private int parentTimer;           // Counts down from activeDelays[0]
-    private int[] activeDelays;        // Selected delay array (normal or flip)
+    private int[] activeDelays;        // Selected fragment delay array (normal or flip)
+    private int[] releaseDelays;       // Parent release always uses ROM $30.
     private boolean flippedForCollapse; // Sprite flipped during directional determination
     private int fragmentFrameIndex;    // Mapping frame used for fragment pieces
+    private final Set<PlayableEntity> collapseWaveRiders =
+            Collections.newSetFromMap(new IdentityHashMap<>());
 
     // Post-fragment fall state (state 3)
     private int velX;   // X velocity (subpixels, only used by MGZ stomp parent)
     private int velY;   // Y velocity (subpixels)
     private int xFrac;  // X subpixel fraction
     private int yFrac;  // Y subpixel fraction
+    private boolean romRenderFlag = true;
 
     // ===== Constructor =====
 
@@ -554,7 +582,7 @@ public class CollapsingBridgeObjectInstance extends AbstractObjectInstance
     @Override
     public SolidObjectParams getSolidParams() {
         // ROM: SolidObjectTop with d1=width_pixels, d3=$10
-        return new SolidObjectParams(halfWidth, SOLID_HEIGHT, SOLID_HEIGHT);
+        return SolidObjectParams.of(halfWidth, SOLID_HEIGHT, SOLID_HEIGHT);
     }
 
     @Override
@@ -563,10 +591,43 @@ public class CollapsingBridgeObjectInstance extends AbstractObjectInstance
     }
 
     @Override
+    public boolean rejectsZeroDistanceTopSolidLanding() {
+        // SolidObjectTop reaches loc_1E45A for fresh contacts. Its unsigned
+        // cmpi.w #-$10,d0 / blo accepts only negative overlap [-$10,-1],
+        // rejecting the exact d0=0 boundary (sonic3k.asm:41982-42015).
+        return true;
+    }
+
+    @Override
+    public boolean usesPlatformObjectLandingSnap() {
+        // Obj_CollapsingBridge calls SolidObjectTop (sonic3k.asm:45170-45175),
+        // whose loc_1E45A landing writes y_pos += d0 + 3 before
+        // Player_TouchFloor restores the default radii (41996-42039). It does
+        // not use PlatformObject_ChkYRange's absolute surface re-seat.
+        return false;
+    }
+
+    @Override
+    public boolean clearsStandingBitOnContinuedRideExit(PlayableEntity player) {
+        // SolidObjectTop's out-of-bounds/airborne exit clears both
+        // Status_OnObj and this object's d6 standing bit before returning
+        // (sonic3k.asm:41798-41825). Keeping only the engine ride owner clear
+        // leaves a hidden stale bit for Check_CollapsePlayerRelease.
+        return true;
+    }
+
+    @Override
     public boolean isSolidFor(PlayableEntity playerEntity) {
-        // Solid during idle (0), countdown (1), and wave-release (2) states.
-        // State 3 (falling away) is not solid.
-        return state < 3;
+        // ROM: once the platform enters Obj_PlatformCollapseWaitHandlePlayer it stops
+        // calling SolidObjectTop entirely. Only riders already standing on it remain
+        // supported until Check_CollapsePlayerRelease drops them.
+        if (state < 2) {
+            return true;
+        }
+        if (state == 2) {
+            return playerEntity != null && collapseWaveRiders.contains(playerEntity);
+        }
+        return false;
     }
 
     // ===== SolidObjectListener =====
@@ -579,10 +640,14 @@ public class CollapsingBridgeObjectInstance extends AbstractObjectInstance
 
         switch (mode) {
             case STANDARD -> {
-                // Player stepping on triggers collapse countdown.
-                // ROM: btst #p1_standing_bit,status(a0) at loc_2095E:45140
-                if (!collapseTriggered) {
-                    collapseTriggered = true;
+                // The engine resolves this SolidObjectTop contact before the
+                // object's update. ROM loc_209A8 instead observes the standing
+                // bit only after the countdown check and calls SolidObjectTop
+                // at the end of the object slot. Defer arming $3A until this
+                // tick's update so the first decrement begins on the same
+                // following frame as the ROM.
+                if (!collapseTriggered && !collapseTriggerPending) {
+                    collapseTriggerPending = true;
                 }
             }
             case TRIGGER -> {
@@ -592,21 +657,56 @@ public class CollapsingBridgeObjectInstance extends AbstractObjectInstance
                 // (e.g., killing a nearby badnik sets the trigger array entry).
             }
             case MGZ_STOMP -> {
-                // MGZ stomp: check if player is rolling (status_tertiary bit 7 proxy)
-                // ROM: btst #7,status_tertiary(a1) — set during spindash release on ground
-                AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-                if (player.getRolling() && !fragmented) {
-                    performMgzStomp(player);
-                }
+                // MGZ resolves both native players before testing the combined
+                // standing mask; update() consumes the manual checkpoint batch.
             }
         }
+    }
+
+    public boolean isMgzStompMode() {
+        return mode == CollapseMode.MGZ_STOMP;
+    }
+
+    @Override
+    public SolidExecutionMode solidExecutionMode() {
+        // loc_209D0 calls SolidObjectTop for P1 and P2 before it inspects the
+        // standing bits and replaces the parent with the first debris piece.
+        // AUTO_AFTER_UPDATE publishes callbacks one player at a time, which
+        // can shatter after P1 and incorrectly prevent P2's same-slot landing.
+        return mode == CollapseMode.MGZ_STOMP
+                ? SolidExecutionMode.MANUAL_CHECKPOINT
+                : SolidExecutionMode.AUTO_AFTER_UPDATE;
     }
 
     // ===== Update =====
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
+        if (mode == CollapseMode.MGZ_STOMP && state == 0 && !fragmented) {
+            SolidCheckpointBatch batch = checkpointAll();
+            ArrayList<AbstractPlayableSprite> standingPlayers = new ArrayList<>();
+            AbstractPlayableSprite stomper = null;
+            for (PlayableEntity participant : collapseParticipants(player)) {
+                PlayerSolidContactResult result = batch.perPlayer().get(participant);
+                if (result != null && result.standingNow()
+                        && participant instanceof AbstractPlayableSprite playable) {
+                    standingPlayers.add(playable);
+                    if (stomper == null && playable.isWallCling()) {
+                        stomper = playable;
+                    }
+                }
+            }
+            if (stomper != null) {
+                performMgzStomp(stomper);
+                // loc_209FC clears both native standing bits and then clears
+                // Status_OnObj for every player whose bit was set, not only
+                // the wall-clinging player that selected the stomp branch.
+                for (AbstractPlayableSprite standingPlayer : standingPlayers) {
+                    clearMgzStompStandingState(standingPlayer);
+                }
+            }
+        }
 
         switch (state) {
             case 0 -> { // Idle
@@ -617,7 +717,10 @@ public class CollapsingBridgeObjectInstance extends AbstractObjectInstance
                     // ROM: clr.b respawn_addr(a0) — prevent respawn after trigger collapse
                 }
 
-                if (collapseTriggered && mode != CollapseMode.MGZ_STOMP) {
+                if (collapseTriggerPending) {
+                    collapseTriggerPending = false;
+                    collapseTriggered = true;
+                } else if (collapseTriggered && mode != CollapseMode.MGZ_STOMP) {
                     state = 1;
                 }
             }
@@ -631,18 +734,27 @@ public class CollapsingBridgeObjectInstance extends AbstractObjectInstance
                 updateWaveCollapse(player);
             }
             case 3 -> { // Parent falling
+                // Obj_PlatformCollapseFall consumes the render_flags sign bit
+                // retained from the preceding Render_Sprites pass before it
+                // calls MoveSprite (sonic3k.asm:45317-45326).
+                if (!romRenderFlag) {
+                    setDestroyedByOffscreen();
+                    return;
+                }
+
                 // Standard collapse: MoveSprite with $38 gravity (Y only)
                 // MGZ stomp: MoveSprite2 (no engine gravity) + manual $18 gravity
                 // ROM: Obj_PlatformCollapseFall uses MoveSprite ($38)
                 // ROM: loc_20A56 uses MoveSprite2 + addi.w #$18,y_vel
                 int grav = (mode == CollapseMode.MGZ_STOMP) ? MGZ_GRAVITY : GRAVITY;
-                velY += grav;
 
-                // Update Y position with subpixel accuracy
+                // MoveSprite adds the old velocity to position, then applies
+                // gravity for the following frame (sonic3k.asm:36032-36049).
                 int y32 = (y << 16) | (yFrac & 0xFFFF);
                 y32 += ((int) (short) velY) << 8;
                 y = y32 >> 16;
                 yFrac = y32 & 0xFFFF;
+                velY = (short) (velY + grav);
 
                 // MGZ stomp parent also moves in X (has initial velocity from BreakObjectToPieces)
                 if (mode == CollapseMode.MGZ_STOMP) {
@@ -652,11 +764,23 @@ public class CollapsingBridgeObjectInstance extends AbstractObjectInstance
                     xFrac = x32 & 0xFFFF;
                 }
 
-                if (!isOnScreen(128)) {
-                    setDestroyed(true);
-                }
             }
         }
+    }
+
+    @Override
+    public int getOnScreenHalfWidth() {
+        return halfWidth;
+    }
+
+    @Override
+    public int getOnScreenHalfHeight() {
+        return displayHeight;
+    }
+
+    @Override
+    public void refreshPostCameraRenderState() {
+        romRenderFlag = isWithinRenderSpriteBounds(halfWidth, displayHeight);
     }
 
     // ===== Collapse mechanics =====
@@ -670,14 +794,18 @@ public class CollapsingBridgeObjectInstance extends AbstractObjectInstance
             return;
         }
 
+        seedCollapseWaveRiders(player);
+
         // Select delay array and determine direction
         activeDelays = delays;
+        releaseDelays = delays;
         flippedForCollapse = false;
 
-        if (directional && player != null) {
+        AbstractPlayableSprite directionalPlayer = selectedDirectionalCollapsePlayer(player);
+        if (directional && directionalPlayer != null) {
             // ROM: btst #7,subtype(a0) → directional collapse
             // Check which side the player is on
-            int playerX = player.getCentreX();
+            int playerX = directionalPlayer.getCentreX();
             if (playerX < x) {
                 // Player on left: use flip array, flip sprite, advance frame
                 // ROM: load $34 array, eori.b #1,status(a0), addq.b #1,mapping_frame(a0)
@@ -694,10 +822,19 @@ public class CollapsingBridgeObjectInstance extends AbstractObjectInstance
 
         spawnFragments();
 
+        // ObjPlatformCollapse_SmashObject clears respawn_addr bit 7 after
+        // converting the original SST slot into fragment zero. The live
+        // fragment remains, but ObjPosLoad may now materialize a fresh bridge.
+        // Trigger-mode bridges instead clear respawn_addr itself before the
+        // smash so their placement bit deliberately remains set.
+        if (mode != CollapseMode.TRIGGER) {
+            releasePlacementForRespawn();
+        }
+
         // Enter wave-collapse state
         state = 2;
         fragmented = true;
-        parentTimer = activeDelays.length > 0 ? activeDelays[0] : 0;
+        parentTimer = releaseDelays.length > 0 ? releaseDelays[0] : 0;
     }
 
     /**
@@ -733,7 +870,8 @@ public class CollapsingBridgeObjectInstance extends AbstractObjectInstance
         for (int i = 1; i < maxFragments; i++) {
             int delay = activeDelays[i];
             BridgeFragment fragment = new BridgeFragment(
-                    x, y, fragmentFrameIndex, i, delay, artKey, hFlip, highPriorityArt);
+                    x, y, fragmentFrameIndex, i, delay, artKey, hFlip,
+                    highPriorityArt, halfWidth, displayHeight);
             spawnDynamicObject(fragment);
         }
     }
@@ -746,57 +884,21 @@ public class CollapsingBridgeObjectInstance extends AbstractObjectInstance
     private void updateWaveCollapse(AbstractPlayableSprite player) {
         parentTimer--;
 
-        if (player != null && isPlayerRiding()) {
-            // ROM: Check_CollapsePlayerRelease
-            // Calculate player position relative to bridge left edge
-            int playerX = player.getCentreX();
-            int relX = playerX - x + halfWidth;
-
-            boolean release = false;
-
-            if (player.getAir()) {
-                // Player jumped off
-                release = true;
-            } else if (relX < 0 || relX >= halfWidth * 2) {
-                // Player walked off the edge
-                release = true;
-            } else {
-                // Mirror position based on current flip state (post-toggle).
-                // ROM: btst #0,status(a0) → neg.w d0, add.w d2,d0
-                int adjustedRelX = hFlip ? (halfWidth * 2 - relX) : relX;
-
-                // Convert to 16px chunk index
-                // ROM: lsr.w #4,d0
-                int chunkIndex = adjustedRelX >> 4;
-                if (chunkIndex >= activeDelays.length) {
-                    chunkIndex = activeDelays.length - 1;
-                }
-                if (chunkIndex < 0) {
-                    chunkIndex = 0;
-                }
-
-                // ROM: d2 = array[0] - array[chunkIndex]
-                // Release when parentTimer <= d2
-                int threshold = activeDelays[0] - activeDelays[chunkIndex];
-                if (parentTimer <= threshold) {
-                    release = true;
-                }
-            }
-
-            if (release) {
-                // ROM: bclr standing bits, bclr Status_OnObj, bset Status_InAir
-                player.setAir(true);
-                player.setOnObject(false);
+        for (PlayableEntity rider : new ArrayList<>(collapseWaveRiders)) {
+            if (rider instanceof AbstractPlayableSprite playable && shouldReleaseCollapseRider(playable)) {
+                releaseCollapseRider(playable);
             }
         }
 
         // When parent timer fully expires, release any remaining players and fall
         if (parentTimer <= 0) {
             state = 3;
-            if (player != null && isPlayerRiding()) {
-                player.setAir(true);
-                player.setOnObject(false);
+            for (PlayableEntity rider : new ArrayList<>(collapseWaveRiders)) {
+                if (rider instanceof AbstractPlayableSprite playable) {
+                    releaseCollapseRider(playable);
+                }
             }
+            collapseWaveRiders.clear();
         }
     }
 
@@ -806,11 +908,28 @@ public class CollapsingBridgeObjectInstance extends AbstractObjectInstance
      */
     private void performMgzStomp(AbstractPlayableSprite player) {
         fragmented = true;
+        collapseWaveRiders.clear();
 
-        // Release the player
-        // ROM: lea (Player_1).w,a1; bsr.s loc_20A3C
-        player.setAir(true);
+        // loc_20A24 follows BreakObjectToPieces by clearing respawn_addr bit 7,
+        // while the transformed parent and its debris continue to execute.
+        releasePlacementForRespawn();
+
+        // Release the player from the object without forcing InAir. loc_209FC
+        // clears only Status_OnObj after SolidObjectTop has already landed the
+        // player this frame; unlike Check_CollapsePlayerRelease, this stomp
+        // path never sets Status_InAir (sonic3k.asm:45189-45216).
         player.setOnObject(false);
+        try {
+            if (services().objectManager() != null) {
+                // The same loc_209FC block also clears the bridge's native
+                // standing bit. Drop the engine ride owner now so the next
+                // compatibility checkpoint does not reinterpret the already
+                // completed stomp as a generic platform walk-off and set air.
+                services().objectManager().clearRidingObject(player);
+            }
+        } catch (Exception e) {
+            // Reflection-level tests may instantiate the bridge without services.
+        }
 
         // Advance mapping frame for fragment pieces
         // ROM: addq.b #1,mapping_frame(a0)
@@ -834,7 +953,10 @@ public class CollapsingBridgeObjectInstance extends AbstractObjectInstance
                 SpriteMappingFrame frame = sheet.getFrame(stompFrameIndex);
                 int pieceCount = frame.pieces().size();
                 int maxPieces = Math.min(pieceCount, MGZ_STOMP_VELOCITIES.length);
-                for (int i = 0; i < maxPieces; i++) {
+                // BreakObjectToPieces starts with a1=a0, so piece zero is the
+                // bridge parent itself. Only later pieces consume newly
+                // allocated slots (sonic3k.asm:45772-45811).
+                for (int i = 1; i < maxPieces; i++) {
                     int xVel = MGZ_STOMP_VELOCITIES[i][0];
                     int yVel = MGZ_STOMP_VELOCITIES[i][1];
                     MgzStompDebris debris = new MgzStompDebris(
@@ -855,6 +977,139 @@ public class CollapsingBridgeObjectInstance extends AbstractObjectInstance
 
         // Enter falling state directly
         state = 3;
+    }
+
+    private void releasePlacementForRespawn() {
+        try {
+            ObjectLifetimeOps.releaseSpawnForRespawn(services().objectManager(), this, getSpawn());
+        } catch (Exception e) {
+            // Focused reflection tests may instantiate the bridge without services.
+        }
+    }
+
+    private void clearMgzStompStandingState(AbstractPlayableSprite player) {
+        player.setOnObject(false);
+        try {
+            if (services().objectManager() != null) {
+                services().objectManager().clearRidingObject(player);
+            }
+        } catch (Exception e) {
+            // Reflection-level tests may instantiate the bridge without services.
+        }
+    }
+
+    private boolean shouldTrackCollapseRider(AbstractPlayableSprite player) {
+        try {
+            ObjectManager objectManager = services().objectManager();
+            if (objectManager != null) {
+                // The native collapse wave snapshots this bridge's own P1/P2
+                // standing bits, not the player's global Status_OnObj bit. A
+                // trigger-mode bridge may shatter while Sonic is standing on
+                // an unrelated solid; treating that global bit as ownership
+                // invents a rider and later writes prev_anim=1 on release.
+                return objectManager.isRidingObject(player, this)
+                        || objectManager.hasObjectStandingBit(player, this);
+            }
+        } catch (Exception e) {
+            // Reflection-level tests may instantiate the bridge without services.
+        }
+        return player.isOnObject();
+    }
+
+    private void seedCollapseWaveRiders(AbstractPlayableSprite fallbackPlayer) {
+        collapseWaveRiders.clear();
+        for (PlayableEntity participant : collapseParticipants(fallbackPlayer)) {
+            if (participant instanceof AbstractPlayableSprite playable
+                    && shouldTrackCollapseRider(playable)) {
+                collapseWaveRiders.add(playable);
+            }
+        }
+    }
+
+    private List<PlayableEntity> collapseParticipants(AbstractPlayableSprite fallbackPlayer) {
+        ArrayList<PlayableEntity> participants = new ArrayList<>();
+        try {
+            participants.addAll(services().playerQuery()
+                    .playersFor(ObjectPlayerParticipationPolicy.ALL_ENGINE_PLAYERS));
+        } catch (Exception e) {
+            // Reflection-level tests may instantiate the object without full services.
+        }
+        if (fallbackPlayer != null && participants.stream().noneMatch(p -> p == fallbackPlayer)) {
+            participants.add(fallbackPlayer);
+        }
+        return participants;
+    }
+
+    private AbstractPlayableSprite selectedDirectionalCollapsePlayer(AbstractPlayableSprite fallbackPlayer) {
+        if (!directional) {
+            return null;
+        }
+        try {
+            List<PlayableEntity> nativePlayers = services().playerQuery()
+                    .playersFor(ObjectPlayerParticipationPolicy.NATIVE_P1_P2);
+            for (PlayableEntity participant : nativePlayers) {
+                if (participant instanceof AbstractPlayableSprite playable
+                        && services().objectManager() != null
+                        && services().objectManager().hasObjectStandingBit(playable, this)) {
+                    return playable;
+                }
+            }
+        } catch (Exception e) {
+            // Fall back below when services are unavailable.
+        }
+        return fallbackPlayer;
+    }
+
+    private boolean shouldReleaseCollapseRider(AbstractPlayableSprite player) {
+        // ROM: Check_CollapsePlayerRelease
+        int playerX = player.getCentreX();
+        int relX = playerX - x + halfWidth;
+
+        if (player.getAir()) {
+            // Player jumped off
+            return true;
+        }
+        if (relX < 0 || relX >= halfWidth * 2) {
+            // Player walked off the edge
+            return true;
+        }
+
+        // Mirror position based on current flip state (post-toggle).
+        // ROM: btst #0,status(a0) -> neg.w d0, add.w d2,d0
+        int adjustedRelX = hFlip ? (halfWidth * 2 - relX) : relX;
+
+        // Convert to 16px chunk index.
+        // ROM: lsr.w #4,d0
+        int chunkIndex = adjustedRelX >> 4;
+        if (chunkIndex >= releaseDelays.length) {
+            chunkIndex = releaseDelays.length - 1;
+        }
+        if (chunkIndex < 0) {
+            chunkIndex = 0;
+        }
+
+        // ROM: d2 = array[0] - array[chunkIndex]
+        // Release when parentTimer <= d2
+        int threshold = releaseDelays[0] - releaseDelays[chunkIndex];
+        return parentTimer <= threshold;
+    }
+
+    private void releaseCollapseRider(AbstractPlayableSprite player) {
+        collapseWaveRiders.remove(player);
+        player.setAir(true);
+        player.setOnObject(false);
+        player.setPushing(false);
+        // Check_CollapsePlayerRelease writes prev_anim=1 after clearing the
+        // standing bits (sonic3k.asm:45349-45383). This intentionally restarts
+        // an unchanged Roll animation on the following player slot.
+        player.getAnimationManager().publishPreviousAnimationId(1);
+        try {
+            if (services().objectManager() != null) {
+                services().objectManager().clearRidingObject(player);
+            }
+        } catch (Exception e) {
+            // Keep release logic robust when called outside a fully-wired runtime.
+        }
     }
 
     // ===== Rendering =====
@@ -913,18 +1168,30 @@ public class CollapsingBridgeObjectInstance extends AbstractObjectInstance
      * Each fragment renders a single mapping piece from the parent's fragment frame.
      * ROM: Obj_PlatformCollapseWait → Obj_PlatformCollapseFall
      */
-    public static class BridgeFragment extends AbstractFallingFragment {
+    public static class BridgeFragment extends AbstractFallingFragment implements RewindRecreatable {
 
-        private final int fragmentFrameIndex;
-        private final int pieceIndex;
-        private final String artKey;
-        private final boolean hFlip;
-        private final boolean highPriority;
+        private int fragmentFrameIndex;
+        private int pieceIndex;
+        private String artKey;
+        private boolean hFlip;
+        private boolean highPriority;
+        private int renderHalfWidth;
+        private int renderHalfHeight;
+        private boolean romRenderFlag = true;
 
         public BridgeFragment(int parentX, int parentY,
                               int fragmentFrameIndex, int pieceIndex,
                               int delay, String artKey, boolean hFlip,
                               boolean highPriority) {
+            this(parentX, parentY, fragmentFrameIndex, pieceIndex, delay,
+                    artKey, hFlip, highPriority, 0x40, 0x20);
+        }
+
+        public BridgeFragment(int parentX, int parentY,
+                              int fragmentFrameIndex, int pieceIndex,
+                              int delay, String artKey, boolean hFlip,
+                              boolean highPriority, int renderHalfWidth,
+                              int renderHalfHeight) {
             super(new ObjectSpawn(parentX, parentY, Sonic3kObjectIds.COLLAPSING_BRIDGE,
                     0, hFlip ? 1 : 0, false, 0), "BridgeFragment", delay, PRIORITY);
             this.fragmentFrameIndex = fragmentFrameIndex;
@@ -932,11 +1199,55 @@ public class CollapsingBridgeObjectInstance extends AbstractObjectInstance
             this.artKey = artKey;
             this.hFlip = hFlip;
             this.highPriority = highPriority;
+            this.renderHalfWidth = renderHalfWidth;
+            this.renderHalfHeight = renderHalfHeight;
+        }
+
+        private BridgeFragment() {
+            this(0, 0, 0, 0, 0, Sonic3kObjectArtKeys.COLLAPSING_BRIDGE_MGZ, false, false);
+        }
+
+        @Override
+        public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+            ObjectSpawn spawn = ctx.spawn();
+            boolean hFlip = spawn != null && (spawn.renderFlags() & 0x01) != 0;
+            int x = spawn != null ? spawn.x() : 0;
+            int y = spawn != null ? spawn.y() : 0;
+            return new BridgeFragment(
+                    x, y, 0, 0, 0, Sonic3kObjectArtKeys.COLLAPSING_BRIDGE_MGZ, hFlip, false);
         }
 
         @Override
         public boolean isHighPriority() {
             return highPriority;
+        }
+
+        @Override
+        public int getOnScreenHalfWidth() {
+            return renderHalfWidth;
+        }
+
+        @Override
+        public int getOnScreenHalfHeight() {
+            return renderHalfHeight;
+        }
+
+        @Override
+        protected boolean shouldDeleteBeforeFall() {
+            // Obj_PlatformCollapseFall tests the previous Draw_Sprite result
+            // before MoveSprite, exactly like the sibling collapsing-platform
+            // fragment routine (sonic3k.asm:45317-45326).
+            return !romRenderFlag;
+        }
+
+        @Override
+        protected boolean shouldDeleteAfterFall() {
+            return false;
+        }
+
+        @Override
+        public void refreshPostCameraRenderState() {
+            romRenderFlag = isWithinRenderSpriteBounds(renderHalfWidth, renderHalfHeight);
         }
 
         @Override
@@ -958,12 +1269,12 @@ public class CollapsingBridgeObjectInstance extends AbstractObjectInstance
      * initial velocity and falls with gravity ($18/frame, lighter than standard $38).
      * ROM: loc_20A56 — MoveSprite2 + manual gravity $18/frame
      */
-    public static class MgzStompDebris extends GravityDebrisChild {
+    public static class MgzStompDebris extends GravityDebrisChild implements RewindRecreatable {
 
-        private final int frameIndex;
-        private final int pieceIndex;
-        private final String artKey;
-        private final boolean hFlip;
+        private int frameIndex;
+        private int pieceIndex;
+        private String artKey;
+        private boolean hFlip;
 
         public MgzStompDebris(int parentX, int parentY,
                               int frameIndex, int pieceIndex,
@@ -976,6 +1287,20 @@ public class CollapsingBridgeObjectInstance extends AbstractObjectInstance
             this.pieceIndex = pieceIndex;
             this.artKey = artKey;
             this.hFlip = hFlip;
+        }
+
+        private MgzStompDebris() {
+            this(0, 0, 0, 0, 0, 0, Sonic3kObjectArtKeys.COLLAPSING_BRIDGE_MGZ, false);
+        }
+
+        @Override
+        public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+            ObjectSpawn spawn = ctx.spawn();
+            boolean hFlip = spawn != null && (spawn.renderFlags() & 0x01) != 0;
+            int x = spawn != null ? spawn.x() : 0;
+            int y = spawn != null ? spawn.y() : 0;
+            return new MgzStompDebris(
+                    x, y, 0, 0, 0, 0, Sonic3kObjectArtKeys.COLLAPSING_BRIDGE_MGZ, hFlip);
         }
 
         @Override

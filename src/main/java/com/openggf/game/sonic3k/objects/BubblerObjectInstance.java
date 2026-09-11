@@ -1,18 +1,21 @@
 package com.openggf.game.sonic3k.objects;
 
 import com.openggf.game.PlayableEntity;
+import com.openggf.game.GameRng;
 import com.openggf.game.ShieldType;
 import com.openggf.game.sonic3k.Sonic3kObjectArtKeys;
 import com.openggf.game.sonic3k.audio.Sonic3kSfx;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.WaterSystem;
 import com.openggf.level.objects.AbstractObjectInstance;
+import com.openggf.level.objects.ObjectPlayerParticipationPolicy;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
 import java.util.List;
-import java.util.Random;
 
 /**
  * Object 0x54 - Bubbler.
@@ -23,9 +26,7 @@ import java.util.Random;
  * <p>
  * ROM: Obj_Bubbler (sonic3k.asm:64446-64736)
  */
-public class BubblerObjectInstance extends AbstractObjectInstance {
-    private static final Random RANDOM = new Random();
-
+public class BubblerObjectInstance extends AbstractObjectInstance implements RewindRecreatable {
     private static final int ROUTINE_INIT = 0;
     private static final int ROUTINE_ANIMATE = 2;
     private static final int ROUTINE_CHK_WATER = 4;
@@ -67,12 +68,14 @@ public class BubblerObjectInstance extends AbstractObjectInstance {
     private static final int COLLISION_X_RANGE = 0x10;
     private static final int COLLISION_Y_RANGE = 0x10;
     private static final int ON_SCREEN_MARGIN = 0x10;
+    private static final ObjectPlayerParticipationPolicy PLAYER_PARTICIPATION =
+            ObjectPlayerParticipationPolicy.MAIN_PLUS_ENGINE_SIDEKICKS_AS_NATIVE_P2_EXTENDED;
 
     private int routine = ROUTINE_INIT;
-    private final boolean maker;
+    private boolean maker;
 
-    private final int originalX;
-    private final int originalY;
+    private int originalX;
+    private int originalY;
 
     private int x;
     private int y;
@@ -107,7 +110,13 @@ public class BubblerObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public BubblerObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new BubblerObjectInstance(ctx.spawn());
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
+        boolean initializedThisFrame = routine == ROUTINE_INIT;
         if (routine == ROUTINE_INIT) {
             initialize();
         }
@@ -118,7 +127,7 @@ public class BubblerObjectInstance extends AbstractObjectInstance {
             case ROUTINE_CHK_WATER -> updateChkWater(player);
             case ROUTINE_DISPLAY -> updateDisplay();
             case ROUTINE_DELETE -> setDestroyed(true);
-            case ROUTINE_MAKER -> updateMaker();
+            case ROUTINE_MAKER -> updateMaker(initializedThisFrame);
             default -> { }
         }
     }
@@ -136,7 +145,7 @@ public class BubblerObjectInstance extends AbstractObjectInstance {
 
         routine = ROUTINE_ANIMATE;
         animId = spawn.subtype() & 0x7F;
-        wobbleAngle = RANDOM.nextInt(256);
+        wobbleAngle = romRng().nextByte();
     }
 
     private void updateAnimate(AbstractPlayableSprite player) {
@@ -162,8 +171,10 @@ public class BubblerObjectInstance extends AbstractObjectInstance {
                 startBurst();
                 return;
             }
-            for (PlayableEntity sidekick : services().sidekicks()) {
-                if (sidekick instanceof AbstractPlayableSprite sprite && tryCollect(sprite)) {
+            for (PlayableEntity participant : services().playerQuery().playersFor(PLAYER_PARTICIPATION)) {
+                if (participant != player
+                        && participant instanceof AbstractPlayableSprite sprite
+                        && tryCollect(sprite)) {
                     startBurst();
                     return;
                 }
@@ -185,7 +196,7 @@ public class BubblerObjectInstance extends AbstractObjectInstance {
         }
     }
 
-    private void updateMaker() {
+    private void updateMaker(boolean initializedThisFrame) {
         updateMakerVisibility();
 
         if (!isInRange()) {
@@ -204,7 +215,10 @@ public class BubblerObjectInstance extends AbstractObjectInstance {
                 return;
             }
         } else {
-            if (!isOnScreen()) {
+            // SetUp_ObjAttributes writes render_flags=$84 before the ROM branches
+            // directly into loc_2FA50, so the initialization dispatch observes
+            // the maker as on-screen until Render_Sprites refreshes the flag.
+            if (!initializedThisFrame && !isOnScreen()) {
                 return;
             }
 
@@ -218,7 +232,7 @@ public class BubblerObjectInstance extends AbstractObjectInstance {
 
             int rng;
             do {
-                rng = RANDOM.nextInt(0x10000);
+                rng = romRng().nextWord();
             } while ((rng & 7) >= 6);
 
             typeCounter = rng & 7;
@@ -235,7 +249,7 @@ public class BubblerObjectInstance extends AbstractObjectInstance {
 
         typeCounter--;
         if (typeCounter < 0) {
-            delayCounter += (RANDOM.nextInt(256) & 0x7F) + 0x80;
+            delayCounter += (romRng().nextWord() & 0x7F) + 0x80;
             productionFlags = 0;
         }
 
@@ -247,7 +261,8 @@ public class BubblerObjectInstance extends AbstractObjectInstance {
     }
 
     private void spawnBubbleChild() {
-        delayCounter = RANDOM.nextInt(32);
+        GameRng rng = romRng();
+        delayCounter = rng.nextWord() & 0x1F;
 
         int tableIndex = typeTableOffset + typeCounter;
         int bubbleSubtype = (tableIndex >= 0 && tableIndex < BUBBLE_TYPE_TABLE.length)
@@ -255,7 +270,7 @@ public class BubblerObjectInstance extends AbstractObjectInstance {
                 : 0;
 
         if ((productionFlags & 0x80) != 0) {
-            if ((RANDOM.nextInt(4) == 0 || typeCounter == 0) && (productionFlags & 0x40) == 0) {
+            if (((rng.nextWord() & 0x03) == 0 || typeCounter == 0) && (productionFlags & 0x40) == 0) {
                 productionFlags |= 0x40;
                 bubbleSubtype = 2;
             }
@@ -264,7 +279,7 @@ public class BubblerObjectInstance extends AbstractObjectInstance {
             bubbleSubtype = 2;
         }
 
-        int spawnX = originalX + RANDOM.nextInt(16) - 8;
+        int spawnX = originalX + (rng.nextWord() & 0x0F) - 8;
         final int childSubtype = bubbleSubtype;
         spawnChild(() -> new BubblerObjectInstance(
                 new ObjectSpawn(spawnX, originalY, spawn.objectId(), childSubtype, 0, false, 0)));
@@ -288,7 +303,11 @@ public class BubblerObjectInstance extends AbstractObjectInstance {
             return false;
         }
 
-        player.replenishAir();
+        if ("sonic".equalsIgnoreCase(player.getCode())) {
+            player.replenishAir();
+        } else {
+            player.replenishAirPreservingRollingStatus();
+        }
         services().playSfx(Sonic3kSfx.BUBBLE.id);
         consumed = true;
         inhalable = false;
@@ -393,5 +412,24 @@ public class BubblerObjectInstance extends AbstractObjectInstance {
     @Override
     public int getPriorityBucket() {
         return 1;
+    }
+
+    /**
+     * {@code Obj_Bubbler} writes {@code width_pixels=$10} but leaves
+     * {@code height_pixels} at the cleared SST value (sonic3k.asm:64491-64498).
+     * Its rising-child and maker paths both use the resulting zero-height
+     * Render_Sprites bound as the off-screen delete gate.
+     */
+    @Override
+    public int getOnScreenHalfHeight() {
+        return 0;
+    }
+
+    int getWobbleAngleForTest() {
+        return wobbleAngle;
+    }
+
+    private GameRng romRng() {
+        return services().rng();
     }
 }

@@ -1,0 +1,249 @@
+diff --git a/src/main/java/com/openggf/game/sonic3k/objects/BubblerObjectInstance.java b/src/main/java/com/openggf/game/sonic3k/objects/BubblerObjectInstance.java
+index a7d9a6baa..47bb6c1ee 100644
+--- a/src/main/java/com/openggf/game/sonic3k/objects/BubblerObjectInstance.java
++++ b/src/main/java/com/openggf/game/sonic3k/objects/BubblerObjectInstance.java
+@@ -260,25 +260,25 @@ public class BubblerObjectInstance extends AbstractObjectInstance implements Rew
+         GameRng rng = romRng();
+         delayCounter = rng.nextWord() & 0x1F;
+ 
+-        int tableIndex = typeTableOffset + typeCounter;
+-        int bubbleSubtype = (tableIndex >= 0 && tableIndex < BUBBLE_TYPE_TABLE.length)
+-                ? BUBBLE_TYPE_TABLE[tableIndex]
+-                : 0;
+-
+-        if ((productionFlags & 0x80) != 0) {
+-            if (((rng.nextWord() & 0x03) == 0 || typeCounter == 0) && (productionFlags & 0x40) == 0) {
++        spawnLowestFreeChildForCurrentDispatch(() -> {
++            int spawnX = originalX + (rng.nextWord() & 0x0F) - 8;
++            int tableIndex = typeTableOffset + typeCounter;
++            int bubbleSubtype = (tableIndex >= 0 && tableIndex < BUBBLE_TYPE_TABLE.length)
++                    ? BUBBLE_TYPE_TABLE[tableIndex]
++                    : 0;
++            if ((productionFlags & 0x80) != 0) {
++                if (((rng.nextWord() & 0x03) == 0 || typeCounter == 0)
++                        && (productionFlags & 0x40) == 0) {
++                    productionFlags |= 0x40;
++                    bubbleSubtype = 2;
++                }
++            } else if (typeCounter == 0 && (productionFlags & 0x40) == 0) {
+                 productionFlags |= 0x40;
+                 bubbleSubtype = 2;
+             }
+-        } else if (typeCounter == 0 && (productionFlags & 0x40) == 0) {
+-            productionFlags |= 0x40;
+-            bubbleSubtype = 2;
+-        }
+-
+-        int spawnX = originalX + (rng.nextWord() & 0x0F) - 8;
+-        final int childSubtype = bubbleSubtype;
+-        spawnChild(() -> new BubblerObjectInstance(
+-                new ObjectSpawn(spawnX, originalY, spawn.objectId(), childSubtype, 0, false, 0)));
++            return new BubblerObjectInstance(
++                    new ObjectSpawn(spawnX, originalY, spawn.objectId(), bubbleSubtype, 0, false, 0));
++        });
+     }
+ 
+     private boolean tryCollect(AbstractPlayableSprite player) {
+diff --git a/src/main/java/com/openggf/level/objects/AbstractObjectInstance.java b/src/main/java/com/openggf/level/objects/AbstractObjectInstance.java
+index 93e151596..f85dfd52f 100644
+--- a/src/main/java/com/openggf/level/objects/AbstractObjectInstance.java
++++ b/src/main/java/com/openggf/level/objects/AbstractObjectInstance.java
+@@ -1168,6 +1168,23 @@ public abstract class AbstractObjectInstance implements ObjectInstance {
+         });
+     }
+ 
++    protected <T extends AbstractObjectInstance> T spawnLowestFreeChildForCurrentDispatch(
++            java.util.function.Supplier<T> factory) {
++        ObjectServices svc = services();
++        ObjectManager om = svc.objectManager();
++        if (om == null || ObjectConstructionContext.isProbeConstruction()) {
++            return ObjectConstructionContext.construct(svc, factory);
++        }
++        if (ObjectConstructionContext.isRewindActiveRestore()) {
++            return ObjectConstructionContext.construct(svc, () -> {
++                T child = factory.get();
++                om.registerRewindReconstructionChild(child);
++                return child;
++            });
++        }
++        return om.createLowestFreeDynamicObjectForCurrentDispatch(factory);
++    }
++
+     /**
+      * Builds an ObjectSpawn at the given position, preserving all other fields from the
+      * original spawn. Use in getSpawn() overrides and dynamic spawn tracking.
+diff --git a/src/main/java/com/openggf/level/objects/ObjectManager.java b/src/main/java/com/openggf/level/objects/ObjectManager.java
+index 6d514edcc..9930698c6 100644
+--- a/src/main/java/com/openggf/level/objects/ObjectManager.java
++++ b/src/main/java/com/openggf/level/objects/ObjectManager.java
+@@ -1721,6 +1721,11 @@ public class ObjectManager {
+      * constructor-time child allocation remains unchanged.
+      */
+     public <T extends ObjectInstance> T createDynamicObjectWithReservedSlot(Supplier<T> factory) {
++        return createLowestFreeDynamicObjectForCurrentDispatch(factory);
++    }
++
++    public <T extends ObjectInstance> T createLowestFreeDynamicObjectForCurrentDispatch(
++            Supplier<T> factory) {
+         return ObjectConstructionContext.construct(objectServices, () -> {
+             int reservedSlot = allocateSlot();
+             if (reservedSlot < 0) {
+diff --git a/src/test/java/com/openggf/level/objects/TestObjectManagerChildSlotAllocation.java b/src/test/java/com/openggf/level/objects/TestObjectManagerChildSlotAllocation.java
+index 2ee101e25..921e70f81 100644
+--- a/src/test/java/com/openggf/level/objects/TestObjectManagerChildSlotAllocation.java
++++ b/src/test/java/com/openggf/level/objects/TestObjectManagerChildSlotAllocation.java
+@@ -14,6 +14,7 @@ import java.util.stream.Collectors;
+ 
+ import static org.junit.jupiter.api.Assertions.assertEquals;
+ import static org.junit.jupiter.api.Assertions.assertNotNull;
++import static org.junit.jupiter.api.Assertions.assertNull;
+ import static org.junit.jupiter.api.Assertions.assertFalse;
+ import static org.junit.jupiter.api.Assertions.assertTrue;
+ import static org.mockito.Mockito.mock;
+@@ -203,6 +204,115 @@ public class TestObjectManagerChildSlotAllocation {
+                 "Sonic 2 FindFreeObj should start allocating at dynamic slot 0x10");
+     }
+ 
++    @Test
++    public void lowestFreeCurrentDispatchChildBehindCursor_waitsUntilNextFrame() {
++        ObjectManager[] holder = new ObjectManager[1];
++        ObjectServices services = new StubObjectServices() {
++            @Override
++            public ObjectManager objectManager() {
++                return holder[0];
++            }
++        };
++        Camera camera = mock(Camera.class);
++        when(camera.getX()).thenReturn((short) 0);
++        when(camera.getY()).thenReturn((short) 0);
++        when(camera.getWidth()).thenReturn((short) 320);
++        when(camera.getHeight()).thenReturn((short) 224);
++        when(camera.isVerticalWrapEnabled()).thenReturn(false);
++        ObjectManager manager = new ObjectManager(
++                List.of(), null, 0, null, null,
++                GraphicsManager.getInstance(), camera, services);
++        holder[0] = manager;
++
++        LowestFreeCurrentDispatchParent parent =
++                new LowestFreeCurrentDispatchParent(new ObjectSpawn(0, 0, 0, 0, 0, false, 0));
++        manager.addDynamicObjectAtSlot(parent, 40);
++
++        manager.update(0, null, null, 1);
++
++        assertNotNull(parent.child);
++        assertEquals(32, parent.child.getSlotIndex());
++        assertEquals(0, parent.child.updateCount,
++                "a lowest-free child behind the live cursor waits for the next object pass");
++
++        manager.update(0, null, null, 2);
++
++        assertEquals(1, parent.child.updateCount);
++    }
++
++    @Test
++    public void lowestFreeCurrentDispatchChildAheadOfCursor_executesInSamePass() {
++        ObjectManager[] holder = new ObjectManager[1];
++        ObjectServices services = new StubObjectServices() {
++            @Override
++            public ObjectManager objectManager() {
++                return holder[0];
++            }
++        };
++        Camera camera = mock(Camera.class);
++        when(camera.getX()).thenReturn((short) 0);
++        when(camera.getY()).thenReturn((short) 0);
++        when(camera.getWidth()).thenReturn((short) 320);
++        when(camera.getHeight()).thenReturn((short) 224);
++        when(camera.isVerticalWrapEnabled()).thenReturn(false);
++        ObjectManager manager = new ObjectManager(
++                List.of(), null, 0, null, null,
++                GraphicsManager.getInstance(), camera, services);
++        holder[0] = manager;
++
++        for (int slot = 32; slot < 40; slot++) {
++            manager.addDynamicObjectAtSlot(
++                    new ChildObject(new ObjectSpawn(0, 0, 0, 0, 0, false, 0)), slot);
++        }
++        LowestFreeCurrentDispatchParent parent =
++                new LowestFreeCurrentDispatchParent(new ObjectSpawn(0, 0, 0, 0, 0, false, 0));
++        manager.addDynamicObjectAtSlot(parent, 40);
++
++        manager.update(0, null, null, 1);
++
++        assertNotNull(parent.child);
++        assertEquals(41, parent.child.getSlotIndex());
++        assertEquals(1, parent.child.updateCount,
++                "a lowest-free child ahead of the live cursor executes in the current object pass");
++    }
++
++    @Test
++    public void lowestFreeCurrentDispatchAllocationFailure_doesNotInvokeFactory() {
++        ObjectManager[] holder = new ObjectManager[1];
++        ObjectServices services = new StubObjectServices() {
++            @Override
++            public ObjectManager objectManager() {
++                return holder[0];
++            }
++        };
++        Camera camera = mock(Camera.class);
++        when(camera.getX()).thenReturn((short) 0);
++        when(camera.getY()).thenReturn((short) 0);
++        when(camera.getWidth()).thenReturn((short) 320);
++        when(camera.getHeight()).thenReturn((short) 224);
++        when(camera.isVerticalWrapEnabled()).thenReturn(false);
++        ObjectManager manager = new ObjectManager(
++                List.of(), null, 0, null, null,
++                GraphicsManager.getInstance(), camera, services);
++        holder[0] = manager;
++
++        LowestFreeCurrentDispatchParent parent =
++                new LowestFreeCurrentDispatchParent(new ObjectSpawn(0, 0, 0, 0, 0, false, 0));
++        manager.addDynamicObjectAtSlot(parent, 40);
++        for (int slot = 32; slot < 128; slot++) {
++            if (slot != 40) {
++                manager.addDynamicObjectAtSlot(
++                        new ChildObject(new ObjectSpawn(0, 0, 0, 0, 0, false, 0)), slot);
++            }
++        }
++
++        manager.update(0, null, null, 1);
++
++        assertNull(parent.child);
++        assertEquals(0, parent.factoryCalls,
++                "AllocateObject failure returns before child-only RNG or construction side effects");
++    }
++
+     @Test
+     public void reservedSlotChildrenPersistAfterParentInit() {
+         ObjectManager[] holder = new ObjectManager[1];
+@@ -370,6 +480,30 @@ public class TestObjectManagerChildSlotAllocation {
+         }
+     }
+ 
++    private static final class LowestFreeCurrentDispatchParent extends AbstractObjectInstance {
++        private ChildObject child;
++        private int factoryCalls;
++
++        private LowestFreeCurrentDispatchParent(ObjectSpawn spawn) {
++            super(spawn, "LowestFreeCurrentDispatchParent");
++        }
++
++        @Override
++        public void update(int frameCounter, PlayableEntity player) {
++            if (child != null || factoryCalls != 0) {
++                return;
++            }
++            child = spawnLowestFreeChildForCurrentDispatch(() -> {
++                factoryCalls++;
++                return new ChildObject(buildSpawnAt(spawn.x(), spawn.y()));
++            });
++        }
++
++        @Override
++        public void appendRenderCommands(List<GLCommand> commands) {
++        }
++    }
++
+     private static final class ReservedParentObject extends AbstractObjectInstance {
+         private final java.util.List<ReservedChildObject> children = new java.util.ArrayList<>();
+ 

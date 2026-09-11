@@ -3,6 +3,7 @@ package com.openggf.game.sonic3k.objects;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.GravityDebrisChild;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnTrailingZeroIntsRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 
 import java.util.List;
@@ -22,7 +23,8 @@ import java.util.List;
  * ROM also sets high_priority on fragment art tiles (ori.w #high_priority),
  * so fragments render in front of high-priority FG tiles.
  */
-public class AizRockFragmentChild extends GravityDebrisChild {
+public class AizRockFragmentChild extends GravityDebrisChild
+        implements SpawnTrailingZeroIntsRewindRecreatable {
 
     /**
      * Fragment-specific gravity: 0x18 subpixels/frame.
@@ -44,8 +46,14 @@ public class AizRockFragmentChild extends GravityDebrisChild {
             {  -0x60,  -0xC0 }, {   0x60,  -0xC0 },
     };
 
-    private final int mappingFrame;
-    private final int pieceIndex;
+    // Non-final so the generic field capturer reapplies them after a rewind
+    // recreate (passed-in differentiators not recoverable from the ObjectSpawn).
+    private int mappingFrame;
+    private int pieceIndex;
+
+    AizRockFragmentChild() {
+        this(new ObjectSpawn(0, 0, 0, 0, 0, false, 0), 0, 0, 0, 0);
+    }
 
     public AizRockFragmentChild(ObjectSpawn spawn, int xVel, int yVel, int mappingFrame, int pieceIndex) {
         super(spawn, "RockFragment", xVel, yVel, GRAVITY);
@@ -55,7 +63,7 @@ public class AizRockFragmentChild extends GravityDebrisChild {
 
     @Override
     public void appendRenderCommands(List<GLCommand> commands) {
-        PatternSpriteRenderer renderer = AizIntroArtLoader.getCorkFloorRenderer();
+        PatternSpriteRenderer renderer = AizIntroArtLoader.getCorkFloorRenderer(services());
         if (renderer == null || !renderer.isReady()) return;
         renderer.drawFramePieceByIndex(mappingFrame, pieceIndex, motionState.x, motionState.y, false, false);
     }

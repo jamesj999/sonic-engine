@@ -1,5 +1,7 @@
 package com.openggf.game;
 
+import com.openggf.data.RomGame;
+
 /**
  * Identifies a specific Sonic game for cross-game resource isolation
  * (e.g., palette contexts, art providers).
@@ -17,6 +19,14 @@ public enum GameId {
 
     public String code() {
         return code;
+    }
+
+    public RomGame romGame() {
+        return switch (this) {
+            case S1 -> RomGame.S1;
+            case S2 -> RomGame.S2;
+            case S3K -> RomGame.S3K;
+        };
     }
 
     public static GameId fromCode(String code) {

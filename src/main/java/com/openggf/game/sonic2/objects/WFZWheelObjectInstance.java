@@ -7,6 +7,8 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -35,14 +37,19 @@ import java.util.List;
  * <p>
  * Art: ArtNem_WfzConveyorBeltWheel at ROM 0x8D7D8, ArtTile $03EA, palette line 2, priority set.
  */
-public class WFZWheelObjectInstance extends AbstractObjectInstance {
+public class WFZWheelObjectInstance extends AbstractObjectInstance implements RewindRecreatable {
 
     public WFZWheelObjectInstance(ObjectSpawn spawn) {
         super(spawn, "WFZWheel");
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public WFZWheelObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new WFZWheelObjectInstance(ctx.spawn());
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // ROM: ObjBA_Main just calls MarkObjGone (off-screen despawn handled by engine)
         // No movement, animation, or collision - purely decorative
@@ -52,6 +59,12 @@ public class WFZWheelObjectInstance extends AbstractObjectInstance {
     public int getPriorityBucket() {
         // ROM: ObjBA_SubObjData priority=4
         return RenderPriority.clamp(4);
+    }
+
+    @Override
+    public boolean isHighPriority() {
+        // ROM: make_art_tile(ArtTile_ArtNem_WfzConveyorBeltWheel,2,1)
+        return true;
     }
 
     @Override

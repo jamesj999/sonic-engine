@@ -77,6 +77,17 @@ public class Sonic3kSpecialStageBackground {
         return hScroll;
     }
 
+    Sonic3kSpecialStageSnapshot.BackgroundSnapshot captureRewindSnapshot() {
+        return new Sonic3kSpecialStageSnapshot.BackgroundSnapshot(vScroll, hScroll, prevXPos, prevYPos);
+    }
+
+    void restoreRewindSnapshot(Sonic3kSpecialStageSnapshot.BackgroundSnapshot snapshot) {
+        vScroll = snapshot.vScroll();
+        hScroll = snapshot.hScroll();
+        prevXPos = snapshot.prevXPos();
+        prevYPos = snapshot.prevYPos();
+    }
+
     public void reset() {
         vScroll = 0;
         hScroll = 0;

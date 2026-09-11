@@ -3,6 +3,7 @@ import com.openggf.game.PlayableEntity;
 
 import com.openggf.camera.Camera;
 import com.openggf.debug.DebugRenderContext;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
@@ -47,7 +48,7 @@ import java.util.List;
  * <p>
  * Reference: docs/s1disasm/_incObj/5C Pylon.asm
  */
-public class Sonic1PylonObjectInstance extends AbstractObjectInstance {
+public class Sonic1PylonObjectInstance extends AbstractObjectInstance implements SpawnRewindRecreatable {
 
     // From disassembly: move.b #$10,obActWid(a0)
     private static final int ACTIVE_WIDTH = 0x10;
@@ -60,6 +61,27 @@ public class Sonic1PylonObjectInstance extends AbstractObjectInstance {
 
     public Sonic1PylonObjectInstance(ObjectSpawn spawn) {
         super(spawn, "Pylon");
+    }
+
+    /**
+     * ROM Pyl_Display recomputes obX/obScreenY from the camera every frame and
+     * ends in {@code bra.w DisplaySprite} — there is no out_of_range test, no
+     * MarkObjGone and no DeleteObject anywhere in the object
+     * (docs/s1disasm/_incObj/5C SLZ Foreground Pylon.asm:28-43), so Obj5C holds
+     * its SST slot for the whole act. Its obX is a screen-fixed parallax value
+     * rather than a level position, so the shared camera-distance unload test
+     * has nothing meaningful to measure against and would free a slot the ROM
+     * keeps occupied — which shifts every later dynamic allocation, and with it
+     * the slot-indexed Obj37 floor-probe cadence.
+     */
+    @Override
+    public boolean usesCustomOutOfRangeCheck() {
+        return true;
+    }
+
+    @Override
+    public boolean isCustomOutOfRange(int cameraX) {
+        return false;
     }
 
     /**
@@ -94,7 +116,7 @@ public class Sonic1PylonObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // Purely decorative — no update logic needed
     }

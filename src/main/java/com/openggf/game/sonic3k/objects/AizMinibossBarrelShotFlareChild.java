@@ -6,6 +6,8 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -19,7 +21,7 @@ import java.util.List;
  * - Palette line 0 (word_69022 make_art_tile(...,0,0))
  * - Lifetime is one short raw-animation sequence, then delete
  */
-public class AizMinibossBarrelShotFlareChild extends AbstractObjectInstance {
+public class AizMinibossBarrelShotFlareChild extends AbstractObjectInstance implements RewindRecreatable {
     private static final int PALETTE_OVERRIDE = 0;
     private static final int Y_OFFSET = 4;
 
@@ -28,7 +30,6 @@ public class AizMinibossBarrelShotFlareChild extends AbstractObjectInstance {
     //                   10 (timer 3=4t), 11 (timer 3=4t) = 16 ticks
     private static final int[] FRAMES = {7, 8, 9, 10, 11};
     private static final int[] DURATIONS = {2, 2, 4, 4, 4};
-
     private final AbstractObjectInstance anchor;
     private int currentX;
     private int currentY;
@@ -51,8 +52,23 @@ public class AizMinibossBarrelShotFlareChild extends AbstractObjectInstance {
         syncToAnchor();
     }
 
+    private AizMinibossBarrelShotFlareChild(ObjectSpawn spawn) {
+        super(spawn, "AIZMinibossBarrelShotFlare");
+        this.anchor = null;
+        this.currentX = spawn.x();
+        this.currentY = spawn.y();
+        this.sequenceIndex = 0;
+        this.frameTimer = DURATIONS[0];
+    }
+
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public AizMinibossBarrelShotFlareChild recreateForRewind(RewindRecreateContext ctx) {
+        AizMinibossFlameBarrelChild anchor = AizMinibossRewindLinks.nearestBarrel(ctx);
+        return anchor == null ? null : new AizMinibossBarrelShotFlareChild(anchor);
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (anchor == null || anchor.isDestroyed()) {
             setDestroyed(true);

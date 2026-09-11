@@ -7,16 +7,20 @@ import com.openggf.game.sonic2.constants.Sonic2ObjectIds;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
-import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SolidContact;
+import com.openggf.level.objects.SolidExecutionMode;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
 import com.openggf.debug.DebugColor;
+import com.openggf.game.solid.PlayerSolidContactResult;
 import java.util.List;
 
 /**
@@ -51,7 +55,7 @@ import java.util.List;
  *   </li>
  * </ul>
  */
-public class SmallMetalPformObjectInstance extends AbstractObjectInstance {
+public class SmallMetalPformObjectInstance extends AbstractObjectInstance implements RewindRecreatable {
 
     // ========================================================================
     // ROM Constants
@@ -68,6 +72,11 @@ public class SmallMetalPformObjectInstance extends AbstractObjectInstance {
         this.spawnTimer = INITIAL_SPAWN_DELAY;
     }
 
+    @Override
+    public SmallMetalPformObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new SmallMetalPformObjectInstance(ctx.spawn(), getName());
+    }
+
     // ========================================================================
     // Parent State (Spawner)
     // ========================================================================
@@ -75,7 +84,7 @@ public class SmallMetalPformObjectInstance extends AbstractObjectInstance {
     private int spawnTimer;
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // ROM: loc_3BC3C (routine 2)
         // subq.w #1,objoff_2A(a0)
@@ -102,7 +111,9 @@ public class SmallMetalPformObjectInstance extends AbstractObjectInstance {
      * </pre>
      */
     private void spawnChild() {
-        ObjectManager manager = services().objectManager();
+        if (services().objectManager() == null) {
+            return;
+        }
         ObjectSpawn childSpawn = new ObjectSpawn(
                 spawn.x(), spawn.y(),
                 Sonic2ObjectIds.SMALL_METAL_PFORM,
@@ -110,9 +121,10 @@ public class SmallMetalPformObjectInstance extends AbstractObjectInstance {
                 spawn.renderFlags(),
                 false,
                 spawn.rawYWord());
-        SmallMetalPformChildInstance child = new SmallMetalPformChildInstance(
-                childSpawn, (spawn.renderFlags() & 0x01) != 0);
-        manager.addDynamicObject(child);
+        // ROM: loc_3BCF8 uses AllocateObjectAfterCurrent. The child then
+        // runs its own loc_3BC6C init routine when its slot is reached.
+        spawnChild(() -> new SmallMetalPformChildInstance(
+                childSpawn, (spawn.renderFlags() & 0x01) != 0));
     }
 
     // ========================================================================
@@ -146,7 +158,7 @@ public class SmallMetalPformObjectInstance extends AbstractObjectInstance {
      * This is the actual visible, rideable platform that unfolds, moves, folds, and deletes.
      */
     public static class SmallMetalPformChildInstance extends AbstractObjectInstance
-            implements SolidObjectProvider, SolidObjectListener {
+            implements SolidObjectProvider, SolidObjectListener, SpawnRewindRecreatable {
 
         // ====================================================================
         // ROM Constants (Child)
@@ -188,6 +200,7 @@ public class SmallMetalPformObjectInstance extends AbstractObjectInstance {
         // ====================================================================
 
         private enum ChildState {
+            INIT,       // routine_secondary 0: LoadSubObject/init, then return
             UNFOLD,     // routine_secondary 2: unfold animation
             MOVE,       // routine_secondary 4: moving with solid collision
             FOLD,       // routine_secondary 6: fold animation
@@ -195,7 +208,7 @@ public class SmallMetalPformObjectInstance extends AbstractObjectInstance {
         }
 
         private ChildState state;
-        private final boolean xFlipped;
+        private boolean xFlipped;
         private int yVelocity;       // 8.8 fixed-point (e.g., $100 = 1 pixel/frame)
         private int currentX;
         private int currentY;
@@ -206,6 +219,8 @@ public class SmallMetalPformObjectInstance extends AbstractObjectInstance {
         // Animation state
         private int animFrameIndex;  // index into UNFOLD_FRAMES or FOLD_FRAMES
         private int animDelayCounter;
+        private String lastSolidResult = "none";
+        private String lastSolidGeometry = "geom=none";
 
         /**
          * Create a child platform instance.
@@ -233,14 +248,17 @@ public class SmallMetalPformObjectInstance extends AbstractObjectInstance {
             int subtypeIndex = (spawn.subtype() & 0xFF) - 0x7E;
             this.yVelocity = (subtypeIndex == 0) ? Y_VEL_ASCENDING : Y_VEL_DESCENDING;
 
-            // Start unfold animation (routine_secondary = 2)
-            // ROM: AnimateSprite resets anim_frame_duration to 0 on animation change,
-            // so on the first tick it immediately decrements to -1 and loads the first frame.
-            this.state = ChildState.UNFOLD;
+            // First execution is routine_secondary 0 (loc_3BC6C), which only
+            // initializes the child and returns. Animation starts next time.
+            this.state = ChildState.INIT;
             this.animFrameIndex = -1;
             this.animDelayCounter = 0;
 
             updateDynamicSpawn(currentX, currentY);
+        }
+
+        SmallMetalPformChildInstance(ObjectSpawn spawn) {
+            this(spawn, (spawn.renderFlags() & 0x01) != 0);
         }
 
         @Override
@@ -259,15 +277,33 @@ public class SmallMetalPformObjectInstance extends AbstractObjectInstance {
         }
 
         @Override
-        public void update(int frameCounter, PlayableEntity playerEntity) {
+        public boolean isHighPriority() {
+            // ROM: make_art_tile(ArtTile_ArtNem_WfzBeltPlatform,3,1)
+            return true;
+        }
+
+        @Override
+        public void update(int vIntRunCount, PlayableEntity playerEntity) {
             AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
             switch (state) {
+                case INIT -> updateInit();
                 case UNFOLD -> updateUnfold();
-                case MOVE -> updateMove(frameCounter);
+                case MOVE -> updateMove(vIntRunCount, player);
                 case FOLD -> updateFold();
                 case DELETE -> updateDelete();
             }
             updateDynamicSpawn(currentX, currentY);
+        }
+
+        // ================================================================
+        // State 0: Init (loc_3BC6C)
+        // ROM: LoadSubObject, mapping_frame=2, routine_secondary += 2,
+        // timer/velocity setup, then RTS. Constructor already populated the
+        // fields; this state preserves the first execution's init-only frame.
+        // ================================================================
+
+        private void updateInit() {
+            state = ChildState.UNFOLD;
         }
 
         // ================================================================
@@ -298,7 +334,7 @@ public class SmallMetalPformObjectInstance extends AbstractObjectInstance {
         // ROM: Timer countdown, ObjectMove (Y velocity only), PlatformObject
         // ================================================================
 
-        private void updateMove(int frameCounter) {
+        private void updateMove(int vIntRunCount, AbstractPlayableSprite player) {
             // subq.w #1,objoff_2A(a0) / bmi.s loc_3BCC0
             moveTimer--;
             if (moveTimer < 0) {
@@ -312,16 +348,42 @@ public class SmallMetalPformObjectInstance extends AbstractObjectInstance {
                 return;
             }
 
-            // ROM: loc_3BCDE - ObjectMove + PlatformObject
-            // ObjectMove: y_vel is sign-extended to 32-bit, shifted left 8 bits,
-            // then added to 32-bit position (16.16 format: upper 16 = integer, lower 16 = subpixel).
-            // ext.l d0 / asl.l #8,d0 / add.l d0,d3
+            var batch = services().solidExecution().resolveSolidNowAll();
+            PlayerSolidContactResult result = batch.perPlayer().get(player);
+            int solidY = currentY;
+
+            // ROM: loc_3BCDE - ObjectMove + PlatformObject. The engine's manual
+            // checkpoint resolves contact before post-checkpoint carry, so keep
+            // the movement after the checkpoint and report geometry from the
+            // solid y_pos that the checkpoint used.
             long yPos32 = ((long) currentY << 16) | (ySubpixel & 0xFFFF);
             yPos32 += ((long) yVelocity << 8);
             currentY = (int) (yPos32 >> 16);
             ySubpixel = (int) (yPos32 & 0xFFFF);
 
-            // PlatformObject collision is handled by the engine's SolidObjectProvider
+            int maxTop = SOLID_HALF_HEIGHT_AIR + player.getYRadius();
+            int relX = player.getCentreX() - currentX + SOLID_HALF_WIDTH;
+            int relY = player.getCentreY() - solidY + 4 + maxTop;
+            lastSolidGeometry = String.format("geom p=(%04X,%04X) r=(%d,%d) rel=(%d,%d) maxTop=%d",
+                    player.getCentreX() & 0xFFFF,
+                    player.getCentreY() & 0xFFFF,
+                    player.getXRadius(),
+                    player.getYRadius(),
+                    relX,
+                    relY,
+                    maxTop);
+            lastSolidResult = result == null
+                    ? "missing"
+                    : String.format("%s stand=%s prev=%s preVel=(%04X,%04X) postVel=(%04X,%04X) air=%s on=%s",
+                            result.kind(),
+                            result.standingNow(),
+                            result.standingLastFrame(),
+                            result.preContact().xSpeed() & 0xFFFF,
+                            result.preContact().ySpeed() & 0xFFFF,
+                            result.postContact().xSpeed() & 0xFFFF,
+                            result.postContact().ySpeed() & 0xFFFF,
+                            result.postContact().air(),
+                            result.postContact().onObject());
         }
 
         // ================================================================
@@ -365,13 +427,36 @@ public class SmallMetalPformObjectInstance extends AbstractObjectInstance {
         @Override
         public SolidObjectParams getSolidParams() {
             // ROM: move.w #$23,d1 / move.w #4,d2 / move.w #5,d3
-            return new SolidObjectParams(SOLID_HALF_WIDTH, SOLID_HALF_HEIGHT_AIR, SOLID_HALF_HEIGHT_GND);
+            return SolidObjectParams.of(SOLID_HALF_WIDTH, SOLID_HALF_HEIGHT_AIR, SOLID_HALF_HEIGHT_GND);
         }
 
         @Override
         public boolean isTopSolidOnly() {
             // PlatformObject = top-solid only
             return true;
+        }
+
+        @Override
+        public boolean usesCollisionHalfWidthForTopLanding() {
+            // ObjBD passes d1=$23 directly to PlatformObject; it is not an obActWid+$B full-solid width.
+            return true;
+        }
+
+        @Override
+        public boolean usesGroundHalfHeightForTopSolidContact() {
+            // ObjBD loc_3BCDE passes d3=5 as PlatformObject's surface height for new landings.
+            return true;
+        }
+
+        @Override
+        public boolean seedsNewRideCarryFromPreUpdateX() {
+            // ObjBD saves x_pos before ObjectMove and passes it through d4 to PlatformObject.
+            return true;
+        }
+
+        @Override
+        public SolidExecutionMode solidExecutionMode() {
+            return SolidExecutionMode.MANUAL_CHECKPOINT;
         }
 
         @Override
@@ -385,6 +470,19 @@ public class SmallMetalPformObjectInstance extends AbstractObjectInstance {
         public boolean isSolidFor(PlayableEntity playerEntity) {
             AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
             return state == ChildState.MOVE;
+        }
+
+        @Override
+        public String traceDebugDetails() {
+            return String.format("state=%s frame=%d timer=%d yv=%04X ysub=%04X flip=%d %s solid=%s",
+                    state.name(),
+                    mappingFrame,
+                    moveTimer,
+                    yVelocity & 0xFFFF,
+                    ySubpixel & 0xFFFF,
+                    xFlipped ? 1 : 0,
+                    lastSolidGeometry,
+                    lastSolidResult);
         }
 
         // ================================================================

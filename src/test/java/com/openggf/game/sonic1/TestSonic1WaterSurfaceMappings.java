@@ -1,15 +1,15 @@
 package com.openggf.game.sonic1;
 
 import com.openggf.level.render.SpriteFramePiece;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import com.openggf.level.render.SpriteMappingFrame;
 import com.openggf.level.render.SpriteMappingPiece;
 
 import java.util.List;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TestSonic1WaterSurfaceMappings {
 
@@ -50,3 +50,5 @@ public class TestSonic1WaterSurfaceMappings {
         }
     }
 }
+
+

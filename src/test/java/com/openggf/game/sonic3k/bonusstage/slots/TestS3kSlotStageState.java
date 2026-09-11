@@ -65,3 +65,5 @@ class TestS3kSlotStageState {
         return Arrays.copyOfRange(S3kSlotRomData.SLOT_BONUS_LAYOUT, start, start + 0x20);
     }
 }
+
+

@@ -1,24 +1,25 @@
 package com.openggf.graphics;
 
+import com.openggf.tests.TestEnvironment;
+import com.openggf.game.session.SessionManager;
 import com.openggf.game.GameServices;
-import com.openggf.game.RuntimeManager;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 public class TestFadeManager {
 
-    @Before
+    @BeforeEach
     public void setUp() {
-        RuntimeManager.createGameplay();
+        TestEnvironment.activeGameplayMode();
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
-        RuntimeManager.destroyCurrent();
+        SessionManager.clear();
     }
 
     /**
@@ -60,5 +61,46 @@ public class TestFadeManager {
         }
 
         assertEquals(FadeManager.FadeState.NONE, fadeManager.getState());
+    }
+
+    @Test
+    public void customDurationFadeToBlackCompletesOnExactFrameAndHoldsBlack() {
+        FadeManager fadeManager = GameServices.fade();
+        fadeManager.resetState();
+        int[] completions = {0};
+
+        fadeManager.startFadeToBlack(() -> completions[0]++, 0, 60);
+        for (int i = 0; i < 59; i++) {
+            fadeManager.update();
+        }
+        assertEquals(0, completions[0]);
+
+        fadeManager.update();
+
+        assertEquals(1, completions[0]);
+        assertEquals(FadeManager.FadeState.HOLD_BLACK, fadeManager.getState());
+    }
+
+    @Test
+    void fadeFromBlackCanRetainTheRomTerminalNoOpVblank() {
+        FadeManager fadeManager = GameServices.fade();
+        fadeManager.resetState();
+        int[] completions = {0};
+
+        fadeManager.startFadeFromBlack(() -> completions[0]++, 1);
+        for (int i = 0; i < FADE_DURATION_FRAMES; i++) {
+            fadeManager.update();
+        }
+
+        assertEquals(FadeManager.FadeState.FADING_FROM_BLACK, fadeManager.getState());
+        assertEquals(0, completions[0]);
+        assertEquals(0.0f, fadeManager.getFadeColor()[0]);
+        assertEquals(0.0f, fadeManager.getFadeColor()[1]);
+        assertEquals(0.0f, fadeManager.getFadeColor()[2]);
+
+        fadeManager.update();
+
+        assertEquals(FadeManager.FadeState.NONE, fadeManager.getState());
+        assertEquals(1, completions[0]);
     }
 }

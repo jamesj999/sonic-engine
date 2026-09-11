@@ -1,18 +1,15 @@
 package com.openggf.tests;
-
-import org.junit.Rule;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import com.openggf.data.Rom;
 import com.openggf.game.sonic2.constants.Sonic2Constants;
 import com.openggf.level.SolidTile;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
 
 import java.io.IOException;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * TODO #6 coverage: SolidTile "TODO add angle recalculations" (SolidTile.java line 21).
@@ -32,9 +29,6 @@ import static org.junit.Assert.assertTrue;
  */
 @RequiresRom(SonicGame.SONIC_2)
 public class TestTodo6_SolidTileAngleFromRom {
-    @Rule
-    public RequiresRomRule romRule = new RequiresRomRule();
-
     /**
      * Verify that flat floor tiles (e.g., tile 1 = full solid block) have angle 0xFF.
      * Angle 0xFF means "no angle" - the tile is a full solid block with no slope.
@@ -42,11 +36,10 @@ public class TestTodo6_SolidTileAngleFromRom {
      */
     @Test
     public void testFullSolidBlockAngle() throws IOException {
-        Rom rom = romRule.rom();
+        Rom rom = com.openggf.tests.TestEnvironment.currentRom();
         // Tile index 1 is typically the full solid block (all 16 height values = 16)
         byte angle = rom.readByte(Sonic2Constants.SOLID_TILE_ANGLE_ADDR + 1);
-        assertEquals("Full solid tile (index 1) should have angle 0xFF",
-                (byte) 0xFF, angle);
+        assertEquals((byte) 0xFF, angle, "Full solid tile (index 1) should have angle 0xFF");
     }
 
     /**
@@ -55,7 +48,7 @@ public class TestTodo6_SolidTileAngleFromRom {
      */
     @Test
     public void testSolidTileConstructorUsesRomAngle() throws IOException {
-        Rom rom = romRule.rom();
+        Rom rom = com.openggf.tests.TestEnvironment.currentRom();
 
         // Read the height and angle data for a known sloped tile
         // We use tile index 2 which should be a slope
@@ -72,12 +65,10 @@ public class TestTodo6_SolidTileAngleFromRom {
         SolidTile tile = new SolidTile(2, heights, widths, angleFromRom);
 
         // Verify the base angle matches
-        assertEquals("SolidTile should store exact ROM angle",
-                angleFromRom, tile.getAngle());
+        assertEquals(angleFromRom, tile.getAngle(), "SolidTile should store exact ROM angle");
 
         // Verify no-flip returns the same angle
-        assertEquals("No-flip should return original angle",
-                angleFromRom, tile.getAngle(false, false));
+        assertEquals(angleFromRom, tile.getAngle(false, false), "No-flip should return original angle");
     }
 
     /**
@@ -90,7 +81,7 @@ public class TestTodo6_SolidTileAngleFromRom {
      */
     @Test
     public void testFlipTransformMatchesDisassembly() throws IOException {
-        Rom rom = romRule.rom();
+        Rom rom = com.openggf.tests.TestEnvironment.currentRom();
 
         // Pick a sloped tile with a known non-trivial angle
         // Read through angles to find one in the ~0x10-0x30 range (gentle slope)
@@ -113,18 +104,18 @@ public class TestTodo6_SolidTileAngleFromRom {
 
                 // H-flip: neg.b angle = -angle (two's complement)
                 byte expectedHFlip = (byte) (-rawAngle);
-                assertEquals(String.format("Tile %d H-flip angle", i),
-                        expectedHFlip, tile.getAngle(true, false));
+                assertEquals(expectedHFlip, tile.getAngle(true, false), String.format("Tile %d H-flip angle", i));
 
                 // V-flip: 0x80 - angle
                 byte expectedVFlip = (byte) (0x80 - rawAngle);
-                assertEquals(String.format("Tile %d V-flip angle", i),
-                        expectedVFlip, tile.getAngle(false, true));
+                assertEquals(expectedVFlip, tile.getAngle(false, true), String.format("Tile %d V-flip angle", i));
 
                 return; // Found and tested a suitable tile
             }
         }
         // If no suitable tile found, that's unexpected
-        assertTrue("Should find at least one gentle slope tile in angle data", false);
+        assertTrue(false, "Should find at least one gentle slope tile in angle data");
     }
 }
+
+

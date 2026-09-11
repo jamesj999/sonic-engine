@@ -6,6 +6,17 @@ import com.openggf.game.sonic2.Sonic2ObjectArtKeys;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.TouchActorContextPolicy;
+import com.openggf.level.objects.TouchAttackBouncePolicy;
+import com.openggf.level.objects.TouchCategoryDecodeMode;
+import com.openggf.level.objects.TouchOverlapStopPolicy;
+import com.openggf.level.objects.TouchResponseListener;
+import com.openggf.level.objects.TouchResponseProvider;
+import com.openggf.level.objects.TouchResponseProfile;
+import com.openggf.level.objects.TouchResponseResult;
+import com.openggf.level.objects.TouchShieldDeflectCapability;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -65,7 +76,8 @@ import java.util.List;
  * @see BumperObjectInstance Round bumper with radial physics
  * @see BonusBlockObjectInstance Drop target with hit tracking
  */
-public class HexBumperObjectInstance extends AbstractObjectInstance {
+public class HexBumperObjectInstance extends AbstractObjectInstance
+        implements TouchResponseProvider, TouchResponseListener, RewindRecreatable {
 
     // ========================================================================
     // ROM Constants
@@ -100,6 +112,17 @@ public class HexBumperObjectInstance extends AbstractObjectInstance {
      */
     private static final int COLLISION_HALF_HEIGHT = 8;
 
+    private static final TouchResponseProfile TOUCH_RESPONSE_PROFILE = new TouchResponseProfile(
+            TouchCategoryDecodeMode.NORMAL,
+            true,
+            false,
+            false,
+            TouchShieldDeflectCapability.NONE,
+            0,
+            TouchAttackBouncePolicy.STANDARD_ENEMY_KILL,
+            TouchActorContextPolicy.MAIN_FULL_SIDEKICK_HURT_ONLY,
+            TouchOverlapStopPolicy.STOP_AFTER_FIRST_OVERLAP_FOR_ALL_ACTORS);
+
     // ========================================================================
     // Subtype Constants
     // ========================================================================
@@ -129,9 +152,6 @@ public class HexBumperObjectInstance extends AbstractObjectInstance {
     /** Duration of hit animation in frames */
     private static final int ANIM_DURATION = 8;
 
-    /** Cooldown frames after bounce to prevent repeated hits */
-    private static final int BOUNCE_COOLDOWN = 8;
-
     // ========================================================================
     // Direction Constants (after quantization)
     // ========================================================================
@@ -154,7 +174,7 @@ public class HexBumperObjectInstance extends AbstractObjectInstance {
 
     private int animFrame = FRAME_IDLE;
     private int animTimer = 0;
-    private int bounceCooldown = 0;
+    private int collisionProperty = 0;
 
     // Moving subtype state
     private int baseX;
@@ -168,6 +188,11 @@ public class HexBumperObjectInstance extends AbstractObjectInstance {
         initMovement();
     }
 
+    @Override
+    public HexBumperObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new HexBumperObjectInstance(ctx.spawn(), getName());
+    }
+
     private void initMovement() {
         baseX = spawn.x();
         currentX = baseX;
@@ -179,8 +204,9 @@ public class HexBumperObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
+        processPendingBounce(playerEntity);
+
         // Update movement for moving subtype
         if ((spawn.subtype() & 0xFF) == SUBTYPE_MOVING) {
             updateMovement();
@@ -193,18 +219,23 @@ public class HexBumperObjectInstance extends AbstractObjectInstance {
                 animFrame = FRAME_IDLE;
             }
         }
+    }
 
-        // Update bounce cooldown
-        if (bounceCooldown > 0) {
-            bounceCooldown--;
+    private void processPendingBounce(PlayableEntity playerEntity) {
+        int pending = collisionProperty;
+        if (pending == 0) {
+            return;
         }
 
-        // Check collision with player (only if not on cooldown)
-        if (player != null && !player.isHurt() && !player.getDead() && bounceCooldown == 0) {
-            if (checkCollision(player)) {
-                applyBounce(player);
+        if ((pending & 0x01) != 0 && playerEntity instanceof AbstractPlayableSprite player) {
+            applyBounce(player);
+        }
+        if ((pending & 0x02) != 0) {
+            if (services().playerQuery().nativeP2OrNull() instanceof AbstractPlayableSprite sidekick) {
+                applyBounce(sidekick);
             }
         }
+        collisionProperty = 0;
     }
 
     private void updateMovement() {
@@ -247,6 +278,102 @@ public class HexBumperObjectInstance extends AbstractObjectInstance {
         return currentX;
     }
 
+    @Override
+    public int getX() {
+        return getCurrentX();
+    }
+
+    @Override
+    public int getY() {
+        return spawn.y();
+    }
+
+    @Override
+    public boolean usesCustomOutOfRangeCheck() {
+        return (spawn.subtype() & 0xFF) == SUBTYPE_MOVING;
+    }
+
+    @Override
+    public boolean isCustomOutOfRange(int cameraX) {
+        if ((spawn.subtype() & 0xFF) != SUBTYPE_MOVING) {
+            return isRomOutOfRange(getCurrentX(), cameraX);
+        }
+        // Moving ObjD7 does not tail-call MarkObjGone. ROM tests both movement
+        // bounds, objoff_30/objoff_32, and deletes only when both are outside
+        // the camera window (docs/s2disasm/s2.asm:59489-59510).
+        return isRomOutOfRange(minX, cameraX) && isRomOutOfRange(maxX, cameraX);
+    }
+
+    private boolean isRomOutOfRange(int objectX, int cameraX) {
+        int objRounded = objectX & 0xFF80;
+        int screenRounded = (cameraX - 128) & 0xFF80;
+        int distance = (objRounded - screenRounded) & 0xFFFF;
+        // 0x280 (640) = 128 + 320 + 192 at native; width-driven for widescreen
+        // (viewportWidth() is 320 at NATIVE_4_3). See KNOWN_DISCREPANCIES entry #14.
+        return distance > (128 + viewportWidth() + 192);
+    }
+
+    @Override
+    public int getCollisionFlags() {
+        // ROM collision_flags is $CA (Touch_Sizes[$0A]), but the engine's
+        // high-bit category dispatch would treat $C0 as automatic boss bounce.
+        // Route it as listener-only SPECIAL while preserving the size index.
+        return 0x40 | 0x0A;
+    }
+
+    @Override
+    public int getCollisionProperty() {
+        return collisionProperty;
+    }
+
+    @Override
+    public TouchResponseProfile getTouchResponseProfile() {
+        return TOUCH_RESPONSE_PROFILE;
+    }
+
+    @Override
+    public TouchResponseProfile getTouchResponseProfile(boolean multiRegionSource) {
+        return TOUCH_RESPONSE_PROFILE;
+    }
+
+    @Override
+    public boolean requiresContinuousTouchCallbacks() {
+        return true;
+    }
+
+    @Override
+    public boolean requiresRenderFlagForTouch() {
+        // S2 TouchResponse checks collision_flags directly, with no
+        // render_flags.on_screen gate before Touch_Special (s2.asm:84537-84551).
+        // ObjD7 relies on that path: Touch_Special increments
+        // collision_property, then ObjD7_Main consumes P1/P2 bits
+        // (s2.asm:59387-59399, 85022-85098).
+        return false;
+    }
+
+    @Override
+    public boolean enablesPostSpecialTouchAirborneSideVelocityPreservation() {
+        return true;
+    }
+
+    @Override
+    public void onTouchResponse(PlayableEntity playerEntity, TouchResponseResult result, int frameCounter) {
+        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
+        if (player == null || player.isHurt() || player.getDead()) {
+            return;
+        }
+        // ROM TouchResponse only sets collision_property bits; ObjD7_Main later
+        // consumes bit 0 for Sonic and bit 1 for Tails before applying the
+        // bounce (s2.asm:59365-59382). Applying the bounce immediately during
+        // the player slot makes Tails CPU sample Sonic's post-bounce x_vel too
+        // early on CNZ ObjD7 frames.
+        if (player.isCpuControlled()) {
+            collisionProperty |= 0x02;
+        } else {
+            collisionProperty |= 0x01;
+        }
+    }
+
     /**
      * Apply 4-direction quantized bounce to player.
      * <p>
@@ -273,32 +400,39 @@ public class HexBumperObjectInstance extends AbstractObjectInstance {
         // Quantize to 4 directions: add $20, mask with $C0
         int quantized = (angle + 0x20) & 0xC0;
 
-        int xVel = 0;
-        int yVel = 0;
+        int xVel = player.getXSpeed();
+        int yVel = player.getYSpeed();
 
         switch (quantized) {
             case DIR_LEFT:
                 xVel = -BOUNCE_VELOCITY;
-                yVel = 0;
                 animFrame = FRAME_HORIZONTAL_SQUEEZE;
                 break;
 
             case DIR_DOWN:
-                // X velocity adjusted by player center position relative to bumper
-                xVel = (player.getCentreX() < currentX) ? -SECONDARY_X_VELOCITY : SECONDARY_X_VELOCITY;
+                // ROM: subi.w #$200,x_vel; addi.w #$400,x_vel when the player
+                // is right of the bumper (d1 = obj.x - player.x is negative;
+                // s2.asm:59422-59427).
+                xVel -= SECONDARY_X_VELOCITY;
+                if (player.getCentreX() > currentX) {
+                    xVel += SECONDARY_X_VELOCITY * 2;
+                }
                 yVel = -BOUNCE_VELOCITY;
                 animFrame = FRAME_VERTICAL_SQUEEZE;
                 break;
 
             case DIR_RIGHT:
                 xVel = BOUNCE_VELOCITY;
-                yVel = 0;
                 animFrame = FRAME_HORIZONTAL_SQUEEZE;
                 break;
 
             case DIR_UP:
-                // X velocity adjusted by player center position relative to bumper
-                xVel = (player.getCentreX() < currentX) ? -SECONDARY_X_VELOCITY : SECONDARY_X_VELOCITY;
+                // Same relative x_vel adjustment as ObjD7_BounceDown, then
+                // y_vel = +$800 (s2.asm:59442-59453).
+                xVel -= SECONDARY_X_VELOCITY;
+                if (player.getCentreX() > currentX) {
+                    xVel += SECONDARY_X_VELOCITY * 2;
+                }
                 yVel = BOUNCE_VELOCITY;
                 animFrame = FRAME_VERTICAL_SQUEEZE;
                 break;
@@ -308,13 +442,15 @@ public class HexBumperObjectInstance extends AbstractObjectInstance {
         player.setYSpeed((short) yVel);
 
         // Set player state
+        // ObjD7_BounceEnd sets in-air, clears rolljumping/pushing, and clears
+        // jumping after the velocity write (s2.asm:59440-59453).
         player.setAir(true);
+        player.setRollingJump(false);
+        player.setJumping(false);
         player.setPushing(false);
-        player.setGSpeed((short) 0);
 
-        // Trigger animation and cooldown
+        // Trigger animation
         animTimer = ANIM_DURATION;
-        bounceCooldown = BOUNCE_COOLDOWN;
 
         // Play sound
         services().playSfx(GameSound.BUMPER);

@@ -35,6 +35,12 @@ public final class Sonic1SmpsConstants {
     /** Raw PCM data for the "SEGA" voice sample. */
     public static final int SEGA_SOUND_ADDR = 0x079688;
 
+    /** Size of the "SEGA" PCM sample. */
+    public static final int SEGA_SOUND_SIZE = 0x6978;
+
+    /** Source sample rate of the "SEGA" PCM sample. */
+    public static final int SEGA_SOUND_SAMPLE_RATE = 16_500;
+
     /**
      * Sound priority table (SoundPriorities label in s1disasm).
      * Located after MusicIndex in ROM, confirmed via Go_ pointer table.

@@ -1,12 +1,14 @@
 package com.openggf.game.sonic2.objects;
-import com.openggf.game.PlayableEntity;
-import com.openggf.level.objects.SpringHelper;
-import com.openggf.level.objects.BoxObjectInstance;
-import com.openggf.level.objects.ObjectAnimationState;
 
 import com.openggf.audio.GameSound;
-import com.openggf.game.sonic2.constants.Sonic2AnimationIds;
+import com.openggf.game.PlayableEntity;
+import com.openggf.game.solid.ContactKind;
+import com.openggf.game.solid.PlayerSolidContactResult;
+import com.openggf.game.solid.PostContactState;
+import com.openggf.game.solid.PreContactState;
+import com.openggf.game.solid.SolidCheckpointBatch;
 import com.openggf.game.sonic2.Sonic2ObjectArtKeys;
+import com.openggf.game.sonic2.constants.Sonic2AnimationIds;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.*;
@@ -14,6 +16,7 @@ import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.Direction;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -40,7 +43,7 @@ import java.util.List;
  * standing bit) rather than relying on onSolidContact() receiving STANDING every frame.
  */
 public class SpringboardObjectInstance extends BoxObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, SlopedSolidProvider {
+        implements SolidObjectProvider, SolidObjectListener, SlopedSolidProvider, RewindRecreatable {
 
     // Animation IDs (from Ani_obj40)
     private static final int ANIM_IDLE = 0;       // byte_265EC: delay=0xF, frames=[0], LOOP
@@ -87,6 +90,8 @@ public class SpringboardObjectInstance extends BoxObjectInstance
     // d1 = $27 (39) half-width, d2 = 8 height
     private static final int COLLISION_HALF_WIDTH = 0x27;
     private static final int COLLISION_HEIGHT = 8;
+    private static final ObjectPlayerParticipationPolicy PLAYER_PARTICIPATION =
+            ObjectPlayerParticipationPolicy.MAIN_PLUS_ENGINE_SIDEKICKS_AS_NATIVE_P2_EXTENDED;
 
     // Position threshold for launch trigger (0x10 pixels from center)
     // ROM: loc_2641E checks player.x vs springboard.x ± 0x10
@@ -116,6 +121,20 @@ public class SpringboardObjectInstance extends BoxObjectInstance
         this.mappingFrame = 0;
     }
 
+    @Override
+    public SpringboardObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new SpringboardObjectInstance(ctx.spawn(), "Springboard");
+    }
+
+    @Override
+    public boolean suppressesObjectEdgeBalance() {
+        // Obj40_Init sets status.npc.no_balancing unconditionally before its
+        // SlopedSolid path. Sonic_Move/Tails_Move therefore skip object-edge
+        // balance whenever the player is riding a springboard.
+        // docs/s2disasm/s2.asm:52279-52294; s2.asm:36589,39710
+        return true;
+    }
+
     private void ensureInitialized() {
         if (initialized) {
             return;
@@ -139,36 +158,12 @@ public class SpringboardObjectInstance extends BoxObjectInstance
      */
     @Override
     public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        if (player == null || !contact.standing()) {
-            return;
-        }
+        // Manual checkpoints drive springboard standing state from update().
+    }
 
-        // Don't process if player is already springing (post-launch).
-        // ROM's SlopedSolid_SingleCharacter does NOT check airborne before setting
-        // the standing bit — it only checks X range. The getAir() guard is omitted
-        // to match ROM behavior: at high speed, terrain micro-gaps can set air=true
-        // for single frames while SolidContacts still resolves STANDING contact.
-        if (player.getSpringing()) {
-            return;
-        }
-
-        // If launch sequence is already in progress, update() handles continuation
-        if (launchSequenceActive && launchPlayer == player) {
-            return;
-        }
-
-        // ROM: loc_2641E - Check if player is on the "high" side
-        if (!isPlayerOnHighSide(player)) {
-            return;
-        }
-
-        // ROM: loc_26446 - Start the compress animation and begin launch sequence
-        if (animationState.getAnimId() != ANIM_COMPRESSED) {
-            animationState.setAnimId(ANIM_COMPRESSED);
-            launchSequenceActive = true;
-            launchPlayer = player;
-        }
+    @Override
+    public SolidExecutionMode solidExecutionMode() {
+        return SolidExecutionMode.MANUAL_CHECKPOINT;
     }
 
     /**
@@ -300,7 +295,25 @@ public class SpringboardObjectInstance extends BoxObjectInstance
     @Override
     public SolidObjectParams getSolidParams() {
         // ROM: d1=$27 (half-width), d2=8 (height)
-        return new SolidObjectParams(COLLISION_HALF_WIDTH, COLLISION_HEIGHT, COLLISION_HEIGHT);
+        return SolidObjectParams.of(COLLISION_HALF_WIDTH, COLLISION_HEIGHT, COLLISION_HEIGHT);
+    }
+
+    /**
+     * ROM: Obj40_Main calls SlopedSolid_SingleCharacter which dispatches to
+     * SlopedSolid_cont (s2.asm:35066) on new contact. SlopedSolid_cont adds
+     * the object's half-height (d2) to the catch range before computing relY:
+     * {@code add.w d3,d2} (d2 = halfHeight + yRadius)
+     * {@code add.w d2,d3} (d3 = playerY - baseY + 4 + halfHeight + yRadius)
+     * This matches the behaviour described in SlopedSolidProvider.addsSlopeCatchRangeToVerticalOverlap().
+     */
+    @Override
+    public boolean addsSlopeCatchRangeToVerticalOverlap() {
+        return true;
+    }
+
+    @Override
+    public boolean bypassesOffscreenSolidGate() {
+        return true;
     }
 
     @Override
@@ -316,20 +329,50 @@ public class SpringboardObjectInstance extends BoxObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         ensureInitialized();
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // ROM: Obj40_Main calls AnimateSprite before collision check
         animationState.update();
         mappingFrame = animationState.getMappingFrame();
 
-        // ROM: After SlopedSolid_SingleCharacter, loc_2641E runs if standing bit set.
-        // The standing bit persists via the fast-path (X range only) without re-evaluating
-        // standing vs side contact. We use our own launchSequenceActive flag to match this,
-        // driving the launch sequence from update() rather than onSolidContact().
-        if (launchSequenceActive && launchPlayer != null) {
-            processLaunchSequence();
+        // ROM: Obj40_Main calls SlopedSolid_SingleCharacter + loc_2641E for BOTH
+        // MainCharacter (p1_standing_bit) and Sidekick (p2_standing_bit).
+        // The resolver processes all players in one shot; resolve the checkpoint
+        // batch once and extract per-player results to avoid double-resolution.
+        // s2.asm:51839-51847 — lea (Sidekick).w,a1 / jsrto SlopedSolid_SingleCharacter
+        //                      / btst #p2_standing_bit / bsr loc_2641E
+        SolidCheckpointBatch batch = checkpointAll();
+
+        for (PlayableEntity participant : playerParticipants(playerEntity)) {
+            if (participant instanceof AbstractPlayableSprite player) {
+                updateLaunchSequence(player, resultFromBatch(player, batch));
+            }
         }
+    }
+
+    private List<PlayableEntity> playerParticipants(PlayableEntity updatePlayer) {
+        ObjectPlayerQuery query = services().playerQuery();
+        ArrayList<PlayableEntity> ordered = new ArrayList<>();
+        if (updatePlayer != null && !containsIdentity(ordered, updatePlayer)) {
+            ordered.add(updatePlayer);
+        }
+        ordered.addAll(query.sidekicks());
+        for (PlayableEntity participant : query.playersFor(PLAYER_PARTICIPATION)) {
+            if (!containsIdentity(ordered, participant)) {
+                ordered.add(participant);
+            }
+        }
+        return ordered;
+    }
+
+    private static boolean containsIdentity(List<? extends PlayableEntity> participants,
+                                            PlayableEntity updatePlayer) {
+        for (PlayableEntity participant : participants) {
+            if (participant == updatePlayer) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -340,52 +383,78 @@ public class SpringboardObjectInstance extends BoxObjectInstance
      * Our SolidContacts may produce SIDE contacts on the sloped surface, but the ROM
      * never re-evaluates standing vs side for an already-standing player.
      */
-    private void processLaunchSequence() {
-        AbstractPlayableSprite lp = launchPlayer;
-
-        // ROM: SlopedSolid_SingleCharacter fast-path checks:
-        // - Player springing -> already launched, clear standing bit
-        // - Player outside X range -> clear standing bit
-        // Note: ROM does NOT clear standing bit on airborne alone — only X range
-        // and springing matter. This allows the launch to complete even if terrain
-        // micro-gaps briefly set air=true at high speed.
-        if (lp.getSpringing()) {
+    private void updateLaunchSequence(AbstractPlayableSprite player, PlayerSolidContactResult result) {
+        if (player.getSpringing()) {
             clearLaunchSequence();
             return;
         }
 
-        // ROM fast-path X range check (s2.asm:34909-34914):
-        // relX = player.x - object.x + halfWidth
-        // if relX < 0 or relX >= width: clear standing
-        int relX = lp.getCentreX() - spawn.x() + COLLISION_HALF_WIDTH;
-        int width = COLLISION_HALF_WIDTH * 2;
-        if (relX < 0 || relX >= width) {
+        // launchContactNow: true when the checkpoint reports actual contact
+        // with this springboard. Only use per-object contact fields (standingNow,
+        // kind) — do NOT include postContact.onObject() here because that
+        // reflects the player's global on-object state (e.g. riding a nearby
+        // swinging platform), not contact with this specific springboard.
+        // The ySpeed>0 restriction was removed: SlopedSolid_cont sets the
+        // standing bit on any successful contact (top/side), and the ROM's
+        // fast-path keeps the bit set within X range regardless of contact type.
+        boolean launchContactNow = result.kind() != ContactKind.NONE;
+        if (launchContactNow && isPlayerOnHighSide(player)) {
+            launchSequenceActive = true;
+            launchPlayer = player;
+        } else {
+            // ROM SlopedSolid_SingleCharacter fast path: the standing bit is
+            // cleared when there is no contact (Y out of range via
+            // SolidObject_TestClearPush, or player went airborne/left X range
+            // via loc_1980A). Once the standing bit is cleared, loc_2641E is
+            // not reached and the launch sequence does not advance.
+            // In the engine we clear launchSequenceActive whenever the
+            // checkpoint returns no contact, which is the same condition.
+            // The previous "persist within X range" logic caused a stale
+            // launchSequenceActive to fire the launch when Sonic was riding
+            // a nearby swinging platform within X range but at a completely
+            // different Y (MCZ2 trace f1487).
             clearLaunchSequence();
             return;
         }
 
-        // ROM: loc_2641E - Check if player is still on the "high" side
-        if (!isPlayerOnHighSide(lp)) {
+        if (!isPlayerOnHighSide(player)) {
             // Player moved to low side - clear launch but keep standing
             clearLaunchSequence();
             return;
         }
 
         // ROM: loc_26446 - Check animation state
+        // cmpi.b #1,anim(a0) / beq.s loc_26456 - if already compressed, check frame
+        // move.w #(1<<8)|(0<<0),anim(a0) / rts  - if NOT compressed, set it and return
         int currentAnim = animationState.getAnimId();
         if (currentAnim != ANIM_COMPRESSED) {
-            // Animation switched back (shouldn't normally happen during sequence)
+            // Not yet compressed: switch animation and return immediately.
+            // ROM does not fall through to the mapping_frame check on the
+            // frame that switches the animation (s2.asm:51868-51872).
             animationState.setAnimId(ANIM_COMPRESSED);
             return;
         }
 
-        // ROM: loc_26456 - anim is 1, check if mapping_frame is 0
+        // ROM: loc_26456 - anim is already 1, check if mapping_frame is 0
+        // tst.b mapping_frame(a0) / beq.s loc_2645E
         if (mappingFrame == 0) {
             // ROM: loc_2645E - Launch the player!
-            applyLaunch(lp);
-            clearLaunchSequence();
+            applyLaunch(player);
         }
         // If mapping_frame != 0, wait for animation to cycle to frame 0
+    }
+
+    private boolean isWithinLaunchXRange(AbstractPlayableSprite player) {
+        int relX = player.getCentreX() - spawn.x() + COLLISION_HALF_WIDTH;
+        int width = COLLISION_HALF_WIDTH * 2;
+        return relX >= 0 && relX < width;
+    }
+
+    private PlayerSolidContactResult resultFromBatch(AbstractPlayableSprite player, SolidCheckpointBatch batch) {
+        return batch.perPlayer().getOrDefault(player, PlayerSolidContactResult.noContact(
+                services().solidExecutionRegistry().previousStanding(this, player),
+                PreContactState.ZERO,
+                PostContactState.ZERO));
     }
 
     private void clearLaunchSequence() {

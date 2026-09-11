@@ -1,10 +1,9 @@
 package com.openggf.game.sonic3k;
 
 import com.openggf.data.Rom;
+import com.openggf.game.AbstractHeaderNameRomDetector;
 import com.openggf.game.GameModule;
-import com.openggf.game.RomDetector;
 
-import java.io.IOException;
 import java.util.logging.Logger;
 
 /**
@@ -15,7 +14,7 @@ import java.util.logging.Logger;
  * containing "SONIC THE HEDGEHOG 3", "SONIC & KNUCKLES", or
  * "SONIC3 & KNUCKLES".
  */
-public class Sonic3kRomDetector implements RomDetector {
+public class Sonic3kRomDetector extends AbstractHeaderNameRomDetector {
     private static final Logger LOGGER = Logger.getLogger(Sonic3kRomDetector.class.getName());
 
     // Checked before S1 (90) and S2 (100)
@@ -23,45 +22,20 @@ public class Sonic3kRomDetector implements RomDetector {
 
     @Override
     public boolean canHandle(Rom rom) {
-        if (rom == null || !rom.isOpen()) {
-            return false;
-        }
-
-        try {
-            String domesticName = rom.readDomesticName();
-            if (isSonic3kName(domesticName)) {
-                LOGGER.fine("Sonic 3K detected via domestic name: " + domesticName);
-                return true;
-            }
-
-            String intlName = rom.readInternationalName();
-            if (isSonic3kName(intlName)) {
-                LOGGER.fine("Sonic 3K detected via international name: " + intlName);
-                return true;
-            }
-
-            LOGGER.fine("ROM names did not match Sonic 3K: domestic='" + domesticName +
-                    "', international='" + intlName + "'");
-            return false;
-        } catch (IOException e) {
-            LOGGER.warning("Error reading ROM header: " + e.getMessage());
-            return false;
-        }
+        return canHandleHeaderName(rom);
     }
 
-    private boolean isSonic3kName(String name) {
-        if (name == null) {
-            return false;
-        }
-        String normalized = normalizeWhitespace(name);
-        return normalized.contains("SONIC THE HEDGEHOG 3")
-                || normalized.contains("SONIC & KNUCKLES")
-                || normalized.contains("SONIC3 & KNUCKLES")
-                || normalized.contains("SONIC AND KNUCKLES");
+    @Override
+    protected boolean matchesNormalizedName(String normalizedName) {
+        return normalizedName.contains("SONIC THE HEDGEHOG 3")
+                || normalizedName.contains("SONIC & KNUCKLES")
+                || normalizedName.contains("SONIC3 & KNUCKLES")
+                || normalizedName.contains("SONIC AND KNUCKLES");
     }
 
-    private String normalizeWhitespace(String input) {
-        return input.toUpperCase().replaceAll("\\s+", " ").trim();
+    @Override
+    protected Logger logger() {
+        return LOGGER;
     }
 
     @Override

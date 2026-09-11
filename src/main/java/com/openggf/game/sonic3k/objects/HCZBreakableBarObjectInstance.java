@@ -9,11 +9,19 @@ import com.openggf.debug.DebugRenderContext;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
+import com.openggf.level.objects.ObjectLifetimeOps;
+import com.openggf.level.objects.ObjectPlayerParticipationPolicy;
+import com.openggf.level.objects.ObjectPlayerQuery;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
+import com.openggf.level.objects.SpawnTrailingZeroIntsRewindRecreatable;
 import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.Direction;
+import com.openggf.sprites.NativePositionOps;
+import com.openggf.sprites.playable.RawControllerInput;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
+import com.openggf.sprites.playable.ObjectControlState;
 
 import java.util.List;
 import java.util.logging.Logger;
@@ -41,7 +49,7 @@ import java.util.logging.Logger;
  * loc_1EDB0 (vertical update), loc_1EF64 (horizontal update), sub_1EDEC (vertical capture),
  * sub_1EFA0 (horizontal capture), loc_1EEEC (vertical break), loc_1F09A (horizontal break).
  */
-public class HCZBreakableBarObjectInstance extends AbstractObjectInstance {
+public class HCZBreakableBarObjectInstance extends AbstractObjectInstance implements SpawnRewindRecreatable {
 
     private static final Logger LOG = Logger.getLogger(HCZBreakableBarObjectInstance.class.getName());
 
@@ -72,6 +80,8 @@ public class HCZBreakableBarObjectInstance extends AbstractObjectInstance {
     // ROM: Capture proximity for cross-axis: player within $14-$24 offset
     private static final int CAPTURE_CROSS_MIN = 0x14;
     private static final int CAPTURE_CROSS_MAX = 0x24;
+    private static final int HORIZONTAL_CAPTURE_Y_MIN_OFFSET = -0x14;
+    private static final int HORIZONTAL_CAPTURE_Y_MAX_OFFSET = -0x04;
 
     // ROM: addi.w #$14,d0 / move.w d0,x_pos(a1) — player offset from bar center
     // Vertical bar: player hangs 0x14 (20px) to the right of the bar
@@ -100,26 +110,26 @@ public class HCZBreakableBarObjectInstance extends AbstractObjectInstance {
 
     // ===== Instance state =====
 
-    private final int x;
-    private final int y;
-    private final int subtype;
-    private final boolean isHorizontal;
-    private final boolean nonDestructiveRelease;
-    private final int sizeIndex;
+    private int x;
+    private int y;
+    private int subtype;
+    private boolean isHorizontal;
+    private boolean nonDestructiveRelease;
+    private int sizeIndex;
 
     // From size table
-    private final int halfExtent;
-    private final int totalExtent;
-    private final int widthOrHeight;
-    private final int mappingFrame;
+    private int halfExtent;
+    private int totalExtent;
+    private int widthOrHeight;
+    private int mappingFrame;
 
     // Effective collision dimensions
-    private final int widthPixels;
-    private final int heightPixels;
+    private int widthPixels;
+    private int heightPixels;
 
     // Timer: counts down per frame while any player is captured
     private int breakTimer;
-    private final boolean hasTimer;
+    private boolean hasTimer;
 
     // Per-player capture state — ROM: $32/$33 (captured flag), $34/$35 (cooldown)
     private final boolean[] captured = new boolean[2];   // $32(a0), $33(a0)
@@ -172,11 +182,13 @@ public class HCZBreakableBarObjectInstance extends AbstractObjectInstance {
     // ===== Update =====
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         if (broken) return;
 
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        if (player == null) return;
+        AbstractPlayableSprite updatePlayer =
+                playerEntity instanceof AbstractPlayableSprite sprite ? sprite : null;
+        NativePlayerSlots players = nativePlayerSlots(updatePlayer);
+        if (players.p1() == null && players.p2() == null) return;
 
         // ROM: loc_1EDB0 / loc_1EF64 — timer countdown while ANY player is captured.
         // tst.w (a2) tests the word at $32, which is nonzero if $32 or $33 is set.
@@ -184,26 +196,51 @@ public class HCZBreakableBarObjectInstance extends AbstractObjectInstance {
         if (hasTimer && anyCaptured) {
             breakTimer--;
             if (breakTimer <= 0) {
-                performBreak(player);
+                performBreak(players);
                 return;
             }
         }
 
         // ROM: calls sub_1EDEC/sub_1EFA0 for Player 1 (d2=0), then Player 2 (d2=1)
-        processPlayerCapture(player, 0);
+        if (players.p1() != null) {
+            processPlayerCapture(players.p1(), 0);
+        }
 
         // Process sidekick (Player 2)
-        for (PlayableEntity sidekickEntity : services().sidekicks()) {
-            if (sidekickEntity instanceof AbstractPlayableSprite sidekick) {
-                processPlayerCapture(sidekick, 1);
-            }
+        if (players.p2() != null) {
+            processPlayerCapture(players.p2(), 1);
         }
 
         // ROM: tst.b $3A(a0) / bne loc_1EEEC — break flag from ABC release
         if (triggerBreak) {
-            performBreak(player);
+            performBreak(players);
             return;
         }
+    }
+
+    private NativePlayerSlots nativePlayerSlots(AbstractPlayableSprite updatePlayer) {
+        ObjectPlayerQuery query = services().playerQuery();
+        PlayableEntity main = query.mainPlayerOrNull();
+        if (!(main instanceof AbstractPlayableSprite) && updatePlayer != null) {
+            main = updatePlayer;
+        }
+
+        AbstractPlayableSprite p1 = (main instanceof AbstractPlayableSprite sprite) ? sprite : null;
+        AbstractPlayableSprite p2 = null;
+        for (PlayableEntity candidate : query.playersFor(ObjectPlayerParticipationPolicy.NATIVE_P1_P2)) {
+            if (candidate == main || !(candidate instanceof AbstractPlayableSprite sprite)) {
+                continue;
+            }
+            p2 = sprite;
+            break;
+        }
+        if (p2 == p1) {
+            p2 = null;
+        }
+        return new NativePlayerSlots(p1, p2);
+    }
+
+    private record NativePlayerSlots(AbstractPlayableSprite p1, AbstractPlayableSprite p2) {
     }
 
     /**
@@ -233,12 +270,19 @@ public class HCZBreakableBarObjectInstance extends AbstractObjectInstance {
             // ROM: tst.b 2(a2) / subq.b #1,2(a2) — cooldown active, skip
             if (releaseCooldown[pi] > 0) return;
 
-            // ROM: collision check — player within height range and X range
-            int dy = player.getCentreY() - y;
-            if (Math.abs(dy) > heightPixels) return;
+            int playerX = player.getCentreX();
+            int playerY = player.getCentreY();
 
-            int dx = player.getCentreX() - x;
-            if (dx < CAPTURE_CROSS_MIN || dx > CAPTURE_CROSS_MAX) return;
+            // ROM: player_y must be in [bar_y-height_pixels, bar_y+height_pixels).
+            int top = y - heightPixels;
+            int bottom = y + heightPixels;
+            if (playerY < top || playerY >= bottom) return;
+
+            int dx = playerX - x;
+            // ROM uses `cmp.w x_pos(a1),d0` / `bhs` at bar_x+$14, so the
+            // lower capture edge is strict: player_x must be greater than
+            // bar_x+$14, not equal to it.
+            if (dx <= CAPTURE_CROSS_MIN || dx > CAPTURE_CROSS_MAX) return;
 
             // ROM: cmpi.b #4,routine(a1) / bhs locret
             if (player.getDead() || player.isHurt()) return;
@@ -248,26 +292,29 @@ public class HCZBreakableBarObjectInstance extends AbstractObjectInstance {
             // Capture — ROM: clamp Y, set x = x_pos + $14, anim $11, object_control = 1
             capturePlayer(player, pi, HANG_ANIM_VERTICAL);
             clampPlayerVertical(player);
-            player.setCentreX((short) (x + PLAYER_HANG_OFFSET));
+            NativePositionOps.writeXPosPreserveSubpixel(player, x + PLAYER_HANG_OFFSET);
             // ROM: bclr #Status_Facing,status(a1) — face right
             player.setDirection(Direction.RIGHT);
         } else {
             // Player captured — ROM: allow up/down movement, clamp to extent
             int hangX = x + PLAYER_HANG_OFFSET;
-            if (player.isUpPressed()) {
+            if (RawControllerInput.isHeld(player, AbstractPlayableSprite.INPUT_UP)) {
                 player.setY((short) (player.getY() - 1));
             }
-            if (player.isDownPressed()) {
+            if (RawControllerInput.isHeld(player, AbstractPlayableSprite.INPUT_DOWN)) {
                 player.setY((short) (player.getY() + 1));
             }
-            player.setCentreX((short) hangX);
+            NativePositionOps.writeXPosPreserveSubpixel(player, hangX);
             clampPlayerVertical(player);
             player.setXSpeed((short) 0);
             player.setYSpeed((short) 0);
-            player.setGSpeed((short) 0);
 
             // ROM: andi.w #button_A|B|C,d1 / beq locret — ABC to release
-            if (player.isJumpPressed()) {
+            // ROM masks the LOW byte of (Ctrl_1).w, which is the *pressed* byte
+            // (the high byte is held, as the btst #button_up+8 tests above show).
+            // Release is therefore edge-triggered on a fresh A/B/C press; a jump
+            // button still held from before the grab must not release the player.
+            if (player.isRawControllerJumpJustPressed()) {
                 releasePlayer(player, pi);
                 // ROM: btst #6,subtype / bne locret — if non-destructive, don't break
                 if (!nonDestructiveRelease) {
@@ -283,12 +330,17 @@ public class HCZBreakableBarObjectInstance extends AbstractObjectInstance {
         if (!captured[pi]) {
             if (releaseCooldown[pi] > 0) return;
 
-            // ROM: collision check — player within width range and Y range
-            int dx = player.getCentreX() - x;
-            if (Math.abs(dx) > widthPixels) return;
+            int playerX = player.getCentreX();
+            int playerY = player.getCentreY();
 
-            int dy = player.getCentreY() - y;
-            if (dy < -CAPTURE_CROSS_MAX || dy > -(CAPTURE_CROSS_MIN - 4)) return;
+            // ROM: player_x must be in [bar_x-width_pixels, bar_x+width_pixels).
+            int left = x - widthPixels;
+            int right = x + widthPixels;
+            if (playerX < left || playerX >= right) return;
+
+            int dy = playerY - y;
+            // ROM: lower edge is strict (player_y > bar_y-$14), upper edge is inclusive.
+            if (dy <= HORIZONTAL_CAPTURE_Y_MIN_OFFSET || dy > HORIZONTAL_CAPTURE_Y_MAX_OFFSET) return;
 
             if (player.getDead() || player.isHurt()) return;
             if (player.isObjectControlled()) return;
@@ -296,22 +348,25 @@ public class HCZBreakableBarObjectInstance extends AbstractObjectInstance {
             // Capture — ROM: clamp X, set y = y_pos - $14, anim $14, object_control = 1
             capturePlayer(player, pi, HANG_ANIM_HORIZONTAL);
             clampPlayerHorizontal(player);
-            player.setCentreY((short) (y - PLAYER_HANG_OFFSET));
+            NativePositionOps.writeYPosPreserveSubpixel(player, y - PLAYER_HANG_OFFSET);
         } else {
             int hangY = y - PLAYER_HANG_OFFSET;
-            if (player.isLeftPressed()) {
-                player.setCentreX((short) (player.getCentreX() - 1));
+            if (RawControllerInput.isHeld(player, AbstractPlayableSprite.INPUT_LEFT)) {
+                NativePositionOps.addXPosPreserveSubpixel(player, -1);
             }
-            if (player.isRightPressed()) {
-                player.setCentreX((short) (player.getCentreX() + 1));
+            if (RawControllerInput.isHeld(player, AbstractPlayableSprite.INPUT_RIGHT)) {
+                NativePositionOps.addXPosPreserveSubpixel(player, 1);
             }
-            player.setCentreY((short) hangY);
+            NativePositionOps.writeYPosPreserveSubpixel(player, hangY);
             clampPlayerHorizontal(player);
             player.setXSpeed((short) 0);
             player.setYSpeed((short) 0);
-            player.setGSpeed((short) 0);
 
-            if (player.isJumpPressed()) {
+            // ROM masks the LOW byte of (Ctrl_1).w, which is the *pressed* byte
+            // (the high byte is held, as the btst #button_up+8 tests above show).
+            // Release is therefore edge-triggered on a fresh A/B/C press; a jump
+            // button still held from before the grab must not release the player.
+            if (player.isRawControllerJumpJustPressed()) {
                 releasePlayer(player, pi);
                 if (!nonDestructiveRelease) {
                     triggerBreak = true;
@@ -334,9 +389,8 @@ public class HCZBreakableBarObjectInstance extends AbstractObjectInstance {
         captured[pi] = true;
         player.setXSpeed((short) 0);
         player.setYSpeed((short) 0);
-        player.setGSpeed((short) 0);
         // ROM: move.b #1,object_control(a1)
-        player.setObjectControlled(true);
+        ObjectControlState.nativeBits0To6CpuAllowedMovementSuppressed().applyTo(player);
         // ROM: move.b #$11,anim(a1) (or #$14 for horizontal)
         player.setAnimationId(hangAnim);
         player.setForcedAnimationId(hangAnim);
@@ -355,7 +409,7 @@ public class HCZBreakableBarObjectInstance extends AbstractObjectInstance {
         captured[pi] = false;
         releaseCooldown[pi] = RELEASE_COOLDOWN;
         // ROM: andi.b #$FE,object_control(a1)
-        player.setObjectControlled(false);
+        ObjectControlState.none().applyTo(player);
         player.setForcedAnimationId(-1);
         // ROM: bclr d2,(_unkF7C7).w — re-enables water tunnel capture
         HCZWaterRushObjectInstance.HCZBreakableBarState.clearBit(pi);
@@ -377,31 +431,27 @@ public class HCZBreakableBarObjectInstance extends AbstractObjectInstance {
         int minX = x - halfExtent;
         int maxX = x + halfExtent;
         if (playerCX < minX) {
-            player.setCentreX((short) minX);
+            NativePositionOps.writeXPosPreserveSubpixel(player, minX);
         } else if (playerCX > maxX) {
-            player.setCentreX((short) maxX);
+            NativePositionOps.writeXPosPreserveSubpixel(player, maxX);
         }
     }
 
     // ===== Break / Destruction logic =====
 
-    private void performBreak(AbstractPlayableSprite player) {
+    private void performBreak(NativePlayerSlots players) {
         if (broken) return;
         broken = true;
 
         // ROM: loc_1EEEC / loc_1F09A — release both players if captured
-        if (captured[0]) {
-            player.setObjectControlled(false);
-            player.setForcedAnimationId(-1);
+        if (captured[0] && players.p1() != null) {
+            ObjectControlState.none().applyTo(players.p1());
+            players.p1().setForcedAnimationId(-1);
         }
         // Release P2 (sidekick)
-        if (captured[1]) {
-            for (PlayableEntity sidekickEntity : services().sidekicks()) {
-                if (sidekickEntity instanceof AbstractPlayableSprite sidekick) {
-                    sidekick.setObjectControlled(false);
-                    sidekick.setForcedAnimationId(-1);
-                }
-            }
+        if (captured[1] && players.p2() != null) {
+            ObjectControlState.none().applyTo(players.p2());
+            players.p2().setForcedAnimationId(-1);
         }
         captured[0] = false;
         captured[1] = false;
@@ -478,9 +528,7 @@ public class HCZBreakableBarObjectInstance extends AbstractObjectInstance {
     private void markRemembered() {
         try {
             var om = services().objectManager();
-            if (om != null) {
-                om.markRemembered(spawn);
-            }
+            ObjectLifetimeOps.markSpawnRemembered(om, spawn);
         } catch (Exception e) {
             // Safe fallback
         }
@@ -563,24 +611,34 @@ public class HCZBreakableBarObjectInstance extends AbstractObjectInstance {
      * ROM: sub_1F188 spawns children; loc_1EF3E handles debris update
      * (frame delay countdown, MoveSprite2 + gravity of 8/frame).
      */
-    public static class BreakableBarDebris extends AbstractObjectInstance {
+    public static class BreakableBarDebris extends AbstractObjectInstance
+            implements SpawnTrailingZeroIntsRewindRecreatable {
 
         private int currentX;
         private int currentY;
-        private final int debrisFrame;
+        private int debrisFrame;
         private int frameDelay;
         private final SubpixelMotion.State motionState;
 
         public BreakableBarDebris(int spawnX, int spawnY, int debrisFrame,
                                   int xVel, int yVel, int frameDelay) {
             super(new ObjectSpawn(spawnX, spawnY, Sonic3kObjectIds.HCZ_BREAKABLE_BAR,
-                    0, 0, false, 0), "BreakableBarDebris");
+                    debrisFrame, 0, false, 0), "BreakableBarDebris");
             this.currentX = spawnX;
             this.currentY = spawnY;
             this.debrisFrame = debrisFrame;
             this.frameDelay = frameDelay;
             this.motionState = new SubpixelMotion.State(
                     spawnX, spawnY, 0, 0, xVel, yVel);
+        }
+
+        private BreakableBarDebris(ObjectSpawn spawn, int ignored) {
+            super(spawn, "BreakableBarDebris");
+            this.currentX = spawn.x();
+            this.currentY = spawn.y();
+            this.debrisFrame = spawn.subtype() & 0xFF;
+            this.frameDelay = 0;
+            this.motionState = new SubpixelMotion.State(spawn.x(), spawn.y(), 0, 0, 0, 0);
         }
 
         @Override
@@ -590,7 +648,7 @@ public class HCZBreakableBarObjectInstance extends AbstractObjectInstance {
         public int getY() { return currentY; }
 
         @Override
-        public void update(int frameCounter, PlayableEntity playerEntity) {
+        public void update(int vIntRunCount, PlayableEntity playerEntity) {
             // ROM: frame delay countdown before movement starts
             if (frameDelay > 0) {
                 frameDelay--;

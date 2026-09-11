@@ -2,21 +2,19 @@ package com.openggf.tests;
 
 import com.openggf.game.sonic3k.constants.Sonic3kConstants;
 import com.openggf.level.*;
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import com.openggf.configuration.SonicConfiguration;
 import com.openggf.configuration.SonicConfigurationService;
 import com.openggf.data.Game;
 import com.openggf.data.Rom;
 import com.openggf.game.sonic3k.Sonic3k;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
 
-import org.junit.After;
+import org.junit.jupiter.api.AfterEach;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Diagnostic test: verifies that the AIZ1 intro FG terrain data is valid
@@ -24,24 +22,20 @@ import static org.junit.Assert.*;
  */
 @RequiresRom(SonicGame.SONIC_3K)
 public class TestAizIntroFgTerrain {
-
-    @Rule
-    public RequiresRomRule romRule = new RequiresRomRule();
-
     private Game game;
     private Object oldSkipIntros;
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         SonicConfigurationService config = SonicConfigurationService.getInstance();
         oldSkipIntros = config.getConfigValue(SonicConfiguration.S3K_SKIP_INTROS);
-        // Do NOT skip intros — we want the intro path
+        // Do NOT skip intros Ã¢â‚¬â€ we want the intro path
         config.setConfigValue(SonicConfiguration.S3K_SKIP_INTROS, false);
-        Rom rom = romRule.rom();
+        Rom rom = com.openggf.tests.TestEnvironment.currentRom();
         game = new Sonic3k(rom);
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         SonicConfigurationService.getInstance().setConfigValue(
                 SonicConfiguration.S3K_SKIP_INTROS,
@@ -53,11 +47,11 @@ public class TestAizIntroFgTerrain {
         // Load AIZ1 with intro mode
         Level level = game.loadLevel(0xC0); // zone 0, act 0
 
-        assertNotNull("Level should load", level);
-        assertNotNull("Map should exist", level.getMap());
-        assertTrue("Should have patterns", level.getPatternCount() > 0);
-        assertTrue("Should have chunks", level.getChunkCount() > 0);
-        assertTrue("Should have blocks", level.getBlockCount() > 0);
+        assertNotNull(level, "Level should load");
+        assertNotNull(level.getMap(), "Map should exist");
+        assertTrue(level.getPatternCount() > 0, "Should have patterns");
+        assertTrue(level.getChunkCount() > 0, "Should have chunks");
+        assertTrue(level.getBlockCount() > 0, "Should have blocks");
 
         System.out.println("=== AIZ1 Intro Level Data ===");
         System.out.println("Patterns: " + level.getPatternCount());
@@ -210,7 +204,7 @@ public class TestAizIntroFgTerrain {
 
         // Also check what the intro-specific LevelSizes entry has
         System.out.println("\n=== LevelSizes comparison ===");
-        Rom rom = romRule.rom();
+        Rom rom = com.openggf.tests.TestEnvironment.currentRom();
         int levelSizesAddr = Sonic3kConstants.LEVEL_SIZES_ADDR;
         int entrySize = Sonic3kConstants.LEVEL_SIZES_ENTRY_SIZE;
         if (levelSizesAddr > 0) {
@@ -236,13 +230,12 @@ public class TestAizIntroFgTerrain {
 
         // Assertions
         int totalCells = level.getMap().getHeight() * level.getMap().getWidth();
-        assertTrue("Level should have non-zero FG blocks somewhere", totalNonZero > 0);
-        assertTrue("At least 5% of FG map cells should be non-zero (got " + totalNonZero
-                        + "/" + totalCells + ")",
-                totalNonZero > totalCells / 20);
+        assertTrue(totalNonZero > 0, "Level should have non-zero FG blocks somewhere");
+        assertTrue(totalNonZero > totalCells / 20, "At least 5% of FG map cells should be non-zero (got " + totalNonZero
+                        + "/" + totalCells + ")");
         // Note: pattern pixel data may be empty in headless tests (PLC art not loaded),
         // so we only check that patterns were examined, not that they contain pixels.
-        assertTrue("Should have checked patterns around intro start", checkedPatterns > 0);
+        assertTrue(checkedPatterns > 0, "Should have checked patterns around intro start");
     }
 
     private boolean hasNonZeroPixels(Pattern pattern) {
@@ -257,3 +250,5 @@ public class TestAizIntroFgTerrain {
         return false;
     }
 }
+
+

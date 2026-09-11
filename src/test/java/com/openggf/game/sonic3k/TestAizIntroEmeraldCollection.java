@@ -2,11 +2,10 @@ package com.openggf.game.sonic3k;
 
 import com.openggf.game.sonic3k.objects.AizEmeraldScatterInstance;
 import com.openggf.game.sonic3k.objects.CutsceneKnucklesAiz1Instance;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import com.openggf.configuration.SonicConfiguration;
 import com.openggf.configuration.SonicConfigurationService;
 import com.openggf.game.GameServices;
@@ -16,16 +15,15 @@ import com.openggf.level.objects.ObjectManager;
 import com.openggf.tests.HeadlessTestFixture;
 import com.openggf.tests.SharedLevel;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
 
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Integration test: Knuckles must collect all 7 scattered emeralds during
@@ -43,15 +41,11 @@ import static org.junit.Assert.assertTrue;
  * spawned 16px too far left. The fix adds scrollSpeed to the spawn X in
  * routine26Explode to compensate for this ordering difference.
  *
- * <p>Level data is loaded once via {@code @BeforeClass}; sprite, camera, and
+ * <p>Level data is loaded once via {@code @BeforeAll}; sprite, camera, and
  * game state are reset per test via {@link HeadlessTestFixture}.
  */
 @RequiresRom(SonicGame.SONIC_3K)
 public class TestAizIntroEmeraldCollection {
-
-    @ClassRule
-    public static RequiresRomRule romRule = new RequiresRomRule();
-
     // AIZ1 start position: centre (64, 1056) -> top-left (54, 1037)
     // (Sonic width=20, height=38; top-left = centre - half-dimension)
     private static final short START_X = (short) 54;
@@ -61,7 +55,7 @@ public class TestAizIntroEmeraldCollection {
     private static Object oldMainCharacter;
     private static SharedLevel sharedLevel;
 
-    @BeforeClass
+    @BeforeAll
     public static void loadLevel() throws Exception {
         SonicConfigurationService config = SonicConfigurationService.getInstance();
         oldSkipIntros = config.getConfigValue(SonicConfiguration.S3K_SKIP_INTROS);
@@ -72,7 +66,7 @@ public class TestAizIntroEmeraldCollection {
         sharedLevel = SharedLevel.load(SonicGame.SONIC_3K, 0, 0);
     }
 
-    @AfterClass
+    @AfterAll
     public static void cleanup() {
         SonicConfigurationService config = SonicConfigurationService.getInstance();
         config.setConfigValue(SonicConfiguration.S3K_SKIP_INTROS,
@@ -84,7 +78,7 @@ public class TestAizIntroEmeraldCollection {
 
     private HeadlessTestFixture fixture;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         fixture = HeadlessTestFixture.builder()
                 .withSharedLevel(sharedLevel)
@@ -108,15 +102,15 @@ public class TestAizIntroEmeraldCollection {
                 break;
             }
         }
-        assertTrue("Emerald scatter objects should spawn during AIZ intro", emeraldsSpawned);
+        assertTrue(emeraldsSpawned, "Emerald scatter objects should spawn during AIZ intro");
 
         int totalEmeralds = countEmeralds(objectManager);
         System.out.println("Emeralds spawned: " + totalEmeralds);
-        assertEquals("All 7 emeralds should be spawned", 7, totalEmeralds);
+        assertEquals(7, totalEmeralds, "All 7 emeralds should be spawned");
 
         // Phase 2: Find Knuckles.
         CutsceneKnucklesAiz1Instance knuckles = findKnuckles(objectManager);
-        assertNotNull("Knuckles cutscene object should exist when emeralds are present", knuckles);
+        assertNotNull(knuckles, "Knuckles cutscene object should exist when emeralds are present");
         System.out.println("Knuckles found at routine " + knuckles.getRoutine()
                 + " pos=(" + knuckles.getX() + ", " + knuckles.getY() + ")");
 
@@ -126,10 +120,8 @@ public class TestAizIntroEmeraldCollection {
         while (guard-- > 0 && knuckles.getRoutine() < 10) {
             fixture.stepFrame(false, false, false, false, false);
         }
-        assertTrue("Knuckles should reach routine 10 (laugh) after pacing",
-                knuckles.getRoutine() >= 10);
-        assertFalse("Knuckles should not be destroyed during laugh phase",
-                knuckles.isDestroyed());
+        assertTrue(knuckles.getRoutine() >= 10, "Knuckles should reach routine 10 (laugh) after pacing");
+        assertFalse(knuckles.isDestroyed(), "Knuckles should not be destroyed during laugh phase");
 
         // Phase 4: Check emerald collection DURING routine 10 (laugh).
         // Pacing is complete but Knuckles hasn't exited yet.
@@ -155,8 +147,8 @@ public class TestAizIntroEmeraldCollection {
             }
         }
 
-        assertEquals("All 7 emeralds should be collected by Knuckles before he laughs "
-                + "(uncollected: " + uncollected.size() + ")", 0, uncollected.size());
+        assertEquals(0, uncollected.size(), "All 7 emeralds should be collected by Knuckles before he laughs "
+                + "(uncollected: " + uncollected.size() + ")");
     }
 
     private static int countEmeralds(ObjectManager objectManager) {
@@ -178,3 +170,5 @@ public class TestAizIntroEmeraldCollection {
         return null;
     }
 }
+
+

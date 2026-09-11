@@ -63,7 +63,14 @@ public class Sonic3kSpecialStageCollisionQueue {
         int slot = findEmptySlot();
         if (slot < 0) return false;
         types[slot] = RESPONSE_RING;
-        timers[slot] = RING_ANIM_TIMER;
+        // ROM never writes the timer byte at creation (Find_SStageCollisionResponseSlot,
+        // sonic3k.asm:12742-12753, only sets type + gridIndex pointer at 12178-12179);
+        // a fresh slot inherits 0 from the clr.l at clearSlot()/entry release. Since
+        // Process_Sprites (creates entries) runs before Touch_SSSprites (decrements
+        // timers) within the same frame (sonic3k.asm:10744-10746), the timer's first
+        // decrement (0 -> -1, subq.b/bpl.s at 12785-12786) fires the animation step in
+        // the SAME frame the entry is created, not RING_ANIM_TIMER frames later.
+        timers[slot] = 0;
         frames[slot] = 0;
         gridIndices[slot] = gridIndex;
         return true;
@@ -89,7 +96,15 @@ public class Sonic3kSpecialStageCollisionQueue {
         int slot = findEmptySlot();
         if (slot < 0) return false;
         types[slot] = RESPONSE_BLUE_SPHERE;
-        timers[slot] = BLUE_SPHERE_ANIM_TIMER;
+        // ROM never writes the timer byte at creation (Find_SStageCollisionResponseSlot,
+        // sonic3k.asm:12742-12753, only sets type + gridIndex pointer at 12136-12137);
+        // a fresh slot inherits 0 from the clr.l at clearSlot()/entry release. Since
+        // Process_Sprites (creates entries) runs before Touch_SSSprites (decrements
+        // timers) within the same frame (sonic3k.asm:10744-10746), the timer's first
+        // decrement (0 -> -1, subq.b/bpl.s at 12807-12808) fires Phase 1 (sphere
+        // collection, Decrement_BlueSphere_Count) in the SAME frame the entry is
+        // created, not BLUE_SPHERE_ANIM_TIMER frames later.
+        timers[slot] = 0;
         frames[slot] = 0;
         gridIndices[slot] = gridIndex;
         return true;
@@ -213,5 +228,17 @@ public class Sonic3kSpecialStageCollisionQueue {
         timers[slot] = 0;
         frames[slot] = 0;
         gridIndices[slot] = 0;
+    }
+
+    Sonic3kSpecialStageSnapshot.CollisionQueueSnapshot captureRewindSnapshot() {
+        return new Sonic3kSpecialStageSnapshot.CollisionQueueSnapshot(
+                types, timers, frames, gridIndices);
+    }
+
+    void restoreRewindSnapshot(Sonic3kSpecialStageSnapshot.CollisionQueueSnapshot snapshot) {
+        Sonic3kSpecialStageSnapshot.copyInto(snapshot.types(), types);
+        Sonic3kSpecialStageSnapshot.copyInto(snapshot.timers(), timers);
+        Sonic3kSpecialStageSnapshot.copyInto(snapshot.frames(), frames);
+        Sonic3kSpecialStageSnapshot.copyInto(snapshot.gridIndices(), gridIndices);
     }
 }

@@ -14,8 +14,8 @@ public interface CoordFlagContext {
     // Data / config access
     // -----------------------------------------------------------------------
 
-    /** Raw SMPS data bytes. */
-    byte[] getData();
+    /** Allocation-free indexed access to the immutable SMPS program. */
+    SmpsProgramView programView();
 
     /** The parsed SMPS header data. */
     AbstractSmpsData getSmpsData();
@@ -35,6 +35,42 @@ public interface CoordFlagContext {
 
     /** Stop the currently playing note on the track (key off / mute). */
     void stopNote(SmpsSequencer.Track t);
+
+    /**
+     * Emits the ROM driver's complete PSG stop transaction. Unlike an
+     * ordinary track write, reaching this command owns the physical bus
+     * operation even while another track retains logical channel ownership.
+     */
+    void stopPsgNoteWithDriverSilence(SmpsSequencer.Track t);
+
+    /**
+     * Hands one channel back to music from inside the track-end flag, which is
+     * where S3K's {@code cfStopTrack} does it: after keying the SFX track off
+     * it clears the overridden music track's bit and sends that track's FM
+     * instrument, all before the music update of the same service
+     * (skdisasm Sound/Z80 Sound Driver.asm:3059-3086). Routing it through the
+     * post-service sweep instead puts the restore after the music's own
+     * writes.
+     */
+    /**
+     * Asks for the music beneath an override to come back, as
+     * {@code cfFadeInToPrevious} does by storing {@code zFadeToPrevFlag} for
+     * the main loop to act on (skdisasm Sound/Z80 Sound Driver.asm:3079-3082,
+     * and the flag's own read at :659-666).
+     *
+     * <p>A handler must reach the restore through here rather than through the
+     * global {@code AudioManager}. A coordination flag runs inside the
+     * sequencer's service, which for the presentation path runs inside an
+     * active presentation command batch, and that batch refuses a command
+     * submitted into it. The sequencer's injected sink is the one wired to
+     * defer the restore to the batch boundary; the singleton's is not, and a
+     * flag that calls it loses the restore to a swallowed exception.
+     */
+    default void restorePreviousMusic() {
+    }
+
+    default void releaseChannelToMusic(SmpsSequencer.Track endingTrack) {
+    }
 
     /** Refresh the track's volume (re-apply TL for FM, attenuation for PSG). */
     void refreshVolume(SmpsSequencer.Track t);

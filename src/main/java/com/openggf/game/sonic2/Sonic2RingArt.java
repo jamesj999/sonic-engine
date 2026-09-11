@@ -20,7 +20,8 @@ public class Sonic2RingArt {
     private static final int RING_MAPPING_BASE_ADDR = 0x12382;
     private static final int RING_PALETTE_INDEX = 1;
     private static final int RING_FRAME_DELAY = 8;
-    private static final int SPARKLE_FRAME_DELAY = 8;
+    // Ani_Ring delay byte is 5, so AnimateSprite displays each sparkle frame for 6 VBlanks.
+    private static final int SPARKLE_FRAME_DELAY = 6;
     private static final int RING_ANIMATION_FRAME_COUNT = 4; // Excludes pickup sparkle frames.
 
     private final Rom rom;

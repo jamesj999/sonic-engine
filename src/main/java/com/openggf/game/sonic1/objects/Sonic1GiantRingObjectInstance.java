@@ -6,8 +6,10 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
+import com.openggf.level.objects.ObjectLifetimeOps;
 import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.objects.TouchCategory;
 import com.openggf.level.objects.TouchResponseListener;
 import com.openggf.level.objects.TouchResponseProvider;
@@ -36,7 +38,7 @@ import java.util.logging.Logger;
  * Collision type $52: SPECIAL category (0x40), size index 0x12 (8x16 from center).
  */
 public class Sonic1GiantRingObjectInstance extends AbstractObjectInstance
-        implements TouchResponseProvider, TouchResponseListener {
+        implements TouchResponseProvider, TouchResponseListener, SpawnRewindRecreatable {
 
     private static final Logger LOGGER = Logger.getLogger(Sonic1GiantRingObjectInstance.class.getName());
 
@@ -62,6 +64,7 @@ public class Sonic1GiantRingObjectInstance extends AbstractObjectInstance
     private enum State {
         INIT,       // Routine 0: checking prerequisites
         ACTIVE,     // Routine 2: animating with collision
+        COLLECT_PENDING, // ReactToItem advanced obRoutine; own slot has not run yet
         COLLECTED,  // Routine 4→2: flash spawned, collision cleared
         DELETED     // Routine 6: pending removal
     }
@@ -78,10 +81,14 @@ public class Sonic1GiantRingObjectInstance extends AbstractObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         switch (state) {
             case INIT -> updateInit(player);
+            case COLLECT_PENDING -> {
+                collect(player);
+                updateAnimate();
+            }
             case ACTIVE, COLLECTED -> updateAnimate();
             case DELETED -> setDestroyed(true);
         }
@@ -168,7 +175,11 @@ public class Sonic1GiantRingObjectInstance extends AbstractObjectInstance
             return;
         }
 
-        collect(player);
+        // ReactToItem only adds 2 to obRoutine. GRing_Collect executes later,
+        // when ExecuteObjects reaches the giant ring's own SST slot. Deferring
+        // the body preserves FindFreeObj ordering: a flash allocated into an
+        // already-visited lower slot begins on the following frame.
+        state = State.COLLECT_PENDING;
     }
 
     /**
@@ -186,21 +197,16 @@ public class Sonic1GiantRingObjectInstance extends AbstractObjectInstance
 
         // Mark spawn as remembered to prevent respawning
         ObjectManager objectManager = services().objectManager();
-        if (objectManager != null) {
-            objectManager.markRemembered(spawn);
-        }
+        ObjectLifetimeOps.markSpawnRemembered(objectManager, spawn);
 
         // Spawn Ring Flash child object
         if (objectManager != null) {
             // ROM: Flash inherits position, gets parent pointer in objoff_3C
-            boolean flashHFlip = false;
             // ROM: cmp.w obX(a0),d0 / blo.s GRing_PlaySnd / bset #0,obRender(a1)
             // If Sonic is to the right of the ring, flip the flash
-            if (player.getCentreX() >= spawn.x()) {
-                flashHFlip = true;
-            }
-            objectManager.addDynamicObject(
-                    new Sonic1RingFlashObjectInstance(this, spawn.x(), spawn.y(), flashHFlip));
+            final boolean flashHFlip = (player.getCentreX() >= spawn.x());
+            spawnFreeChild(() -> new Sonic1RingFlashObjectInstance(
+                    this, spawn.x(), spawn.y(), flashHFlip));
         }
 
         // Play sound: move.w #sfx_GiantRing,d0 / jsr (QueueSound2).l
