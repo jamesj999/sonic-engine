@@ -47,7 +47,11 @@ ROM-backed sign-off.
 Release policy checks exclude history already present on the target branch and
 apply the established trailer and resource-policy cutovers to older incoming
 history. All later incoming commits remain checked, including bad content
-introduced and subsequently removed. Delivered-tree symlink checks still run.
+introduced and subsequently removed. Delivered-tree symlink checks still run. The maintainer approved the fixed 0.6
+trailer baseline `45cecf566825aa50612f5e687b2682fc9681aed1` on September 11,
+2026, to retain existing published history with historical trailer debt.
+Resource validation keeps its independent July 29 cutoff; this trailer
+exception does not exclude later content from resource checks.
 
 ## Rewind Tests And Benchmark
 

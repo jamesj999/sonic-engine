@@ -10,8 +10,8 @@ param(
 $ErrorActionPreference = "Stop"
 $script:GithubFileSizeLimitBytes = 100000000
 $script:TraceCompressionThresholdBytes = 1048576
-# Reachable counterpart of the original 677447024 cutover (identical tree).
-$script:ReleaseTrailerCutoverBase = "b5c56bb5687a6ba5dcbb000fc2c9cd1544395884"
+# Maintainer-approved 0.6 trailer-debt baseline; all later incoming commits are checked.
+$script:ReleaseTrailerCutoverBase = "45cecf566825aa50612f5e687b2682fc9681aed1"
 $script:ReleaseRangeBase = ""
 $script:ResourcePolicyCutover = "ccdd33edf4f9cd4a7937791f1d4c2f37cbeeb5e0"
 $script:RomLikeDenylistExtensions = @(".gen", ".smd", ".bin", ".sms", ".gg", ".32x")
@@ -1035,7 +1035,13 @@ function Validate-CiPr([string]$BaseSha, [string]$HeadSha, [string]$BaseRef, [st
 
 function Validate-CiCommitRange([string]$EffectiveBaseSha, [string]$HeadSha) {
     $commits = @(Get-CommitsInRange $EffectiveBaseSha $HeadSha)
-    Validate-ContentCommitList $commits $HeadSha
+    # Trailer debt never changes the independent resource-policy boundary.
+    if ($script:ReleaseRangeBase) {
+        $contentCommits = @(Get-CommitsInRange $script:ReleaseRangeBase $HeadSha)
+        Validate-ContentCommitList $contentCommits $HeadSha
+    } else {
+        Validate-ContentCommitList $commits $HeadSha
+    }
 
     foreach ($commit in $commits) {
         $parentLine = Invoke-GitText @("rev-list", "--parents", "-n", "1", $commit)

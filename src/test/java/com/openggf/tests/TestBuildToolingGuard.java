@@ -1868,7 +1868,7 @@ class TestBuildToolingGuard {
         Map<String, String> expectedConstants = Map.ofEntries(
                 Map.entry("GITHUB_FILE_SIZE_LIMIT_BYTES", "100000000"),
                 Map.entry("TRACE_COMPRESSION_THRESHOLD_BYTES", "1048576"),
-                Map.entry("RELEASE_TRAILER_CUTOVER_BASE", "b5c56bb5687a6ba5dcbb000fc2c9cd1544395884"),
+                Map.entry("RELEASE_TRAILER_CUTOVER_BASE", "45cecf566825aa50612f5e687b2682fc9681aed1"),
                 Map.entry("RESOURCE_POLICY_CUTOVER", RESOURCE_POLICY_CUTOVER),
                 Map.entry("EMPTY_TREE_OID", "4b825dc642cb6eb9a060e54bf8d69288fbee4904"),
                 Map.entry("ALL_ZERO_OID", ALL_ZERO_OID),
@@ -3156,6 +3156,39 @@ class TestBuildToolingGuard {
     }
 
     @Test
+    void trailerDebtBaselineMustNotHideLaterResourceViolations(
+            @TempDir Path temporaryDirectory) throws Exception {
+        Path repository = newRepository(temporaryDirectory, "trailer-debt-resource-check");
+        createInitialCommit(repository);
+        String resourceCutover = gitOutput(repository, "rev-parse", "HEAD").trim();
+        String trace = "src/test/resources/traces/policy-debt/physics.csv";
+        writeAndStage(repository, trace, "x".repeat(1_048_576));
+        commit(repository, "historical trailer debt with a resource violation");
+        String trailerCutover = gitOutput(repository, "rev-parse", "HEAD").trim();
+        deleteAndStage(repository, trace);
+        commit(repository, """
+                chore: remove trace
+
+                Changelog: n/a
+                Guide: n/a
+                Known-Discrepancies: n/a
+                S3K-Known-Discrepancies: n/a
+                Agent-Docs: n/a
+                Configuration-Docs: n/a
+                Skills: n/a
+                """);
+        String candidate = gitOutput(repository, "rev-parse", "HEAD").trim();
+        Path policy = temporaryDirectory.resolve("trailer-debt-policy.sh");
+        Files.writeString(policy, Files.readString(POLICY_SCRIPT)
+                .replace("RELEASE_TRAILER_CUTOVER_BASE=45cecf566825aa50612f5e687b2682fc9681aed1",
+                        "RELEASE_TRAILER_CUTOVER_BASE=" + trailerCutover)
+                .replace("RESOURCE_POLICY_CUTOVER=" + RESOURCE_POLICY_CUTOVER,
+                        "RESOURCE_POLICY_CUTOVER=" + resourceCutover));
+        assertPolicyRejects(run(repository, List.of("sh", policy.toString(), "ci-push",
+                resourceCutover, candidate, "master"), null), "uncompressed trace payload");
+    }
+
+    @Test
     void resourceCutoverMustNotDiscardCommitsStillSubjectToTrailerChecks(
             @TempDir Path temporaryDirectory) throws Exception {
         Path repository = newRepository(temporaryDirectory, "independent-cutovers");
@@ -3179,7 +3212,7 @@ class TestBuildToolingGuard {
         String candidate = gitOutput(repository, "rev-parse", "HEAD").trim();
         Path policy = temporaryDirectory.resolve("cutover-policy.sh");
         Files.writeString(policy, Files.readString(POLICY_SCRIPT)
-                .replace("RELEASE_TRAILER_CUTOVER_BASE=b5c56bb5687a6ba5dcbb000fc2c9cd1544395884",
+                .replace("RELEASE_TRAILER_CUTOVER_BASE=45cecf566825aa50612f5e687b2682fc9681aed1",
                         "RELEASE_TRAILER_CUTOVER_BASE=" + trailerCutover)
                 .replace("RESOURCE_POLICY_CUTOVER=" + RESOURCE_POLICY_CUTOVER,
                         "RESOURCE_POLICY_CUTOVER=" + resourceCutover));

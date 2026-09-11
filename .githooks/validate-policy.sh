@@ -4,8 +4,8 @@ set -eu
 
 GITHUB_FILE_SIZE_LIMIT_BYTES=100000000
 TRACE_COMPRESSION_THRESHOLD_BYTES=1048576
-# Reachable counterpart of the original 677447024 cutover (identical tree).
-RELEASE_TRAILER_CUTOVER_BASE=b5c56bb5687a6ba5dcbb000fc2c9cd1544395884
+# Maintainer-approved 0.6 trailer-debt baseline; all later incoming commits are checked.
+RELEASE_TRAILER_CUTOVER_BASE=45cecf566825aa50612f5e687b2682fc9681aed1
 RESOURCE_POLICY_CUTOVER=ccdd33edf4f9cd4a7937791f1d4c2f37cbeeb5e0
 RELEASE_RANGE_BASE=
 ROM_LIKE_DENYLIST_EXTENSIONS=".gen .smd .bin .sms .gg .32x"
@@ -1089,7 +1089,13 @@ validate_ci_commit_range() {
     head_sha=$2
 
     commits=$(commits_in_range "$effective_base" "$head_sha")
-    validate_content_commit_list "$commits" "$head_sha"
+    # Trailer debt never changes the independent resource-policy boundary.
+    if [ -n "$RELEASE_RANGE_BASE" ]; then
+        release_content_commits=$(commits_in_range "$RELEASE_RANGE_BASE" "$head_sha")
+        validate_content_commit_list "$release_content_commits" "$head_sha"
+    else
+        validate_content_commit_list "$commits" "$head_sha"
+    fi
 
     for commit in $commits; do
         parent_line=$(git rev-list --parents -n 1 "$commit")
