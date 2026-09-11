@@ -12,6 +12,7 @@ $script:GithubFileSizeLimitBytes = 100000000
 $script:TraceCompressionThresholdBytes = 1048576
 # Maintainer-approved 0.6 trailer-debt baseline; all later incoming commits are checked.
 $script:ReleaseTrailerCutoverBase = "45cecf566825aa50612f5e687b2682fc9681aed1"
+$script:ReleaseResourceBaseline = "45cecf566825aa50612f5e687b2682fc9681aed1"
 $script:ReleaseRangeBase = ""
 $script:ResourcePolicyCutover = "ccdd33edf4f9cd4a7937791f1d4c2f37cbeeb5e0"
 $script:RomLikeDenylistExtensions = @(".gen", ".smd", ".bin", ".sms", ".gg", ".32x")
@@ -966,10 +967,19 @@ function Validate-TipTreeLinks([string]$Tip) {
 }
 
 function Validate-ContentCommitList([string[]]$Commits, [string]$Tip) {
-    # Match the new-ref cutover when release merges carry pre-policy history.
+    # Audit the reviewed snapshot once, keeping per-commit checks on later work.
+    $contentCutover = $script:ResourcePolicyCutover
+    if (Test-GitSuccess @("merge-base", "--is-ancestor", $script:ReleaseResourceBaseline, $Tip)) {
+        $contentCutover = $script:ReleaseResourceBaseline
+        $python = Get-Command python3 -ErrorAction SilentlyContinue
+        if (-not $python) { $python = Get-Command python -ErrorAction SilentlyContinue }
+        if (-not $python) { Fail "Python 3 is required for the release snapshot audit." }
+        & $python.Source (Join-Path $PSScriptRoot "audit-release-tree.py") $Tip
+        if ($LASTEXITCODE -ne 0) { Fail "release snapshot audit rejected $Tip." }
+    }
     $legacyCommits = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-    if (Test-GitSuccess @("merge-base", "--is-ancestor", $script:ResourcePolicyCutover, $Tip)) {
-        foreach ($legacy in (Invoke-GitLines @("rev-list", $script:ResourcePolicyCutover))) {
+    if (Test-GitSuccess @("merge-base", "--is-ancestor", $contentCutover, $Tip)) {
+        foreach ($legacy in (Invoke-GitLines @("rev-list", $contentCutover))) {
             [void]$legacyCommits.Add($legacy)
         }
     }
@@ -1168,8 +1178,7 @@ function Get-EffectiveBaseForCiPr([string]$BaseSha, [string]$HeadSha, [string]$B
     if (-not (Test-GitSuccess @("merge-base", "--is-ancestor", $script:ReleaseTrailerCutoverBase, $HeadSha))) {
         Fail "release trailer cutover baseline $script:ReleaseTrailerCutoverBase is not reachable from PR head $HeadSha."
     }
-    $baseCommon = Invoke-GitText @("merge-base", $BaseSha, $HeadSha)
-    if (Test-GitSuccess @("merge-base", "--is-ancestor", $baseCommon, $script:ReleaseTrailerCutoverBase)) {
+    if (-not (Test-GitSuccess @("merge-base", "--is-ancestor", $script:ReleaseTrailerCutoverBase, $BaseSha))) {
         return $script:ReleaseTrailerCutoverBase
     }
     return $BaseSha

@@ -44,14 +44,19 @@ cloud builds. The no-regression policy in
 [release 6 trace scope](../../status/trace-scope-release-6.md) still applies to
 ROM-backed sign-off.
 
-Release policy checks exclude history already present on the target branch and
-apply the established trailer and resource-policy cutovers to older incoming
-history. All later incoming commits remain checked, including bad content
-introduced and subsequently removed. Delivered-tree symlink checks still run. The maintainer approved the fixed 0.6
-trailer baseline `45cecf566825aa50612f5e687b2682fc9681aed1` on September 11,
-2026, to retain existing published history with historical trailer debt.
-Resource validation keeps its independent July 29 cutoff; this trailer
-exception does not exclude later content from resource checks.
+Release checks use the fixed reviewed `develop` snapshot
+`45cecf566825aa50612f5e687b2682fc9681aed1` as the 0.6 history boundary, as
+approved by the maintainer on September 11, 2026. They audit every entry of
+the final Git tree once for forbidden assets, oversized or uncompressed
+payloads, scratch artifacts, and unsafe symlinks. Python 3 runs this audit.
+All newer incoming commits retain their normal content checks, including
+new local paths and violations introduced and subsequently removed. New
+release commits also retain their documentation-trailer checks. The original
+resource cutover remains the fallback for histories before this snapshot.
+
+The baseline is an immutable commit, not a moving branch name. Existing
+trailer debt is preserved without rewriting published history. Future
+baseline changes require explicit review; an audit failure is never ignored.
 
 ## Rewind Tests And Benchmark
 
