@@ -1537,6 +1537,8 @@ execution order, SST slot ownership, and routines that read their state once per
   art and writes the same words. The line uses palette line 0, which the ROM clears at setup and
   only fills when `Obj0E_Sonic_LoadPalette` copies Sonic's palette in at frame 128, so the text
   appears with Sonic rather than fading in with the emblem.
+- **Title screen sparkles:** stars disappear between appearances and animate with the ROM's
+  cadence, including the shorter first pause and the final animation transition before each gap.
 - **Title card:** the wait loop exits on the ROM's own two-part test, the zone-name piece plus the
   art queue, instead of an invented sixty-frame minimum, and the `Obj34_WaitAndGoAway` tail is
   shared between the omitted and displayed presentation paths.
