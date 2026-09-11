@@ -445,6 +445,8 @@ outside the primary release slice or are still under active development.
 
 #### Release documentation
 
+- [Publishing a GitHub release](docs/project/release-publishing.md) — pushes to
+  `master` automatically publish after validation and builds succeed.
 - [0.6 changelog](CHANGELOG.0.6.md)
 - [Release Summary for website and GitHub](docs/changelog/v0.6-release-summary.md)
 - [Detailed development ledger](docs/changelog/v0.6-prerelease-detailed.md)
