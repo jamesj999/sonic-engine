@@ -676,6 +676,12 @@ public class Sonic2ObjectArtProvider implements ObjectArtProvider,
     public void registerLevelTileArt(Level level, int zoneIndex) {
         registerSmashableGroundSheet(level);
         registerSteamSpringPistonSheet(level);
+        if (level != null && artLoader != null
+                && (zoneIndex == Sonic2ZoneConstants.ROM_ZONE_MTZ
+                || zoneIndex == Sonic2ZoneConstants.ROM_ZONE_MTZ_3)) {
+            // Obj2D has no dedicated PLC in MTZ: its frame 1 uses level tiles.
+            registerSheet(Sonic2ObjectArtKeys.BARRIER, artLoader.loadMtzBarrierSheet(level));
+        }
     }
 
     /**

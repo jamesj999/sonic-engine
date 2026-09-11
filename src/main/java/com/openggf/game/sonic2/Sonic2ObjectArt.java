@@ -599,6 +599,21 @@ public class Sonic2ObjectArt {
                 Sonic2Constants.MAP_UNC_BARRIER_ADDR, 1, 1);
     }
 
+    /** Obj2D_Init uses ArtKos_LevelArt, palette 3, in both Metropolis zone slots. */
+    public ObjectSpriteSheet loadMtzBarrierSheet(com.openggf.level.Level level) {
+        if (level == null) {
+            return null;
+        }
+        // Map_obj2D_002A repeats a 3x4 piece at level tile $5F (through $6A).
+        int copyCount = Math.min(level.getPatternCount(), 0x6B);
+        Pattern[] patterns = new Pattern[copyCount];
+        for (int i = 0; i < copyCount; i++) {
+            patterns[i] = level.getPattern(i);
+        }
+        return new ObjectSpriteSheet(patterns,
+                loadMappingFrames(Sonic2Constants.MAP_UNC_BARRIER_ADDR), 3, 1);
+    }
+
     public ObjectSpriteSheet loadSpringboardSheet() {
         return buildArtSheetFromRom(Sonic2Constants.ART_NEM_LEVER_SPRING_ADDR,
                 Sonic2Constants.MAP_UNC_SPRINGBOARD_ADDR, 0, 1);
