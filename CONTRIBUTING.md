@@ -137,6 +137,10 @@ When a trace frontier moves, regresses, or a trace sweep is used to choose the n
 
 ## Branches, Commits, And Documentation
 
+Release maintainers: pushing `master` automatically publishes a GitHub release
+after validation and builds succeed. Manual dispatch is validation-only; see [Publishing a GitHub release](docs/project/release-publishing.md)
+for the command, tag ownership, and final checks.
+
 Use focused branches from `develop`:
 
 - `feature/ai-...` for new features.

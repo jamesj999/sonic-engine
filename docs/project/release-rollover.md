@@ -56,8 +56,15 @@ audio QA that automated gates cannot cover. Record the evidence in
 
 ### 3. Release
 
-Merge `develop` into `master` and tag `v0.6.<YYYYMMDD>`. `master` now carries
-the released pom, so `release.yml` builds correctly named artifacts.
+Merge the reviewed release into `master` in its separate worktree. Follow
+[Publishing a GitHub release](release-publishing.md): check that the remote
+version tag does not already exist, then push `master` when publication is
+authorized. **The push automatically publishes** after validation and builds
+succeed; no manual dispatch is needed.
+
+Do not create `v0.6.<YYYYMMDD>` yourself; the workflow creates it at the pushed
+commit and rejects an existing tag. Manual dispatch runs validation only.
+Confirm the GitHub release and all four downloads before promoting branches.
 
 ### 4. Promote `develop` to 0.7
 

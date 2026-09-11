@@ -121,6 +121,15 @@ Follow its current guide and verified BizHawk 2.11 dependency. Use
 
 ## Delivery and documentation
 
+A non-deletion push to `master` automatically publishes a GitHub release
+after validation and builds succeed. Manual dispatch and pull requests do
+not publish. The workflow creates the POM-derived version tag at the pushed
+commit and rejects an existing tag, so do not tag first or reuse a released
+version for a new release. Read
+[release publishing](docs/project/release-publishing.md) and use the
+`release-publishing` skill for publication or a skipped release job. Confirm
+the release and downloads before reporting that it shipped.
+
 Follow the user's global branch/integration workflow. Never switch the main
 workspace branch. New branches use isolated `.worktrees/` checkouts and
 `feature/ai-*` or `bugfix/ai-*` names, based on the current main branch.
@@ -158,6 +167,8 @@ under `target/`.
 
 ## Find the owning reference
 
+- Release publication/skipped jobs: `release-publishing` and
+  [publishing guide](docs/project/release-publishing.md).
 - Architecture/services: [engine map](docs/architecture/engine-map.md).
 - Objects/bosses: matching `s1-`, `s2-`, or `s3k-implement-*` skill and
   [implementation reference](docs/architecture/object-implementation-reference.md).

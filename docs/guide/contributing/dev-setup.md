@@ -174,6 +174,8 @@ beside the app before launching it. Native image metadata is maintained in
 
 ## Next Steps
 
+- [Publishing a GitHub release](../../project/release-publishing.md) -- Pushes
+  to `master` automatically publish after validation and builds succeed.
 - [Architecture](architecture.md) -- Understand the codebase design
 - [Tutorial: Implement an Object](tutorial-implement-object.md) -- Learn by doing
 - [Testing](testing.md) -- Writing and running tests
