@@ -3,6 +3,7 @@ import importlib.util
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -10,7 +11,9 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location('release_tree_audit', ROOT / '.githooks/audit-release-tree.py')
 audit = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(audit)
+# Keep imported test helpers from creating binary files in the LF-only hook tree.
+with patch.object(sys, 'dont_write_bytecode', True):
+    spec.loader.exec_module(audit)
 BASELINE = '45cecf566825aa50612f5e687b2682fc9681aed1'
 OID = 'a' * 40
 
