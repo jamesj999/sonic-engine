@@ -1,11 +1,12 @@
 package com.openggf.game.sonic1.objects;
 
-import com.openggf.game.GameRuntime;
+import com.openggf.game.GameServices;
 import com.openggf.game.ObjectArtProvider;
-import com.openggf.game.RuntimeManager;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import com.openggf.game.session.SessionManager;
+import com.openggf.tests.TestEnvironment;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import com.openggf.game.sonic1.constants.Sonic1ObjectIds;
 import com.openggf.graphics.GraphicsManager;
 import com.openggf.level.LevelManager;
@@ -24,30 +25,29 @@ import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TestSonic1GargoyleObjectInstanceRender {
 
-    private Field levelManagerField;
-    private LevelManager originalLevelManager;
-    private GameRuntime originalRuntime;
+    private Field objectRenderManagerField;
+    private ObjectRenderManager originalRenderManager;
+    private LevelManager runtimeLevelManager;
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
-        levelManagerField = LevelManager.class.getDeclaredField("levelManager");
-        levelManagerField.setAccessible(true);
-        originalLevelManager = (LevelManager) levelManagerField.get(null);
-        // Clear any leaked GameRuntime so LevelManager.getInstance() uses the static field
-        originalRuntime = RuntimeManager.getCurrent();
-        RuntimeManager.setCurrent(null);
+        TestEnvironment.activeGameplayMode();
+        runtimeLevelManager = GameServices.level();
+        objectRenderManagerField = LevelManager.class.getDeclaredField("objectRenderManager");
+        objectRenderManagerField.setAccessible(true);
+        originalRenderManager = (ObjectRenderManager) objectRenderManagerField.get(runtimeLevelManager);
     }
 
-    @After
+    @AfterEach
     public void tearDown() throws Exception {
-        levelManagerField.set(null, originalLevelManager);
-        RuntimeManager.setCurrent(originalRuntime);
+        objectRenderManagerField.set(runtimeLevelManager, originalRenderManager);
+        SessionManager.clear();
     }
 
     @Test
@@ -57,17 +57,19 @@ public class TestSonic1GargoyleObjectInstanceRender {
 
         Sonic1GargoyleObjectInstance leftFacing = new Sonic1GargoyleObjectInstance(
                 new ObjectSpawn(100, 100, Sonic1ObjectIds.GARGOYLE, 0, 0, false, 0));
+        leftFacing.setServices(new TestObjectServices().withLevelManager(runtimeLevelManager));
         leftFacing.appendRenderCommands(new ArrayList<>());
 
         assertEquals(1, renderer.drawCount);
-        assertFalse("Status bit 0 clear should render without H-flip (facing left)", renderer.lastHFlip);
+        assertFalse(renderer.lastHFlip, "Status bit 0 clear should render without H-flip (facing left)");
 
         Sonic1GargoyleObjectInstance rightFacing = new Sonic1GargoyleObjectInstance(
                 new ObjectSpawn(120, 100, Sonic1ObjectIds.GARGOYLE, 0, 1, false, 0));
+        rightFacing.setServices(new TestObjectServices().withLevelManager(runtimeLevelManager));
         rightFacing.appendRenderCommands(new ArrayList<>());
 
         assertEquals(2, renderer.drawCount);
-        assertTrue("Status bit 0 set should render with H-flip (facing right)", renderer.lastHFlip);
+        assertTrue(renderer.lastHFlip, "Status bit 0 set should render with H-flip (facing right)");
     }
 
     @Test
@@ -77,31 +79,17 @@ public class TestSonic1GargoyleObjectInstanceRender {
 
         Sonic1GargoyleObjectInstance.Fireball fireball =
                 new Sonic1GargoyleObjectInstance.Fireball(100, 100, true);
-        fireball.setServices(new TestObjectServices().withLevelManager(LevelManager.getInstance()));
+        fireball.setServices(new TestObjectServices().withLevelManager(runtimeLevelManager));
         fireball.appendRenderCommands(new ArrayList<>());
 
         assertEquals(1, renderer.drawCount);
-        assertTrue("Fireball render path should call palette override variant", renderer.usedPaletteOverride);
-        assertEquals("Gar_FireBall uses make_art_tile(...,0,0), so palette line must be 0",
-                0, renderer.lastPaletteOverride);
+        assertTrue(renderer.usedPaletteOverride, "Fireball render path should call palette override variant");
+        assertEquals(0, renderer.lastPaletteOverride, "Gar_FireBall uses make_art_tile(...,0,0), so palette line must be 0");
     }
 
     private void installRenderer(RecordingRenderer renderer) throws Exception {
         ObjectRenderManager renderManager = new ObjectRenderManager(new StubObjectArtProvider(renderer));
-        levelManagerField.set(null, new TestLevelManager(renderManager));
-    }
-
-    private static final class TestLevelManager extends LevelManager {
-        private final ObjectRenderManager renderManager;
-
-        private TestLevelManager(ObjectRenderManager renderManager) {
-            this.renderManager = renderManager;
-        }
-
-        @Override
-        public ObjectRenderManager getObjectRenderManager() {
-            return renderManager;
-        }
+        objectRenderManagerField.set(runtimeLevelManager, renderManager);
     }
 
     private static final class StubObjectArtProvider implements ObjectArtProvider {
@@ -210,3 +198,5 @@ public class TestSonic1GargoyleObjectInstanceRender {
         }
     }
 }
+
+

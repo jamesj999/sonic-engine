@@ -1,10 +1,10 @@
 package com.openggf.tests;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Water slide chunk detection in Labyrinth Zone.
@@ -78,7 +78,7 @@ public class TestTodo34_WaterSlideDetection {
         // Because the search goes backward, d1=6 checks the last entry first (chunk $04),
         // d1=5 checks chunk $08, etc. When a match is found, d1 is the array index.
         int searchCount = EXPECTED_SLIDE_CHUNK_IDS.length - 1; // 6 (initial d1 value)
-        assertEquals("Initial d1 should be Slide_Chunks length - 1", 6, searchCount);
+        assertEquals(6, searchCount, "Initial d1 should be Slide_Chunks length - 1");
 
         // Verify a sample reverse search: looking for chunk $4B
         int targetChunk = 0x4B;
@@ -90,35 +90,29 @@ public class TestTodo34_WaterSlideDetection {
                 break;
             }
         }
-        assertEquals("Chunk $4B should be found at index 4", 4, foundIndex);
-        assertEquals("Speed for chunk $4B should be -11", -11, EXPECTED_SLIDE_SPEEDS[foundIndex]);
+        assertEquals(4, foundIndex, "Chunk $4B should be found at index 4");
+        assertEquals(-11, EXPECTED_SLIDE_SPEEDS[foundIndex], "Speed for chunk $4B should be -11");
     }
 
     @Test
     public void testSlideChunkIdsMatchRom() throws Exception {
         int[] actual = getPrivateStaticIntArray("SLIDE_CHUNK_IDS");
-        assertArrayEquals(
-                "SLIDE_CHUNK_IDS must match disassembly Slide_Chunks table",
-                EXPECTED_SLIDE_CHUNK_IDS, actual);
+        assertArrayEquals(EXPECTED_SLIDE_CHUNK_IDS, actual, "SLIDE_CHUNK_IDS must match disassembly Slide_Chunks table");
     }
 
     @Test
     public void testSlideSpeedsMatchRom() throws Exception {
         int[] actual = getPrivateStaticIntArray("SLIDE_SPEEDS");
-        assertArrayEquals(
-                "SLIDE_SPEEDS must match disassembly Slide_Speeds table",
-                EXPECTED_SLIDE_SPEEDS, actual);
+        assertArrayEquals(EXPECTED_SLIDE_SPEEDS, actual, "SLIDE_SPEEDS must match disassembly Slide_Speeds table");
     }
 
     @Test
     public void testSlideChunkAndSpeedTablesHaveSameLength() throws Exception {
         int[] chunkIds = getPrivateStaticIntArray("SLIDE_CHUNK_IDS");
         int[] speeds = getPrivateStaticIntArray("SLIDE_SPEEDS");
-        assertEquals(
-                "SLIDE_CHUNK_IDS and SLIDE_SPEEDS must have the same length",
-                7, chunkIds.length);
-        assertEquals(
-                "SLIDE_CHUNK_IDS and SLIDE_SPEEDS must have the same length",
-                chunkIds.length, speeds.length);
+        assertEquals(7, chunkIds.length, "SLIDE_CHUNK_IDS and SLIDE_SPEEDS must have the same length");
+        assertEquals(chunkIds.length, speeds.length, "SLIDE_CHUNK_IDS and SLIDE_SPEEDS must have the same length");
     }
 }
+
+

@@ -9,6 +9,10 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.ObjectPlayerParticipationPolicy;
+import com.openggf.level.objects.ObjectPlayerQuery;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.camera.Camera;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
@@ -33,7 +37,7 @@ import java.util.List;
  * - Escape velocity: x=-0x200, y=-0x200 (flies up-left at 45°)
  * - Initial chase Y velocity: -0x100 (upward momentum)
  */
-public class WhispBadnikInstance extends AbstractBadnikInstance {
+public class WhispBadnikInstance extends AbstractBadnikInstance implements RewindRecreatable {
 
     private enum State {
         INIT,              // Routine 0: Initialize
@@ -59,9 +63,29 @@ public class WhispBadnikInstance extends AbstractBadnikInstance {
     private static final int ESCAPE_VELOCITY_Y = -0x200;  // Escape velocity Y (line 72705)
     private static final int INITIAL_CHASE_Y_VEL = -0x100; // Initial upward velocity when starting chase (line 72711)
 
+    // ROM Render_Sprites / BuildSprites on-screen culling parameters (s2.asm:30560-30621).
+    // The X test sets render_flags.on_screen when the object's render box overlaps
+    // the 320px-wide screen: (x_pos - cam_x + width_pixels) >= 0 AND
+    // (x_pos - cam_x - width_pixels) < screen_width. width_pixels for Obj8C is $C
+    // (subObjData ...,4,$C,$B at s2.asm:73223 -> the $C width field).
+    private static final int RENDER_WIDTH_PIXELS = 0x0C;   // width_pixels(a0) for Obj8C
+    private static final int SCREEN_WIDTH = 320;
+    // Obj8C is displayed with the approximate-Y check (level_fg, no explicit_height),
+    // which assumes a Y radius of 32px: on-screen in Y when
+    // (y_pos - cam_y) in [-32, screen_height+32) (s2.asm:30603-30609).
+    private static final int RENDER_Y_RADIUS = 32;
+    private static final int SCREEN_HEIGHT = 224;
+
     private State state;
     private int timer;
     private int attacksRemaining;
+
+    // ROM render_flags.on_screen bit. BuildSprites sets it at the END of a frame's
+    // display pass (s2.asm:30621), and Obj8C_WaitUntilOnscreen tests it at the
+    // START of the NEXT frame's object update (s2.asm:73138). We mirror that
+    // one-frame display-then-observe ordering with a deferred flag so the chase
+    // starts on the same frame the ROM does.
+    private boolean onScreenFlag;
 
     // Fixed-point position (8.8 format for subpixel accuracy)
     private int xPosFixed;
@@ -89,13 +113,18 @@ public class WhispBadnikInstance extends AbstractBadnikInstance {
     }
 
     @Override
-    protected void updateMovement(int frameCounter, PlayableEntity playerEntity) {
+    public WhispBadnikInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new WhispBadnikInstance(ctx.spawn());
+    }
+
+    @Override
+    protected void updateMovement(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         switch (state) {
             case INIT -> updateInit();
-            case WAIT_ONSCREEN -> updateWaitOnscreen();
+            case WAIT_ONSCREEN -> updateWaitOnscreen(player);
             case CHASE -> updateChase(player);
-            case PAUSE -> updatePause();
+            case PAUSE -> updatePause(player);
             case FLY_AWAY -> updateFlyAway();
         }
 
@@ -115,46 +144,75 @@ public class WhispBadnikInstance extends AbstractBadnikInstance {
      * WAIT_ONSCREEN state: Wait until the whisp is visible on screen.
      * When visible, decrement attacks and start chase (matching loc_36970 flow).
      */
-    private void updateWaitOnscreen() {
+    private void updateWaitOnscreen(AbstractPlayableSprite player) {
+        // Obj8C_WaitUntilOnscreen (s2.asm:73199-73202): test render_flags.on_screen,
+        // and on a set bit branch to loc_36970. Headless replay has no separate
+        // BuildSprites producer for this local flag, so compute the same ROM
+        // overlap predicate here before taking the ROM branch/fallthrough.
+        onScreenFlag = computeOnScreen();
+        if (onScreenFlag) {
+            startNextAttackOrEscape(player);
+        }
+    }
+
+    /**
+     * ROM BuildSprites on-screen culling for Obj8C (s2.asm:30560-30621). Sets the
+     * render_flags.on_screen bit when the object's render box overlaps the screen.
+     */
+    private boolean computeOnScreen() {
         Camera camera = services().camera();
         int screenX = currentX - camera.getX();
+        // X: (screenX + width) >= 0 && (screenX - width) < screen_width (s2.asm:30566-30571)
+        if (screenX + RENDER_WIDTH_PIXELS < 0) return false;
+        if (screenX - RENDER_WIDTH_PIXELS >= SCREEN_WIDTH) return false;
+        // Y: approximate check, radius 32 -> screenY in [-32, screen_height+32)
+        // (s2.asm:30603-30609)
         int screenY = currentY - camera.getY();
-
-        // Check if on-screen (with some margin)
-        if (screenX >= -32 && screenX < 352 && screenY >= -32 && screenY < 256) {
-            // Transition to attack check (loc_36970 in disassembly)
-            startNextAttackOrEscape();
-        }
+        if (screenY + RENDER_Y_RADIUS < 0) return false;
+        if (screenY - RENDER_Y_RADIUS >= SCREEN_HEIGHT) return false;
+        return true;
     }
 
     /**
      * Common routine for starting next attack or escaping (loc_36970).
      * Decrements attack counter BEFORE starting chase, not after.
      */
-    private void startNextAttackOrEscape() {
+    private void startNextAttackOrEscape(AbstractPlayableSprite player) {
         attacksRemaining--;
         if (attacksRemaining < 0) {
-            // All attacks exhausted - fly away (routine 8)
+            // Obj8C loc_36970 falls through to Obj8C_FlyAway in the same object pass
+            // after the final attack counter underflow (s2.asm:73215-73223).
             state = State.FLY_AWAY;
             xVelFixed = ESCAPE_VELOCITY_X;
             yVelFixed = ESCAPE_VELOCITY_Y;
+            updateFlyAway();
         } else {
-            // Start chase with initial upward velocity (routine 4)
+            // Obj8C loc_36996 sets routine/timer and falls through immediately to
+            // Obj8C_ChasePlayer, so the first chase movement occurs in this pass
+            // rather than waiting for the next frame (s2.asm:73226-73231).
             state = State.CHASE;
             timer = CHASE_DURATION;
-            yVelFixed = INITIAL_CHASE_Y_VEL;  // -0x100 upward (line 72711)
+            yVelFixed = INITIAL_CHASE_Y_VEL;
+            updateChase(player);
         }
     }
 
     /**
-     * PAUSE state: Random 0-31 frame pause between attacks.
-     * When timer expires, go to attack check (loc_36970).
+     * PAUSE state: Random 0-31 frame pause between attacks
+     * (Obj8C_WaitUntilTimerExpires, routine 6, s2.asm:73145-73147).
+     *
+     * <p>ROM decrements the timer FIRST and branches to the attack check on
+     * underflow: {@code subq.b #1,obj8C_timer(a0) ; bmi.s loc_36970}. {@code bmi}
+     * fires only when the result is strictly negative, so a pause loaded with
+     * value P lasts P+1 frames. The previous {@code timer <= 0} test ended the
+     * pause one frame early (P frames per cycle). Using {@code timer < 0}
+     * reproduces the ROM {@code bmi} timing exactly.
      */
-    private void updatePause() {
+    private void updatePause(AbstractPlayableSprite player) {
         timer--;
-        if (timer <= 0) {
-            // Timer expired - check attacks and start next chase
-            startNextAttackOrEscape();
+        if (timer < 0) {
+            // Timer underflowed (bmi.s loc_36970) - check attacks and start next chase
+            startNextAttackOrEscape(player);
         }
     }
 
@@ -163,13 +221,27 @@ public class WhispBadnikInstance extends AbstractBadnikInstance {
      * When timer expires, transition to PAUSE with random duration.
      */
     private void updateChase(AbstractPlayableSprite player) {
-        if (player != null) {
-            // Calculate direction to player
-            int playerX = player.getCentreX();
-            int playerY = player.getCentreY();
+        // Obj8C_ChasePlayer pre-decrements obj8C_timer and branches to the pause
+        // routine on negative before orientation/movement (s2.asm:73231-73265).
+        timer--;
+        if (timer < 0) {
+            state = State.PAUSE;
+            timer = Sonic2Rng.nextWhispPauseTimer(services().rng());  // Random 0-31 frames
+            xVelFixed = 0;
+            yVelFixed = 0;
+            return;
+        }
 
-            // Accelerate toward player on X axis
-            if (playerX < currentX) {
+        PlayableEntity target = closestRomOrientationTarget(player);
+        if (target != null) {
+            // Calculate direction to player
+            int playerX = target.getCentreX();
+            int playerY = target.getCentreY();
+
+            // Obj_GetOrientationToPlayer (s2.asm:72836-72848) leaves d0/d1 at
+            // index 0 when object-pos minus player-pos is zero. Obj8C therefore
+            // treats equality as the left/up delta, not the right/down delta.
+            if (playerX <= currentX) {
                 xVelFixed -= ACCELERATION;
                 if (xVelFixed < -MAX_VELOCITY) {
                     xVelFixed = -MAX_VELOCITY;
@@ -183,8 +255,7 @@ public class WhispBadnikInstance extends AbstractBadnikInstance {
                 facingLeft = false;
             }
 
-            // Accelerate toward player on Y axis
-            if (playerY < currentY) {
+            if (playerY <= currentY) {
                 yVelFixed -= ACCELERATION;
                 if (yVelFixed < -MAX_VELOCITY) {
                     yVelFixed = -MAX_VELOCITY;
@@ -200,14 +271,13 @@ public class WhispBadnikInstance extends AbstractBadnikInstance {
         // Apply velocity to position
         xPosFixed += xVelFixed;
         yPosFixed += yVelFixed;
+    }
 
-        // Decrement chase timer
-        timer--;
-        if (timer <= 0) {
-            // Chase finished - transition to pause with random duration (lines 72744-72747)
-            state = State.PAUSE;
-            timer = Sonic2Rng.nextWhispPauseTimer(services().rng());  // Random 0-31 frames
-        }
+    private PlayableEntity closestRomOrientationTarget(AbstractPlayableSprite player) {
+        ObjectPlayerQuery.NearestPlayerX nearest = services().playerQuery().nearestByRomX(
+                ObjectPlayerParticipationPolicy.MAIN_PLUS_ENGINE_SIDEKICKS_AS_NATIVE_P2_EXTENDED,
+                currentX);
+        return nearest.player() != null ? nearest.player() : player;
     }
 
     /**
@@ -221,9 +291,9 @@ public class WhispBadnikInstance extends AbstractBadnikInstance {
     }
 
     @Override
-    protected void updateAnimation(int frameCounter) {
+    protected void updateAnimation(int vIntRunCount) {
         // Fast wing flapping - toggle between frames every tick
-        animFrame = frameCounter & 1;
+        animFrame = vIntRunCount & 1;
     }
 
     @Override

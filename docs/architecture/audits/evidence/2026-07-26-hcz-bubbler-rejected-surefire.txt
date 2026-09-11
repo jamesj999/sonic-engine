@@ -1,0 +1,12 @@
+-------------------------------------------------------------------------------
+Test set: com.openggf.tests.trace.s3k.TestS3kHczCompleteRunTraceReplay
+-------------------------------------------------------------------------------
+Tests run: 1, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 8.310 s <<< FAILURE! -- in com.openggf.tests.trace.s3k.TestS3kHczCompleteRunTraceReplay
+com.openggf.tests.trace.s3k.TestS3kHczCompleteRunTraceReplay.replayMatchesTrace -- Time elapsed: 8.150 s <<< FAILURE!
+org.opentest4j.AssertionFailedError: Trace replay diverged. Totals: 4794 errors, 0 warnings. First error: frame 1824 -- y mismatch (expected=0x07F9, actual=0x07F4)
+	at com.openggf.tests.trace.TraceReplayDiagnostics.assertNoReleaseBlockingDivergences(TraceReplayDiagnostics.java:115)
+	at com.openggf.tests.trace.AbstractTraceReplayTest.assertReportHasNoReleaseBlockingDivergences(AbstractTraceReplayTest.java:486)
+	at com.openggf.tests.trace.AbstractTraceReplayTest.replayMatchesTrace(AbstractTraceReplayTest.java:462)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)

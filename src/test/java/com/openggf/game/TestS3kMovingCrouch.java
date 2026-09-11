@@ -1,5 +1,7 @@
 package com.openggf.game;
 
+import com.openggf.game.rules.GameRules;
+
 import com.openggf.game.sonic2.Sonic2GameModule;
 import com.openggf.game.sonic3k.Sonic3kGameModule;
 import org.junit.jupiter.api.AfterEach;
@@ -28,27 +30,29 @@ class TestS3kMovingCrouch {
 
     @Test
     void s3k_hasMovingCrouchThreshold() {
-        PhysicsFeatureSet fs = PhysicsFeatureSet.SONIC_3K;
-        assertEquals(0x100, fs.movingCrouchThreshold(),
+        GameRules fs = GameRules.SONIC_3K;
+        assertEquals(0x100, fs.playerMovement().movingCrouchThreshold(),
                 "S3K moving crouch threshold should be $100");
     }
 
     @Test
     void s2_noMovingCrouchThreshold() {
-        assertEquals(0, PhysicsFeatureSet.SONIC_2.movingCrouchThreshold(),
+        assertEquals(0, GameRules.SONIC_2.playerMovement().movingCrouchThreshold(),
                 "S2 should have no moving crouch threshold");
     }
 
     @Test
     void s1_noMovingCrouchThreshold() {
-        assertEquals(0, PhysicsFeatureSet.SONIC_1.movingCrouchThreshold(),
+        assertEquals(0, GameRules.SONIC_1.playerMovement().movingCrouchThreshold(),
                 "S1 should have no moving crouch threshold");
     }
 
     @Test
     void s3k_thresholdHigherThanS2RollSpeed() {
         // S3K roll threshold (0x100) is higher than S2's (0x80)
-        assertTrue(PhysicsFeatureSet.SONIC_3K.movingCrouchThreshold() > 0x80,
+        assertTrue(GameRules.SONIC_3K.playerMovement().movingCrouchThreshold() > 0x80,
                 "S3K threshold should be higher than S2's roll speed");
     }
 }
+
+

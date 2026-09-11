@@ -15,6 +15,7 @@ import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -44,7 +45,7 @@ import java.util.List;
  * ROM reference: docs/s1disasm/_incObj/69 SBZ Spinning Platforms.asm
  */
 public class Sonic1SpinPlatformObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, SpawnRewindRecreatable {
 
     // ---- Trapdoor solid params (Spin_Trapdoor) ----
     // move.w #$4B,d1 / move.w #$C,d2 / move.w d2,d3 / addq.w #1,d3
@@ -53,6 +54,13 @@ public class Sonic1SpinPlatformObjectInstance extends AbstractObjectInstance
     // ---- Spinner solid params (Spin_Spinner) ----
     // move.w #$1B,d1 / move.w #7,d2 / move.w d2,d3 / addq.w #1,d3
     private static final SolidObjectParams SPINNER_SOLID = new SolidObjectParams(0x1B, 0x7, 0x8);
+
+    // Spin_Main: move.b #256/2,obActWid(a0) on the shipped FixBugs = 0 branch
+    // (69 SBZ Spinning Platforms and Trapdoors.asm:28-31). Kept by the trapdoor.
+    private static final int TRAPDOOR_ACT_WIDTH = 0x80;
+
+    // Spin_Main spinner path: move.b #32/2,obActWid(a0) (:49), overwriting the above.
+    private static final int SPINNER_ACT_WIDTH = 0x10;
 
     // ---- Trapdoor animation (Ani_Spin entries 0 and 1) ----
     // .trapopen:  dc.b 3, 0, 1, 2, afBack, 1  (plays 0->1->2, holds on frame 2 = fully open)
@@ -82,13 +90,13 @@ public class Sonic1SpinPlatformObjectInstance extends AbstractObjectInstance
             0x23, 0x22, 0x21, 0
     };
 
-    private final boolean isSpinner;
+    private boolean isSpinner;
 
     // Timer state
     // spin_timer = objoff_30: countdown until next animation toggle
     // spin_timelen = objoff_32: reload value for timer
     private int spinTimer;
-    private final int spinTimelen;
+    private int spinTimelen;
 
     // Animation state
     // obAnim: current animation index
@@ -101,7 +109,7 @@ public class Sonic1SpinPlatformObjectInstance extends AbstractObjectInstance
 
     // Spinner-specific: frame counter mask for periodic triggering
     // objoff_36: mask applied to v_framecount to gate trigger
-    private final int frameCounterMask;
+    private int frameCounterMask;
     // objoff_34: trigger flag (set when frame counter matches, cleared on timer expiry)
     private boolean spinnerTriggered;
 
@@ -153,10 +161,10 @@ public class Sonic1SpinPlatformObjectInstance extends AbstractObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isSpinner) {
-            updateSpinner(frameCounter, player);
+            updateSpinner(vIntRunCount, player);
         } else {
             updateTrapdoor(player);
         }
@@ -221,9 +229,15 @@ public class Sonic1SpinPlatformObjectInstance extends AbstractObjectInstance
     // Spinner logic (Spin_Spinner, routine 4)
     // ========================================
 
-    private void updateSpinner(int frameCounter, AbstractPlayableSprite player) {
+    private void updateSpinner(int vIntRunCount, AbstractPlayableSprite player) {
+        // ROM Spin_Spinner reads (v_framecount).w (the Level frame counter), NOT
+        // the VBla clock ObjectManager passes into update(); the VBla gate runs
+        // the spin cycle ~14 frames out of phase (docs/s1disasm/_incObj/69 SBZ
+        // Spinning Platforms and Trapdoors.asm:96). Route through the trace-seeded
+        // Level frame counter (same pattern as the Electrocuter f1925 fix).
+        int vfc = resolveVFrameCounter(vIntRunCount);
         // move.w (v_framecount).w,d0 / and.w objoff_36(a0),d0 / bne.s .delay
-        if ((frameCounter & frameCounterMask) == 0) {
+        if ((vfc & frameCounterMask) == 0) {
             // move.b #1,objoff_34(a0)
             spinnerTriggered = true;
         }
@@ -279,6 +293,22 @@ public class Sonic1SpinPlatformObjectInstance extends AbstractObjectInstance
     }
 
     /**
+     * Resolves the ROM {@code v_framecount} (Level frame counter). The engine's
+     * canonical Level_frame_counter is {@code LevelManager.frameCounter} (the
+     * trace-seeded gameplay_frame_counter); it has not yet been incremented for
+     * the current frame at object-execution time, so +1 gives the current
+     * frame's v_framecount. Mirrors
+     * {@code Sonic1ElectrocuterObjectInstance.resolveVFrameCounter}.
+     */
+    private int resolveVFrameCounter(int vIntRunCount) {
+        LevelManager lm = services().levelManager();
+        if (lm != null) {
+            return lm.getFrameCounter();
+        }
+        return vIntRunCount;
+    }
+
+    /**
      * Reset animation state, matching AnimateSprite's detection of obAnim != obPrevAni.
      */
     private void resetAnimation() {
@@ -303,6 +333,20 @@ public class Sonic1SpinPlatformObjectInstance extends AbstractObjectInstance
         ObjectManager objectManager = services().objectManager();
         if (objectManager != null && objectManager.isAnyPlayerRiding(this)) {
             objectManager.clearRidingObject(player);
+            // ROM .notsolid2 does bclr #3,obStatus(a1) + clr.b obSolid(a0): the
+            // platform fully releases the rider when it stops being solid
+            // (docs/s1disasm/_incObj/69 SBZ Spinning Platforms and Trapdoors.asm:124-130).
+            // It clears the on-object/standing bits but does NOT set Status_InAir —
+            // ROM's player only becomes airborne on the NEXT frame, when his own
+            // grounded floor check (which ran before the platform this frame, since
+            // Obj01 precedes the platform in ExecuteObjects) finds no floor. So
+            // release support (clearRidingObject + drop the SolidObject latch on THIS
+            // instance so finalizeInlinePlayer clears Status_OnObj) but let the
+            // player's next-frame grounded collision set air, rather than forcing it
+            // the same frame (which goes airborne one frame early — SBZ1 f5531).
+            if (player.getLatchedSolidObjectInstance() == this) {
+                player.setLatchedSolidObjectId(0);
+            }
         }
     }
 
@@ -382,6 +426,41 @@ public class Sonic1SpinPlatformObjectInstance extends AbstractObjectInstance
         return isSpinner ? SPINNER_SOLID : TRAPDOOR_SOLID;
     }
 
+    /**
+     * Obj69's ROM {@code obActWid}, which differs by variant.
+     *
+     * <p>{@code Spin_Main} writes {@code move.b #256/2,obActWid(a0)} = 128 for
+     * every Obj69 and only then overwrites it with {@code #32/2} = 16 on the
+     * spinning-platform path
+     * (docs/s1disasm/_incObj/69 SBZ Spinning Platforms and Trapdoors.asm:28-31,49).
+     * The trapdoor keeps the 128. That first write sits on a {@code FixBugs}
+     * conditional: with {@code FixBugs = 1} the ROM would write {@code #128/2}
+     * = 64, the listing calling 128 "way too big, resulting in screen wrapping
+     * issues". The engine takes the {@code FixBugs = 0} branch
+     * (docs/s1disasm/sonic.asm:20) because that is what the shipped ROM does and
+     * what every trace records.
+     *
+     * <p>The variant split is the subtype's bit 7, the same ROM byte the class
+     * already reads for {@link #isSpinner} -- {@code tst.b obSubtype(a0) /
+     * bpl.s Spin_Trapdoor} at {@code :46}.
+     *
+     * <p>Supplied here rather than at {@link #getBalanceWidthPixels()} because
+     * both ROM consumers want the byte: {@code BuildSprites}' horizontal cull
+     * (docs/s1disasm/_inc/BuildSprites.asm:49-58) and {@code Sonic_Balance}
+     * (docs/s1disasm/_incObj/01 Sonic.asm:423). Obj69 is full-solid, so the
+     * balance accessor inherits this one. The collision widths are authored
+     * separately -- {@code #128/2+sonic_solid_width} = {@code $4B} for the
+     * trapdoor at {@code :85} -- and are unchanged.
+     *
+     * <p>Without the override the inherited 16 made the player balance anywhere
+     * more than 12px from the centre of a 128-wide trapdoor, where the ROM's
+     * window of {@code d1 < 4 || d1 >= 252} balances essentially nowhere on it.
+     */
+    @Override
+    public int getOnScreenHalfWidth() {
+        return isSpinner ? SPINNER_ACT_WIDTH : TRAPDOOR_ACT_WIDTH;
+    }
+
     @Override
     public boolean isSolidFor(PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
@@ -402,8 +481,16 @@ public class Sonic1SpinPlatformObjectInstance extends AbstractObjectInstance
 
     @Override
     public boolean isPersistent() {
-        // RememberState: out_of_range.w checks X distance from camera
-        // Approximately 640px range (128 + 320 + 192)
-        return !isDestroyed() && isOnScreenX(160);
+        // Spin_Trapdoor/.display and Spin_Spinner both end in RememberState
+        // (docs/s1disasm/_incObj/69 SBZ Spinning Platforms and Trapdoors.asm:80,
+        // 92,121), whose off-screen test is the out_of_range macro
+        // (docs/s1disasm/Macros.asm:273-289): chunk-align obX and (v_screenposx
+        // -128), and delete when the unsigned distance exceeds 128+320+192 (=640).
+        // The platform/trapdoor is stationary so getX() (= spawn obX) is the live
+        // obX the macro reads. The previous symmetric isOnScreenX(160) approximated
+        // this and kept objects ~160px left of the viewport that the ROM has
+        // already deleted off the left edge (SBZ2: the x=0x05F0 trapdoor lingered
+        // in slot 83 after the camera reached 0x0688, drifting OST occupancy).
+        return !isDestroyed() && isInRange();
     }
 }

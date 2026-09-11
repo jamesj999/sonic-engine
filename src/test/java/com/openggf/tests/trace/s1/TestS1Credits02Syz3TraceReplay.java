@@ -1,4 +1,5 @@
 package com.openggf.tests.trace.s1;
+import com.openggf.trace.*;
 
 import com.openggf.tests.rules.RequiresRom;
 import com.openggf.tests.rules.SonicGame;
@@ -17,3 +18,5 @@ public class TestS1Credits02Syz3TraceReplay extends AbstractCreditsDemoTraceRepl
         return Path.of("src/test/resources/traces/s1/credits_02_syz3");
     }
 }
+
+

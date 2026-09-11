@@ -1,14 +1,18 @@
 package com.openggf.game.sonic3k.objects.badniks;
 
 import com.openggf.game.PlayableEntity;
+import com.openggf.game.rewind.RewindTransient;
 import com.openggf.game.sonic3k.Sonic3kObjectArtKeys;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.WaterSystem;
 import com.openggf.level.objects.AbstractObjectInstance;
+import com.openggf.level.objects.ObjectInstance;
 import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.ObjectServices;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -43,7 +47,7 @@ import java.util.List;
  * <h3>Deletion:</h3>
  * Uses {@code Sprite_CheckDeleteTouchXY} (both X and Y bounds check).
  */
-final class BuggernautBabyInstance extends AbstractObjectInstance {
+public final class BuggernautBabyInstance extends AbstractObjectInstance implements RewindRecreatable {
 
     // --- Chase physics ---
 
@@ -94,6 +98,9 @@ final class BuggernautBabyInstance extends AbstractObjectInstance {
     private int animIndex;
 
     /** Reference to the current parent (ROM: parent3 at $42). */
+    @RewindTransient(reason = "Structural parent link; relinked to the nearest live "
+            + "Buggernaut on rewind recreate. State/velocity/facing are reapplied by "
+            + "the generic field capturer.")
     private BuggernautBadnikInstance parent;
 
     BuggernautBabyInstance(ObjectSpawn ownerSpawn, int x, int y,
@@ -108,7 +115,46 @@ final class BuggernautBabyInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        if (ctx == null || ctx.spawn() == null || ctx.objectServices() == null) {
+            return null;
+        }
+        ObjectManager objectManager = ctx.objectServices().objectManager();
+        BuggernautBadnikInstance liveParent =
+                findNearestLiveParentForRewind(objectManager, ctx.spawn());
+        if (liveParent == null) {
+            return null;
+        }
+        ObjectSpawn capturedSpawn = ctx.spawn();
+        return BuggernautBadnikInstance.recreateBabyForRewind(
+                capturedSpawn, capturedSpawn.x(), capturedSpawn.y(), liveParent);
+    }
+
+    private static BuggernautBadnikInstance findNearestLiveParentForRewind(
+            ObjectManager objectManager,
+            ObjectSpawn spawn) {
+        if (objectManager == null || spawn == null) {
+            return null;
+        }
+        BuggernautBadnikInstance best = null;
+        long bestDistance = Long.MAX_VALUE;
+        for (ObjectInstance instance : objectManager.getActiveObjects()) {
+            if (!(instance instanceof BuggernautBadnikInstance parent) || parent.isDestroyed()) {
+                continue;
+            }
+            long dx = parent.getX() - spawn.x();
+            long dy = parent.getY() - spawn.y();
+            long distance = dx * dx + dy * dy;
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = parent;
+            }
+        }
+        return best;
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         switch (state) {
             case INIT -> updateInit();
             case FOLLOW -> updateFollow(playerEntity);
@@ -172,7 +218,7 @@ final class BuggernautBabyInstance extends AbstractObjectInstance {
         // btst #0,render_flags(a1)
         // beq.s +
         // bset #0,render_flags(a0)
-        facingLeft = parent.facingLeft;
+        facingLeft = parent.badnikFacingLeft();
 
         // Chase_Object toward parent (not player)
         chaseParent();
@@ -250,8 +296,8 @@ final class BuggernautBabyInstance extends AbstractObjectInstance {
      * axes match. See {@code sonic3k.asm} lines 179340–179386.
      */
     private void chaseParent() {
-        int targetX = parent.currentX;
-        int targetY = parent.currentY;
+        int targetX = parent.getX();
+        int targetY = parent.getY();
         boolean xEqual = (currentX == targetX);
 
         // X axis: skip if positions match (preserve old x velocity)

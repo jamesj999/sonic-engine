@@ -21,3 +21,5 @@ class TestSingletonResetExtension {
         assertEquals(0, gs.getScore(), "Score should be 0 after full reset");
     }
 }
+
+

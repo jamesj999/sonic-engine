@@ -1,0 +1,1141 @@
+f=3200 lfc=0C81 who=sonic F264_IN sensor=1 sx=0EBF sy=0798 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3200 lfc=0C81 who=sonic F264_EXIT sensor=1 path=tile_below_+10 d1=23 angle_out=10
+f=3200 lfc=0C81 who=sonic F264_IN sensor=2 sx=0EAD sy=0798 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3200 lfc=0C81 who=sonic F264_EXIT sensor=2 path=tile_below_+10 d1=15 angle_out=12
+f=3200 lfc=0C81 who=tails ANGLEPOS zone=07 act=00 x=1002 y=0770 xsub=4600 ysub=8B00 xvel=FE98 yvel=0000 gvel=FE98 ang=00 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3200 lfc=0C81 who=tails F264_IN sensor=1 sx=100B sy=077F d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3200 lfc=0C81 who=tails F264_EXIT sensor=1 path=tile_below_+10 d1=0 angle_out=FF
+f=3200 lfc=0C81 who=tails F264_IN sensor=2 sx=0FF9 sy=077F d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3200 lfc=0C81 who=tails F264_EXIT sensor=2 path=tile_below_+10 d1=0 angle_out=FF
+f=3200 lfc=0C81 who=tails PLAYER_ANGLE primary_d0=0 secondary_d1=0 prim_angle=FF sec_angle=FF chosen=secondary/left player_angle=00
+f=3200 lfc=0C81 who=tails ED12_RETURN d1=0 player_angle=00
+f=3201 lfc=0C82 who=sonic F264_IN sensor=3 sx=0EBA sy=079F d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3201 lfc=0C82 who=sonic F264_EXIT sensor=3 path=tile_below_+10 d1=15 angle_out=10
+f=3201 lfc=0C82 who=sonic F264_IN sensor=4 sx=0EA8 sy=079F d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3201 lfc=0C82 who=sonic F264_EXIT sensor=4 path=tile_below_+10 d1=5 angle_out=12
+f=3201 lfc=0C82 who=tails ANGLEPOS zone=07 act=00 x=0FFF y=0770 xsub=D200 ysub=8B00 xvel=FE8C yvel=0000 gvel=FE8C ang=00 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3201 lfc=0C82 who=tails F264_IN sensor=1 sx=1008 sy=077F d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3201 lfc=0C82 who=tails F264_EXIT sensor=1 path=tile_below_+10 d1=0 angle_out=FF
+f=3201 lfc=0C82 who=tails F264_IN sensor=2 sx=0FF6 sy=077F d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3201 lfc=0C82 who=tails F264_EXIT sensor=2 path=tile_below_+10 d1=0 angle_out=FF
+f=3201 lfc=0C82 who=tails PLAYER_ANGLE primary_d0=0 secondary_d1=0 prim_angle=FF sec_angle=FF chosen=secondary/left player_angle=00
+f=3201 lfc=0C82 who=tails ED12_RETURN d1=0 player_angle=00
+f=3202 lfc=0C83 who=sonic F264_IN sensor=3 sx=0EB5 sy=07A6 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3202 lfc=0C83 who=sonic F264_SOLID sensor=3 chunk_word=F66A chunk_idx=26A
+f=3202 lfc=0C83 who=sonic F264_BLOCK sensor=3 block_id=41 angle_arr=10 col_pre=F14A d4=F66A
+f=3202 lfc=0C83 who=sonic F264_EXIT sensor=3 path=normal d1=6 angle_out=10
+f=3202 lfc=0C83 who=sonic F264_IN sensor=4 sx=0EA3 sy=07A6 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3202 lfc=0C83 who=sonic F264_SOLID sensor=4 chunk_word=F696 chunk_idx=296
+f=3202 lfc=0C83 who=sonic F264_BLOCK sensor=4 block_id=42 angle_arr=12 col_pre=F15C d4=F696
+f=3202 lfc=0C83 who=sonic F264_EXIT sensor=4 path=normal d1=-5 angle_out=12
+f=3202 lfc=0C83 who=tails ANGLEPOS zone=07 act=00 x=0FFD y=0770 xsub=5200 ysub=8B00 xvel=FE80 yvel=0000 gvel=FE80 ang=00 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3202 lfc=0C83 who=tails F264_IN sensor=1 sx=1006 sy=077F d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3202 lfc=0C83 who=tails F264_EXIT sensor=1 path=tile_below_+10 d1=0 angle_out=FF
+f=3202 lfc=0C83 who=tails F264_IN sensor=2 sx=0FF4 sy=077F d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3202 lfc=0C83 who=tails F264_EXIT sensor=2 path=tile_below_+10 d1=0 angle_out=FF
+f=3202 lfc=0C83 who=tails PLAYER_ANGLE primary_d0=0 secondary_d1=0 prim_angle=FF sec_angle=FF chosen=secondary/left player_angle=00
+f=3202 lfc=0C83 who=tails ED12_RETURN d1=0 player_angle=00
+f=3203 lfc=0C84 who=sonic ANGLEPOS zone=07 act=00 x=0EAF y=078F xsub=F800 ysub=B100 xvel=0349 yvel=018D gvel=03A5 ang=12 status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3203 lfc=0C84 who=sonic F264_IN sensor=1 sx=0EB8 sy=07A2 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3203 lfc=0C84 who=sonic F264_SOLID sensor=1 chunk_word=F66A chunk_idx=26A
+f=3203 lfc=0C84 who=sonic F264_BLOCK sensor=1 block_id=41 angle_arr=10 col_pre=F147 d4=F66A
+f=3203 lfc=0C84 who=sonic F264_EXIT sensor=1 path=normal d1=11 angle_out=10
+f=3203 lfc=0C84 who=sonic F264_IN sensor=2 sx=0EA6 sy=07A2 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3203 lfc=0C84 who=sonic F264_SOLID sensor=2 chunk_word=F696 chunk_idx=296
+f=3203 lfc=0C84 who=sonic F264_BLOCK sensor=2 block_id=42 angle_arr=12 col_pre=F159 d4=F696
+f=3203 lfc=0C84 who=sonic F264_EXIT sensor=2 path=normal d1=1 angle_out=12
+f=3203 lfc=0C84 who=sonic PLAYER_ANGLE primary_d0=11 secondary_d1=1 prim_angle=10 sec_angle=12 chosen=secondary/left player_angle=12
+f=3203 lfc=0C84 who=sonic ED14_POSITIVE min_d1=1 xvel=0349 stick=00
+f=3203 lfc=0C84 who=tails ANGLEPOS zone=07 act=00 x=0FFA y=0770 xsub=C600 ysub=8B00 xvel=FE74 yvel=0000 gvel=FE74 ang=00 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3203 lfc=0C84 who=tails F264_IN sensor=1 sx=1003 sy=077F d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3203 lfc=0C84 who=tails F264_EXIT sensor=1 path=tile_below_+10 d1=0 angle_out=FF
+f=3203 lfc=0C84 who=tails F264_IN sensor=2 sx=0FF1 sy=077F d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3203 lfc=0C84 who=tails F264_EXIT sensor=2 path=tile_below_+10 d1=0 angle_out=FF
+f=3203 lfc=0C84 who=tails PLAYER_ANGLE primary_d0=0 secondary_d1=0 prim_angle=FF sec_angle=FF chosen=secondary/left player_angle=00
+f=3203 lfc=0C84 who=tails ED12_RETURN d1=0 player_angle=00
+f=3204 lfc=0C85 who=sonic ANGLEPOS zone=07 act=00 x=0EB3 y=0792 xsub=6300 ysub=4E00 xvel=036B yvel=019D gvel=03CA ang=12 status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3204 lfc=0C85 who=sonic F264_IN sensor=1 sx=0EBC sy=07A5 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3204 lfc=0C85 who=sonic F264_SOLID sensor=1 chunk_word=F66A chunk_idx=26A
+f=3204 lfc=0C85 who=sonic F264_BLOCK sensor=1 block_id=41 angle_arr=10 col_pre=F143 d4=F66A
+f=3204 lfc=0C85 who=sonic F264_EXIT sensor=1 path=tile_below_+10 d1=10 angle_out=0C
+f=3204 lfc=0C85 who=sonic F264_IN sensor=2 sx=0EAA sy=07A5 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3204 lfc=0C85 who=sonic F264_SOLID sensor=2 chunk_word=F696 chunk_idx=296
+f=3204 lfc=0C85 who=sonic F264_BLOCK sensor=2 block_id=42 angle_arr=12 col_pre=F155 d4=F696
+f=3204 lfc=0C85 who=sonic F264_EXIT sensor=2 path=normal d1=0 angle_out=12
+f=3204 lfc=0C85 who=sonic PLAYER_ANGLE primary_d0=10 secondary_d1=0 prim_angle=0C sec_angle=12 chosen=secondary/left player_angle=12
+f=3204 lfc=0C85 who=sonic ED12_RETURN d1=0 player_angle=12
+f=3204 lfc=0C85 who=tails ANGLEPOS zone=07 act=00 x=0FF8 y=0770 xsub=2E00 ysub=8B00 xvel=FE68 yvel=0000 gvel=FE68 ang=00 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3204 lfc=0C85 who=tails F264_IN sensor=1 sx=1001 sy=077F d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3204 lfc=0C85 who=tails F264_EXIT sensor=1 path=tile_below_+10 d1=0 angle_out=FF
+f=3204 lfc=0C85 who=tails F264_IN sensor=2 sx=0FEF sy=077F d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3204 lfc=0C85 who=tails F264_EXIT sensor=2 path=tile_below_+10 d1=0 angle_out=FC
+f=3204 lfc=0C85 who=tails PLAYER_ANGLE primary_d0=0 secondary_d1=0 prim_angle=FF sec_angle=FC chosen=secondary/left player_angle=00
+f=3204 lfc=0C85 who=tails ED12_RETURN d1=0 player_angle=FC
+f=3205 lfc=0C86 who=sonic ANGLEPOS zone=07 act=00 x=0EB6 y=0793 xsub=EF00 ysub=FA00 xvel=038C yvel=01AC gvel=03EF ang=12 status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3205 lfc=0C86 who=sonic F264_IN sensor=1 sx=0EBF sy=07A6 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3205 lfc=0C86 who=sonic F264_SOLID sensor=1 chunk_word=F66A chunk_idx=26A
+f=3205 lfc=0C86 who=sonic F264_BLOCK sensor=1 block_id=41 angle_arr=10 col_pre=F140 d4=F66A
+f=3205 lfc=0C86 who=sonic F264_EXIT sensor=1 path=tile_below_+10 d1=11 angle_out=0C
+f=3205 lfc=0C86 who=sonic F264_IN sensor=2 sx=0EAD sy=07A6 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3205 lfc=0C86 who=sonic F264_SOLID sensor=2 chunk_word=F696 chunk_idx=296
+f=3205 lfc=0C86 who=sonic F264_BLOCK sensor=2 block_id=42 angle_arr=12 col_pre=F152 d4=F696
+f=3205 lfc=0C86 who=sonic F264_EXIT sensor=2 path=normal d1=1 angle_out=12
+f=3205 lfc=0C86 who=sonic PLAYER_ANGLE primary_d0=11 secondary_d1=1 prim_angle=0C sec_angle=12 chosen=secondary/left player_angle=12
+f=3205 lfc=0C86 who=sonic ED14_POSITIVE min_d1=1 xvel=038C stick=00
+f=3205 lfc=0C86 who=tails ANGLEPOS zone=07 act=00 x=0FF5 y=0770 xsub=8900 ysub=B400 xvel=FE5B yvel=0029 gvel=FE58 ang=FC status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3205 lfc=0C86 who=tails F264_IN sensor=1 sx=0FFE sy=077F d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3205 lfc=0C86 who=tails F264_EXIT sensor=1 path=tile_below_+10 d1=0 angle_out=FF
+f=3205 lfc=0C86 who=tails F264_IN sensor=2 sx=0FEC sy=077F d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3205 lfc=0C86 who=tails F264_EXIT sensor=2 path=tile_below_+10 d1=1 angle_out=FC
+f=3205 lfc=0C86 who=tails PLAYER_ANGLE primary_d0=0 secondary_d1=1 prim_angle=FF sec_angle=FC chosen=primary/right player_angle=FC
+f=3205 lfc=0C86 who=tails ED12_RETURN d1=0 player_angle=00
+f=3206 lfc=0C87 who=sonic ANGLEPOS zone=07 act=00 x=0EBA y=0796 xsub=9D00 ysub=B600 xvel=03AE yvel=01BC gvel=0414 ang=12 status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3206 lfc=0C87 who=sonic F264_IN sensor=1 sx=0EC3 sy=07A9 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3206 lfc=0C87 who=sonic F264_EXIT sensor=1 path=tile_below_+10 d1=9 angle_out=0C
+f=3206 lfc=0C87 who=sonic F264_IN sensor=2 sx=0EB1 sy=07A9 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3206 lfc=0C87 who=sonic F264_SOLID sensor=2 chunk_word=F66A chunk_idx=26A
+f=3206 lfc=0C87 who=sonic F264_BLOCK sensor=2 block_id=41 angle_arr=10 col_pre=F14E d4=F66A
+f=3206 lfc=0C87 who=sonic F264_EXIT sensor=2 path=normal d1=1 angle_out=10
+f=3206 lfc=0C87 who=sonic PLAYER_ANGLE primary_d0=9 secondary_d1=1 prim_angle=0C sec_angle=10 chosen=secondary/left player_angle=12
+f=3206 lfc=0C87 who=sonic ED14_POSITIVE min_d1=1 xvel=03AE stick=00
+f=3206 lfc=0C87 who=tails ANGLEPOS zone=07 act=00 x=0FF2 y=0770 xsub=D500 ysub=B400 xvel=FE4C yvel=0000 gvel=FE4C ang=00 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3206 lfc=0C87 who=tails F264_IN sensor=1 sx=0FFB sy=077F d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3206 lfc=0C87 who=tails F264_EXIT sensor=1 path=tile_below_+10 d1=0 angle_out=FF
+f=3206 lfc=0C87 who=tails F264_IN sensor=2 sx=0FE9 sy=077F d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3206 lfc=0C87 who=tails F264_EXIT sensor=2 path=tile_below_+10 d1=1 angle_out=FC
+f=3206 lfc=0C87 who=tails PLAYER_ANGLE primary_d0=0 secondary_d1=1 prim_angle=FF sec_angle=FC chosen=primary/right player_angle=00
+f=3206 lfc=0C87 who=tails ED12_RETURN d1=0 player_angle=00
+f=3207 lfc=0C88 who=sonic ANGLEPOS zone=07 act=00 x=0EBE y=0799 xsub=8000 ysub=4F00 xvel=03E3 yvel=0199 gvel=0438 ang=10 status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3207 lfc=0C88 who=sonic F264_IN sensor=1 sx=0EC7 sy=07AC d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3207 lfc=0C88 who=sonic F264_EXIT sensor=1 path=tile_below_+10 d1=8 angle_out=0C
+f=3207 lfc=0C88 who=sonic F264_IN sensor=2 sx=0EB5 sy=07AC d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3207 lfc=0C88 who=sonic F264_SOLID sensor=2 chunk_word=F66A chunk_idx=26A
+f=3207 lfc=0C88 who=sonic F264_BLOCK sensor=2 block_id=41 angle_arr=10 col_pre=F14A d4=F66A
+f=3207 lfc=0C88 who=sonic F264_EXIT sensor=2 path=normal d1=0 angle_out=10
+f=3207 lfc=0C88 who=sonic PLAYER_ANGLE primary_d0=8 secondary_d1=0 prim_angle=0C sec_angle=10 chosen=secondary/left player_angle=10
+f=3207 lfc=0C88 who=sonic ED12_RETURN d1=0 player_angle=10
+f=3207 lfc=0C88 who=tails ANGLEPOS zone=07 act=00 x=0FF0 y=0770 xsub=1500 ysub=B400 xvel=FE40 yvel=0000 gvel=FE40 ang=00 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3207 lfc=0C88 who=tails F264_IN sensor=1 sx=0FF9 sy=077F d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3207 lfc=0C88 who=tails F264_EXIT sensor=1 path=tile_below_+10 d1=0 angle_out=FF
+f=3207 lfc=0C88 who=tails F264_IN sensor=2 sx=0FE7 sy=077F d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3207 lfc=0C88 who=tails F264_EXIT sensor=2 path=tile_below_+10 d1=1 angle_out=FC
+f=3207 lfc=0C88 who=tails PLAYER_ANGLE primary_d0=0 secondary_d1=1 prim_angle=FF sec_angle=FC chosen=primary/right player_angle=00
+f=3207 lfc=0C88 who=tails ED12_RETURN d1=0 player_angle=00
+f=3208 lfc=0C89 who=sonic ANGLEPOS zone=07 act=00 x=0EC2 y=079A xsub=8400 ysub=F500 xvel=0404 yvel=01A6 gvel=045C ang=10 status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3208 lfc=0C89 who=sonic F264_IN sensor=1 sx=0ECB sy=07AD d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3208 lfc=0C89 who=sonic F264_EXIT sensor=1 path=tile_below_+10 d1=8 angle_out=0C
+f=3208 lfc=0C89 who=sonic F264_IN sensor=2 sx=0EB9 sy=07AD d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3208 lfc=0C89 who=sonic F264_SOLID sensor=2 chunk_word=F66A chunk_idx=26A
+f=3208 lfc=0C89 who=sonic F264_BLOCK sensor=2 block_id=41 angle_arr=10 col_pre=F146 d4=F66A
+f=3208 lfc=0C89 who=sonic F264_EXIT sensor=2 path=normal d1=1 angle_out=10
+f=3208 lfc=0C89 who=sonic PLAYER_ANGLE primary_d0=8 secondary_d1=1 prim_angle=0C sec_angle=10 chosen=secondary/left player_angle=10
+f=3208 lfc=0C89 who=sonic ED14_POSITIVE min_d1=1 xvel=0404 stick=00
+f=3208 lfc=0C89 who=tails ANGLEPOS zone=07 act=00 x=0FED y=0770 xsub=4900 ysub=B400 xvel=FE34 yvel=0000 gvel=FE34 ang=00 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3208 lfc=0C89 who=tails F264_IN sensor=1 sx=0FF6 sy=077F d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3208 lfc=0C89 who=tails F264_EXIT sensor=1 path=tile_below_+10 d1=0 angle_out=FF
+f=3208 lfc=0C89 who=tails F264_IN sensor=2 sx=0FE4 sy=077F d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3208 lfc=0C89 who=tails F264_EXIT sensor=2 path=tile_below_+10 d1=1 angle_out=FC
+f=3208 lfc=0C89 who=tails PLAYER_ANGLE primary_d0=0 secondary_d1=1 prim_angle=FF sec_angle=FC chosen=primary/right player_angle=00
+f=3208 lfc=0C89 who=tails ED12_RETURN d1=0 player_angle=00
+f=3209 lfc=0C8A who=sonic ANGLEPOS zone=07 act=00 x=0EC6 y=079D xsub=AA00 ysub=A900 xvel=0426 yvel=01B4 gvel=0480 ang=10 status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3209 lfc=0C8A who=sonic F264_IN sensor=1 sx=0ECF sy=07B0 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3209 lfc=0C8A who=sonic F264_SOLID sensor=1 chunk_word=F65A chunk_idx=25A
+f=3209 lfc=0C8A who=sonic F264_BLOCK sensor=1 block_id=46 angle_arr=0C col_pre=F130 d4=F65A
+f=3209 lfc=0C8A who=sonic F264_EXIT sensor=1 path=normal d1=7 angle_out=0C
+f=3209 lfc=0C8A who=sonic F264_IN sensor=2 sx=0EBD sy=07B0 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3209 lfc=0C8A who=sonic F264_SOLID sensor=2 chunk_word=F65B chunk_idx=25B
+f=3209 lfc=0C8A who=sonic F264_BLOCK sensor=2 block_id=47 angle_arr=0C col_pre=F142 d4=F65B
+f=3209 lfc=0C8A who=sonic F264_EXIT sensor=2 path=normal d1=0 angle_out=0C
+f=3209 lfc=0C8A who=sonic PLAYER_ANGLE primary_d0=7 secondary_d1=0 prim_angle=0C sec_angle=0C chosen=secondary/left player_angle=10
+f=3209 lfc=0C8A who=sonic ED12_RETURN d1=0 player_angle=0C
+f=3209 lfc=0C8A who=tails ANGLEPOS zone=07 act=00 x=0FEA y=0770 xsub=7100 ysub=B400 xvel=FE28 yvel=0000 gvel=FE28 ang=00 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3209 lfc=0C8A who=tails F264_IN sensor=1 sx=0FF3 sy=077F d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3209 lfc=0C8A who=tails F264_EXIT sensor=1 path=tile_below_+10 d1=0 angle_out=FF
+f=3209 lfc=0C8A who=tails F264_IN sensor=2 sx=0FE1 sy=077F d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3209 lfc=0C8A who=tails F264_EXIT sensor=2 path=tile_below_+10 d1=2 angle_out=FC
+f=3209 lfc=0C8A who=tails PLAYER_ANGLE primary_d0=0 secondary_d1=2 prim_angle=FF sec_angle=FC chosen=primary/right player_angle=00
+f=3209 lfc=0C8A who=tails ED12_RETURN d1=0 player_angle=00
+f=3210 lfc=0C8B who=sonic ANGLEPOS zone=07 act=00 x=0ECB y=079E xsub=1300 ysub=FF00 xvel=0469 yvel=0156 gvel=04A1 ang=0C status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3210 lfc=0C8B who=sonic F264_IN sensor=1 sx=0ED4 sy=07B1 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3210 lfc=0C8B who=sonic F264_SOLID sensor=1 chunk_word=F66D chunk_idx=26D
+f=3210 lfc=0C8B who=sonic F264_BLOCK sensor=1 block_id=45 angle_arr=08 col_pre=F12B d4=F66D
+f=3210 lfc=0C8B who=sonic F264_EXIT sensor=1 path=normal d1=7 angle_out=08
+f=3210 lfc=0C8B who=sonic F264_IN sensor=2 sx=0EC2 sy=07B1 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3210 lfc=0C8B who=sonic F264_SOLID sensor=2 chunk_word=F65A chunk_idx=25A
+f=3210 lfc=0C8B who=sonic F264_BLOCK sensor=2 block_id=46 angle_arr=0C col_pre=F13D d4=F65A
+f=3210 lfc=0C8B who=sonic F264_EXIT sensor=2 path=normal d1=1 angle_out=0C
+f=3210 lfc=0C8B who=sonic PLAYER_ANGLE primary_d0=7 secondary_d1=1 prim_angle=08 sec_angle=0C chosen=secondary/left player_angle=0C
+f=3210 lfc=0C8B who=sonic ED14_POSITIVE min_d1=1 xvel=0469 stick=00
+f=3210 lfc=0C8B who=tails ANGLEPOS zone=07 act=00 x=0FE7 y=0770 xsub=8D00 ysub=B400 xvel=FE1C yvel=0000 gvel=FE1C ang=00 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3210 lfc=0C8B who=tails F264_IN sensor=1 sx=0FF0 sy=077F d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3210 lfc=0C8B who=tails F264_EXIT sensor=1 path=tile_below_+10 d1=0 angle_out=FF
+f=3210 lfc=0C8B who=tails F264_IN sensor=2 sx=0FDE sy=077F d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3210 lfc=0C8B who=tails F264_EXIT sensor=2 path=tile_below_+10 d1=2 angle_out=FC
+f=3210 lfc=0C8B who=tails PLAYER_ANGLE primary_d0=0 secondary_d1=2 prim_angle=FF sec_angle=FC chosen=primary/right player_angle=00
+f=3210 lfc=0C8B who=tails ED12_RETURN d1=0 player_angle=00
+f=3211 lfc=0C8C who=sonic ANGLEPOS zone=07 act=00 x=0ECF y=07A1 xsub=9B00 ysub=5F00 xvel=0488 yvel=0160 gvel=04C2 ang=0C status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3211 lfc=0C8C who=sonic F264_IN sensor=1 sx=0ED8 sy=07B4 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3211 lfc=0C8C who=sonic F264_SOLID sensor=1 chunk_word=F66D chunk_idx=26D
+f=3211 lfc=0C8C who=sonic F264_BLOCK sensor=1 block_id=45 angle_arr=08 col_pre=F127 d4=F66D
+f=3211 lfc=0C8C who=sonic F264_EXIT sensor=1 path=normal d1=5 angle_out=08
+f=3211 lfc=0C8C who=sonic F264_IN sensor=2 sx=0EC6 sy=07B4 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3211 lfc=0C8C who=sonic F264_SOLID sensor=2 chunk_word=F65A chunk_idx=25A
+f=3211 lfc=0C8C who=sonic F264_BLOCK sensor=2 block_id=46 angle_arr=0C col_pre=F139 d4=F65A
+f=3211 lfc=0C8C who=sonic F264_EXIT sensor=2 path=normal d1=-1 angle_out=0C
+f=3211 lfc=0C8C who=sonic PLAYER_ANGLE primary_d0=5 secondary_d1=-1 prim_angle=08 sec_angle=0C chosen=secondary/left player_angle=0C
+f=3211 lfc=0C8C who=sonic ED12_RETURN d1=-1 player_angle=0C
+f=3211 lfc=0C8C who=tails ANGLEPOS zone=07 act=00 x=0FE4 y=0770 xsub=9D00 ysub=B400 xvel=FE10 yvel=0000 gvel=FE10 ang=00 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3211 lfc=0C8C who=tails F264_IN sensor=1 sx=0FED sy=077F d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3211 lfc=0C8C who=tails F264_EXIT sensor=1 path=tile_below_+10 d1=1 angle_out=FC
+f=3211 lfc=0C8C who=tails F264_IN sensor=2 sx=0FDB sy=077F d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3211 lfc=0C8C who=tails F264_EXIT sensor=2 path=tile_below_+10 d1=2 angle_out=FC
+f=3211 lfc=0C8C who=tails PLAYER_ANGLE primary_d0=1 secondary_d1=2 prim_angle=FC sec_angle=FC chosen=primary/right player_angle=00
+f=3211 lfc=0C8C who=tails ED14_POSITIVE min_d1=1 xvel=FE10 stick=00
+f=3212 lfc=0C8D who=sonic ANGLEPOS zone=07 act=00 x=0ED4 y=07A1 xsub=4300 ysub=C800 xvel=04A8 yvel=0169 gvel=04E3 ang=0C status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3212 lfc=0C8D who=sonic F264_IN sensor=1 sx=0EDD sy=07B4 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3212 lfc=0C8D who=sonic F264_SOLID sensor=1 chunk_word=F66D chunk_idx=26D
+f=3212 lfc=0C8D who=sonic F264_BLOCK sensor=1 block_id=45 angle_arr=08 col_pre=F122 d4=F66D
+f=3212 lfc=0C8D who=sonic F264_EXIT sensor=1 path=normal d1=6 angle_out=08
+f=3212 lfc=0C8D who=sonic F264_IN sensor=2 sx=0ECB sy=07B4 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3212 lfc=0C8D who=sonic F264_SOLID sensor=2 chunk_word=F65A chunk_idx=25A
+f=3212 lfc=0C8D who=sonic F264_BLOCK sensor=2 block_id=46 angle_arr=0C col_pre=F134 d4=F65A
+f=3212 lfc=0C8D who=sonic F264_EXIT sensor=2 path=normal d1=1 angle_out=0C
+f=3212 lfc=0C8D who=sonic PLAYER_ANGLE primary_d0=6 secondary_d1=1 prim_angle=08 sec_angle=0C chosen=secondary/left player_angle=0C
+f=3212 lfc=0C8D who=sonic ED14_POSITIVE min_d1=1 xvel=04A8 stick=00
+f=3212 lfc=0C8D who=tails ANGLEPOS zone=07 act=00 x=0FE1 y=0771 xsub=A100 ysub=E600 xvel=FE04 yvel=0032 gvel=FE00 ang=FC status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3212 lfc=0C8D who=tails F264_IN sensor=1 sx=0FEA sy=0780 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3212 lfc=0C8D who=tails F264_SOLID sensor=1 chunk_word=F099 chunk_idx=099
+f=3212 lfc=0C8D who=tails F264_BLOCK sensor=1 block_id=3B angle_arr=FC col_pre=0FEA d4=F099
+f=3212 lfc=0C8D who=tails F264_EXIT sensor=1 path=normal d1=0 angle_out=FC
+f=3212 lfc=0C8D who=tails F264_IN sensor=2 sx=0FD8 sy=0780 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3212 lfc=0C8D who=tails F264_SOLID sensor=2 chunk_word=F09A chunk_idx=09A
+f=3212 lfc=0C8D who=tails F264_BLOCK sensor=2 block_id=3A angle_arr=FC col_pre=0FD8 d4=F09A
+f=3212 lfc=0C8D who=tails F264_EXIT sensor=2 path=normal d1=2 angle_out=FC
+f=3212 lfc=0C8D who=tails PLAYER_ANGLE primary_d0=0 secondary_d1=2 prim_angle=FC sec_angle=FC chosen=primary/right player_angle=FC
+f=3212 lfc=0C8D who=tails ED12_RETURN d1=0 player_angle=FC
+f=3213 lfc=0C8E who=sonic ANGLEPOS zone=07 act=00 x=0ED9 y=07A4 xsub=0A00 ysub=3B00 xvel=04C7 yvel=0173 gvel=0504 ang=0C status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3213 lfc=0C8E who=sonic F264_IN sensor=1 sx=0EE2 sy=07B7 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3213 lfc=0C8E who=sonic F264_SOLID sensor=1 chunk_word=F66C chunk_idx=26C
+f=3213 lfc=0C8E who=sonic F264_BLOCK sensor=1 block_id=44 angle_arr=04 col_pre=F11D d4=F66C
+f=3213 lfc=0C8E who=sonic F264_EXIT sensor=1 path=normal d1=4 angle_out=04
+f=3213 lfc=0C8E who=sonic F264_IN sensor=2 sx=0ED0 sy=07B7 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3213 lfc=0C8E who=sonic F264_SOLID sensor=2 chunk_word=F66D chunk_idx=26D
+f=3213 lfc=0C8E who=sonic F264_BLOCK sensor=2 block_id=45 angle_arr=08 col_pre=F12F d4=F66D
+f=3213 lfc=0C8E who=sonic F264_EXIT sensor=2 path=normal d1=0 angle_out=08
+f=3213 lfc=0C8E who=sonic PLAYER_ANGLE primary_d0=4 secondary_d1=0 prim_angle=04 sec_angle=08 chosen=secondary/left player_angle=0C
+f=3213 lfc=0C8E who=sonic ED12_RETURN d1=0 player_angle=08
+f=3213 lfc=0C8E who=tails ANGLEPOS zone=07 act=00 x=0FDE y=0772 xsub=9500 ysub=1900 xvel=FDF4 yvel=0033 gvel=FDF0 ang=FC status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3213 lfc=0C8E who=tails F264_IN sensor=1 sx=0FE7 sy=0781 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3213 lfc=0C8E who=tails F264_SOLID sensor=1 chunk_word=F099 chunk_idx=099
+f=3213 lfc=0C8E who=tails F264_BLOCK sensor=1 block_id=3B angle_arr=FC col_pre=0FE7 d4=F099
+f=3213 lfc=0C8E who=tails F264_EXIT sensor=1 path=normal d1=-1 angle_out=FC
+f=3213 lfc=0C8E who=tails F264_IN sensor=2 sx=0FD5 sy=0781 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3213 lfc=0C8E who=tails F264_SOLID sensor=2 chunk_word=F09A chunk_idx=09A
+f=3213 lfc=0C8E who=tails F264_BLOCK sensor=2 block_id=3A angle_arr=FC col_pre=0FD5 d4=F09A
+f=3213 lfc=0C8E who=tails F264_EXIT sensor=2 path=normal d1=1 angle_out=FC
+f=3213 lfc=0C8E who=tails PLAYER_ANGLE primary_d0=-1 secondary_d1=1 prim_angle=FC sec_angle=FC chosen=primary/right player_angle=FC
+f=3213 lfc=0C8E who=tails ED12_RETURN d1=-1 player_angle=FC
+f=3214 lfc=0C8F who=sonic ANGLEPOS zone=07 act=00 x=0EDE y=07A5 xsub=1200 ysub=3600 xvel=0508 yvel=00FB gvel=0522 ang=08 status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3214 lfc=0C8F who=sonic F264_IN sensor=1 sx=0EE7 sy=07B8 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3214 lfc=0C8F who=sonic F264_SOLID sensor=1 chunk_word=F66C chunk_idx=26C
+f=3214 lfc=0C8F who=sonic F264_BLOCK sensor=1 block_id=44 angle_arr=04 col_pre=F118 d4=F66C
+f=3214 lfc=0C8F who=sonic F264_EXIT sensor=1 path=normal d1=4 angle_out=04
+f=3214 lfc=0C8F who=sonic F264_IN sensor=2 sx=0ED5 sy=07B8 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3214 lfc=0C8F who=sonic F264_SOLID sensor=2 chunk_word=F66D chunk_idx=26D
+f=3214 lfc=0C8F who=sonic F264_BLOCK sensor=2 block_id=45 angle_arr=08 col_pre=F12A d4=F66D
+f=3214 lfc=0C8F who=sonic F264_EXIT sensor=2 path=normal d1=0 angle_out=08
+f=3214 lfc=0C8F who=sonic PLAYER_ANGLE primary_d0=4 secondary_d1=0 prim_angle=04 sec_angle=08 chosen=secondary/left player_angle=08
+f=3214 lfc=0C8F who=sonic ED12_RETURN d1=0 player_angle=08
+f=3214 lfc=0C8F who=tails ANGLEPOS zone=07 act=00 x=0FDB y=0771 xsub=7900 ysub=4E00 xvel=FDE4 yvel=0035 gvel=FDE0 ang=FC status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3214 lfc=0C8F who=tails F264_IN sensor=1 sx=0FE4 sy=0780 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3214 lfc=0C8F who=tails F264_SOLID sensor=1 chunk_word=F099 chunk_idx=099
+f=3214 lfc=0C8F who=tails F264_BLOCK sensor=1 block_id=3B angle_arr=FC col_pre=0FE4 d4=F099
+f=3214 lfc=0C8F who=tails F264_EXIT sensor=1 path=normal d1=0 angle_out=FC
+f=3214 lfc=0C8F who=tails F264_IN sensor=2 sx=0FD2 sy=0780 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3214 lfc=0C8F who=tails F264_SOLID sensor=2 chunk_word=F09A chunk_idx=09A
+f=3214 lfc=0C8F who=tails F264_BLOCK sensor=2 block_id=3A angle_arr=FC col_pre=0FD2 d4=F09A
+f=3214 lfc=0C8F who=tails F264_EXIT sensor=2 path=normal d1=3 angle_out=FC
+f=3214 lfc=0C8F who=tails PLAYER_ANGLE primary_d0=0 secondary_d1=3 prim_angle=FC sec_angle=FC chosen=primary/right player_angle=FC
+f=3214 lfc=0C8F who=tails ED12_RETURN d1=0 player_angle=FC
+f=3215 lfc=0C90 who=sonic ANGLEPOS zone=07 act=00 x=0EE3 y=07A6 xsub=3700 ysub=3700 xvel=0525 yvel=0101 gvel=0540 ang=08 status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3215 lfc=0C90 who=sonic F264_IN sensor=1 sx=0EEC sy=07B9 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3215 lfc=0C90 who=sonic F264_SOLID sensor=1 chunk_word=F66C chunk_idx=26C
+f=3215 lfc=0C90 who=sonic F264_BLOCK sensor=1 block_id=44 angle_arr=04 col_pre=F113 d4=F66C
+f=3215 lfc=0C90 who=sonic F264_EXIT sensor=1 path=normal d1=4 angle_out=04
+f=3215 lfc=0C90 who=sonic F264_IN sensor=2 sx=0EDA sy=07B9 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3215 lfc=0C90 who=sonic F264_SOLID sensor=2 chunk_word=F66D chunk_idx=26D
+f=3215 lfc=0C90 who=sonic F264_BLOCK sensor=2 block_id=45 angle_arr=08 col_pre=F125 d4=F66D
+f=3215 lfc=0C90 who=sonic F264_EXIT sensor=2 path=normal d1=1 angle_out=08
+f=3215 lfc=0C90 who=sonic PLAYER_ANGLE primary_d0=4 secondary_d1=1 prim_angle=04 sec_angle=08 chosen=secondary/left player_angle=08
+f=3215 lfc=0C90 who=sonic ED14_POSITIVE min_d1=1 xvel=0525 stick=00
+f=3215 lfc=0C90 who=tails ANGLEPOS zone=07 act=00 x=0FD8 y=0771 xsub=4D00 ysub=8400 xvel=FDD4 yvel=0036 gvel=FDD0 ang=FC status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3215 lfc=0C90 who=tails F264_IN sensor=1 sx=0FE1 sy=0780 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3215 lfc=0C90 who=tails F264_SOLID sensor=1 chunk_word=F099 chunk_idx=099
+f=3215 lfc=0C90 who=tails F264_BLOCK sensor=1 block_id=3B angle_arr=FC col_pre=0FE1 d4=F099
+f=3215 lfc=0C90 who=tails F264_EXIT sensor=1 path=normal d1=1 angle_out=FC
+f=3215 lfc=0C90 who=tails F264_IN sensor=2 sx=0FCF sy=0780 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3215 lfc=0C90 who=tails F264_SOLID sensor=2 chunk_word=F2A0 chunk_idx=2A0
+f=3215 lfc=0C90 who=tails F264_BLOCK sensor=2 block_id=39 angle_arr=FA col_pre=0FCF d4=F2A0
+f=3215 lfc=0C90 who=tails F264_EXIT sensor=2 path=normal d1=3 angle_out=FA
+f=3215 lfc=0C90 who=tails PLAYER_ANGLE primary_d0=1 secondary_d1=3 prim_angle=FC sec_angle=FA chosen=primary/right player_angle=FC
+f=3215 lfc=0C90 who=tails ED14_POSITIVE min_d1=1 xvel=FDD4 stick=00
+f=3216 lfc=0C91 who=sonic ANGLEPOS zone=07 act=00 x=0EE8 y=07A8 xsub=7A00 ysub=3D00 xvel=0543 yvel=0106 gvel=055E ang=08 status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3216 lfc=0C91 who=sonic F264_IN sensor=1 sx=0EF1 sy=07BB d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3216 lfc=0C91 who=sonic F264_SOLID sensor=1 chunk_word=F66B chunk_idx=26B
+f=3216 lfc=0C91 who=sonic F264_BLOCK sensor=1 block_id=43 angle_arr=02 col_pre=F10E d4=F66B
+f=3216 lfc=0C91 who=sonic F264_EXIT sensor=1 path=normal d1=2 angle_out=02
+f=3216 lfc=0C91 who=sonic F264_IN sensor=2 sx=0EDF sy=07BB d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3216 lfc=0C91 who=sonic F264_SOLID sensor=2 chunk_word=F66D chunk_idx=26D
+f=3216 lfc=0C91 who=sonic F264_BLOCK sensor=2 block_id=45 angle_arr=08 col_pre=F120 d4=F66D
+f=3216 lfc=0C91 who=sonic F264_EXIT sensor=2 path=normal d1=0 angle_out=08
+f=3216 lfc=0C91 who=sonic PLAYER_ANGLE primary_d0=2 secondary_d1=0 prim_angle=02 sec_angle=08 chosen=secondary/left player_angle=08
+f=3216 lfc=0C91 who=sonic ED12_RETURN d1=0 player_angle=08
+f=3216 lfc=0C91 who=tails ANGLEPOS zone=07 act=00 x=0FD5 y=0772 xsub=1100 ysub=BC00 xvel=FDC4 yvel=0038 gvel=FDC0 ang=FC status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3216 lfc=0C91 who=tails F264_IN sensor=1 sx=0FDE sy=0781 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3216 lfc=0C91 who=tails F264_SOLID sensor=1 chunk_word=F09A chunk_idx=09A
+f=3216 lfc=0C91 who=tails F264_BLOCK sensor=1 block_id=3A angle_arr=FC col_pre=0FDE d4=F09A
+f=3216 lfc=0C91 who=tails F264_EXIT sensor=1 path=normal d1=0 angle_out=FC
+f=3216 lfc=0C91 who=tails F264_IN sensor=2 sx=0FCC sy=0781 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3216 lfc=0C91 who=tails F264_SOLID sensor=2 chunk_word=F2A0 chunk_idx=2A0
+f=3216 lfc=0C91 who=tails F264_BLOCK sensor=2 block_id=39 angle_arr=FA col_pre=0FCC d4=F2A0
+f=3216 lfc=0C91 who=tails F264_EXIT sensor=2 path=normal d1=3 angle_out=FA
+f=3216 lfc=0C91 who=tails PLAYER_ANGLE primary_d0=0 secondary_d1=3 prim_angle=FC sec_angle=FA chosen=primary/right player_angle=FC
+f=3216 lfc=0C91 who=tails ED12_RETURN d1=0 player_angle=FC
+f=3217 lfc=0C92 who=sonic ANGLEPOS zone=07 act=00 x=0EED y=07A9 xsub=DA00 ysub=4900 xvel=0560 yvel=010C gvel=057C ang=08 status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3217 lfc=0C92 who=sonic F264_IN sensor=1 sx=0EF6 sy=07BC d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3217 lfc=0C92 who=sonic F264_SOLID sensor=1 chunk_word=F66B chunk_idx=26B
+f=3217 lfc=0C92 who=sonic F264_BLOCK sensor=1 block_id=43 angle_arr=02 col_pre=F109 d4=F66B
+f=3217 lfc=0C92 who=sonic F264_EXIT sensor=1 path=normal d1=2 angle_out=02
+f=3217 lfc=0C92 who=sonic F264_IN sensor=2 sx=0EE4 sy=07BC d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3217 lfc=0C92 who=sonic F264_SOLID sensor=2 chunk_word=F66C chunk_idx=26C
+f=3217 lfc=0C92 who=sonic F264_BLOCK sensor=2 block_id=44 angle_arr=04 col_pre=F11B d4=F66C
+f=3217 lfc=0C92 who=sonic F264_EXIT sensor=2 path=normal d1=0 angle_out=04
+f=3217 lfc=0C92 who=sonic PLAYER_ANGLE primary_d0=2 secondary_d1=0 prim_angle=02 sec_angle=04 chosen=secondary/left player_angle=08
+f=3217 lfc=0C92 who=sonic ED12_RETURN d1=0 player_angle=04
+f=3217 lfc=0C92 who=tails ANGLEPOS zone=07 act=00 x=0FD1 y=0772 xsub=C500 ysub=F500 xvel=FDB4 yvel=0039 gvel=FDB0 ang=FC status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3217 lfc=0C92 who=tails F264_IN sensor=1 sx=0FDA sy=0781 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3217 lfc=0C92 who=tails F264_SOLID sensor=1 chunk_word=F09A chunk_idx=09A
+f=3217 lfc=0C92 who=tails F264_BLOCK sensor=1 block_id=3A angle_arr=FC col_pre=0FDA d4=F09A
+f=3217 lfc=0C92 who=tails F264_EXIT sensor=1 path=normal d1=0 angle_out=FC
+f=3217 lfc=0C92 who=tails F264_IN sensor=2 sx=0FC8 sy=0781 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3217 lfc=0C92 who=tails F264_SOLID sensor=2 chunk_word=F2A0 chunk_idx=2A0
+f=3217 lfc=0C92 who=tails F264_BLOCK sensor=2 block_id=39 angle_arr=FA col_pre=0FC8 d4=F2A0
+f=3217 lfc=0C92 who=tails F264_EXIT sensor=2 path=normal d1=3 angle_out=FA
+f=3217 lfc=0C92 who=tails PLAYER_ANGLE primary_d0=0 secondary_d1=3 prim_angle=FC sec_angle=FA chosen=primary/right player_angle=FC
+f=3217 lfc=0C92 who=tails ED12_RETURN d1=0 player_angle=FC
+f=3218 lfc=0C93 who=sonic ANGLEPOS zone=07 act=00 x=0EF3 y=07A9 xsub=6500 ysub=D400 xvel=058B yvel=008B gvel=0597 ang=04 status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3218 lfc=0C93 who=sonic F264_IN sensor=1 sx=0EFC sy=07BC d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3218 lfc=0C93 who=sonic F264_SOLID sensor=1 chunk_word=F66B chunk_idx=26B
+f=3218 lfc=0C93 who=sonic F264_BLOCK sensor=1 block_id=43 angle_arr=02 col_pre=F103 d4=F66B
+f=3218 lfc=0C93 who=sonic F264_EXIT sensor=1 path=normal d1=2 angle_out=02
+f=3218 lfc=0C93 who=sonic F264_IN sensor=2 sx=0EEA sy=07BC d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3218 lfc=0C93 who=sonic F264_SOLID sensor=2 chunk_word=F66C chunk_idx=26C
+f=3218 lfc=0C93 who=sonic F264_BLOCK sensor=2 block_id=44 angle_arr=04 col_pre=F115 d4=F66C
+f=3218 lfc=0C93 who=sonic F264_EXIT sensor=2 path=normal d1=1 angle_out=04
+f=3218 lfc=0C93 who=sonic PLAYER_ANGLE primary_d0=2 secondary_d1=1 prim_angle=02 sec_angle=04 chosen=secondary/left player_angle=04
+f=3218 lfc=0C93 who=sonic ED14_POSITIVE min_d1=1 xvel=058B stick=00
+f=3218 lfc=0C93 who=tails ANGLEPOS zone=07 act=00 x=0FCE y=0773 xsub=6900 ysub=3000 xvel=FDA4 yvel=003B gvel=FDA0 ang=FC status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3218 lfc=0C93 who=tails F264_IN sensor=1 sx=0FD7 sy=0782 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3218 lfc=0C93 who=tails F264_SOLID sensor=1 chunk_word=F09A chunk_idx=09A
+f=3218 lfc=0C93 who=tails F264_BLOCK sensor=1 block_id=3A angle_arr=FC col_pre=0FD7 d4=F09A
+f=3218 lfc=0C93 who=tails F264_EXIT sensor=1 path=normal d1=0 angle_out=FC
+f=3218 lfc=0C93 who=tails F264_IN sensor=2 sx=0FC5 sy=0782 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3218 lfc=0C93 who=tails F264_SOLID sensor=2 chunk_word=F2A0 chunk_idx=2A0
+f=3218 lfc=0C93 who=tails F264_BLOCK sensor=2 block_id=39 angle_arr=FA col_pre=0FC5 d4=F2A0
+f=3218 lfc=0C93 who=tails F264_EXIT sensor=2 path=normal d1=3 angle_out=FA
+f=3218 lfc=0C93 who=tails PLAYER_ANGLE primary_d0=0 secondary_d1=3 prim_angle=FC sec_angle=FA chosen=primary/right player_angle=FC
+f=3218 lfc=0C93 who=tails ED12_RETURN d1=0 player_angle=FC
+f=3219 lfc=0C94 who=sonic ANGLEPOS zone=07 act=00 x=0EF9 y=07AB xsub=0B00 ysub=6200 xvel=05A6 yvel=008E gvel=05B2 ang=04 status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3219 lfc=0C94 who=sonic F264_IN sensor=1 sx=0F02 sy=07BE d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3219 lfc=0C94 who=sonic F264_SOLID sensor=1 chunk_word=F0A9 chunk_idx=0A9
+f=3219 lfc=0C94 who=sonic F264_BLOCK sensor=1 block_id=01 angle_arr=FF col_pre=0F02 d4=F0A9
+f=3219 lfc=0C94 who=sonic F264_EXIT sensor=1 path=normal d1=0 angle_out=FF
+f=3219 lfc=0C94 who=sonic F264_IN sensor=2 sx=0EF0 sy=07BE d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3219 lfc=0C94 who=sonic F264_SOLID sensor=2 chunk_word=F66B chunk_idx=26B
+f=3219 lfc=0C94 who=sonic F264_BLOCK sensor=2 block_id=43 angle_arr=02 col_pre=F10F d4=F66B
+f=3219 lfc=0C94 who=sonic F264_EXIT sensor=2 path=normal d1=-1 angle_out=02
+f=3219 lfc=0C94 who=sonic PLAYER_ANGLE primary_d0=0 secondary_d1=-1 prim_angle=FF sec_angle=02 chosen=secondary/left player_angle=04
+f=3219 lfc=0C94 who=sonic ED12_RETURN d1=-1 player_angle=02
+f=3219 lfc=0C94 who=tails ANGLEPOS zone=07 act=00 x=0FCA y=0773 xsub=FD00 ysub=6C00 xvel=FD94 yvel=003C gvel=FD90 ang=FC status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3219 lfc=0C94 who=tails F264_IN sensor=1 sx=0FD3 sy=0782 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3219 lfc=0C94 who=tails F264_SOLID sensor=1 chunk_word=F09A chunk_idx=09A
+f=3219 lfc=0C94 who=tails F264_BLOCK sensor=1 block_id=3A angle_arr=FC col_pre=0FD3 d4=F09A
+f=3219 lfc=0C94 who=tails F264_EXIT sensor=1 path=normal d1=0 angle_out=FC
+f=3219 lfc=0C94 who=tails F264_IN sensor=2 sx=0FC1 sy=0782 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3219 lfc=0C94 who=tails F264_SOLID sensor=2 chunk_word=F2A0 chunk_idx=2A0
+f=3219 lfc=0C94 who=tails F264_BLOCK sensor=2 block_id=39 angle_arr=FA col_pre=0FC1 d4=F2A0
+f=3219 lfc=0C94 who=tails F264_EXIT sensor=2 path=normal d1=4 angle_out=FA
+f=3219 lfc=0C94 who=tails PLAYER_ANGLE primary_d0=0 secondary_d1=4 prim_angle=FC sec_angle=FA chosen=primary/right player_angle=FC
+f=3219 lfc=0C94 who=tails ED12_RETURN d1=0 player_angle=FC
+f=3220 lfc=0C95 who=sonic ANGLEPOS zone=07 act=00 x=0EFE y=07AA xsub=D000 ysub=A700 xvel=05C5 yvel=0045 gvel=05CB ang=02 status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3220 lfc=0C95 who=sonic F264_IN sensor=1 sx=0F07 sy=07BD d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3220 lfc=0C95 who=sonic F264_SOLID sensor=1 chunk_word=F0A9 chunk_idx=0A9
+f=3220 lfc=0C95 who=sonic F264_BLOCK sensor=1 block_id=01 angle_arr=FF col_pre=0F07 d4=F0A9
+f=3220 lfc=0C95 who=sonic F264_EXIT sensor=1 path=normal d1=1 angle_out=FF
+f=3220 lfc=0C95 who=sonic F264_IN sensor=2 sx=0EF5 sy=07BD d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3220 lfc=0C95 who=sonic F264_SOLID sensor=2 chunk_word=F66B chunk_idx=26B
+f=3220 lfc=0C95 who=sonic F264_BLOCK sensor=2 block_id=43 angle_arr=02 col_pre=F10A d4=F66B
+f=3220 lfc=0C95 who=sonic F264_EXIT sensor=2 path=normal d1=1 angle_out=02
+f=3220 lfc=0C95 who=sonic PLAYER_ANGLE primary_d0=1 secondary_d1=1 prim_angle=FF sec_angle=02 chosen=secondary/left player_angle=02
+f=3220 lfc=0C95 who=sonic ED14_POSITIVE min_d1=1 xvel=05C5 stick=00
+f=3220 lfc=0C95 who=tails ANGLEPOS zone=07 act=00 x=0FC7 y=0773 xsub=8200 ysub=AA00 xvel=FD85 yvel=003E gvel=FD80 ang=FC status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3220 lfc=0C95 who=tails F264_IN sensor=1 sx=0FD0 sy=0782 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3220 lfc=0C95 who=tails F264_SOLID sensor=1 chunk_word=F09A chunk_idx=09A
+f=3220 lfc=0C95 who=tails F264_BLOCK sensor=1 block_id=3A angle_arr=FC col_pre=0FD0 d4=F09A
+f=3220 lfc=0C95 who=tails F264_EXIT sensor=1 path=normal d1=1 angle_out=FC
+f=3220 lfc=0C95 who=tails F264_IN sensor=2 sx=0FBE sy=0782 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3220 lfc=0C95 who=tails F264_SOLID sensor=2 chunk_word=F276 chunk_idx=276
+f=3220 lfc=0C95 who=tails F264_BLOCK sensor=2 block_id=38 angle_arr=F8 col_pre=0FBE d4=F276
+f=3220 lfc=0C95 who=tails F264_EXIT sensor=2 path=normal d1=5 angle_out=F8
+f=3220 lfc=0C95 who=tails PLAYER_ANGLE primary_d0=1 secondary_d1=5 prim_angle=FC sec_angle=F8 chosen=primary/right player_angle=FC
+f=3220 lfc=0C95 who=tails ED14_POSITIVE min_d1=1 xvel=FD85 stick=00
+f=3221 lfc=0C96 who=sonic ANGLEPOS zone=07 act=00 x=0F04 y=07AB xsub=AE00 ysub=ED00 xvel=05DE yvel=0046 gvel=05E4 ang=02 status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3221 lfc=0C96 who=sonic F264_IN sensor=1 sx=0F0D sy=07BE d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3221 lfc=0C96 who=sonic F264_SOLID sensor=1 chunk_word=F0A9 chunk_idx=0A9
+f=3221 lfc=0C96 who=sonic F264_BLOCK sensor=1 block_id=01 angle_arr=FF col_pre=0F0D d4=F0A9
+f=3221 lfc=0C96 who=sonic F264_EXIT sensor=1 path=normal d1=0 angle_out=FF
+f=3221 lfc=0C96 who=sonic F264_IN sensor=2 sx=0EFB sy=07BE d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3221 lfc=0C96 who=sonic F264_SOLID sensor=2 chunk_word=F66B chunk_idx=26B
+f=3221 lfc=0C96 who=sonic F264_BLOCK sensor=2 block_id=43 angle_arr=02 col_pre=F104 d4=F66B
+f=3221 lfc=0C96 who=sonic F264_EXIT sensor=2 path=normal d1=0 angle_out=02
+f=3221 lfc=0C96 who=sonic PLAYER_ANGLE primary_d0=0 secondary_d1=0 prim_angle=FF sec_angle=02 chosen=secondary/left player_angle=02
+f=3221 lfc=0C96 who=sonic ED12_RETURN d1=0 player_angle=02
+f=3221 lfc=0C96 who=tails ANGLEPOS zone=07 act=00 x=0FC3 y=0774 xsub=F700 ysub=EA00 xvel=FD75 yvel=0040 gvel=FD70 ang=FC status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3221 lfc=0C96 who=tails F264_IN sensor=1 sx=0FCC sy=0783 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3221 lfc=0C96 who=tails F264_SOLID sensor=1 chunk_word=F2A0 chunk_idx=2A0
+f=3221 lfc=0C96 who=tails F264_BLOCK sensor=1 block_id=39 angle_arr=FA col_pre=0FCC d4=F2A0
+f=3221 lfc=0C96 who=tails F264_EXIT sensor=1 path=normal d1=1 angle_out=FA
+f=3221 lfc=0C96 who=tails F264_IN sensor=2 sx=0FBA sy=0783 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3221 lfc=0C96 who=tails F264_SOLID sensor=2 chunk_word=F276 chunk_idx=276
+f=3221 lfc=0C96 who=tails F264_BLOCK sensor=2 block_id=38 angle_arr=F8 col_pre=0FBA d4=F276
+f=3221 lfc=0C96 who=tails F264_EXIT sensor=2 path=normal d1=5 angle_out=F8
+f=3221 lfc=0C96 who=tails PLAYER_ANGLE primary_d0=1 secondary_d1=5 prim_angle=FA sec_angle=F8 chosen=primary/right player_angle=FC
+f=3221 lfc=0C96 who=tails ED14_POSITIVE min_d1=1 xvel=FD75 stick=00
+f=3222 lfc=0C97 who=sonic ANGLEPOS zone=07 act=00 x=0F0A y=07AC xsub=A500 ysub=3400 xvel=05F7 yvel=0047 gvel=05FD ang=02 status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3222 lfc=0C97 who=sonic F264_IN sensor=1 sx=0F13 sy=07BF d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3222 lfc=0C97 who=sonic F264_SOLID sensor=1 chunk_word=F0A8 chunk_idx=0A8
+f=3222 lfc=0C97 who=sonic F264_BLOCK sensor=1 block_id=32 angle_arr=FC col_pre=0F13 d4=F0A8
+f=3222 lfc=0C97 who=sonic F264_EXIT sensor=1 path=normal d1=-2 angle_out=FC
+f=3222 lfc=0C97 who=sonic F264_IN sensor=2 sx=0F01 sy=07BF d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3222 lfc=0C97 who=sonic F264_SOLID sensor=2 chunk_word=F0A9 chunk_idx=0A9
+f=3222 lfc=0C97 who=sonic F264_BLOCK sensor=2 block_id=01 angle_arr=FF col_pre=0F01 d4=F0A9
+f=3222 lfc=0C97 who=sonic F264_EXIT sensor=2 path=normal d1=-1 angle_out=FF
+f=3222 lfc=0C97 who=sonic PLAYER_ANGLE primary_d0=-2 secondary_d1=-1 prim_angle=FC sec_angle=FF chosen=primary/right player_angle=02
+f=3222 lfc=0C97 who=sonic ED12_RETURN d1=-2 player_angle=FC
+f=3222 lfc=0C97 who=tails ANGLEPOS zone=07 act=00 x=0FC0 y=0776 xsub=5D00 ysub=4B00 xvel=FD66 yvel=0061 gvel=FD5F ang=FA status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3222 lfc=0C97 who=tails F264_IN sensor=1 sx=0FC9 sy=0785 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3222 lfc=0C97 who=tails F264_SOLID sensor=1 chunk_word=F2A0 chunk_idx=2A0
+f=3222 lfc=0C97 who=tails F264_BLOCK sensor=1 block_id=39 angle_arr=FA col_pre=0FC9 d4=F2A0
+f=3222 lfc=0C97 who=tails F264_EXIT sensor=1 path=normal d1=-1 angle_out=FA
+f=3222 lfc=0C97 who=tails F264_IN sensor=2 sx=0FB7 sy=0785 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3222 lfc=0C97 who=tails F264_SOLID sensor=2 chunk_word=F276 chunk_idx=276
+f=3222 lfc=0C97 who=tails F264_BLOCK sensor=2 block_id=38 angle_arr=F8 col_pre=0FB7 d4=F276
+f=3222 lfc=0C97 who=tails F264_EXIT sensor=2 path=normal d1=3 angle_out=F8
+f=3222 lfc=0C97 who=tails PLAYER_ANGLE primary_d0=-1 secondary_d1=3 prim_angle=FA sec_angle=F8 chosen=primary/right player_angle=FA
+f=3222 lfc=0C97 who=tails ED12_RETURN d1=-1 player_angle=FA
+f=3223 lfc=0C98 who=sonic ANGLEPOS zone=07 act=00 x=0F10 y=07A9 xsub=A900 ysub=9C00 xvel=0604 yvel=FF68 gvel=0611 ang=FC status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3223 lfc=0C98 who=sonic F264_IN sensor=1 sx=0F19 sy=07BC d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3223 lfc=0C98 who=sonic F264_SOLID sensor=1 chunk_word=F0A8 chunk_idx=0A8
+f=3223 lfc=0C98 who=sonic F264_BLOCK sensor=1 block_id=32 angle_arr=FC col_pre=0F19 d4=F0A8
+f=3223 lfc=0C98 who=sonic F264_EXIT sensor=1 path=normal d1=1 angle_out=FC
+f=3223 lfc=0C98 who=sonic F264_IN sensor=2 sx=0F07 sy=07BC d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3223 lfc=0C98 who=sonic F264_SOLID sensor=2 chunk_word=F0A9 chunk_idx=0A9
+f=3223 lfc=0C98 who=sonic F264_BLOCK sensor=2 block_id=01 angle_arr=FF col_pre=0F07 d4=F0A9
+f=3223 lfc=0C98 who=sonic F264_EXIT sensor=2 path=normal d1=2 angle_out=FF
+f=3223 lfc=0C98 who=sonic PLAYER_ANGLE primary_d0=1 secondary_d1=2 prim_angle=FC sec_angle=FF chosen=primary/right player_angle=FC
+f=3223 lfc=0C98 who=sonic ED14_POSITIVE min_d1=1 xvel=0604 stick=00
+f=3223 lfc=0C98 who=tails ANGLEPOS zone=07 act=00 x=0FBC y=0775 xsub=B300 ysub=AE00 xvel=FD56 yvel=0063 gvel=FD4E ang=FA status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3223 lfc=0C98 who=tails F264_IN sensor=1 sx=0FC5 sy=0784 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3223 lfc=0C98 who=tails F264_SOLID sensor=1 chunk_word=F2A0 chunk_idx=2A0
+f=3223 lfc=0C98 who=tails F264_BLOCK sensor=1 block_id=39 angle_arr=FA col_pre=0FC5 d4=F2A0
+f=3223 lfc=0C98 who=tails F264_EXIT sensor=1 path=normal d1=1 angle_out=FA
+f=3223 lfc=0C98 who=tails F264_IN sensor=2 sx=0FB3 sy=0784 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3223 lfc=0C98 who=tails F264_SOLID sensor=2 chunk_word=F276 chunk_idx=276
+f=3223 lfc=0C98 who=tails F264_BLOCK sensor=2 block_id=38 angle_arr=F8 col_pre=0FB3 d4=F276
+f=3223 lfc=0C98 who=tails F264_EXIT sensor=2 path=normal d1=6 angle_out=F8
+f=3223 lfc=0C98 who=tails PLAYER_ANGLE primary_d0=1 secondary_d1=6 prim_angle=FA sec_angle=F8 chosen=primary/right player_angle=FA
+f=3223 lfc=0C98 who=tails ED14_POSITIVE min_d1=1 xvel=FD56 stick=00
+f=3224 lfc=0C99 who=sonic ANGLEPOS zone=07 act=00 x=0F16 y=07AA xsub=C100 ysub=0200 xvel=0618 yvel=FF66 gvel=0625 ang=FC status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3224 lfc=0C99 who=sonic F264_IN sensor=1 sx=0F1F sy=07BD d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3224 lfc=0C99 who=sonic F264_SOLID sensor=1 chunk_word=F0A8 chunk_idx=0A8
+f=3224 lfc=0C99 who=sonic F264_BLOCK sensor=1 block_id=32 angle_arr=FC col_pre=0F1F d4=F0A8
+f=3224 lfc=0C99 who=sonic F264_EXIT sensor=1 path=normal d1=-1 angle_out=FC
+f=3224 lfc=0C99 who=sonic F264_IN sensor=2 sx=0F0D sy=07BD d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3224 lfc=0C99 who=sonic F264_SOLID sensor=2 chunk_word=F0A9 chunk_idx=0A9
+f=3224 lfc=0C99 who=sonic F264_BLOCK sensor=2 block_id=01 angle_arr=FF col_pre=0F0D d4=F0A9
+f=3224 lfc=0C99 who=sonic F264_EXIT sensor=2 path=normal d1=1 angle_out=FF
+f=3224 lfc=0C99 who=sonic PLAYER_ANGLE primary_d0=-1 secondary_d1=1 prim_angle=FC sec_angle=FF chosen=primary/right player_angle=FC
+f=3224 lfc=0C99 who=sonic ED12_RETURN d1=-1 player_angle=FC
+f=3224 lfc=0C99 who=tails ANGLEPOS zone=07 act=00 x=0FB8 y=0777 xsub=F800 ysub=1400 xvel=FD45 yvel=0066 gvel=FD3D ang=FA status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3224 lfc=0C99 who=tails F264_IN sensor=1 sx=0FC1 sy=0786 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3224 lfc=0C99 who=tails F264_SOLID sensor=1 chunk_word=F2A0 chunk_idx=2A0
+f=3224 lfc=0C99 who=tails F264_BLOCK sensor=1 block_id=39 angle_arr=FA col_pre=0FC1 d4=F2A0
+f=3224 lfc=0C99 who=tails F264_EXIT sensor=1 path=normal d1=0 angle_out=FA
+f=3224 lfc=0C99 who=tails F264_IN sensor=2 sx=0FAF sy=0786 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3224 lfc=0C99 who=tails F264_SOLID sensor=2 chunk_word=F277 chunk_idx=277
+f=3224 lfc=0C99 who=tails F264_BLOCK sensor=2 block_id=37 angle_arr=F6 col_pre=0FAF d4=F277
+f=3224 lfc=0C99 who=tails F264_EXIT sensor=2 path=normal d1=5 angle_out=F6
+f=3224 lfc=0C99 who=tails PLAYER_ANGLE primary_d0=0 secondary_d1=5 prim_angle=FA sec_angle=F6 chosen=primary/right player_angle=FA
+f=3224 lfc=0C99 who=tails ED12_RETURN d1=0 player_angle=FA
+f=3225 lfc=0C9A who=sonic ANGLEPOS zone=07 act=00 x=0F1C y=07A8 xsub=ED00 ysub=6600 xvel=062C yvel=FF64 gvel=0639 ang=FC status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3225 lfc=0C9A who=sonic F264_IN sensor=1 sx=0F25 sy=07BB d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3225 lfc=0C9A who=sonic F264_SOLID sensor=1 chunk_word=F0A7 chunk_idx=0A7
+f=3225 lfc=0C9A who=sonic F264_BLOCK sensor=1 block_id=33 angle_arr=FC col_pre=0F25 d4=F0A7
+f=3225 lfc=0C9A who=sonic F264_EXIT sensor=1 path=normal d1=1 angle_out=FC
+f=3225 lfc=0C9A who=sonic F264_IN sensor=2 sx=0F13 sy=07BB d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3225 lfc=0C9A who=sonic F264_SOLID sensor=2 chunk_word=F0A8 chunk_idx=0A8
+f=3225 lfc=0C9A who=sonic F264_BLOCK sensor=2 block_id=32 angle_arr=FC col_pre=0F13 d4=F0A8
+f=3225 lfc=0C9A who=sonic F264_EXIT sensor=2 path=normal d1=2 angle_out=FC
+f=3225 lfc=0C9A who=sonic PLAYER_ANGLE primary_d0=1 secondary_d1=2 prim_angle=FC sec_angle=FC chosen=primary/right player_angle=FC
+f=3225 lfc=0C9A who=sonic ED14_POSITIVE min_d1=1 xvel=062C stick=00
+f=3225 lfc=0C9A who=tails ANGLEPOS zone=07 act=00 x=0FB5 y=0777 xsub=2C00 ysub=7C00 xvel=FD34 yvel=0068 gvel=FD2C ang=FA status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3225 lfc=0C9A who=tails F264_IN sensor=1 sx=0FBE sy=0786 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3225 lfc=0C9A who=tails F264_SOLID sensor=1 chunk_word=F276 chunk_idx=276
+f=3225 lfc=0C9A who=tails F264_BLOCK sensor=1 block_id=38 angle_arr=F8 col_pre=0FBE d4=F276
+f=3225 lfc=0C9A who=tails F264_EXIT sensor=1 path=normal d1=1 angle_out=F8
+f=3225 lfc=0C9A who=tails F264_IN sensor=2 sx=0FAC sy=0786 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3225 lfc=0C9A who=tails F264_SOLID sensor=2 chunk_word=F277 chunk_idx=277
+f=3225 lfc=0C9A who=tails F264_BLOCK sensor=2 block_id=37 angle_arr=F6 col_pre=0FAC d4=F277
+f=3225 lfc=0C9A who=tails F264_EXIT sensor=2 path=normal d1=6 angle_out=F6
+f=3225 lfc=0C9A who=tails PLAYER_ANGLE primary_d0=1 secondary_d1=6 prim_angle=F8 sec_angle=F6 chosen=primary/right player_angle=FA
+f=3225 lfc=0C9A who=tails ED14_POSITIVE min_d1=1 xvel=FD34 stick=00
+f=3226 lfc=0C9B who=sonic ANGLEPOS zone=07 act=00 x=0F23 y=07A8 xsub=2D00 ysub=C800 xvel=0640 yvel=FF62 gvel=064D ang=FC status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3226 lfc=0C9B who=sonic F264_IN sensor=1 sx=0F2C sy=07BB d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3226 lfc=0C9B who=sonic F264_SOLID sensor=1 chunk_word=F0A7 chunk_idx=0A7
+f=3226 lfc=0C9B who=sonic F264_BLOCK sensor=1 block_id=33 angle_arr=FC col_pre=0F2C d4=F0A7
+f=3226 lfc=0C9B who=sonic F264_EXIT sensor=1 path=normal d1=0 angle_out=FC
+f=3226 lfc=0C9B who=sonic F264_IN sensor=2 sx=0F1A sy=07BB d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3226 lfc=0C9B who=sonic F264_SOLID sensor=2 chunk_word=F0A8 chunk_idx=0A8
+f=3226 lfc=0C9B who=sonic F264_BLOCK sensor=2 block_id=32 angle_arr=FC col_pre=0F1A d4=F0A8
+f=3226 lfc=0C9B who=sonic F264_EXIT sensor=2 path=normal d1=2 angle_out=FC
+f=3226 lfc=0C9B who=sonic PLAYER_ANGLE primary_d0=0 secondary_d1=2 prim_angle=FC sec_angle=FC chosen=primary/right player_angle=FC
+f=3226 lfc=0C9B who=sonic ED12_RETURN d1=0 player_angle=FC
+f=3226 lfc=0C9B who=tails ANGLEPOS zone=07 act=00 x=0FB1 y=0779 xsub=5300 ysub=0A00 xvel=FD27 yvel=008E gvel=FD19 ang=F8 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3226 lfc=0C9B who=tails F264_IN sensor=1 sx=0FBA sy=0788 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3226 lfc=0C9B who=tails F264_SOLID sensor=1 chunk_word=F276 chunk_idx=276
+f=3226 lfc=0C9B who=tails F264_BLOCK sensor=1 block_id=38 angle_arr=F8 col_pre=0FBA d4=F276
+f=3226 lfc=0C9B who=tails F264_EXIT sensor=1 path=normal d1=0 angle_out=F8
+f=3226 lfc=0C9B who=tails F264_IN sensor=2 sx=0FA8 sy=0788 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3226 lfc=0C9B who=tails F264_SOLID sensor=2 chunk_word=F277 chunk_idx=277
+f=3226 lfc=0C9B who=tails F264_BLOCK sensor=2 block_id=37 angle_arr=F6 col_pre=0FA8 d4=F277
+f=3226 lfc=0C9B who=tails F264_EXIT sensor=2 path=normal d1=5 angle_out=F6
+f=3226 lfc=0C9B who=tails PLAYER_ANGLE primary_d0=0 secondary_d1=5 prim_angle=F8 sec_angle=F6 chosen=primary/right player_angle=F8
+f=3226 lfc=0C9B who=tails ED12_RETURN d1=0 player_angle=F8
+f=3227 lfc=0C9C who=sonic ANGLEPOS zone=07 act=00 x=0F29 y=07A8 xsub=8100 ysub=2800 xvel=0654 yvel=FF60 gvel=0661 ang=FC status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3227 lfc=0C9C who=sonic F264_IN sensor=1 sx=0F32 sy=07BB d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3227 lfc=0C9C who=sonic F264_SOLID sensor=1 chunk_word=F0A6 chunk_idx=0A6
+f=3227 lfc=0C9C who=sonic F264_BLOCK sensor=1 block_id=34 angle_arr=FA col_pre=0F32 d4=F0A6
+f=3227 lfc=0C9C who=sonic F264_EXIT sensor=1 path=normal d1=-2 angle_out=FA
+f=3227 lfc=0C9C who=sonic F264_IN sensor=2 sx=0F20 sy=07BB d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3227 lfc=0C9C who=sonic F264_SOLID sensor=2 chunk_word=F0A7 chunk_idx=0A7
+f=3227 lfc=0C9C who=sonic F264_BLOCK sensor=2 block_id=33 angle_arr=FC col_pre=0F20 d4=F0A7
+f=3227 lfc=0C9C who=sonic F264_EXIT sensor=2 path=normal d1=1 angle_out=FC
+f=3227 lfc=0C9C who=sonic PLAYER_ANGLE primary_d0=-2 secondary_d1=1 prim_angle=FA sec_angle=FC chosen=primary/right player_angle=FC
+f=3227 lfc=0C9C who=sonic ED12_RETURN d1=-2 player_angle=FA
+f=3227 lfc=0C9C who=tails ANGLEPOS zone=07 act=00 x=0FAD y=0779 xsub=6700 ysub=9B00 xvel=FD14 yvel=0091 gvel=FD06 ang=F8 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3227 lfc=0C9C who=tails F264_IN sensor=1 sx=0FB6 sy=0788 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3227 lfc=0C9C who=tails F264_SOLID sensor=1 chunk_word=F276 chunk_idx=276
+f=3227 lfc=0C9C who=tails F264_BLOCK sensor=1 block_id=38 angle_arr=F8 col_pre=0FB6 d4=F276
+f=3227 lfc=0C9C who=tails F264_EXIT sensor=1 path=normal d1=1 angle_out=F8
+f=3227 lfc=0C9C who=tails F264_IN sensor=2 sx=0FA4 sy=0788 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3227 lfc=0C9C who=tails F264_SOLID sensor=2 chunk_word=F277 chunk_idx=277
+f=3227 lfc=0C9C who=tails F264_BLOCK sensor=2 block_id=37 angle_arr=F6 col_pre=0FA4 d4=F277
+f=3227 lfc=0C9C who=tails F264_EXIT sensor=2 path=normal d1=6 angle_out=F6
+f=3227 lfc=0C9C who=tails PLAYER_ANGLE primary_d0=1 secondary_d1=6 prim_angle=F8 sec_angle=F6 chosen=primary/right player_angle=F8
+f=3227 lfc=0C9C who=tails ED14_POSITIVE min_d1=1 xvel=FD14 stick=00
+f=3228 lfc=0C9D who=sonic ANGLEPOS zone=07 act=00 x=0F2F y=07A5 xsub=E100 ysub=3900 xvel=0660 yvel=FF11 gvel=0674 ang=FA status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3228 lfc=0C9D who=sonic F264_IN sensor=1 sx=0F38 sy=07B8 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3228 lfc=0C9D who=sonic F264_SOLID sensor=1 chunk_word=F0A6 chunk_idx=0A6
+f=3228 lfc=0C9D who=sonic F264_BLOCK sensor=1 block_id=34 angle_arr=FA col_pre=0F38 d4=F0A6
+f=3228 lfc=0C9D who=sonic F264_EXIT sensor=1 path=normal d1=0 angle_out=FA
+f=3228 lfc=0C9D who=sonic F264_IN sensor=2 sx=0F26 sy=07B8 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3228 lfc=0C9D who=sonic F264_SOLID sensor=2 chunk_word=F0A7 chunk_idx=0A7
+f=3228 lfc=0C9D who=sonic F264_BLOCK sensor=2 block_id=33 angle_arr=FC col_pre=0F26 d4=F0A7
+f=3228 lfc=0C9D who=sonic F264_EXIT sensor=2 path=normal d1=3 angle_out=FC
+f=3228 lfc=0C9D who=sonic PLAYER_ANGLE primary_d0=0 secondary_d1=3 prim_angle=FA sec_angle=FC chosen=primary/right player_angle=FA
+f=3228 lfc=0C9D who=sonic ED12_RETURN d1=0 player_angle=FA
+f=3228 lfc=0C9D who=tails ANGLEPOS zone=07 act=00 x=0FA9 y=077B xsub=6900 ysub=3000 xvel=FD02 yvel=0095 gvel=FCF3 ang=F8 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3228 lfc=0C9D who=tails F264_IN sensor=1 sx=0FB2 sy=078A d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3228 lfc=0C9D who=tails F264_SOLID sensor=1 chunk_word=F276 chunk_idx=276
+f=3228 lfc=0C9D who=tails F264_BLOCK sensor=1 block_id=38 angle_arr=F8 col_pre=0FB2 d4=F276
+f=3228 lfc=0C9D who=tails F264_EXIT sensor=1 path=normal d1=0 angle_out=F8
+f=3228 lfc=0C9D who=tails F264_IN sensor=2 sx=0FA0 sy=078A d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3228 lfc=0C9D who=tails F264_SOLID sensor=2 chunk_word=F277 chunk_idx=277
+f=3228 lfc=0C9D who=tails F264_BLOCK sensor=2 block_id=37 angle_arr=F6 col_pre=0FA0 d4=F277
+f=3228 lfc=0C9D who=tails F264_EXIT sensor=2 path=tile_below_+10 d1=6 angle_out=F4
+f=3228 lfc=0C9D who=tails PLAYER_ANGLE primary_d0=0 secondary_d1=6 prim_angle=F8 sec_angle=F4 chosen=primary/right player_angle=F8
+f=3228 lfc=0C9D who=tails ED12_RETURN d1=0 player_angle=F8
+f=3229 lfc=0C9E who=sonic ANGLEPOS zone=07 act=00 x=0F36 y=07A4 xsub=5400 ysub=4700 xvel=0673 yvel=FF0E gvel=0687 ang=FA status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3229 lfc=0C9E who=sonic F264_IN sensor=1 sx=0F3F sy=07B7 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3229 lfc=0C9E who=sonic F264_SOLID sensor=1 chunk_word=F0A6 chunk_idx=0A6
+f=3229 lfc=0C9E who=sonic F264_BLOCK sensor=1 block_id=34 angle_arr=FA col_pre=0F3F d4=F0A6
+f=3229 lfc=0C9E who=sonic F264_EXIT sensor=1 path=normal d1=0 angle_out=FA
+f=3229 lfc=0C9E who=sonic F264_IN sensor=2 sx=0F2D sy=07B7 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3229 lfc=0C9E who=sonic F264_SOLID sensor=2 chunk_word=F0A7 chunk_idx=0A7
+f=3229 lfc=0C9E who=sonic F264_BLOCK sensor=2 block_id=33 angle_arr=FC col_pre=0F2D d4=F0A7
+f=3229 lfc=0C9E who=sonic F264_EXIT sensor=2 path=normal d1=3 angle_out=FC
+f=3229 lfc=0C9E who=sonic PLAYER_ANGLE primary_d0=0 secondary_d1=3 prim_angle=FA sec_angle=FC chosen=primary/right player_angle=FA
+f=3229 lfc=0C9E who=sonic ED12_RETURN d1=0 player_angle=FA
+f=3229 lfc=0C9E who=tails ANGLEPOS zone=07 act=00 x=0FA5 y=077B xsub=5800 ysub=C900 xvel=FCEF yvel=0099 gvel=FCE0 ang=F8 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3229 lfc=0C9E who=tails F264_IN sensor=1 sx=0FAE sy=078A d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3229 lfc=0C9E who=tails F264_SOLID sensor=1 chunk_word=F277 chunk_idx=277
+f=3229 lfc=0C9E who=tails F264_BLOCK sensor=1 block_id=37 angle_arr=F6 col_pre=0FAE d4=F277
+f=3229 lfc=0C9E who=tails F264_EXIT sensor=1 path=normal d1=1 angle_out=F6
+f=3229 lfc=0C9E who=tails F264_IN sensor=2 sx=0F9C sy=078A d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3229 lfc=0C9E who=tails F264_EXIT sensor=2 path=tile_below_+10 d1=7 angle_out=F4
+f=3229 lfc=0C9E who=tails PLAYER_ANGLE primary_d0=1 secondary_d1=7 prim_angle=F6 sec_angle=F4 chosen=primary/right player_angle=F8
+f=3229 lfc=0C9E who=tails ED14_POSITIVE min_d1=1 xvel=FCEF stick=00
+f=3230 lfc=0C9F who=sonic ANGLEPOS zone=07 act=00 x=0F3C y=07A3 xsub=DA00 ysub=5200 xvel=0686 yvel=FF0B gvel=069A ang=FA status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3230 lfc=0C9F who=sonic F264_IN sensor=1 sx=0F45 sy=07B6 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3230 lfc=0C9F who=sonic F264_SOLID sensor=1 chunk_word=F0A5 chunk_idx=0A5
+f=3230 lfc=0C9F who=sonic F264_BLOCK sensor=1 block_id=35 angle_arr=F8 col_pre=0F45 d4=F0A5
+f=3230 lfc=0C9F who=sonic F264_EXIT sensor=1 path=normal d1=-1 angle_out=F8
+f=3230 lfc=0C9F who=sonic F264_IN sensor=2 sx=0F33 sy=07B6 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3230 lfc=0C9F who=sonic F264_SOLID sensor=2 chunk_word=F0A6 chunk_idx=0A6
+f=3230 lfc=0C9F who=sonic F264_BLOCK sensor=2 block_id=34 angle_arr=FA col_pre=0F33 d4=F0A6
+f=3230 lfc=0C9F who=sonic F264_EXIT sensor=2 path=normal d1=3 angle_out=FA
+f=3230 lfc=0C9F who=sonic PLAYER_ANGLE primary_d0=-1 secondary_d1=3 prim_angle=F8 sec_angle=FA chosen=primary/right player_angle=FA
+f=3230 lfc=0C9F who=sonic ED12_RETURN d1=-1 player_angle=F8
+f=3230 lfc=0C9F who=tails ANGLEPOS zone=07 act=00 x=0FA1 y=077D xsub=3D00 ysub=8F00 xvel=FCE5 yvel=00C6 gvel=FCCC ang=F6 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3230 lfc=0C9F who=tails F264_IN sensor=1 sx=0FAA sy=078C d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3230 lfc=0C9F who=tails F264_SOLID sensor=1 chunk_word=F277 chunk_idx=277
+f=3230 lfc=0C9F who=tails F264_BLOCK sensor=1 block_id=37 angle_arr=F6 col_pre=0FAA d4=F277
+f=3230 lfc=0C9F who=tails F264_EXIT sensor=1 path=normal d1=0 angle_out=F6
+f=3230 lfc=0C9F who=tails F264_IN sensor=2 sx=0F98 sy=078C d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3230 lfc=0C9F who=tails F264_EXIT sensor=2 path=tile_below_+10 d1=7 angle_out=F4
+f=3230 lfc=0C9F who=tails PLAYER_ANGLE primary_d0=0 secondary_d1=7 prim_angle=F6 sec_angle=F4 chosen=primary/right player_angle=F6
+f=3230 lfc=0C9F who=tails ED12_RETURN d1=0 player_angle=F6
+f=3231 lfc=0CA0 who=sonic ANGLEPOS zone=07 act=00 x=0F43 y=07A1 xsub=6300 ysub=0B00 xvel=0689 yvel=FEB9 gvel=06AB ang=F8 status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3231 lfc=0CA0 who=sonic F264_IN sensor=1 sx=0F4C sy=07B4 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3231 lfc=0CA0 who=sonic F264_SOLID sensor=1 chunk_word=F0A5 chunk_idx=0A5
+f=3231 lfc=0CA0 who=sonic F264_BLOCK sensor=1 block_id=35 angle_arr=F8 col_pre=0F4C d4=F0A5
+f=3231 lfc=0CA0 who=sonic F264_EXIT sensor=1 path=normal d1=-1 angle_out=F8
+f=3231 lfc=0CA0 who=sonic F264_IN sensor=2 sx=0F3A sy=07B4 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3231 lfc=0CA0 who=sonic F264_SOLID sensor=2 chunk_word=F0A6 chunk_idx=0A6
+f=3231 lfc=0CA0 who=sonic F264_BLOCK sensor=2 block_id=34 angle_arr=FA col_pre=0F3A d4=F0A6
+f=3231 lfc=0CA0 who=sonic F264_EXIT sensor=2 path=normal d1=4 angle_out=FA
+f=3231 lfc=0CA0 who=sonic PLAYER_ANGLE primary_d0=-1 secondary_d1=4 prim_angle=F8 sec_angle=FA chosen=primary/right player_angle=F8
+f=3231 lfc=0CA0 who=sonic ED12_RETURN d1=-1 player_angle=F8
+f=3231 lfc=0CA0 who=tails ANGLEPOS zone=07 act=00 x=0F9D y=077E xsub=0F00 ysub=5A00 xvel=FCD2 yvel=00CB gvel=FCB8 ang=F6 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3231 lfc=0CA0 who=tails F264_IN sensor=1 sx=0FA6 sy=078D d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3231 lfc=0CA0 who=tails F264_SOLID sensor=1 chunk_word=F277 chunk_idx=277
+f=3231 lfc=0CA0 who=tails F264_BLOCK sensor=1 block_id=37 angle_arr=F6 col_pre=0FA6 d4=F277
+f=3231 lfc=0CA0 who=tails F264_EXIT sensor=1 path=normal d1=1 angle_out=F6
+f=3231 lfc=0CA0 who=tails F264_IN sensor=2 sx=0F94 sy=078D d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3231 lfc=0CA0 who=tails F264_EXIT sensor=2 path=tile_below_+10 d1=7 angle_out=F4
+f=3231 lfc=0CA0 who=tails PLAYER_ANGLE primary_d0=1 secondary_d1=7 prim_angle=F6 sec_angle=F4 chosen=primary/right player_angle=F6
+f=3231 lfc=0CA0 who=tails ED14_POSITIVE min_d1=1 xvel=FCD2 stick=00
+f=3232 lfc=0CA1 who=sonic ANGLEPOS zone=07 act=00 x=0F49 y=079E xsub=FD00 ysub=C100 xvel=069A yvel=FEB6 gvel=06BC ang=F8 status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3232 lfc=0CA1 who=sonic F264_IN sensor=1 sx=0F52 sy=07B1 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3232 lfc=0CA1 who=sonic F264_SOLID sensor=1 chunk_word=F0A4 chunk_idx=0A4
+f=3232 lfc=0CA1 who=sonic F264_BLOCK sensor=1 block_id=36 angle_arr=F6 col_pre=0F52 d4=F0A4
+f=3232 lfc=0CA1 who=sonic F264_EXIT sensor=1 path=normal d1=1 angle_out=F6
+f=3232 lfc=0CA1 who=sonic F264_IN sensor=2 sx=0F40 sy=07B1 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3232 lfc=0CA1 who=sonic F264_SOLID sensor=2 chunk_word=F0A5 chunk_idx=0A5
+f=3232 lfc=0CA1 who=sonic F264_BLOCK sensor=2 block_id=35 angle_arr=F8 col_pre=0F40 d4=F0A5
+f=3232 lfc=0CA1 who=sonic F264_EXIT sensor=2 path=normal d1=6 angle_out=F8
+f=3232 lfc=0CA1 who=sonic PLAYER_ANGLE primary_d0=1 secondary_d1=6 prim_angle=F6 sec_angle=F8 chosen=primary/right player_angle=F8
+f=3232 lfc=0CA1 who=sonic ED14_POSITIVE min_d1=1 xvel=069A stick=00
+f=3232 lfc=0CA1 who=tails ANGLEPOS zone=07 act=00 x=0F98 y=0780 xsub=CD00 ysub=2A00 xvel=FCBE yvel=00D0 gvel=FCA4 ang=F6 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3232 lfc=0CA1 who=tails F264_IN sensor=1 sx=0FA1 sy=078F d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3232 lfc=0CA1 who=tails F264_SOLID sensor=1 chunk_word=F277 chunk_idx=277
+f=3232 lfc=0CA1 who=tails F264_BLOCK sensor=1 block_id=37 angle_arr=F6 col_pre=0FA1 d4=F277
+f=3232 lfc=0CA1 who=tails F264_EXIT sensor=1 path=tile_below_+10 d1=0 angle_out=F4
+f=3232 lfc=0CA1 who=tails F264_IN sensor=2 sx=0F8F sy=078F d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3232 lfc=0CA1 who=tails F264_EXIT sensor=2 path=tile_below_+10 d1=8 angle_out=F2
+f=3232 lfc=0CA1 who=tails PLAYER_ANGLE primary_d0=0 secondary_d1=8 prim_angle=F4 sec_angle=F2 chosen=primary/right player_angle=F6
+f=3232 lfc=0CA1 who=tails ED12_RETURN d1=0 player_angle=F4
+f=3233 lfc=0CA2 who=sonic ANGLEPOS zone=07 act=00 x=0F50 y=079E xsub=9200 ysub=1B00 xvel=0695 yvel=FE5A gvel=06CC ang=F6 status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3233 lfc=0CA2 who=sonic F264_IN sensor=1 sx=0F59 sy=07B1 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3233 lfc=0CA2 who=sonic F264_SOLID sensor=1 chunk_word=F0A4 chunk_idx=0A4
+f=3233 lfc=0CA2 who=sonic F264_BLOCK sensor=1 block_id=36 angle_arr=F6 col_pre=0F59 d4=F0A4
+f=3233 lfc=0CA2 who=sonic F264_EXIT sensor=1 path=tile_above_-10 d1=-2 angle_out=F6
+f=3233 lfc=0CA2 who=sonic F264_IN sensor=2 sx=0F47 sy=07B1 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3233 lfc=0CA2 who=sonic F264_SOLID sensor=2 chunk_word=F0A5 chunk_idx=0A5
+f=3233 lfc=0CA2 who=sonic F264_BLOCK sensor=2 block_id=35 angle_arr=F8 col_pre=0F47 d4=F0A5
+f=3233 lfc=0CA2 who=sonic F264_EXIT sensor=2 path=normal d1=4 angle_out=F8
+f=3233 lfc=0CA2 who=sonic PLAYER_ANGLE primary_d0=-2 secondary_d1=4 prim_angle=F6 sec_angle=F8 chosen=primary/right player_angle=F6
+f=3233 lfc=0CA2 who=sonic ED12_RETURN d1=-2 player_angle=F6
+f=3233 lfc=0CA2 who=tails ANGLEPOS zone=07 act=00 x=0F94 y=0781 xsub=8400 ysub=2800 xvel=FCB7 yvel=00FE gvel=FC8E ang=F4 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3233 lfc=0CA2 who=tails F264_IN sensor=1 sx=0F9D sy=0790 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3233 lfc=0CA2 who=tails F264_SOLID sensor=1 chunk_word=F09F chunk_idx=09F
+f=3233 lfc=0CA2 who=tails F264_BLOCK sensor=1 block_id=3D angle_arr=F4 col_pre=0F9D d4=F09F
+f=3233 lfc=0CA2 who=tails F264_EXIT sensor=1 path=normal d1=1 angle_out=F4
+f=3233 lfc=0CA2 who=tails F264_IN sensor=2 sx=0F8B sy=0790 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3233 lfc=0CA2 who=tails F264_SOLID sensor=2 chunk_word=F0A0 chunk_idx=0A0
+f=3233 lfc=0CA2 who=tails F264_BLOCK sensor=2 block_id=3C angle_arr=F2 col_pre=0F8B d4=F0A0
+f=3233 lfc=0CA2 who=tails F264_EXIT sensor=2 path=normal d1=8 angle_out=F2
+f=3233 lfc=0CA2 who=tails PLAYER_ANGLE primary_d0=1 secondary_d1=8 prim_angle=F4 sec_angle=F2 chosen=primary/right player_angle=F4
+f=3233 lfc=0CA2 who=tails ED14_POSITIVE min_d1=1 xvel=FCB7 stick=00
+f=3234 lfc=0CA3 who=sonic ANGLEPOS zone=07 act=00 x=0F57 y=079A xsub=3700 ysub=7100 xvel=06A5 yvel=FE56 gvel=06DC ang=F6 status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3234 lfc=0CA3 who=sonic F264_IN sensor=1 sx=0F60 sy=07AD d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3234 lfc=0CA3 who=sonic F264_SOLID sensor=1 chunk_word=F293 chunk_idx=293
+f=3234 lfc=0CA3 who=sonic F264_BLOCK sensor=1 block_id=30 angle_arr=F2 col_pre=0F60 d4=F293
+f=3234 lfc=0CA3 who=sonic F264_EXIT sensor=1 path=normal d1=0 angle_out=F2
+f=3234 lfc=0CA3 who=sonic F264_IN sensor=2 sx=0F4E sy=07AD d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3234 lfc=0CA3 who=sonic F264_EXIT sensor=2 path=tile_below_+10 d1=6 angle_out=F8
+f=3234 lfc=0CA3 who=sonic PLAYER_ANGLE primary_d0=0 secondary_d1=6 prim_angle=F2 sec_angle=F8 chosen=primary/right player_angle=F6
+f=3234 lfc=0CA3 who=sonic ED12_RETURN d1=0 player_angle=F2
+f=3234 lfc=0CA3 who=tails ANGLEPOS zone=07 act=00 x=0F90 y=0783 xsub=2600 ysub=2D00 xvel=FCA2 yvel=0105 gvel=FC78 ang=F4 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3234 lfc=0CA3 who=tails F264_IN sensor=1 sx=0F99 sy=0792 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3234 lfc=0CA3 who=tails F264_SOLID sensor=1 chunk_word=F09F chunk_idx=09F
+f=3234 lfc=0CA3 who=tails F264_BLOCK sensor=1 block_id=3D angle_arr=F4 col_pre=0F99 d4=F09F
+f=3234 lfc=0CA3 who=tails F264_EXIT sensor=1 path=normal d1=0 angle_out=F4
+f=3234 lfc=0CA3 who=tails F264_IN sensor=2 sx=0F87 sy=0792 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3234 lfc=0CA3 who=tails F264_SOLID sensor=2 chunk_word=F0A0 chunk_idx=0A0
+f=3234 lfc=0CA3 who=tails F264_BLOCK sensor=2 block_id=3C angle_arr=F2 col_pre=0F87 d4=F0A0
+f=3234 lfc=0CA3 who=tails F264_EXIT sensor=2 path=normal d1=8 angle_out=F2
+f=3234 lfc=0CA3 who=tails PLAYER_ANGLE primary_d0=0 secondary_d1=8 prim_angle=F4 sec_angle=F2 chosen=primary/right player_angle=F4
+f=3234 lfc=0CA3 who=tails ED12_RETURN d1=0 player_angle=F4
+f=3235 lfc=0CA4 who=sonic ANGLEPOS zone=07 act=00 x=0F5D y=0798 xsub=B800 ysub=1E00 xvel=0681 yvel=FDAD gvel=06E9 ang=F2 status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3235 lfc=0CA4 who=sonic F264_IN sensor=1 sx=0F66 sy=07AB d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3235 lfc=0CA4 who=sonic F264_SOLID sensor=1 chunk_word=F293 chunk_idx=293
+f=3235 lfc=0CA4 who=sonic F264_BLOCK sensor=1 block_id=30 angle_arr=F2 col_pre=0F66 d4=F293
+f=3235 lfc=0CA4 who=sonic F264_EXIT sensor=1 path=normal d1=0 angle_out=F2
+f=3235 lfc=0CA4 who=sonic F264_IN sensor=2 sx=0F54 sy=07AB d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3235 lfc=0CA4 who=sonic F264_EXIT sensor=2 path=tile_below_+10 d1=6 angle_out=F6
+f=3235 lfc=0CA4 who=sonic PLAYER_ANGLE primary_d0=0 secondary_d1=6 prim_angle=F2 sec_angle=F6 chosen=primary/right player_angle=F2
+f=3235 lfc=0CA4 who=sonic ED12_RETURN d1=0 player_angle=F2
+f=3235 lfc=0CA4 who=tails ANGLEPOS zone=07 act=00 x=0F8B y=0784 xsub=B300 ysub=3800 xvel=FC8D yvel=010B gvel=FC62 ang=F4 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3235 lfc=0CA4 who=tails F264_IN sensor=1 sx=0F94 sy=0793 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3235 lfc=0CA4 who=tails F264_SOLID sensor=1 chunk_word=F09F chunk_idx=09F
+f=3235 lfc=0CA4 who=tails F264_BLOCK sensor=1 block_id=3D angle_arr=F4 col_pre=0F94 d4=F09F
+f=3235 lfc=0CA4 who=tails F264_EXIT sensor=1 path=normal d1=1 angle_out=F4
+f=3235 lfc=0CA4 who=tails F264_IN sensor=2 sx=0F82 sy=0793 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3235 lfc=0CA4 who=tails F264_SOLID sensor=2 chunk_word=F0A0 chunk_idx=0A0
+f=3235 lfc=0CA4 who=tails F264_BLOCK sensor=2 block_id=3C angle_arr=F2 col_pre=0F82 d4=F0A0
+f=3235 lfc=0CA4 who=tails F264_EXIT sensor=2 path=normal d1=10 angle_out=F2
+f=3235 lfc=0CA4 who=tails PLAYER_ANGLE primary_d0=1 secondary_d1=10 prim_angle=F4 sec_angle=F2 chosen=primary/right player_angle=F4
+f=3235 lfc=0CA4 who=tails ED14_POSITIVE min_d1=1 xvel=FC8D stick=00
+f=3236 lfc=0CA5 who=sonic ANGLEPOS zone=07 act=00 x=0F64 y=0795 xsub=4500 ysub=C700 xvel=068D yvel=FDA9 gvel=06F6 ang=F2 status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3236 lfc=0CA5 who=sonic F264_IN sensor=1 sx=0F6D sy=07A8 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3236 lfc=0CA5 who=sonic F264_SOLID sensor=1 chunk_word=F293 chunk_idx=293
+f=3236 lfc=0CA5 who=sonic F264_BLOCK sensor=1 block_id=30 angle_arr=F2 col_pre=0F6D d4=F293
+f=3236 lfc=0CA5 who=sonic F264_EXIT sensor=1 path=normal d1=0 angle_out=F2
+f=3236 lfc=0CA5 who=sonic F264_IN sensor=2 sx=0F5B sy=07A8 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3236 lfc=0CA5 who=sonic F264_EXIT sensor=2 path=tile_below_+10 d1=7 angle_out=F6
+f=3236 lfc=0CA5 who=sonic PLAYER_ANGLE primary_d0=0 secondary_d1=7 prim_angle=F2 sec_angle=F6 chosen=primary/right player_angle=F2
+f=3236 lfc=0CA5 who=sonic ED12_RETURN d1=0 player_angle=F2
+f=3236 lfc=0CA5 who=tails ANGLEPOS zone=07 act=00 x=0F87 y=0786 xsub=2B00 ysub=4A00 xvel=FC78 yvel=0112 gvel=FC4C ang=F4 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3236 lfc=0CA5 who=tails F264_IN sensor=1 sx=0F90 sy=0795 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3236 lfc=0CA5 who=tails F264_SOLID sensor=1 chunk_word=F09F chunk_idx=09F
+f=3236 lfc=0CA5 who=tails F264_BLOCK sensor=1 block_id=3D angle_arr=F4 col_pre=0F90 d4=F09F
+f=3236 lfc=0CA5 who=tails F264_EXIT sensor=1 path=normal d1=1 angle_out=F4
+f=3236 lfc=0CA5 who=tails F264_IN sensor=2 sx=0F7E sy=0795 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3236 lfc=0CA5 who=tails F264_EXIT sensor=2 path=tile_below_+10 d1=10 angle_out=F0
+f=3236 lfc=0CA5 who=tails PLAYER_ANGLE primary_d0=1 secondary_d1=10 prim_angle=F4 sec_angle=F0 chosen=primary/right player_angle=F4
+f=3236 lfc=0CA5 who=tails ED14_POSITIVE min_d1=1 xvel=FC78 stick=00
+f=3237 lfc=0CA6 who=sonic ANGLEPOS zone=07 act=00 x=0F6A y=0793 xsub=DE00 ysub=6B00 xvel=0699 yvel=FDA4 gvel=0703 ang=F2 status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3237 lfc=0CA6 who=sonic F264_IN sensor=1 sx=0F73 sy=07A6 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3237 lfc=0CA6 who=sonic F264_SOLID sensor=1 chunk_word=F294 chunk_idx=294
+f=3237 lfc=0CA6 who=sonic F264_BLOCK sensor=1 block_id=31 angle_arr=F0 col_pre=0F73 d4=F294
+f=3237 lfc=0CA6 who=sonic F264_EXIT sensor=1 path=normal d1=-1 angle_out=F0
+f=3237 lfc=0CA6 who=sonic F264_IN sensor=2 sx=0F61 sy=07A6 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3237 lfc=0CA6 who=sonic F264_SOLID sensor=2 chunk_word=F293 chunk_idx=293
+f=3237 lfc=0CA6 who=sonic F264_BLOCK sensor=2 block_id=30 angle_arr=F2 col_pre=0F61 d4=F293
+f=3237 lfc=0CA6 who=sonic F264_EXIT sensor=2 path=normal d1=7 angle_out=F2
+f=3237 lfc=0CA6 who=sonic PLAYER_ANGLE primary_d0=-1 secondary_d1=7 prim_angle=F0 sec_angle=F2 chosen=primary/right player_angle=F2
+f=3237 lfc=0CA6 who=sonic ED12_RETURN d1=-1 player_angle=F0
+f=3237 lfc=0CA6 who=tails ANGLEPOS zone=07 act=00 x=0F82 y=0788 xsub=8E00 ysub=6200 xvel=FC63 yvel=0118 gvel=FC36 ang=F4 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3237 lfc=0CA6 who=tails F264_IN sensor=1 sx=0F8B sy=0797 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3237 lfc=0CA6 who=tails F264_SOLID sensor=1 chunk_word=F0A0 chunk_idx=0A0
+f=3237 lfc=0CA6 who=tails F264_BLOCK sensor=1 block_id=3C angle_arr=F2 col_pre=0F8B d4=F0A0
+f=3237 lfc=0CA6 who=tails F264_EXIT sensor=1 path=normal d1=1 angle_out=F2
+f=3237 lfc=0CA6 who=tails F264_IN sensor=2 sx=0F79 sy=0797 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3237 lfc=0CA6 who=tails F264_EXIT sensor=2 path=tile_below_+10 d1=11 angle_out=F0
+f=3237 lfc=0CA6 who=tails PLAYER_ANGLE primary_d0=1 secondary_d1=11 prim_angle=F2 sec_angle=F0 chosen=primary/right player_angle=F4
+f=3237 lfc=0CA6 who=tails ED14_POSITIVE min_d1=1 xvel=FC63 stick=00
+f=3238 lfc=0CA7 who=sonic ANGLEPOS zone=07 act=00 x=0F71 y=078F xsub=5E00 ysub=BE00 xvel=0680 yvel=FD53 gvel=070E ang=F0 status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3238 lfc=0CA7 who=sonic F264_IN sensor=1 sx=0F7A sy=07A2 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3238 lfc=0CA7 who=sonic F264_SOLID sensor=1 chunk_word=F294 chunk_idx=294
+f=3238 lfc=0CA7 who=sonic F264_BLOCK sensor=1 block_id=31 angle_arr=F0 col_pre=0F7A d4=F294
+f=3238 lfc=0CA7 who=sonic F264_EXIT sensor=1 path=normal d1=0 angle_out=F0
+f=3238 lfc=0CA7 who=sonic F264_IN sensor=2 sx=0F68 sy=07A2 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3238 lfc=0CA7 who=sonic F264_SOLID sensor=2 chunk_word=F293 chunk_idx=293
+f=3238 lfc=0CA7 who=sonic F264_BLOCK sensor=2 block_id=30 angle_arr=F2 col_pre=0F68 d4=F293
+f=3238 lfc=0CA7 who=sonic F264_EXIT sensor=2 path=normal d1=8 angle_out=F2
+f=3238 lfc=0CA7 who=sonic PLAYER_ANGLE primary_d0=0 secondary_d1=8 prim_angle=F0 sec_angle=F2 chosen=primary/right player_angle=F0
+f=3238 lfc=0CA7 who=sonic ED12_RETURN d1=0 player_angle=F0
+f=3238 lfc=0CA7 who=tails ANGLEPOS zone=07 act=00 x=0F7D y=078A xsub=E700 ysub=AF00 xvel=FC59 yvel=014D gvel=FC1F ang=F2 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3238 lfc=0CA7 who=tails F264_IN sensor=1 sx=0F86 sy=0799 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3238 lfc=0CA7 who=tails F264_SOLID sensor=1 chunk_word=F0A0 chunk_idx=0A0
+f=3238 lfc=0CA7 who=tails F264_BLOCK sensor=1 block_id=3C angle_arr=F2 col_pre=0F86 d4=F0A0
+f=3238 lfc=0CA7 who=tails F264_EXIT sensor=1 path=normal d1=2 angle_out=F2
+f=3238 lfc=0CA7 who=tails F264_IN sensor=2 sx=0F74 sy=0799 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3238 lfc=0CA7 who=tails F264_EXIT sensor=2 path=tile_below_+10 d1=12 angle_out=F0
+f=3238 lfc=0CA7 who=tails PLAYER_ANGLE primary_d0=2 secondary_d1=12 prim_angle=F2 sec_angle=F0 chosen=primary/right player_angle=F2
+f=3238 lfc=0CA7 who=tails ED14_POSITIVE min_d1=2 xvel=FC59 stick=00
+f=3239 lfc=0CA8 who=sonic ANGLEPOS zone=07 act=00 x=0F77 y=078D xsub=E900 ysub=0D00 xvel=068B yvel=FD4F gvel=0719 ang=F0 status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3239 lfc=0CA8 who=sonic F264_IN sensor=1 sx=0F80 sy=07A0 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3239 lfc=0CA8 who=sonic F264_SOLID sensor=1 chunk_word=F012 chunk_idx=012
+f=3239 lfc=0CA8 who=sonic F264_BLOCK sensor=1 block_id=FF angle_arr=FF col_pre=0F80 d4=F012
+f=3239 lfc=0CA8 who=sonic F264_EXIT sensor=1 path=tile_above_-10 d1=-2 angle_out=F2
+f=3239 lfc=0CA8 who=sonic F264_IN sensor=2 sx=0F6E sy=07A0 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3239 lfc=0CA8 who=sonic F264_SOLID sensor=2 chunk_word=F293 chunk_idx=293
+f=3239 lfc=0CA8 who=sonic F264_BLOCK sensor=2 block_id=30 angle_arr=F2 col_pre=0F6E d4=F293
+f=3239 lfc=0CA8 who=sonic F264_EXIT sensor=2 path=normal d1=7 angle_out=F2
+f=3239 lfc=0CA8 who=sonic PLAYER_ANGLE primary_d0=-2 secondary_d1=7 prim_angle=F2 sec_angle=F2 chosen=primary/right player_angle=F0
+f=3239 lfc=0CA8 who=sonic ED12_RETURN d1=-2 player_angle=F2
+f=3239 lfc=0CA8 who=tails ANGLEPOS zone=07 act=00 x=0F79 y=078E xsub=2A00 ysub=0400 xvel=FC43 yvel=0155 gvel=FC08 ang=F2 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3239 lfc=0CA8 who=tails F264_IN sensor=1 sx=0F82 sy=079D d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3239 lfc=0CA8 who=tails F264_SOLID sensor=1 chunk_word=F0A0 chunk_idx=0A0
+f=3239 lfc=0CA8 who=tails F264_BLOCK sensor=1 block_id=3C angle_arr=F2 col_pre=0F82 d4=F0A0
+f=3239 lfc=0CA8 who=tails F264_EXIT sensor=1 path=normal d1=0 angle_out=F2
+f=3239 lfc=0CA8 who=tails F264_IN sensor=2 sx=0F70 sy=079D d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3239 lfc=0CA8 who=tails F264_EXIT sensor=2 path=tile_below_+10 d1=9 angle_out=F0
+f=3239 lfc=0CA8 who=tails PLAYER_ANGLE primary_d0=0 secondary_d1=9 prim_angle=F2 sec_angle=F0 chosen=primary/right player_angle=F2
+f=3239 lfc=0CA8 who=tails ED12_RETURN d1=0 player_angle=F2
+f=3240 lfc=0CA9 who=sonic ANGLEPOS zone=07 act=00 x=0F7E y=0788 xsub=A300 ysub=A600 xvel=06BA yvel=FD99 gvel=0726 ang=F2 status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3240 lfc=0CA9 who=sonic F264_IN sensor=1 sx=0F87 sy=079B d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3240 lfc=0CA9 who=sonic F264_SOLID sensor=1 chunk_word=F0A0 chunk_idx=0A0
+f=3240 lfc=0CA9 who=sonic F264_BLOCK sensor=1 block_id=3C angle_arr=F2 col_pre=0F87 d4=F0A0
+f=3240 lfc=0CA9 who=sonic F264_EXIT sensor=1 path=normal d1=-1 angle_out=F2
+f=3240 lfc=0CA9 who=sonic F264_IN sensor=2 sx=0F75 sy=079B d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3240 lfc=0CA9 who=sonic F264_EXIT sensor=2 path=tile_below_+10 d1=9 angle_out=F0
+f=3240 lfc=0CA9 who=sonic PLAYER_ANGLE primary_d0=-1 secondary_d1=9 prim_angle=F2 sec_angle=F0 chosen=primary/right player_angle=F2
+f=3240 lfc=0CA9 who=sonic ED12_RETURN d1=-1 player_angle=F2
+f=3240 lfc=0CA9 who=tails ANGLEPOS zone=07 act=00 x=0F74 y=078F xsub=5700 ysub=6100 xvel=FC2D yvel=015D gvel=FBF1 ang=F2 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3240 lfc=0CA9 who=tails F264_IN sensor=1 sx=0F7D sy=079E d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3240 lfc=0CA9 who=tails F264_EXIT sensor=1 path=tile_below_+10 d1=2 angle_out=F0
+f=3240 lfc=0CA9 who=tails F264_IN sensor=2 sx=0F6B sy=079E d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3240 lfc=0CA9 who=tails F264_EXIT sensor=2 path=tile_below_+10 d1=11 angle_out=F2
+f=3240 lfc=0CA9 who=tails PLAYER_ANGLE primary_d0=2 secondary_d1=11 prim_angle=F0 sec_angle=F2 chosen=primary/right player_angle=F2
+f=3240 lfc=0CA9 who=tails ED14_POSITIVE min_d1=2 xvel=FC2D stick=00
+f=3241 lfc=0CAA who=sonic ANGLEPOS zone=07 act=00 x=0F85 y=0785 xsub=6A00 ysub=3A00 xvel=06C7 yvel=FD94 gvel=0733 ang=F2 status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3241 lfc=0CAA who=sonic F264_IN sensor=1 sx=0F8E sy=0798 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3241 lfc=0CAA who=sonic F264_SOLID sensor=1 chunk_word=F0A0 chunk_idx=0A0
+f=3241 lfc=0CAA who=sonic F264_BLOCK sensor=1 block_id=3C angle_arr=F2 col_pre=0F8E d4=F0A0
+f=3241 lfc=0CAA who=sonic F264_EXIT sensor=1 path=normal d1=-1 angle_out=F2
+f=3241 lfc=0CAA who=sonic F264_IN sensor=2 sx=0F7C sy=0798 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3241 lfc=0CAA who=sonic F264_EXIT sensor=2 path=tile_below_+10 d1=9 angle_out=F0
+f=3241 lfc=0CAA who=sonic PLAYER_ANGLE primary_d0=-1 secondary_d1=9 prim_angle=F2 sec_angle=F0 chosen=primary/right player_angle=F2
+f=3241 lfc=0CAA who=sonic ED12_RETURN d1=-1 player_angle=F2
+f=3241 lfc=0CAA who=tails ANGLEPOS zone=07 act=00 x=0F6F y=0792 xsub=8200 ysub=F400 xvel=FC2B yvel=0193 gvel=FBD8 ang=F0 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3241 lfc=0CAA who=tails F264_IN sensor=1 sx=0F78 sy=07A1 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3241 lfc=0CAA who=tails F264_SOLID sensor=1 chunk_word=F294 chunk_idx=294
+f=3241 lfc=0CAA who=tails F264_BLOCK sensor=1 block_id=31 angle_arr=F0 col_pre=0F78 d4=F294
+f=3241 lfc=0CAA who=tails F264_EXIT sensor=1 path=normal d1=2 angle_out=F0
+f=3241 lfc=0CAA who=tails F264_IN sensor=2 sx=0F66 sy=07A1 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3241 lfc=0CAA who=tails F264_SOLID sensor=2 chunk_word=F293 chunk_idx=293
+f=3241 lfc=0CAA who=tails F264_BLOCK sensor=2 block_id=30 angle_arr=F2 col_pre=0F66 d4=F293
+f=3241 lfc=0CAA who=tails F264_EXIT sensor=2 path=normal d1=10 angle_out=F2
+f=3241 lfc=0CAA who=tails PLAYER_ANGLE primary_d0=2 secondary_d1=10 prim_angle=F0 sec_angle=F2 chosen=primary/right player_angle=F0
+f=3241 lfc=0CAA who=tails ED14_POSITIVE min_d1=2 xvel=FC2B stick=00
+f=3242 lfc=0CAB who=sonic ANGLEPOS zone=07 act=00 x=0F8C y=0781 xsub=3D00 ysub=CA00 xvel=06D3 yvel=FD90 gvel=0740 ang=F2 status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3242 lfc=0CAB who=sonic F264_IN sensor=1 sx=0F95 sy=0794 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3242 lfc=0CAB who=sonic F264_SOLID sensor=1 chunk_word=F09F chunk_idx=09F
+f=3242 lfc=0CAB who=sonic F264_BLOCK sensor=1 block_id=3D angle_arr=F4 col_pre=0F95 d4=F09F
+f=3242 lfc=0CAB who=sonic F264_EXIT sensor=1 path=normal d1=0 angle_out=F4
+f=3242 lfc=0CAB who=sonic F264_IN sensor=2 sx=0F83 sy=0794 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3242 lfc=0CAB who=sonic F264_SOLID sensor=2 chunk_word=F0A0 chunk_idx=0A0
+f=3242 lfc=0CAB who=sonic F264_BLOCK sensor=2 block_id=3C angle_arr=F2 col_pre=0F83 d4=F0A0
+f=3242 lfc=0CAB who=sonic F264_EXIT sensor=2 path=normal d1=8 angle_out=F2
+f=3242 lfc=0CAB who=sonic PLAYER_ANGLE primary_d0=0 secondary_d1=8 prim_angle=F4 sec_angle=F2 chosen=primary/right player_angle=F2
+f=3242 lfc=0CAB who=sonic ED12_RETURN d1=0 player_angle=F4
+f=3242 lfc=0CAB who=tails ANGLEPOS zone=07 act=00 x=0F6A y=0796 xsub=9600 ysub=9000 xvel=FC14 yvel=019C gvel=FBBF ang=F0 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3242 lfc=0CAB who=tails F264_IN sensor=1 sx=0F73 sy=07A5 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3242 lfc=0CAB who=tails F264_SOLID sensor=1 chunk_word=F294 chunk_idx=294
+f=3242 lfc=0CAB who=tails F264_BLOCK sensor=1 block_id=31 angle_arr=F0 col_pre=0F73 d4=F294
+f=3242 lfc=0CAB who=tails F264_EXIT sensor=1 path=normal d1=0 angle_out=F0
+f=3242 lfc=0CAB who=tails F264_IN sensor=2 sx=0F61 sy=07A5 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3242 lfc=0CAB who=tails F264_SOLID sensor=2 chunk_word=F293 chunk_idx=293
+f=3242 lfc=0CAB who=tails F264_BLOCK sensor=2 block_id=30 angle_arr=F2 col_pre=0F61 d4=F293
+f=3242 lfc=0CAB who=tails F264_EXIT sensor=2 path=normal d1=8 angle_out=F2
+f=3242 lfc=0CAB who=tails PLAYER_ANGLE primary_d0=0 secondary_d1=8 prim_angle=F0 sec_angle=F2 chosen=primary/right player_angle=F0
+f=3242 lfc=0CAB who=tails ED12_RETURN d1=0 player_angle=F0
+f=3243 lfc=0CAC who=sonic ANGLEPOS zone=07 act=00 x=0F93 y=077F xsub=3300 ysub=AD00 xvel=06F6 yvel=FDE3 gvel=074E ang=F4 status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3243 lfc=0CAC who=sonic F264_IN sensor=1 sx=0F9C sy=0792 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3243 lfc=0CAC who=sonic F264_SOLID sensor=1 chunk_word=F09F chunk_idx=09F
+f=3243 lfc=0CAC who=sonic F264_BLOCK sensor=1 block_id=3D angle_arr=F4 col_pre=0F9C d4=F09F
+f=3243 lfc=0CAC who=sonic F264_EXIT sensor=1 path=normal d1=-1 angle_out=F4
+f=3243 lfc=0CAC who=sonic F264_IN sensor=2 sx=0F8A sy=0792 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3243 lfc=0CAC who=sonic F264_SOLID sensor=2 chunk_word=F0A0 chunk_idx=0A0
+f=3243 lfc=0CAC who=sonic F264_BLOCK sensor=2 block_id=3C angle_arr=F2 col_pre=0F8A d4=F0A0
+f=3243 lfc=0CAC who=sonic F264_EXIT sensor=2 path=normal d1=7 angle_out=F2
+f=3243 lfc=0CAC who=sonic PLAYER_ANGLE primary_d0=-1 secondary_d1=7 prim_angle=F4 sec_angle=F2 chosen=primary/right player_angle=F4
+f=3243 lfc=0CAC who=sonic ED12_RETURN d1=-1 player_angle=F4
+f=3243 lfc=0CAC who=tails ANGLEPOS zone=07 act=00 x=0F65 y=0798 xsub=9300 ysub=3600 xvel=FBFD yvel=01A6 gvel=FBA6 ang=F0 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3243 lfc=0CAC who=tails F264_IN sensor=1 sx=0F6E sy=07A7 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3243 lfc=0CAC who=tails F264_SOLID sensor=1 chunk_word=F293 chunk_idx=293
+f=3243 lfc=0CAC who=tails F264_BLOCK sensor=1 block_id=30 angle_arr=F2 col_pre=0F6E d4=F293
+f=3243 lfc=0CAC who=tails F264_EXIT sensor=1 path=normal d1=0 angle_out=F2
+f=3243 lfc=0CAC who=tails F264_IN sensor=2 sx=0F5C sy=07A7 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3243 lfc=0CAC who=tails F264_EXIT sensor=2 path=tile_below_+10 d1=8 angle_out=F6
+f=3243 lfc=0CAC who=tails PLAYER_ANGLE primary_d0=0 secondary_d1=8 prim_angle=F2 sec_angle=F6 chosen=primary/right player_angle=F0
+f=3243 lfc=0CAC who=tails ED12_RETURN d1=0 player_angle=F2
+f=3244 lfc=0CAD who=sonic ANGLEPOS zone=07 act=00 x=0F9A y=077C xsub=3600 ysub=8C00 xvel=0703 yvel=FDDF gvel=075C ang=F4 status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3244 lfc=0CAD who=sonic F264_IN sensor=1 sx=0FA3 sy=078F d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3244 lfc=0CAD who=sonic F264_SOLID sensor=1 chunk_word=F277 chunk_idx=277
+f=3244 lfc=0CAD who=sonic F264_BLOCK sensor=1 block_id=37 angle_arr=F6 col_pre=0FA3 d4=F277
+f=3244 lfc=0CAD who=sonic F264_EXIT sensor=1 path=tile_below_+10 d1=0 angle_out=F4
+f=3244 lfc=0CAD who=sonic F264_IN sensor=2 sx=0F91 sy=078F d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3244 lfc=0CAD who=sonic F264_EXIT sensor=2 path=tile_below_+10 d1=7 angle_out=F4
+f=3244 lfc=0CAD who=sonic PLAYER_ANGLE primary_d0=0 secondary_d1=7 prim_angle=F4 sec_angle=F4 chosen=primary/right player_angle=F4
+f=3244 lfc=0CAD who=sonic ED12_RETURN d1=0 player_angle=F4
+f=3244 lfc=0CAD who=tails ANGLEPOS zone=07 act=00 x=0F60 y=0799 xsub=6400 ysub=B300 xvel=FBD1 yvel=017D gvel=FB8F ang=F2 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3244 lfc=0CAD who=tails F264_IN sensor=1 sx=0F69 sy=07A8 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3244 lfc=0CAD who=tails F264_SOLID sensor=1 chunk_word=F293 chunk_idx=293
+f=3244 lfc=0CAD who=tails F264_BLOCK sensor=1 block_id=30 angle_arr=F2 col_pre=0F69 d4=F293
+f=3244 lfc=0CAD who=tails F264_EXIT sensor=1 path=normal d1=1 angle_out=F2
+f=3244 lfc=0CAD who=tails F264_IN sensor=2 sx=0F57 sy=07A8 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3244 lfc=0CAD who=tails F264_EXIT sensor=2 path=tile_below_+10 d1=8 angle_out=F6
+f=3244 lfc=0CAD who=tails PLAYER_ANGLE primary_d0=1 secondary_d1=8 prim_angle=F2 sec_angle=F6 chosen=primary/right player_angle=F2
+f=3244 lfc=0CAD who=tails ED14_POSITIVE min_d1=1 xvel=FBD1 stick=00
+f=3245 lfc=0CAE who=sonic ANGLEPOS zone=07 act=00 x=0FA1 y=077A xsub=4700 ysub=6700 xvel=0711 yvel=FDDB gvel=076A ang=F4 status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3245 lfc=0CAE who=sonic F264_IN sensor=1 sx=0FAA sy=078D d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3245 lfc=0CAE who=sonic F264_SOLID sensor=1 chunk_word=F277 chunk_idx=277
+f=3245 lfc=0CAE who=sonic F264_BLOCK sensor=1 block_id=37 angle_arr=F6 col_pre=0FAA d4=F277
+f=3245 lfc=0CAE who=sonic F264_EXIT sensor=1 path=normal d1=-1 angle_out=F6
+f=3245 lfc=0CAE who=sonic F264_IN sensor=2 sx=0F98 sy=078D d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3245 lfc=0CAE who=sonic F264_EXIT sensor=2 path=tile_below_+10 d1=6 angle_out=F4
+f=3245 lfc=0CAE who=sonic PLAYER_ANGLE primary_d0=-1 secondary_d1=6 prim_angle=F6 sec_angle=F4 chosen=primary/right player_angle=F4
+f=3245 lfc=0CAE who=sonic ED12_RETURN d1=-1 player_angle=F6
+f=3245 lfc=0CAE who=tails ANGLEPOS zone=07 act=00 x=0F5B y=079C xsub=A300 ysub=0900 xvel=FC3F yvel=0156 gvel=FC04 ang=F2 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3245 lfc=0CAE who=tails F264_IN sensor=1 sx=0F64 sy=07AB d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3245 lfc=0CAE who=tails F264_SOLID sensor=1 chunk_word=F293 chunk_idx=293
+f=3245 lfc=0CAE who=tails F264_BLOCK sensor=1 block_id=30 angle_arr=F2 col_pre=0F64 d4=F293
+f=3245 lfc=0CAE who=tails F264_EXIT sensor=1 path=normal d1=0 angle_out=F2
+f=3245 lfc=0CAE who=tails F264_IN sensor=2 sx=0F52 sy=07AB d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3245 lfc=0CAE who=tails F264_EXIT sensor=2 path=tile_below_+10 d1=7 angle_out=F6
+f=3245 lfc=0CAE who=tails PLAYER_ANGLE primary_d0=0 secondary_d1=7 prim_angle=F2 sec_angle=F6 chosen=primary/right player_angle=F2
+f=3245 lfc=0CAE who=tails ED12_RETURN d1=0 player_angle=F2
+f=3246 lfc=0CAF who=sonic ANGLEPOS zone=07 act=00 x=0FA8 y=0777 xsub=8500 ysub=9700 xvel=073E yvel=FE30 gvel=077A ang=F6 status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3246 lfc=0CAF who=sonic F264_IN sensor=1 sx=0FB1 sy=078A d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3246 lfc=0CAF who=sonic F264_SOLID sensor=1 chunk_word=F276 chunk_idx=276
+f=3246 lfc=0CAF who=sonic F264_BLOCK sensor=1 block_id=38 angle_arr=F8 col_pre=0FB1 d4=F276
+f=3246 lfc=0CAF who=sonic F264_EXIT sensor=1 path=normal d1=0 angle_out=F8
+f=3246 lfc=0CAF who=sonic F264_IN sensor=2 sx=0F9F sy=078A d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3246 lfc=0CAF who=sonic F264_EXIT sensor=2 path=tile_below_+10 d1=6 angle_out=F4
+f=3246 lfc=0CAF who=sonic PLAYER_ANGLE primary_d0=0 secondary_d1=6 prim_angle=F8 sec_angle=F4 chosen=primary/right player_angle=F6
+f=3246 lfc=0CAF who=sonic ED12_RETURN d1=0 player_angle=F8
+f=3246 lfc=0CAF who=tails ANGLEPOS zone=07 act=00 x=0F57 y=079D xsub=5000 ysub=3800 xvel=FCAD yvel=012F gvel=FC79 ang=F2 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3246 lfc=0CAF who=tails F264_IN sensor=1 sx=0F60 sy=07AC d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3246 lfc=0CAF who=tails F264_SOLID sensor=1 chunk_word=F293 chunk_idx=293
+f=3246 lfc=0CAF who=tails F264_BLOCK sensor=1 block_id=30 angle_arr=F2 col_pre=0F60 d4=F293
+f=3246 lfc=0CAF who=tails F264_EXIT sensor=1 path=normal d1=1 angle_out=F2
+f=3246 lfc=0CAF who=tails F264_IN sensor=2 sx=0F4E sy=07AC d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3246 lfc=0CAF who=tails F264_EXIT sensor=2 path=tile_below_+10 d1=7 angle_out=F8
+f=3246 lfc=0CAF who=tails PLAYER_ANGLE primary_d0=1 secondary_d1=7 prim_angle=F2 sec_angle=F8 chosen=primary/right player_angle=F2
+f=3246 lfc=0CAF who=tails ED14_POSITIVE min_d1=1 xvel=FCAD stick=00
+f=3247 lfc=0CB0 who=sonic F264_IN sensor=3 sx=0FB8 sy=076D d5=0D d6=0800 a3=FFF0 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3247 lfc=0CB0 who=sonic F264_EXIT sensor=3 path=tile_below_+10 d1=18 angle_out=F2
+f=3247 lfc=0CB0 who=sonic F264_IN sensor=4 sx=0FA6 sy=076D d5=0D d6=0800 a3=FFF0 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3247 lfc=0CB0 who=sonic F264_EXIT sensor=4 path=tile_below_+10 d1=18 angle_out=F8
+f=3247 lfc=0CB0 who=tails ANGLEPOS zone=07 act=00 x=0F53 y=079F xsub=6C00 ysub=4000 xvel=FD1C yvel=0108 gvel=FCEE ang=F2 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3247 lfc=0CB0 who=tails F264_IN sensor=1 sx=0F5C sy=07AE d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3247 lfc=0CB0 who=tails F264_EXIT sensor=1 path=tile_below_+10 d1=1 angle_out=F6
+f=3247 lfc=0CB0 who=tails F264_IN sensor=2 sx=0F4A sy=07AE d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3247 lfc=0CB0 who=tails F264_EXIT sensor=2 path=tile_below_+10 d1=6 angle_out=F8
+f=3247 lfc=0CB0 who=tails PLAYER_ANGLE primary_d0=1 secondary_d1=6 prim_angle=F6 sec_angle=F8 chosen=primary/right player_angle=F2
+f=3247 lfc=0CB0 who=tails ED14_POSITIVE min_d1=1 xvel=FD1C stick=00
+f=3248 lfc=0CB1 who=sonic F264_IN sensor=3 sx=0FBF sy=076E d5=0D d6=0800 a3=FFF0 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3248 lfc=0CB1 who=sonic F264_EXIT sensor=3 path=tile_below_+10 d1=17 angle_out=F6
+f=3248 lfc=0CB1 who=sonic F264_IN sensor=4 sx=0FAD sy=076E d5=0D d6=0800 a3=FFF0 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3248 lfc=0CB1 who=sonic F264_EXIT sensor=4 path=tile_below_+10 d1=17 angle_out=F8
+f=3248 lfc=0CB1 who=tails ANGLEPOS zone=07 act=00 x=0F4F y=07A0 xsub=E600 ysub=E100 xvel=FD7A yvel=00A1 gvel=FD66 ang=F6 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3248 lfc=0CB1 who=tails F264_IN sensor=1 sx=0F58 sy=07AF d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3248 lfc=0CB1 who=tails F264_EXIT sensor=1 path=tile_below_+10 d1=1 angle_out=F6
+f=3248 lfc=0CB1 who=tails F264_IN sensor=2 sx=0F46 sy=07AF d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3248 lfc=0CB1 who=tails F264_EXIT sensor=2 path=tile_below_+10 d1=6 angle_out=F8
+f=3248 lfc=0CB1 who=tails PLAYER_ANGLE primary_d0=1 secondary_d1=6 prim_angle=F6 sec_angle=F8 chosen=primary/right player_angle=F6
+f=3248 lfc=0CB1 who=tails ED14_POSITIVE min_d1=1 xvel=FD7A stick=00
+f=3249 lfc=0CB2 who=sonic F264_IN sensor=3 sx=0FC6 sy=0750 d5=0D d6=0800 a3=FFF0 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3249 lfc=0CB2 who=sonic F264_EXIT sensor=3 path=tile_below_+10 d1=31 angle_out=F6
+f=3249 lfc=0CB2 who=sonic F264_IN sensor=4 sx=0FB4 sy=0750 d5=0D d6=0800 a3=FFF0 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3249 lfc=0CB2 who=sonic F264_EXIT sensor=4 path=tile_below_+10 d1=31 angle_out=F8
+f=3249 lfc=0CB2 who=tails ANGLEPOS zone=07 act=00 x=0F4D y=07A2 xsub=D500 ysub=6500 xvel=FDEF yvel=0084 gvel=FDDE ang=F6 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3249 lfc=0CB2 who=tails F264_IN sensor=1 sx=0F56 sy=07B1 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3249 lfc=0CB2 who=tails F264_SOLID sensor=1 chunk_word=F0A4 chunk_idx=0A4
+f=3249 lfc=0CB2 who=tails F264_BLOCK sensor=1 block_id=36 angle_arr=F6 col_pre=0F56 d4=F0A4
+f=3249 lfc=0CB2 who=tails F264_EXIT sensor=1 path=normal d1=-1 angle_out=F6
+f=3249 lfc=0CB2 who=tails F264_IN sensor=2 sx=0F44 sy=07B1 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3249 lfc=0CB2 who=tails F264_SOLID sensor=2 chunk_word=F0A5 chunk_idx=0A5
+f=3249 lfc=0CB2 who=tails F264_BLOCK sensor=2 block_id=35 angle_arr=F8 col_pre=0F44 d4=F0A5
+f=3249 lfc=0CB2 who=tails F264_EXIT sensor=2 path=normal d1=5 angle_out=F8
+f=3249 lfc=0CB2 who=tails PLAYER_ANGLE primary_d0=-1 secondary_d1=5 prim_angle=F6 sec_angle=F8 chosen=primary/right player_angle=F6
+f=3249 lfc=0CB2 who=tails ED12_RETURN d1=-1 player_angle=F6
+f=3250 lfc=0CB3 who=sonic F264_IN sensor=3 sx=0FCE sy=0751 d5=0D d6=0800 a3=FFF0 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3250 lfc=0CB3 who=sonic F264_EXIT sensor=3 path=tile_below_+10 d1=30 angle_out=F6
+f=3250 lfc=0CB3 who=sonic F264_IN sensor=4 sx=0FBC sy=0751 d5=0D d6=0800 a3=FFF0 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3250 lfc=0CB3 who=sonic F264_EXIT sensor=4 path=tile_below_+10 d1=30 angle_out=F8
+f=3250 lfc=0CB3 who=tails ANGLEPOS zone=07 act=00 x=0F4C y=07A1 xsub=3800 ysub=CC00 xvel=FE63 yvel=0067 gvel=FE56 ang=F6 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3250 lfc=0CB3 who=tails F264_IN sensor=1 sx=0F55 sy=07B0 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3250 lfc=0CB3 who=tails F264_SOLID sensor=1 chunk_word=F0A4 chunk_idx=0A4
+f=3250 lfc=0CB3 who=tails F264_BLOCK sensor=1 block_id=36 angle_arr=F6 col_pre=0F55 d4=F0A4
+f=3250 lfc=0CB3 who=tails F264_EXIT sensor=1 path=normal d1=1 angle_out=F6
+f=3250 lfc=0CB3 who=tails F264_IN sensor=2 sx=0F43 sy=07B0 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3250 lfc=0CB3 who=tails F264_SOLID sensor=2 chunk_word=F0A5 chunk_idx=0A5
+f=3250 lfc=0CB3 who=tails F264_BLOCK sensor=2 block_id=35 angle_arr=F8 col_pre=0F43 d4=F0A5
+f=3250 lfc=0CB3 who=tails F264_EXIT sensor=2 path=normal d1=6 angle_out=F8
+f=3250 lfc=0CB3 who=tails PLAYER_ANGLE primary_d0=1 secondary_d1=6 prim_angle=F6 sec_angle=F8 chosen=primary/right player_angle=F6
+f=3250 lfc=0CB3 who=tails ED14_POSITIVE min_d1=1 xvel=FE63 stick=00
+f=3251 lfc=0CB4 who=sonic F264_IN sensor=3 sx=0FD5 sy=0752 d5=0D d6=0800 a3=FFF0 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3251 lfc=0CB4 who=sonic F264_EXIT sensor=3 path=tile_below_+10 d1=29 angle_out=F6
+f=3251 lfc=0CB4 who=sonic F264_IN sensor=4 sx=0FC3 sy=0752 d5=0D d6=0800 a3=FFF0 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3251 lfc=0CB4 who=sonic F264_EXIT sensor=4 path=tile_below_+10 d1=29 angle_out=F8
+f=3251 lfc=0CB4 who=tails ANGLEPOS zone=07 act=00 x=0F4B y=07A3 xsub=0F00 ysub=1600 xvel=FED7 yvel=004A gvel=FECE ang=F6 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3251 lfc=0CB4 who=tails F264_IN sensor=1 sx=0F54 sy=07B2 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3251 lfc=0CB4 who=tails F264_SOLID sensor=1 chunk_word=F0A4 chunk_idx=0A4
+f=3251 lfc=0CB4 who=tails F264_BLOCK sensor=1 block_id=36 angle_arr=F6 col_pre=0F54 d4=F0A4
+f=3251 lfc=0CB4 who=tails F264_EXIT sensor=1 path=normal d1=-1 angle_out=F6
+f=3251 lfc=0CB4 who=tails F264_IN sensor=2 sx=0F42 sy=07B2 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3251 lfc=0CB4 who=tails F264_SOLID sensor=2 chunk_word=F0A5 chunk_idx=0A5
+f=3251 lfc=0CB4 who=tails F264_BLOCK sensor=2 block_id=35 angle_arr=F8 col_pre=0F42 d4=F0A5
+f=3251 lfc=0CB4 who=tails F264_EXIT sensor=2 path=normal d1=4 angle_out=F8
+f=3251 lfc=0CB4 who=tails PLAYER_ANGLE primary_d0=-1 secondary_d1=4 prim_angle=F6 sec_angle=F8 chosen=primary/right player_angle=F6
+f=3251 lfc=0CB4 who=tails ED12_RETURN d1=-1 player_angle=F6
+f=3252 lfc=0CB5 who=sonic F264_IN sensor=3 sx=0FDC sy=0753 d5=0D d6=0800 a3=FFF0 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3252 lfc=0CB5 who=sonic F264_EXIT sensor=3 path=tile_below_+10 d1=28 angle_out=F6
+f=3252 lfc=0CB5 who=sonic F264_IN sensor=4 sx=0FCA sy=0753 d5=0D d6=0800 a3=FFF0 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3252 lfc=0CB5 who=sonic F264_EXIT sensor=4 path=tile_below_+10 d1=28 angle_out=F8
+f=3252 lfc=0CB5 who=tails ANGLEPOS zone=07 act=00 x=0F4A y=07A2 xsub=5A00 ysub=4300 xvel=FF4B yvel=002D gvel=FF46 ang=F6 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3252 lfc=0CB5 who=tails F264_IN sensor=1 sx=0F53 sy=07B1 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3252 lfc=0CB5 who=tails F264_SOLID sensor=1 chunk_word=F0A4 chunk_idx=0A4
+f=3252 lfc=0CB5 who=tails F264_BLOCK sensor=1 block_id=36 angle_arr=F6 col_pre=0F53 d4=F0A4
+f=3252 lfc=0CB5 who=tails F264_EXIT sensor=1 path=normal d1=0 angle_out=F6
+f=3252 lfc=0CB5 who=tails F264_IN sensor=2 sx=0F41 sy=07B1 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3252 lfc=0CB5 who=tails F264_SOLID sensor=2 chunk_word=F0A5 chunk_idx=0A5
+f=3252 lfc=0CB5 who=tails F264_BLOCK sensor=2 block_id=35 angle_arr=F8 col_pre=0F41 d4=F0A5
+f=3252 lfc=0CB5 who=tails F264_EXIT sensor=2 path=normal d1=5 angle_out=F8
+f=3252 lfc=0CB5 who=tails PLAYER_ANGLE primary_d0=0 secondary_d1=5 prim_angle=F6 sec_angle=F8 chosen=primary/right player_angle=F6
+f=3252 lfc=0CB5 who=tails ED12_RETURN d1=0 player_angle=F6
+f=3253 lfc=0CB6 who=sonic F264_IN sensor=3 sx=0FE3 sy=0753 d5=0D d6=0800 a3=FFF0 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3253 lfc=0CB6 who=sonic F264_EXIT sensor=3 path=tile_below_+10 d1=28 angle_out=F6
+f=3253 lfc=0CB6 who=sonic F264_IN sensor=4 sx=0FD1 sy=0753 d5=0D d6=0800 a3=FFF0 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3253 lfc=0CB6 who=sonic F264_EXIT sensor=4 path=tile_below_+10 d1=28 angle_out=F8
+f=3253 lfc=0CB6 who=tails ANGLEPOS zone=07 act=00 x=0F4A y=07A2 xsub=1A00 ysub=5200 xvel=FFC0 yvel=000F gvel=FFBE ang=F6 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3253 lfc=0CB6 who=tails F264_IN sensor=1 sx=0F53 sy=07B1 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3253 lfc=0CB6 who=tails F264_SOLID sensor=1 chunk_word=F0A4 chunk_idx=0A4
+f=3253 lfc=0CB6 who=tails F264_BLOCK sensor=1 block_id=36 angle_arr=F6 col_pre=0F53 d4=F0A4
+f=3253 lfc=0CB6 who=tails F264_EXIT sensor=1 path=normal d1=0 angle_out=F6
+f=3253 lfc=0CB6 who=tails F264_IN sensor=2 sx=0F41 sy=07B1 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3253 lfc=0CB6 who=tails F264_SOLID sensor=2 chunk_word=F0A5 chunk_idx=0A5
+f=3253 lfc=0CB6 who=tails F264_BLOCK sensor=2 block_id=35 angle_arr=F8 col_pre=0F41 d4=F0A5
+f=3253 lfc=0CB6 who=tails F264_EXIT sensor=2 path=normal d1=5 angle_out=F8
+f=3253 lfc=0CB6 who=tails PLAYER_ANGLE primary_d0=0 secondary_d1=5 prim_angle=F6 sec_angle=F8 chosen=primary/right player_angle=F6
+f=3253 lfc=0CB6 who=tails ED12_RETURN d1=0 player_angle=F6
+f=3254 lfc=0CB7 who=sonic F264_IN sensor=3 sx=0FEA sy=0753 d5=0D d6=0800 a3=FFF0 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3254 lfc=0CB7 who=sonic F264_EXIT sensor=3 path=tile_below_+10 d1=28 angle_out=F6
+f=3254 lfc=0CB7 who=sonic F264_IN sensor=4 sx=0FD8 sy=0753 d5=0D d6=0800 a3=FFF0 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3254 lfc=0CB7 who=sonic F264_EXIT sensor=4 path=tile_below_+10 d1=28 angle_out=F8
+f=3254 lfc=0CB7 who=tails ANGLEPOS zone=07 act=00 x=0F4A y=07A2 xsub=9600 ysub=3300 xvel=007C yvel=FFE1 gvel=0080 ang=F6 status=01 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3254 lfc=0CB7 who=tails F264_IN sensor=1 sx=0F53 sy=07B1 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3254 lfc=0CB7 who=tails F264_SOLID sensor=1 chunk_word=F0A4 chunk_idx=0A4
+f=3254 lfc=0CB7 who=tails F264_BLOCK sensor=1 block_id=36 angle_arr=F6 col_pre=0F53 d4=F0A4
+f=3254 lfc=0CB7 who=tails F264_EXIT sensor=1 path=normal d1=0 angle_out=F6
+f=3254 lfc=0CB7 who=tails F264_IN sensor=2 sx=0F41 sy=07B1 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3254 lfc=0CB7 who=tails F264_SOLID sensor=2 chunk_word=F0A5 chunk_idx=0A5
+f=3254 lfc=0CB7 who=tails F264_BLOCK sensor=2 block_id=35 angle_arr=F8 col_pre=0F41 d4=F0A5
+f=3254 lfc=0CB7 who=tails F264_EXIT sensor=2 path=normal d1=5 angle_out=F8
+f=3254 lfc=0CB7 who=tails PLAYER_ANGLE primary_d0=0 secondary_d1=5 prim_angle=F6 sec_angle=F8 chosen=primary/right player_angle=F6
+f=3254 lfc=0CB7 who=tails ED12_RETURN d1=0 player_angle=F6
+f=3255 lfc=0CB8 who=sonic F264_IN sensor=3 sx=0FF0 sy=0753 d5=0D d6=0800 a3=FFF0 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3255 lfc=0CB8 who=sonic F264_EXIT sensor=3 path=tile_below_+10 d1=28 angle_out=F6
+f=3255 lfc=0CB8 who=sonic F264_IN sensor=4 sx=0FDE sy=0753 d5=0D d6=0800 a3=FFF0 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3255 lfc=0CB8 who=sonic F264_EXIT sensor=4 path=tile_below_+10 d1=28 angle_out=F8
+f=3255 lfc=0CB8 who=sonic F264_IN sensor=5 sx=0FF0 sy=0782 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3255 lfc=0CB8 who=sonic F264_SOLID sensor=5 chunk_word=F012 chunk_idx=012
+f=3255 lfc=0CB8 who=sonic F264_BLOCK sensor=5 block_id=FF angle_arr=FF col_pre=0FF0 d4=F012
+f=3255 lfc=0CB8 who=sonic F264_EXIT sensor=5 path=tile_above_-10 d1=-3 angle_out=FF
+f=3255 lfc=0CB8 who=sonic F264_IN sensor=6 sx=0FDE sy=0782 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3255 lfc=0CB8 who=sonic F264_SOLID sensor=6 chunk_word=F09A chunk_idx=09A
+f=3255 lfc=0CB8 who=sonic F264_BLOCK sensor=6 block_id=3A angle_arr=FC col_pre=0FDE d4=F09A
+f=3255 lfc=0CB8 who=sonic F264_EXIT sensor=6 path=normal d1=-1 angle_out=FC
+f=3255 lfc=0CB8 who=tails ANGLEPOS zone=07 act=00 x=0F4B y=07A2 xsub=1500 ysub=1300 xvel=007F yvel=FFE0 gvel=0084 ang=F6 status=00 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3255 lfc=0CB8 who=tails F264_IN sensor=1 sx=0F54 sy=07B1 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3255 lfc=0CB8 who=tails F264_SOLID sensor=1 chunk_word=F0A4 chunk_idx=0A4
+f=3255 lfc=0CB8 who=tails F264_BLOCK sensor=1 block_id=36 angle_arr=F6 col_pre=0F54 d4=F0A4
+f=3255 lfc=0CB8 who=tails F264_EXIT sensor=1 path=normal d1=0 angle_out=F6
+f=3255 lfc=0CB8 who=tails F264_IN sensor=2 sx=0F42 sy=07B1 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3255 lfc=0CB8 who=tails F264_SOLID sensor=2 chunk_word=F0A5 chunk_idx=0A5
+f=3255 lfc=0CB8 who=tails F264_BLOCK sensor=2 block_id=35 angle_arr=F8 col_pre=0F42 d4=F0A5
+f=3255 lfc=0CB8 who=tails F264_EXIT sensor=2 path=normal d1=5 angle_out=F8
+f=3255 lfc=0CB8 who=tails PLAYER_ANGLE primary_d0=0 secondary_d1=5 prim_angle=F6 sec_angle=F8 chosen=primary/right player_angle=F6
+f=3255 lfc=0CB8 who=tails ED12_RETURN d1=0 player_angle=F6
+f=3256 lfc=0CB9 who=sonic ANGLEPOS zone=07 act=00 x=0FEE y=076C xsub=EA00 ysub=2700 xvel=06FF yvel=0000 gvel=06FF ang=00 status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3256 lfc=0CB9 who=sonic F264_IN sensor=1 sx=0FF7 sy=077F d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3256 lfc=0CB9 who=sonic F264_EXIT sensor=1 path=tile_below_+10 d1=0 angle_out=FF
+f=3256 lfc=0CB9 who=sonic F264_IN sensor=2 sx=0FE5 sy=077F d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3256 lfc=0CB9 who=sonic F264_EXIT sensor=2 path=tile_below_+10 d1=1 angle_out=FC
+f=3256 lfc=0CB9 who=sonic PLAYER_ANGLE primary_d0=0 secondary_d1=1 prim_angle=FF sec_angle=FC chosen=primary/right player_angle=00
+f=3256 lfc=0CB9 who=sonic ED12_RETURN d1=0 player_angle=00
+f=3256 lfc=0CB9 who=tails ANGLEPOS zone=07 act=00 x=0F4C y=07A1 xsub=9800 ysub=F200 xvel=0083 yvel=FFDF gvel=0088 ang=F6 status=00 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3256 lfc=0CB9 who=tails F264_IN sensor=1 sx=0F55 sy=07B0 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3256 lfc=0CB9 who=tails F264_SOLID sensor=1 chunk_word=F0A4 chunk_idx=0A4
+f=3256 lfc=0CB9 who=tails F264_BLOCK sensor=1 block_id=36 angle_arr=F6 col_pre=0F55 d4=F0A4
+f=3256 lfc=0CB9 who=tails F264_EXIT sensor=1 path=normal d1=1 angle_out=F6
+f=3256 lfc=0CB9 who=tails F264_IN sensor=2 sx=0F43 sy=07B0 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3256 lfc=0CB9 who=tails F264_SOLID sensor=2 chunk_word=F0A5 chunk_idx=0A5
+f=3256 lfc=0CB9 who=tails F264_BLOCK sensor=2 block_id=35 angle_arr=F8 col_pre=0F43 d4=F0A5
+f=3256 lfc=0CB9 who=tails F264_EXIT sensor=2 path=normal d1=6 angle_out=F8
+f=3256 lfc=0CB9 who=tails PLAYER_ANGLE primary_d0=1 secondary_d1=6 prim_angle=F6 sec_angle=F8 chosen=primary/right player_angle=F6
+f=3256 lfc=0CB9 who=tails ED14_POSITIVE min_d1=1 xvel=0083 stick=00
+f=3257 lfc=0CBA who=sonic ANGLEPOS zone=07 act=00 x=0FF6 y=076C xsub=0100 ysub=2700 xvel=0717 yvel=0000 gvel=0717 ang=00 status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3257 lfc=0CBA who=sonic F264_IN sensor=1 sx=0FFF sy=077F d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3257 lfc=0CBA who=sonic F264_EXIT sensor=1 path=tile_below_+10 d1=0 angle_out=FF
+f=3257 lfc=0CBA who=sonic F264_IN sensor=2 sx=0FED sy=077F d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3257 lfc=0CBA who=sonic F264_EXIT sensor=2 path=tile_below_+10 d1=1 angle_out=FC
+f=3257 lfc=0CBA who=sonic PLAYER_ANGLE primary_d0=0 secondary_d1=1 prim_angle=FF sec_angle=FC chosen=primary/right player_angle=00
+f=3257 lfc=0CBA who=sonic ED12_RETURN d1=0 player_angle=00
+f=3257 lfc=0CBA who=tails ANGLEPOS zone=07 act=00 x=0F4E y=07A2 xsub=1F00 ysub=D000 xvel=0087 yvel=FFDE gvel=008C ang=F6 status=00 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3257 lfc=0CBA who=tails F264_IN sensor=1 sx=0F57 sy=07B1 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3257 lfc=0CBA who=tails F264_SOLID sensor=1 chunk_word=F0A4 chunk_idx=0A4
+f=3257 lfc=0CBA who=tails F264_BLOCK sensor=1 block_id=36 angle_arr=F6 col_pre=0F57 d4=F0A4
+f=3257 lfc=0CBA who=tails F264_EXIT sensor=1 path=normal d1=-1 angle_out=F6
+f=3257 lfc=0CBA who=tails F264_IN sensor=2 sx=0F45 sy=07B1 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3257 lfc=0CBA who=tails F264_SOLID sensor=2 chunk_word=F0A5 chunk_idx=0A5
+f=3257 lfc=0CBA who=tails F264_BLOCK sensor=2 block_id=35 angle_arr=F8 col_pre=0F45 d4=F0A5
+f=3257 lfc=0CBA who=tails F264_EXIT sensor=2 path=normal d1=4 angle_out=F8
+f=3257 lfc=0CBA who=tails PLAYER_ANGLE primary_d0=-1 secondary_d1=4 prim_angle=F6 sec_angle=F8 chosen=primary/right player_angle=F6
+f=3257 lfc=0CBA who=tails ED12_RETURN d1=-1 player_angle=F6
+f=3258 lfc=0CBB who=sonic ANGLEPOS zone=07 act=00 x=0FFD y=076C xsub=3000 ysub=2700 xvel=072F yvel=0000 gvel=072F ang=00 status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3258 lfc=0CBB who=sonic F264_IN sensor=1 sx=1006 sy=077F d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3258 lfc=0CBB who=sonic F264_EXIT sensor=1 path=tile_below_+10 d1=0 angle_out=FF
+f=3258 lfc=0CBB who=sonic F264_IN sensor=2 sx=0FF4 sy=077F d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3258 lfc=0CBB who=sonic F264_EXIT sensor=2 path=tile_below_+10 d1=0 angle_out=FF
+f=3258 lfc=0CBB who=sonic PLAYER_ANGLE primary_d0=0 secondary_d1=0 prim_angle=FF sec_angle=FF chosen=secondary/left player_angle=00
+f=3258 lfc=0CBB who=sonic ED12_RETURN d1=0 player_angle=00
+f=3258 lfc=0CBB who=tails ANGLEPOS zone=07 act=00 x=0F4F y=07A1 xsub=AA00 ysub=AD00 xvel=008B yvel=FFDD gvel=0090 ang=F6 status=00 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3258 lfc=0CBB who=tails F264_IN sensor=1 sx=0F58 sy=07B0 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3258 lfc=0CBB who=tails F264_SOLID sensor=1 chunk_word=F0A4 chunk_idx=0A4
+f=3258 lfc=0CBB who=tails F264_BLOCK sensor=1 block_id=36 angle_arr=F6 col_pre=0F58 d4=F0A4
+f=3258 lfc=0CBB who=tails F264_EXIT sensor=1 path=normal d1=0 angle_out=F6
+f=3258 lfc=0CBB who=tails F264_IN sensor=2 sx=0F46 sy=07B0 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3258 lfc=0CBB who=tails F264_SOLID sensor=2 chunk_word=F0A5 chunk_idx=0A5
+f=3258 lfc=0CBB who=tails F264_BLOCK sensor=2 block_id=35 angle_arr=F8 col_pre=0F46 d4=F0A5
+f=3258 lfc=0CBB who=tails F264_EXIT sensor=2 path=normal d1=5 angle_out=F8
+f=3258 lfc=0CBB who=tails PLAYER_ANGLE primary_d0=0 secondary_d1=5 prim_angle=F6 sec_angle=F8 chosen=primary/right player_angle=F6
+f=3258 lfc=0CBB who=tails ED12_RETURN d1=0 player_angle=F6
+f=3259 lfc=0CBC who=sonic ANGLEPOS zone=07 act=00 x=1004 y=076C xsub=7700 ysub=2700 xvel=0747 yvel=0000 gvel=0747 ang=00 status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3259 lfc=0CBC who=sonic F264_IN sensor=1 sx=100D sy=077F d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3259 lfc=0CBC who=sonic F264_EXIT sensor=1 path=tile_below_+10 d1=0 angle_out=FF
+f=3259 lfc=0CBC who=sonic F264_IN sensor=2 sx=0FFB sy=077F d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3259 lfc=0CBC who=sonic F264_EXIT sensor=2 path=tile_below_+10 d1=0 angle_out=FF
+f=3259 lfc=0CBC who=sonic PLAYER_ANGLE primary_d0=0 secondary_d1=0 prim_angle=FF sec_angle=FF chosen=secondary/left player_angle=00
+f=3259 lfc=0CBC who=sonic ED12_RETURN d1=0 player_angle=00
+f=3259 lfc=0CBC who=tails ANGLEPOS zone=07 act=00 x=0F51 y=07A1 xsub=3900 ysub=8900 xvel=008F yvel=FFDC gvel=0094 ang=F6 status=00 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3259 lfc=0CBC who=tails F264_IN sensor=1 sx=0F5A sy=07B0 d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3259 lfc=0CBC who=tails F264_SOLID sensor=1 chunk_word=F0A4 chunk_idx=0A4
+f=3259 lfc=0CBC who=tails F264_BLOCK sensor=1 block_id=36 angle_arr=F6 col_pre=0F5A d4=F0A4
+f=3259 lfc=0CBC who=tails F264_EXIT sensor=1 path=tile_above_-10 d1=-1 angle_out=F6
+f=3259 lfc=0CBC who=tails F264_IN sensor=2 sx=0F48 sy=07B0 d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3259 lfc=0CBC who=tails F264_SOLID sensor=2 chunk_word=F0A5 chunk_idx=0A5
+f=3259 lfc=0CBC who=tails F264_BLOCK sensor=2 block_id=35 angle_arr=F8 col_pre=0F48 d4=F0A5
+f=3259 lfc=0CBC who=tails F264_EXIT sensor=2 path=normal d1=5 angle_out=F8
+f=3259 lfc=0CBC who=tails PLAYER_ANGLE primary_d0=-1 secondary_d1=5 prim_angle=F6 sec_angle=F8 chosen=primary/right player_angle=F6
+f=3259 lfc=0CBC who=tails ED12_RETURN d1=-1 player_angle=F6
+f=3260 lfc=0CBD who=sonic ANGLEPOS zone=07 act=00 x=100B y=076C xsub=D600 ysub=2700 xvel=075F yvel=0000 gvel=075F ang=00 status=00 rtn=02 yrad=13 xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3260 lfc=0CBD who=sonic F264_IN sensor=1 sx=1014 sy=077F d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3260 lfc=0CBD who=sonic F264_EXIT sensor=1 path=tile_below_+10 d1=0 angle_out=FF
+f=3260 lfc=0CBD who=sonic F264_IN sensor=2 sx=1002 sy=077F d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3260 lfc=0CBD who=sonic F264_EXIT sensor=2 path=tile_below_+10 d1=0 angle_out=FF
+f=3260 lfc=0CBD who=sonic PLAYER_ANGLE primary_d0=0 secondary_d1=0 prim_angle=FF sec_angle=FF chosen=secondary/left player_angle=00
+f=3260 lfc=0CBD who=sonic ED12_RETURN d1=0 player_angle=00
+f=3260 lfc=0CBD who=tails ANGLEPOS zone=07 act=00 x=0F52 y=07A0 xsub=CC00 ysub=6400 xvel=0093 yvel=FFDB gvel=0098 ang=F6 status=00 rtn=02 yrad=0F xrad=09 topbit=0C lrbbit=0D stick=00 prim_coll=000987C0 sec_coll=000987C1 coll=000987C0 bgflag=00
+f=3260 lfc=0CBD who=tails F264_IN sensor=1 sx=0F5B sy=07AF d5=0C d6=0000 a3=0010 a4=F768(primary/right) a5=00EFF0 coll=000987C0
+f=3260 lfc=0CBD who=tails F264_EXIT sensor=1 path=tile_below_+10 d1=0 angle_out=F6
+f=3260 lfc=0CBD who=tails F264_IN sensor=2 sx=0F49 sy=07AF d5=0C d6=0000 a3=0010 a4=F76A(secondary/left) a5=00EFF0 coll=000987C0
+f=3260 lfc=0CBD who=tails F264_EXIT sensor=2 path=tile_below_+10 d1=5 angle_out=F8
+f=3260 lfc=0CBD who=tails PLAYER_ANGLE primary_d0=0 secondary_d1=5 prim_angle=F6 sec_angle=F8 chosen=primary/right player_angle=F6
+f=3260 lfc=0CBD who=tails ED12_RETURN d1=0 player_angle=F6
+f=3261 done=1

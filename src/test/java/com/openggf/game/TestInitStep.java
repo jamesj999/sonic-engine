@@ -1,10 +1,10 @@
 package com.openggf.game;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class TestInitStep {
 
@@ -40,3 +40,5 @@ public class TestInitStep {
         assertEquals(3, order.get());
     }
 }
+
+

@@ -1,24 +1,27 @@
 package com.openggf.graphics;
 
 import com.openggf.level.Palette;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import com.openggf.game.GameId;
 
-import static org.junit.Assert.*;
+import java.lang.reflect.Field;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Tests for {@link RenderContext} static registry and instance behavior.
  */
 public class TestRenderContext {
 
-    @Before
+    @BeforeEach
     public void setUp() {
         RenderContext.reset();
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         RenderContext.reset();
     }
@@ -107,7 +110,7 @@ public class TestRenderContext {
     public void createSidekickContext_doesNotCacheByGameId() {
         RenderContext first = RenderContext.createSidekickContext(GameId.S3K);
         RenderContext second = RenderContext.createSidekickContext(GameId.S3K);
-        assertNotSame("Each sidekick must get its own context", first, second);
+        assertNotSame(first, second, "Each sidekick must get its own context");
         assertEquals(4, first.getPaletteLineBase());
         assertEquals(8, second.getPaletteLineBase());
         assertEquals(12, RenderContext.getTotalPaletteLines());
@@ -177,7 +180,7 @@ public class TestRenderContext {
 
     @Test
     public void deriveUnderwaterPalette_appliesUniformTintAcrossAllDonorColors() {
-        // Same base palettes — ratio ~0.5 across all channels
+        // Same base palettes â€” ratio ~0.5 across all channels
         Palette normalBase = new Palette();
         normalBase.setColor(1, new Palette.Color(
                 (byte) 200, (byte) 200, (byte) 200));
@@ -196,7 +199,7 @@ public class TestRenderContext {
         Palette result = RenderContext.deriveUnderwaterPalette(
                 donorNormal, normalBase, underwaterBase);
 
-        // Both should get the same 0.5 factor: orange→(100,50,0), blue→(0,0,100)
+        // Both should get the same 0.5 factor: orangeâ†’(100,50,0), blueâ†’(0,0,100)
         Palette.Color orange = result.getColor(4);
         assertEquals(100, Byte.toUnsignedInt(orange.r));
         assertEquals(50, Byte.toUnsignedInt(orange.g));
@@ -233,7 +236,7 @@ public class TestRenderContext {
 
     @Test
     public void deriveUnderwaterPalette_allZeroBase_preservesDonorColors() {
-        // All base colors are black — ratio defaults to 1.0 (no shift)
+        // All base colors are black â€” ratio defaults to 1.0 (no shift)
         Palette normalBase = new Palette();
         Palette underwaterBase = new Palette();
 
@@ -244,10 +247,116 @@ public class TestRenderContext {
         Palette result = RenderContext.deriveUnderwaterPalette(
                 donorNormal, normalBase, underwaterBase);
 
-        // No valid base colors to compute ratio from — donor colors pass through unchanged
+        // No valid base colors to compute ratio from â€” donor colors pass through unchanged
         Palette.Color c = result.getColor(1);
         assertEquals(120, Byte.toUnsignedInt(c.r));
         assertEquals(60, Byte.toUnsignedInt(c.g));
         assertEquals(30, Byte.toUnsignedInt(c.b));
     }
+
+    @Test
+    void headlessFlushDiscardsDeferredCommands() {
+        GraphicsManager graphics = new GraphicsManager();
+        graphics.initHeadless();
+        TrackingCommand command = new TrackingCommand(false);
+        graphics.registerCommand(command);
+
+        graphics.flushWithCamera((short) 0, (short) 0, (short) 320, (short) 224);
+
+        assertEquals(0, command.executions);
+        assertEquals(1, command.releases);
+    }
+
+    @Test
+    void executedAndExceptionalQueuesReleaseEveryCommandExactlyOnce() throws Exception {
+        GraphicsManager graphics = new GraphicsManager();
+        setBooleanField(graphics, "glInitialized", true);
+        TrackingCommand first = new TrackingCommand(false);
+        TrackingCommand throwing = new TrackingCommand(true);
+        TrackingCommand remaining = new TrackingCommand(false);
+        graphics.registerCommand(first);
+        graphics.registerCommand(throwing);
+        graphics.registerCommand(remaining);
+
+        assertThrows(IllegalStateException.class,
+                () -> graphics.flushWithCamera((short) 0, (short) 0, (short) 320, (short) 224));
+
+        assertEquals(1, first.executions);
+        assertEquals(1, throwing.executions);
+        assertEquals(0, remaining.executions);
+        assertEquals(1, first.releases);
+        assertEquals(1, throwing.releases);
+        assertEquals(1, remaining.releases);
+    }
+
+    @Test
+    void nestedHeadlessCaptureDiscardsCommandsAtTheirOwningDrain() {
+        GraphicsManager graphics = new GraphicsManager();
+        graphics.initHeadless();
+        TrackingCommand outerBefore = new TrackingCommand(false);
+        TrackingCommand inner = new TrackingCommand(false);
+        TrackingCommand outerAfter = new TrackingCommand(false);
+
+        graphics.executeCapturedCommands(() -> {
+            graphics.registerCommand(outerBefore);
+            graphics.executeCapturedCommands(() -> graphics.registerCommand(inner), 0, 0, 320, 224);
+            graphics.registerCommand(outerAfter);
+        }, 0, 0, 320, 224);
+
+        assertEquals(1, outerBefore.releases);
+        assertEquals(1, inner.releases);
+        assertEquals(1, outerAfter.releases);
+    }
+
+    @Test
+    void resetAndHeadlessCleanupDiscardQueuedCommands() {
+        GraphicsManager graphics = new GraphicsManager();
+        graphics.initHeadless();
+        TrackingCommand resetCommand = new TrackingCommand(false);
+        graphics.registerCommand(resetCommand);
+        graphics.resetState();
+        assertEquals(1, resetCommand.releases);
+
+        TrackingCommand cleanupCommand = new TrackingCommand(false);
+        graphics.registerCommand(cleanupCommand);
+        graphics.cleanup();
+        assertEquals(1, cleanupCommand.releases);
+    }
+
+    private static void setBooleanField(Object target, String fieldName, boolean value) throws Exception {
+        Field field = target.getClass().getDeclaredField(fieldName);
+        field.setAccessible(true);
+        field.setBoolean(target, value);
+    }
+
+    private static final class TrackingCommand implements GLCommandable {
+        private final boolean throwOnExecute;
+        private final AtomicBoolean released = new AtomicBoolean();
+        private int executions;
+        private int releases;
+
+        private TrackingCommand(boolean throwOnExecute) {
+            this.throwOnExecute = throwOnExecute;
+        }
+
+        @Override
+        public void execute(int cameraX, int cameraY, int cameraWidth, int cameraHeight) {
+            executions++;
+            try {
+                if (throwOnExecute) {
+                    throw new IllegalStateException("expected");
+                }
+            } finally {
+                discard();
+            }
+        }
+
+        @Override
+        public void discard() {
+            if (released.compareAndSet(false, true)) {
+                releases++;
+            }
+        }
+    }
+
 }

@@ -13,8 +13,12 @@ import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
+import com.openggf.sprites.NativePositionOps;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
+import com.openggf.sprites.playable.ObjectControlState;
 
 import java.util.List;
 
@@ -35,7 +39,7 @@ import java.util.List;
  * </table>
  */
 public class OOZPoppingPlatformObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
 
     // ========================================================================
     // ROM Constants
@@ -113,22 +117,38 @@ public class OOZPoppingPlatformObjectInstance extends AbstractObjectInstance
         this.velocity = 0;
         this.isPlayerTriggered = (spawn.subtype() != 0);
 
-        // ROM: subtype == 0 starts at mode 2 (timer), subtype != 0 starts at mode 4 (wait for player)
-        this.mode = isPlayerTriggered ? Mode.WAIT_FOR_PLAYER : Mode.TIMER_COUNTDOWN;
+        // ROM Obj33_Init (s2.asm:49653-49657): routine_secondary defaults to 2 (mode 2 =
+        // loc_23BEA pop-physics), and is only overridden to 4 (wait-for-player) when subtype != 0.
+        // For the auto-pop (subtype 0) variant, the ROM burns one mode-2 frame immediately after
+        // Init with objoff_32 (velocity) = 0: y stays at home, velocity becomes $3800 (< $10000),
+        // so it transitions back to mode 0 and applies the bounce, THEN mode 0 starts the $78 timer
+        // the next frame. Starting at TIMER_COUNTDOWN here would skip that single mode-2 frame and
+        // fire every auto-pop one frame early (observed: engine pops at 1133 vs ROM 1134), which
+        // drags the riding player down a frame too soon. updatePopPhysics() with velocity 0 already
+        // reproduces the ROM's immediate transition-to-timer + bounce, so start in POP_PHYSICS.
+        // (See s2.asm:49710-49728 loc_23BEA.)
+        this.mode = isPlayerTriggered ? Mode.WAIT_FOR_PLAYER : Mode.POP_PHYSICS;
 
-        // Spawn flame child (ROM: AllocateObjectAfterCurrent)
-        spawnFlameChild();
         updateDynamicSpawn(x, currentY);
     }
 
-    private void spawnFlameChild() {
+    @Override
+    public OOZPoppingPlatformObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new OOZPoppingPlatformObjectInstance(ctx.spawn(), "OOZPoppingPform");
+    }
+
+    private void ensureFlameChildSpawned() {
+        if (flameChild != null || services().objectManager() == null) {
+            return;
+        }
+
         // Flame position: same X as parent, Y = parent Y - $10 (16 pixels above)
         int flameX = x;
         int flameY = homeY - 0x10;
         ObjectSpawn flameSpawn = new ObjectSpawn(flameX, flameY, spawn.objectId(), spawn.subtype(),
                 spawn.renderFlags(), false, spawn.rawYWord());
-        flameChild = new OOZBurnerFlameObjectInstance(flameSpawn, this);
-        services().objectManager().addDynamicObject(flameChild);
+        // ROM Obj33_Init uses AllocateObjectAfterCurrent.
+        flameChild = spawnChild(() -> new OOZBurnerFlameObjectInstance(flameSpawn, this));
     }
 
     @Override
@@ -140,19 +160,36 @@ public class OOZPoppingPlatformObjectInstance extends AbstractObjectInstance
     public int getY() {
         return currentY;
     }
+
+    /**
+     * Stable home (spawn) Y used as the burner flame's parent identity on rewind relink.
+     * The flame child spawns at {@code homeY - 0x10}, so a dropped flame can be re-bound to
+     * its platform by matching {@code getX() == flameSpawn.x()} and
+     * {@code getHomeY() == flameSpawn.y() + 0x10}.
+     */
+    public int getHomeY() {
+        return homeY;
+    }
+
+    @Override
+    public boolean usesInstanceSolidStateLatchKey() {
+        return true;
+    }
+
     @Override
     public int getPriorityBucket() {
         return RenderPriority.clamp(3);
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
+        ensureFlameChildSpawned();
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         switch (mode) {
             case TIMER_COUNTDOWN -> updateTimerCountdown();
             case POP_PHYSICS -> updatePopPhysics();
-            case WAIT_FOR_PLAYER -> updateWaitForPlayer(player, frameCounter);
-            case RISE_AND_LAUNCH -> updateRiseAndLaunch(player, frameCounter);
+            case WAIT_FOR_PLAYER -> updateWaitForPlayer(player, vIntRunCount);
+            case RISE_AND_LAUNCH -> updateRiseAndLaunch(player, vIntRunCount);
             case IDLE -> { /* rts - do nothing */ }
         }
         updateDynamicSpawn(x, currentY);
@@ -212,10 +249,9 @@ public class OOZPoppingPlatformObjectInstance extends AbstractObjectInstance
     // Mode 4: Wait for Player Standing (loc_23C26)
     // ========================================================================
 
-    private void updateWaitForPlayer(AbstractPlayableSprite player, int frameCounter) {
+    private void updateWaitForPlayer(AbstractPlayableSprite player, int vIntRunCount) {
         ObjectManager objectManager = services().objectManager();
-        var sidekicks = services().sidekicks();
-        AbstractPlayableSprite sidekick = sidekicks.isEmpty() ? null : (AbstractPlayableSprite) sidekicks.getFirst();
+        AbstractPlayableSprite sidekick = firstTrackedSidekick();
 
         // ROM: Check standing bits first, then X range
         boolean mainStanding = isPlayerStandingOnThis(player, objectManager);
@@ -285,7 +321,7 @@ public class OOZPoppingPlatformObjectInstance extends AbstractObjectInstance
      *      bclr #status.player.pushing,status(a1) / bclr #high_priority_bit,art_tile(a1)
      */
     private void lockPlayer(AbstractPlayableSprite player) {
-        player.setObjectControlled(true);
+        ObjectControlState.nativeBits0To6CpuAllowedMovementSuppressed().applyTo(player);
         player.setGSpeed((short) 0);
         player.setXSpeed((short) 0);
         player.setYSpeed((short) 0);
@@ -297,7 +333,7 @@ public class OOZPoppingPlatformObjectInstance extends AbstractObjectInstance
     // Mode 6: Rise to Apex and Launch Player (loc_23D20)
     // ========================================================================
 
-    private void updateRiseAndLaunch(AbstractPlayableSprite player, int frameCounter) {
+    private void updateRiseAndLaunch(AbstractPlayableSprite player, int vIntRunCount) {
         // Apply velocity (same as pop physics)
         int yPos32 = (currentY << 16) | (yFractional & 0xFFFF);
         yPos32 += velocity;
@@ -307,13 +343,16 @@ public class OOZPoppingPlatformObjectInstance extends AbstractObjectInstance
         // Apply gravity
         velocity += GRAVITY;
 
-        // Move locked players with platform
-        moveLockedPlayers(player);
-
         // ROM: cmp.w d0,d1 / bne.s + (exact equality check)
         // The physics are calibrated so currentY always hits the exact apex value.
         int apexY = homeY - APEX_OFFSET;
         if (currentY != apexY) {
+            // The engine's shared moving-solid carry can lose the positive obj_control rider
+            // before Obj33 reaches its exact apex. Preserve the existing bridge on rising
+            // frames only. ROM loc_23D20 launches without writing y_pos(a1), then clears
+            // Status_OnObj before Obj33_Main reaches SolidObject, so the apex frame must not
+            // re-seat the player to the platform top.
+            moveLockedPlayers(player);
             return; // Not at apex yet
         }
 
@@ -322,33 +361,32 @@ public class OOZPoppingPlatformObjectInstance extends AbstractObjectInstance
         mode = Mode.IDLE;
         ObjectManager objectManager = services().objectManager();
 
-        if (mainCharLocked && player != null && objectManager.isRidingObject(player, this)) {
-            launchPlayer(player, frameCounter);
+        if (player != null && objectManager.isRidingObject(player, this)) {
+            launchPlayer(player, vIntRunCount);
         }
         mainCharLocked = false;
 
-        var sidekicks = services().sidekicks();
-        AbstractPlayableSprite sidekick = sidekicks.isEmpty() ? null : (AbstractPlayableSprite) sidekicks.getFirst();
-        if (sidekickLocked && sidekick != null && objectManager.isRidingObject(sidekick, this)) {
-            launchPlayer(sidekick, frameCounter);
+        AbstractPlayableSprite sidekick = firstTrackedSidekick();
+        if (sidekick != null && objectManager.isRidingObject(sidekick, this)) {
+            launchPlayer(sidekick, vIntRunCount);
         }
         sidekickLocked = false;
     }
 
-    /**
-     * Move locked players to ride with the platform.
-     */
     private void moveLockedPlayers(AbstractPlayableSprite mainChar) {
         if (mainCharLocked && mainChar != null) {
-            mainChar.setCentreX((short) x);
-            mainChar.setCentreY((short) (currentY - SOLID_HALF_HEIGHT_AIR));
+            NativePositionOps.writeYPosPreserveSubpixel(mainChar, currentY - SOLID_HALF_HEIGHT_AIR);
         }
-        var sidekicks2 = services().sidekicks();
-        AbstractPlayableSprite sidekick = sidekicks2.isEmpty() ? null : (AbstractPlayableSprite) sidekicks2.getFirst();
+        AbstractPlayableSprite sidekick = firstTrackedSidekick();
         if (sidekickLocked && sidekick != null) {
-            sidekick.setCentreX((short) x);
-            sidekick.setCentreY((short) (currentY - SOLID_HALF_HEIGHT_AIR));
+            NativePositionOps.writeYPosPreserveSubpixel(sidekick, currentY - SOLID_HALF_HEIGHT_AIR);
         }
+    }
+
+    private AbstractPlayableSprite firstTrackedSidekick() {
+        return services().playerQuery().nativeP2OrNull() instanceof AbstractPlayableSprite sidekick
+                ? sidekick
+                : null;
     }
 
     /**
@@ -357,9 +395,9 @@ public class OOZPoppingPlatformObjectInstance extends AbstractObjectInstance
      *      bset #1,status(a1) / move.w #-$1000,y_vel(a1)
      *      bclr #3,status(a1) / clr.b obj_control(a1)
      */
-    private void launchPlayer(AbstractPlayableSprite player, int frameCounter) {
-        // Center player on platform X
-        player.setCentreX((short) x);
+    private void launchPlayer(AbstractPlayableSprite player, int vIntRunCount) {
+        // ROM move.w x_pos(a0),x_pos(a1): write the native pixel word and preserve x_sub.
+        NativePositionOps.writeXPosPreserveSubpixel(player, x);
         // Set rolling animation
         player.setAnimationId(Sonic2AnimationIds.ROLL);
         // Set inertia
@@ -368,8 +406,10 @@ public class OOZPoppingPlatformObjectInstance extends AbstractObjectInstance
         player.setAir(true);
         // Set strong upward velocity
         player.setYSpeed((short) LAUNCH_Y_VEL);
+        // ROM bclr #status.player.on_object,status(a1)
+        player.setOnObject(false);
         // Release from object control
-        player.releaseFromObjectControl(frameCounter);
+        player.releaseFromObjectControl(vIntRunCount);
         // Play spring sound
         services().playSfx(Sonic2Sfx.SPRING.id);
     }
@@ -380,7 +420,49 @@ public class OOZPoppingPlatformObjectInstance extends AbstractObjectInstance
 
     @Override
     public SolidObjectParams getSolidParams() {
-        return new SolidObjectParams(SOLID_HALF_WIDTH, SOLID_HALF_HEIGHT_AIR, SOLID_HALF_HEIGHT_GND);
+        return SolidObjectParams.of(SOLID_HALF_WIDTH, SOLID_HALF_HEIGHT_AIR, SOLID_HALF_HEIGHT_GND);
+    }
+
+    @Override
+    public int getBalanceWidthPixels() {
+        // Obj33_Init writes width_pixels=$18. Balance uses width_pixels, while
+        // the SolidObject call separately adds its $B horizontal allowance.
+        return WIDTH_PIXELS;
+    }
+
+    @Override
+    public boolean usesInclusiveRightEdge() {
+        // Obj33_Main calls the standard SolidObject helper with d1=$18+$B.
+        // Its unsigned BHI rejection keeps relX==2*d1 in range.
+        return true;
+    }
+
+    @Override
+    public boolean preservesZeroDistanceSideContactMotion() {
+        // At the inclusive edge, SolidObject_ChkBounds computes d0=0 and
+        // reaches SolidObject_AtEdge without entering StopCharacter. It sets
+        // Status_Push but leaves x_pos, x_vel, and inertia unchanged
+        // (docs/s2disasm/s2.asm:35338-35444).
+        return true;
+    }
+
+    @Override
+    public boolean allowsObjectControlledSolidContacts() {
+        // Obj33 writes obj_control(a1)=1 while the player rides the rising lid
+        // (s2.asm:49809/49837/49843), then still calls SolidObject from Obj33_Main.
+        // SolidObject_ChkBounds rejects only negative object_control values
+        // (s2.asm:35375-35377), so the positive capture state must keep support.
+        return true;
+    }
+
+    @Override
+    public boolean rejectsBit7ObjectControlNewSolidContact(PlayableEntity player) {
+        // Obj33_Main still calls SolidObject after moving the lid
+        // (s2.asm:49727-49740), but only positive object_control=1 riders pass
+        // through SolidObject_ChkBounds. Signed bit-7 states such as Tails's
+        // off-screen/flying obj_control=$81 branch to SolidObject_TestClearPush
+        // before side/top classification (s2.asm:35344-35489).
+        return player instanceof AbstractPlayableSprite;
     }
 
     @Override

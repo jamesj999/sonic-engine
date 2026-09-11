@@ -9,6 +9,7 @@ import com.openggf.game.sonic1.scroll.Sonic1ZoneConstants;
 import com.openggf.graphics.GraphicsManager;
 import com.openggf.level.LevelManager;
 import com.openggf.level.WaterSystem;
+import com.openggf.physics.SensorResult;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
 import java.io.IOException;
@@ -110,18 +111,15 @@ public class Sonic1ZoneFeatureProvider implements ZoneFeatureProvider {
             }
 
             // 2. Water slides (chunk-based slide mechanic)
-            // ROM reads from v_lvllayout using obX/obY. In our engine, use the
-            // player's centre position to query the equivalent layout block ID.
+            // ROM LZWaterSlides samples v_lvllayout from obX/obY only
+            // (docs/s1disasm/_inc/LZWaterFeatures.asm:392-406). In this engine
+            // those ROM fields map to centre coordinates, not sprite bounds.
             int chunkIdAtPlayer = -1;
-            int fallbackChunkId = -1;
             LevelManager levelManager = GameServices.levelOrNull();
             if (levelManager != null) {
                 chunkIdAtPlayer = levelManager.getBlockIdAt(player.getCentreX(), player.getCentreY());
-                // ROM uses obX/obY directly; in this engine we also sample sprite-origin
-                // to avoid transient misses from coordinate representation differences.
-                fallbackChunkId = levelManager.getBlockIdAt(player.getX(), player.getY());
             }
-            waterEvents.checkWaterSlide(chunkIdAtPlayer, fallbackChunkId);
+            waterEvents.checkWaterSlide(chunkIdAtPlayer);
         }
     }
 
@@ -240,12 +238,23 @@ public class Sonic1ZoneFeatureProvider implements ZoneFeatureProvider {
         return waterEvents != null && waterEvents.isWindTunnelDisabled();
     }
 
+    @Override
+    public boolean isWaterTunnelActive() {
+        return waterEvents != null && waterEvents.isWindTunnelActive();
+    }
+
     /**
      * Returns the LZ water events instance, or null if not in a water zone.
      * Used by credits demo to restore lamppost water routine state.
      */
     public Sonic1LZWaterEvents getWaterEvents() {
         return waterEvents;
+    }
+
+    @Override
+    public boolean shouldTreatZeroDistanceAirLandingAsGround(AbstractPlayableSprite player,
+                                                             SensorResult support) {
+        return waterEvents != null && waterEvents.allowsFlatZeroDistanceLanding(player, support);
     }
 
     @Override

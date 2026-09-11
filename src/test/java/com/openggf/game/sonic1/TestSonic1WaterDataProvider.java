@@ -1,12 +1,14 @@
 package com.openggf.game.sonic1;
 
+import com.openggf.game.OscillationManager;
 import com.openggf.game.PlayerCharacter;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Tests for {@link Sonic1WaterDataProvider}.
@@ -100,10 +102,8 @@ public class TestSonic1WaterDataProvider {
     @Test
     public void testNoDynamicHandler() {
         // S1 water is static; no dynamic handlers
-        assertNull("LZ should have no dynamic water handler",
-                provider.getDynamicHandler(ZONE_LZ, 0, PlayerCharacter.SONIC_AND_TAILS));
-        assertNull("SBZ3 should have no dynamic water handler",
-                provider.getDynamicHandler(ZONE_SBZ, 2, PlayerCharacter.SONIC_AND_TAILS));
+        assertNull(provider.getDynamicHandler(ZONE_LZ, 0, PlayerCharacter.SONIC_AND_TAILS), "LZ should have no dynamic water handler");
+        assertNull(provider.getDynamicHandler(ZONE_SBZ, 2, PlayerCharacter.SONIC_AND_TAILS), "SBZ3 should have no dynamic water handler");
     }
 
     // --- getWaterSpeed tests ---
@@ -113,4 +113,49 @@ public class TestSonic1WaterDataProvider {
         // WaterDataProvider default is 1
         assertEquals(1, provider.getWaterSpeed(ZONE_LZ, 0));
     }
+
+    // --- getVisualWaterLevelOffset tests ---
+
+    @Test
+    public void testLzVisualOffsetAtResetIsZero() {
+        // ROM (LZWaterFeatures.asm): byte at v_oscillate+2, lsr #1, added to
+        // v_waterpos2. After resetForSonic1(), oscillator 0's value word is
+        // 0x0080 -> high byte 0x00 -> expected offset = 0 >> 1 = 0.
+        OscillationManager.resetForSonic1();
+        assertEquals(0, provider.getVisualWaterLevelOffset(ZONE_LZ, 0));
+    }
+
+    @Test
+    public void testLzVisualOffsetTracksOscillatorAfterStepping() {
+        // After stepping the oscillator, getByte(0) moves off zero and the
+        // provider must return getByte(0) >> 1.
+        OscillationManager.resetForSonic1();
+        for (int frame = 1; frame <= 50; frame++) {
+            OscillationManager.update(frame);
+        }
+        int byte0 = OscillationManager.getByte(0);
+        assertNotEquals(0, byte0, "Oscillator 0 should have advanced after 50 update() calls");
+        assertEquals(byte0 >> 1, provider.getVisualWaterLevelOffset(ZONE_LZ, 0));
+    }
+
+    @Test
+    public void testSbz3VisualOffsetTracksOscillatorAfterStepping() {
+        // SBZ3 reuses LZ water mechanics, so it must produce the same formula.
+        OscillationManager.resetForSonic1();
+        for (int frame = 1; frame <= 50; frame++) {
+            OscillationManager.update(frame);
+        }
+        int byte0 = OscillationManager.getByte(0);
+        assertNotEquals(0, byte0, "Oscillator 0 should have advanced after 50 update() calls");
+        assertEquals(byte0 >> 1, provider.getVisualWaterLevelOffset(ZONE_SBZ, 2));
+    }
+
+    @Test
+    public void testGhzVisualOffsetIsZero() {
+        // Non-water zones report no oscillation offset.
+        OscillationManager.resetForSonic1();
+        assertEquals(0, provider.getVisualWaterLevelOffset(ZONE_GHZ, 0));
+    }
 }
+
+

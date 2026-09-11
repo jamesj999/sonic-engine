@@ -8,32 +8,27 @@ import com.openggf.level.Pattern;
 import com.openggf.level.animation.AnimatedPatternManager;
 import com.openggf.tests.HeadlessTestFixture;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 @RequiresRom(SonicGame.SONIC_3K)
 public class TestS3kPachinkoPatternAnimation {
-
-    @ClassRule public static RequiresRomRule romRule = new RequiresRomRule();
-
     private HeadlessTestFixture fixture;
 
-    @BeforeClass
+    @BeforeAll
     public static void configure() {
         SonicConfigurationService config = SonicConfigurationService.getInstance();
         config.setConfigValue(SonicConfiguration.S3K_SKIP_INTROS, true);
     }
 
-    @Before
+    @BeforeEach
     public void setUp() {
         fixture = null;
     }
@@ -45,14 +40,14 @@ public class TestS3kPachinkoPatternAnimation {
                 .build();
 
         Level level = GameServices.level().getCurrentLevel();
-        assertNotNull("Level must be loaded", level);
+        assertNotNull(level, "Level must be loaded");
 
         Pattern pattern = level.getPattern(0x125);
-        assertNotNull("Pattern tile must exist at $125", pattern);
+        assertNotNull(pattern, "Pattern tile must exist at $125");
 
         byte[] initial = snapshot(pattern);
         AnimatedPatternManager apm = GameServices.level().getAnimatedPatternManager();
-        assertNotNull("AnimatedPatternManager must be present", apm);
+        assertNotNull(apm, "AnimatedPatternManager must be present");
 
         boolean changed = false;
         for (int frame = 0; frame < 12; frame++) {
@@ -64,7 +59,7 @@ public class TestS3kPachinkoPatternAnimation {
             }
         }
 
-        assertFalse("Expected animated Pachinko tile $125 to remain static over 12 frames", !changed);
+        assertFalse(!changed, "Expected animated Pachinko tile $125 to remain static over 12 frames");
     }
 
     @Test
@@ -74,14 +69,14 @@ public class TestS3kPachinkoPatternAnimation {
                 .build();
 
         Level level = GameServices.level().getCurrentLevel();
-        assertNotNull("Level must be loaded", level);
+        assertNotNull(level, "Level must be loaded");
 
         Pattern pattern = level.getPattern(0x0E9);
-        assertNotNull("Pattern tile must exist at $0E9", pattern);
+        assertNotNull(pattern, "Pattern tile must exist at $0E9");
 
         byte[] initial = snapshot(pattern);
         AnimatedPatternManager apm = GameServices.level().getAnimatedPatternManager();
-        assertNotNull("AnimatedPatternManager must be present", apm);
+        assertNotNull(apm, "AnimatedPatternManager must be present");
 
         boolean changed = false;
         for (int frame = 0; frame < 6; frame++) {
@@ -93,7 +88,7 @@ public class TestS3kPachinkoPatternAnimation {
             }
         }
 
-        assertFalse("Expected animated Pachinko tile $0E9 to remain static over 6 frames", !changed);
+        assertFalse(!changed, "Expected animated Pachinko tile $0E9 to remain static over 6 frames");
     }
 
     private static byte[] snapshot(Pattern pattern) {
@@ -107,3 +102,5 @@ public class TestS3kPachinkoPatternAnimation {
         return data;
     }
 }
+
+

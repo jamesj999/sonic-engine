@@ -8,13 +8,13 @@ import com.openggf.game.sonic1.audio.Sonic1SmpsConstants;
 import com.openggf.game.sonic1.audio.Sonic1SmpsSequencerConfig;
 import com.openggf.game.sonic2.audio.smps.Sonic2SmpsData;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Unit tests for Bug #16: Sonic 1 waterfall SFX stop/start after interruption.
@@ -45,11 +45,6 @@ public class TestSonic1AudioPriority {
      */
     static class SpyDriver extends SmpsDriver {
         List<Integer> rawPsgWrites = new ArrayList<>();
-
-        @Override
-        public void render(short[] buffer) {
-            // No-op for synth rendering in unit tests.
-        }
 
         @Override
         public void writeFm(Object source, int port, int reg, int val) {
@@ -153,15 +148,14 @@ public class TestSonic1AudioPriority {
         // Step 1: Waterfall SFX takes FM channel 2.
         // S1 waterfall (0xD0) has priority 0x80 and is a special SFX.
         int waterfallPriority = Sonic1SmpsConstants.getSfxPriority(0xD0);
-        assertEquals("Waterfall priority should be 0x80", 0x80, waterfallPriority);
+        assertEquals(0x80, waterfallPriority, "Waterfall priority should be 0x80");
 
         SmpsSequencer waterfall1 = createSfxSequencer(driver, 0xD0, waterfallPriority, true);
         driver.addSequencer(waterfall1, true);
 
         // Give waterfall the FM2 lock via a frequency write.
         driver.writeFm(waterfall1, 0, 0xA2, 0x10); // FM channel 2 (port 0, reg 0xA2)
-        assertEquals("Waterfall should initially hold FM2 lock",
-                waterfall1, driver.getFmLock(2));
+        assertEquals(waterfall1, driver.getFmLock(2), "Waterfall should initially hold FM2 lock");
 
         // Step 2: Jump SFX (normal, priority 0x70) steals the channel.
         // Jump (0xA0) has priority 0x80 in S1's table, but for this test we use the
@@ -173,8 +167,7 @@ public class TestSonic1AudioPriority {
 
         // Jump writes to FM2, stealing the lock from the waterfall.
         driver.writeFm(jump, 0, 0xA2, 0x20);
-        assertEquals("Jump SFX should steal FM2 from waterfall",
-                jump, driver.getFmLock(2));
+        assertEquals(jump, driver.getFmLock(2), "Jump SFX should steal FM2 from waterfall");
 
         // Step 3: Simulate jump SFX completing - remove it and release its locks.
         // In normal operation, the driver removes completed sequencers in read().
@@ -203,7 +196,7 @@ public class TestSonic1AudioPriority {
             throw new RuntimeException("Failed to simulate jump SFX completion", e);
         }
 
-        assertNull("FM2 lock should be released after jump finishes", driver.getFmLock(2));
+        assertNull(driver.getFmLock(2), "FM2 lock should be released after jump finishes");
 
         // Step 4: Waterfall replays (object re-triggers every 64 frames).
         // The old waterfall1 sequencer was removed by same-ID dedup when jump was added
@@ -213,8 +206,7 @@ public class TestSonic1AudioPriority {
 
         // Waterfall writes to FM2, reclaiming the now-free channel.
         driver.writeFm(waterfall2, 0, 0xA2, 0x30);
-        assertEquals("Waterfall should reclaim FM2 after jump finishes",
-                waterfall2, driver.getFmLock(2));
+        assertEquals(waterfall2, driver.getFmLock(2), "Waterfall should reclaim FM2 after jump finishes");
 
         // Step 5: Assert stability - simulate 128 write cycles and count lock changes.
         // In the buggy case, the lock would toggle between waterfall and null (or another
@@ -233,13 +225,11 @@ public class TestSonic1AudioPriority {
             }
         }
 
-        assertTrue("Channel lock should not toggle rapidly after waterfall re-play "
-                        + "(changes=" + lockChanges + ", max=3)",
-                lockChanges <= 3);
+        assertTrue(lockChanges <= 3, "Channel lock should not toggle rapidly after waterfall re-play "
+                        + "(changes=" + lockChanges + ", max=3)");
 
         // Stronger assertion: the waterfall should still own the channel.
-        assertEquals("Waterfall should stably hold FM2 after 128 frames",
-                waterfall2, driver.getFmLock(2));
+        assertEquals(waterfall2, driver.getFmLock(2), "Waterfall should stably hold FM2 after 128 frames");
     }
 
     /**
@@ -266,8 +256,7 @@ public class TestSonic1AudioPriority {
         driver.addSequencer(waterfall, true);
 
         driver.writeFm(waterfall, 0, 0xA2, 0x10);
-        assertEquals("Waterfall should hold FM2 initially",
-                waterfall, driver.getFmLock(2));
+        assertEquals(waterfall, driver.getFmLock(2), "Waterfall should hold FM2 initially");
 
         // Jump SFX (0xA0) - normal SFX with priority 0x70 (lower numeric value).
         // Despite lower numeric priority, normal SFX should still steal from special SFX
@@ -276,8 +265,7 @@ public class TestSonic1AudioPriority {
         driver.addSequencer(jump, true);
 
         driver.writeFm(jump, 0, 0xA2, 0x20);
-        assertEquals("Normal SFX should steal FM2 from special SFX (class demotion rule)",
-                jump, driver.getFmLock(2));
+        assertEquals(jump, driver.getFmLock(2), "Normal SFX should steal FM2 from special SFX (class demotion rule)");
     }
 
     /**
@@ -306,8 +294,7 @@ public class TestSonic1AudioPriority {
                     driver, 0xD0, waterfallPriority, true);
             driver.addSequencer(waterfall, true);
             driver.writeFm(waterfall, 0, 0xA2, 0x10);
-            assertEquals("Cycle " + cycle + ": waterfall should hold FM2",
-                    waterfall, driver.getFmLock(2));
+            assertEquals(waterfall, driver.getFmLock(2), "Cycle " + cycle + ": waterfall should hold FM2");
 
             // Normal SFX steals FM2. Use different IDs per cycle to avoid same-ID dedup
             // between cycles (each iteration is a distinct SFX in-game).
@@ -317,8 +304,7 @@ public class TestSonic1AudioPriority {
             normalSfx.addTrack(createTrack(SmpsSequencer.TrackType.FM, 2));
             driver.addSequencer(normalSfx, true);
             driver.writeFm(normalSfx, 0, 0xA2, 0x20);
-            assertEquals("Cycle " + cycle + ": normal SFX should steal FM2",
-                    normalSfx, driver.getFmLock(2));
+            assertEquals(normalSfx, driver.getFmLock(2), "Cycle " + cycle + ": normal SFX should steal FM2");
 
             // Simulate normal SFX completing.
             try {
@@ -345,8 +331,7 @@ public class TestSonic1AudioPriority {
                 throw new RuntimeException("Failed to simulate SFX completion in cycle " + cycle, e);
             }
 
-            assertNull("Cycle " + cycle + ": FM2 should be free after normal SFX ends",
-                    driver.getFmLock(2));
+            assertNull(driver.getFmLock(2), "Cycle " + cycle + ": FM2 should be free after normal SFX ends");
 
             // Also remove the waterfall sequencer (it was killed by channel conflict
             // during addSequencer of the normal SFX, or replaced by same-ID dedup).
@@ -371,20 +356,17 @@ public class TestSonic1AudioPriority {
                 driver, 0xD0, waterfallPriority, true);
         driver.addSequencer(waterfall1, true);
         driver.writeFm(waterfall1, 0, 0xA2, 0x10);
-        assertEquals("First waterfall should hold FM2",
-                waterfall1, driver.getFmLock(2));
+        assertEquals(waterfall1, driver.getFmLock(2), "First waterfall should hold FM2");
 
         // Second waterfall instance (same ID 0xD0) - same-ID dedup replaces the first.
         SmpsSequencer waterfall2 = createSfxSequencer(
                 driver, 0xD0, waterfallPriority, true);
         driver.addSequencer(waterfall2, true);
         driver.writeFm(waterfall2, 0, 0xA2, 0x20);
-        assertEquals("Second waterfall should replace first via same-ID dedup",
-                waterfall2, driver.getFmLock(2));
+        assertEquals(waterfall2, driver.getFmLock(2), "Second waterfall should replace first via same-ID dedup");
 
         // Only one sequencer should remain (the old one was deduped).
-        assertEquals("Should have exactly 1 sequencer after same-ID dedup",
-                1, driver.getSequencerCount());
+        assertEquals(1, driver.getSequencerCount(), "Should have exactly 1 sequencer after same-ID dedup");
     }
 
     /**
@@ -397,29 +379,24 @@ public class TestSonic1AudioPriority {
     @Test
     public void testS1PriorityTableValues() {
         // Waterfall (special SFX 0xD0) should have priority 0x80 (bit 7 = transient).
-        assertEquals("Waterfall (0xD0) priority", 0x80,
-                Sonic1SmpsConstants.getSfxPriority(0xD0));
+        assertEquals(0x80, Sonic1SmpsConstants.getSfxPriority(0xD0), "Waterfall (0xD0) priority");
 
         // Jump (0xA0) should have priority 0x80 (bit 7 set, per s1disasm).
-        assertEquals("Jump (0xA0) priority", 0x80,
-                Sonic1SmpsConstants.getSfxPriority(0xA0));
+        assertEquals(0x80, Sonic1SmpsConstants.getSfxPriority(0xA0), "Jump (0xA0) priority");
 
         // Ring (0xB5) should have priority 0x70 (normal SFX).
-        assertEquals("Ring (0xB5) priority", 0x70,
-                Sonic1SmpsConstants.getSfxPriority(0xB5));
+        assertEquals(0x70, Sonic1SmpsConstants.getSfxPriority(0xB5), "Ring (0xB5) priority");
 
         // Skid (0xA4) should have priority 0x70.
-        assertEquals("Skid (0xA4) priority", 0x70,
-                Sonic1SmpsConstants.getSfxPriority(0xA4));
+        assertEquals(0x70, Sonic1SmpsConstants.getSfxPriority(0xA4), "Skid (0xA4) priority");
 
         // Spring (0xCC) should have priority 0x70.
-        assertEquals("Spring (0xCC) priority", 0x70,
-                Sonic1SmpsConstants.getSfxPriority(0xCC));
+        assertEquals(0x70, Sonic1SmpsConstants.getSfxPriority(0xCC), "Spring (0xCC) priority");
 
         // All special SFX (0xD0-0xDF) should be 0x80.
         for (int id = 0xD0; id <= 0xDF; id++) {
-            assertEquals("Special SFX 0x" + Integer.toHexString(id) + " priority",
-                    0x80, Sonic1SmpsConstants.getSfxPriority(id));
+            assertEquals(0x80, Sonic1SmpsConstants.getSfxPriority(id), "Special SFX 0x" + Integer.toHexString(id) + " priority");
         }
     }
 }
+

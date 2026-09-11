@@ -7,7 +7,10 @@ import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectRenderManager;
+import com.openggf.level.objects.ObjectServices;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
+import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.ObjectTerrainUtils;
 import com.openggf.physics.TerrainCheckResult;
@@ -26,8 +29,9 @@ import java.util.List;
  *   <li>Subtype 0x0A-0x14: ending animals ("Anml_Ending" subtype path)</li>
  * </ul>
  */
-public class Sonic1AnimalsObjectInstance extends AbstractObjectInstance {
-    private static final int GRAVITY = 0x18;
+public class Sonic1AnimalsObjectInstance extends AbstractObjectInstance implements SpawnRewindRecreatable {
+    private static final int OBJECT_FALL_GRAVITY = 0x38;
+    private static final int FLIGHT_GRAVITY = 0x18;
     private static final int FLOOR_CHECK_HEIGHT = 12;
     private static final int INITIAL_POP_Y_VELOCITY = -0x400;
     private static final int START_MOVE_DISTANCE = 0xB8;
@@ -43,6 +47,8 @@ public class Sonic1AnimalsObjectInstance extends AbstractObjectInstance {
     private static final int SUBTYPE_ENDING_MAX = 0x14;
     private static final int ENDING_SPECIES_COUNT = 7;
     private static final int PRISON_WAIT_FRAMES = 0x0C;
+    private static final int S1_SCREEN_WIDTH = 320;
+    private static final int S1_SCREEN_HEIGHT = 224;
 
     // Anml_VarIndex table (GHZ, LZ, MZ, SLZ, SYZ, SBZ)
     private static final int[][] ZONE_VARIANT_INDEX = {
@@ -89,7 +95,8 @@ public class Sonic1AnimalsObjectInstance extends AbstractObjectInstance {
 
     private PatternSpriteRenderer zoneAnimalRenderer;
     private PatternSpriteRenderer endingAnimalRenderer;
-    private final int subtype;
+    private int subtype;
+    private int pointsValue;
 
     private int currentX;
     private int currentY;
@@ -111,14 +118,37 @@ public class Sonic1AnimalsObjectInstance extends AbstractObjectInstance {
     private int bounceToggle;
     private boolean hFlip = true;
     private boolean endingMode;
+    private boolean romRenderOnScreen = true;
 
     private boolean initialized;
+    private int prisonDelay;
+    private boolean fromPrison;
 
     public Sonic1AnimalsObjectInstance(ObjectSpawn spawn) {
+        this(spawn, 100);
+    }
+
+    public Sonic1AnimalsObjectInstance(ObjectSpawn spawn, int pointsValue) {
+        this(spawn, pointsValue, 0);
+    }
+
+    /**
+     * Capsule-spawned animal. The prison capsule writes {@code animal_prisondelay}
+     * into the freshly allocated animal slot and sets {@code v_bossstatus} to 2, so
+     * the animal's own init takes the {@code .fromPrison} branch and waits that many
+     * frames before hopping out
+     * (docs/s1disasm/_incObj/3E Prison Capsule.asm:133,152-160,180-181;
+     * docs/s1disasm/_incObj/28, 29 Animals and Points.asm:190-192,311-324).
+     * A non-zero delay is exactly the ROM state that marks a capsule animal.
+     */
+    public Sonic1AnimalsObjectInstance(ObjectSpawn spawn, int pointsValue, int prisonDelay) {
         super(spawn, "Animals");
         this.currentX = spawn.x();
         this.currentY = spawn.y();
         this.subtype = spawn.subtype() & 0xFF;
+        this.pointsValue = pointsValue;
+        this.prisonDelay = prisonDelay;
+        this.fromPrison = prisonDelay > 0;
     }
 
     private void ensureInitialized() {
@@ -168,19 +198,45 @@ public class Sonic1AnimalsObjectInstance extends AbstractObjectInstance {
         this.xVelocity = 0;
         this.yVelocity = INITIAL_POP_Y_VELOCITY;
 
-        if (services().gameState().isBossFightActive()) {
+        if (fromPrison || services().gameState().isBossFightActive()) {
             this.routine = ROUTINE_PRISON_WAIT;
-            this.prisonWaitTimer = PRISON_WAIT_FRAMES;
+            this.prisonWaitTimer = prisonDelay > 0 ? prisonDelay : PRISON_WAIT_FRAMES;
             this.xVelocity = 0;
+            return;
+        }
+
+        // ROM Anml_FromEnemy allocates Obj29 from the animal's own routine 0
+        // with FindFreeObj, using the copied objoff_3E score-chain value
+        // (docs/s1disasm/_incObj/28 Animals.asm:163-168).
+        ObjectServices svc = tryServices();
+        if (svc != null && svc.objectManager() != null && svc.renderManager() != null) {
+            spawnFreeChild(() -> new Sonic1PointsObjectInstance(
+                    new ObjectSpawn(currentX, currentY, 0x29, 0, 0, false, 0),
+                    svc, pointsValue));
         }
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
-        ensureInitialized();
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
+        if (!initialized) {
+            ensureInitialized();
+            // ROM Anml_Main (routine 0) sets obRoutine (addq.b #2,obRoutine for
+            // from-enemy / obSubtype*2 for ending) and then falls through to
+            // DisplaySprite WITHOUT running the resolved routine on the same
+            // frame (docs/s1disasm/_incObj/28, 29 Animals and Points.asm:130,
+            // 177,183). The resolved routine (Anml_ChkFloor fall / ending
+            // movement) runs only from the NEXT frame. Running it on the init
+            // frame put the animal one frame ahead, so it crossed the
+            // BuildSprites off-left bound and self-deleted one frame early,
+            // freeing its SST slot a frame early and shifting the S1 LZ2
+            // ObjPosLoad/FindFreeObj allocation cadence (LZ2 complete-run
+            // internal f361 -> f1068 frontier: a waterfall+burrobot took the
+            // animal's freed slot 0x20 instead of slots 0x24/0x25).
+            return;
+        }
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         switch (routine) {
-            case 0x02 -> updateRoutine912A(frameCounter);
+            case 0x02 -> updateRoutine912A(vIntRunCount);
             case 0x04, 0x08, 0x0A, 0x0C, 0x10 -> updateRoutine9184(player);
             case 0x06, 0x0E -> updateRoutine91C0(player);
             case 0x12 -> updateRoutine9240();
@@ -198,8 +254,8 @@ public class Sonic1AnimalsObjectInstance extends AbstractObjectInstance {
     /**
      * loc_912A: initial falling state for enemy-spawned animals.
      */
-    private void updateRoutine912A(int frameCounter) {
-        if (!isOnScreenX()) {
+    private void updateRoutine912A(int vIntRunCount) {
+        if (!romRenderOnScreen) {
             setDestroyed(true);
             return;
         }
@@ -211,7 +267,8 @@ public class Sonic1AnimalsObjectInstance extends AbstractObjectInstance {
             animFrame = 1;
             routine = (fromEnemyVariantIndex << 1) + 4;
 
-            if (services().gameState().isBossFightActive() && (frameCounter & 0x10) != 0) {
+            if ((fromPrison || services().gameState().isBossFightActive())
+                    && (vIntRunCount & 0x10) != 0) {
                 xVelocity = -xVelocity;
                 hFlip = !hFlip;
             }
@@ -238,7 +295,7 @@ public class Sonic1AnimalsObjectInstance extends AbstractObjectInstance {
      */
     private void updateRoutine91C0(AbstractPlayableSprite player) {
         speedToPos();
-        yVelocity += GRAVITY;
+        yVelocity += FLIGHT_GRAVITY;
 
         if (yVelocity >= 0 && checkFloorCollision()) {
             yVelocity = initialYVelocity;
@@ -257,7 +314,7 @@ public class Sonic1AnimalsObjectInstance extends AbstractObjectInstance {
      * loc_9240: prison wait, then transition back to routine 2.
      */
     private void updateRoutine9240() {
-        if (!isOnScreenX()) {
+        if (!romRenderOnScreen) {
             setDestroyed(true);
             return;
         }
@@ -289,7 +346,7 @@ public class Sonic1AnimalsObjectInstance extends AbstractObjectInstance {
             xVelocity = 0;
             initialXVelocity = 0;
             speedToPos();
-            yVelocity += GRAVITY;
+            yVelocity += FLIGHT_GRAVITY;
             applyGroundFrame();
             facePlayer(player);
             animateWings();
@@ -370,7 +427,7 @@ public class Sonic1AnimalsObjectInstance extends AbstractObjectInstance {
     private void updateRoutine9370(AbstractPlayableSprite player) {
         if (isPlayerClose(player)) {
             speedToPos();
-            yVelocity += GRAVITY;
+            yVelocity += FLIGHT_GRAVITY;
             if (yVelocity >= 0 && checkFloorCollision()) {
                 bounceToggle ^= 1;
                 if (bounceToggle == 0) {
@@ -385,22 +442,40 @@ public class Sonic1AnimalsObjectInstance extends AbstractObjectInstance {
     }
 
     private void speedToPos() {
-        xSub += xVelocity;
-        ySub += yVelocity;
-        currentX += (xSub >> 8);
-        currentY += (ySub >> 8);
-        xSub &= 0xFF;
-        ySub &= 0xFF;
+        SubpixelMotion.State motion = new SubpixelMotion.State(
+                currentX, currentY, xSub, ySub, xVelocity, yVelocity);
+        SubpixelMotion.speedToPos(motion);
+        currentX = motion.x;
+        currentY = motion.y;
+        xSub = motion.xSub;
+        ySub = motion.ySub;
     }
 
     private void objectFall() {
-        speedToPos();
-        yVelocity += GRAVITY;
+        SubpixelMotion.State motion = new SubpixelMotion.State(
+                currentX, currentY, xSub, ySub, xVelocity, yVelocity);
+        SubpixelMotion.objectFallXY(motion, OBJECT_FALL_GRAVITY);
+        currentX = motion.x;
+        currentY = motion.y;
+        xSub = motion.xSub;
+        ySub = motion.ySub;
+        xVelocity = motion.xVel;
+        yVelocity = motion.yVel;
     }
 
     private boolean checkFloorCollision() {
+        // ObjFloorDist sets d5 to #$D, the object floor/top-solid bit in S1
+        // (docs/s1disasm/s1disasm/_incObj/sub ObjFloorDist.asm).
         TerrainCheckResult result = ObjectTerrainUtils.checkFloorDist(currentX, currentY, FLOOR_CHECK_HEIGHT);
-        if (result.hasCollision()) {
+        // Every Anml_* floor test is "jsr ObjFloorDist / tst.w d1 / bpl.s <no hit>"
+        // (docs/s1disasm/_incObj/28, 29 Animals and Points.asm:211-214, 247-250,
+        // 272-275, 495-498), so d1 == 0 -- the animal's bottom exactly level with
+        // the topmost solid pixel -- is NOT a hit: bpl branches on N clear, which
+        // includes zero. The shared TerrainCheckResult#hasCollision() answers
+        // "distance <= 0" instead, which landed the animal one frame early on
+        // every flat-floor bounce and put its bounce cycle in anti-phase with the
+        // ROM's, leaving it on a ledge the ROM had already run off.
+        if (result.distance() < 0) {
             currentY += result.distance();
             return true;
         }
@@ -431,16 +506,33 @@ public class Sonic1AnimalsObjectInstance extends AbstractObjectInstance {
     // loc_9224 and subtype=0 off-screen cleanup paths
     private void applyDistanceCull(AbstractPlayableSprite player) {
         if (subtype == 0) {
-            if (!isOnScreenX()) {
+            if (!romRenderOnScreen) {
                 setDestroyed(true);
             }
             return;
         }
 
         int dx = currentX - playerX(player);
-        if (dx >= 0 && dx < DELETE_RANGE_AHEAD && !isOnScreenX()) {
+        if (dx >= 0 && dx < DELETE_RANGE_AHEAD && !romRenderOnScreen) {
             setDestroyed(true);
         }
+    }
+
+    @Override
+    public void refreshPostCameraRenderState() {
+        romRenderOnScreen = isWithinS1BuildSpritesBounds();
+    }
+
+    private boolean isWithinS1BuildSpritesBounds() {
+        int screenX = currentX - services().camera().getX();
+        int screenY = currentY - services().camera().getY();
+        // Obj28 sets obActWid=8 and leaves obRender bit 4 clear, so S1
+        // BuildSprites uses literal 320x224 bounds and the 32px assumed-height
+        // branch (docs/s1disasm/s1disasm/_inc/BuildSprites.asm).
+        return screenX + 8 >= 0
+                && screenX - 8 < S1_SCREEN_WIDTH
+                && screenY >= -32
+                && screenY < S1_SCREEN_HEIGHT + 32;
     }
 
     private void animateWings() {
@@ -514,5 +606,18 @@ public class Sonic1AnimalsObjectInstance extends AbstractObjectInstance {
     @Override
     public int getY() {
         return currentY;
+    }
+
+    @Override
+    public String traceDebugDetails() {
+        return String.format("routine=%02X var=%d vel=(%04X,%04X) sub=(%04X,%04X) render=%s frame=%d",
+                routine & 0xFF,
+                fromEnemyVariantIndex,
+                xVelocity & 0xFFFF,
+                yVelocity & 0xFFFF,
+                xSub & 0xFFFF,
+                ySub & 0xFFFF,
+                romRenderOnScreen,
+                animFrame);
     }
 }

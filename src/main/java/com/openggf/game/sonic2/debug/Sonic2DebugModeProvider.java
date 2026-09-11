@@ -11,7 +11,21 @@ public class Sonic2DebugModeProvider implements DebugModeProvider {
     private final Sonic2SpecialStageDebugController specialStageDebug;
 
     public Sonic2DebugModeProvider() {
-        this.specialStageDebug = new Sonic2SpecialStageDebugController();
+        this(createSpecialStageGraph());
+    }
+
+    public Sonic2DebugModeProvider(Sonic2SpecialStageManager manager,
+                                   Sonic2SpecialStageSpriteDebug spriteDebug) {
+        this.specialStageDebug = new Sonic2SpecialStageDebugController(manager, spriteDebug);
+    }
+
+    private Sonic2DebugModeProvider(SpecialStageGraph graph) {
+        this(graph.manager(), graph.spriteDebug());
+    }
+
+    private static SpecialStageGraph createSpecialStageGraph() {
+        Sonic2SpecialStageSpriteDebug spriteDebug = new Sonic2SpecialStageSpriteDebug();
+        return new SpecialStageGraph(new Sonic2SpecialStageManager(spriteDebug), spriteDebug);
     }
 
     @Override
@@ -38,9 +52,10 @@ public class Sonic2DebugModeProvider implements DebugModeProvider {
         private final Sonic2SpecialStageManager manager;
         private final Sonic2SpecialStageSpriteDebug spriteDebug;
 
-        public Sonic2SpecialStageDebugController() {
-            this.manager = Sonic2SpecialStageManager.getInstance();
-            this.spriteDebug = Sonic2SpecialStageSpriteDebug.getInstance();
+        public Sonic2SpecialStageDebugController(Sonic2SpecialStageManager manager,
+                                                 Sonic2SpecialStageSpriteDebug spriteDebug) {
+            this.manager = manager;
+            this.spriteDebug = spriteDebug;
         }
 
         @Override
@@ -90,7 +105,7 @@ public class Sonic2DebugModeProvider implements DebugModeProvider {
 
         @Override
         public void renderLagCompensationOverlay(int viewportWidth, int viewportHeight) {
-            manager.renderLagCompensationOverlay(viewportWidth, viewportHeight);
+            // S2 does not advertise a live lag diagnostic.
         }
 
         @Override
@@ -114,5 +129,18 @@ public class Sonic2DebugModeProvider implements DebugModeProvider {
                 spriteDebug.previousSet();
             }
         }
+
+        public Sonic2SpecialStageManager getManager() {
+            return manager;
+        }
+
+        public Sonic2SpecialStageSpriteDebug getSpriteDebug() {
+            return spriteDebug;
+        }
+    }
+
+    private record SpecialStageGraph(
+            Sonic2SpecialStageManager manager,
+            Sonic2SpecialStageSpriteDebug spriteDebug) {
     }
 }

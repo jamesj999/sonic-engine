@@ -2,6 +2,7 @@ package com.openggf.game.sonic1.objects.bosses;
 
 import com.openggf.camera.Camera;
 import com.openggf.game.sonic1.audio.Sonic1Sfx;
+import com.openggf.game.sonic1.constants.Sonic1ObjectIds;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectRenderManager;
@@ -42,6 +43,25 @@ public abstract class AbstractS1EggmanBossInstance extends AbstractBossInstance 
 
     protected AbstractS1EggmanBossInstance(ObjectSpawn spawn, String name) {
         super(spawn, name);
+    }
+
+    /**
+     * The S1 Eggman-ship bosses are never unloaded by the generic {@code out_of_range}
+     * window: their main routine ends with {@code jmp (DisplaySprite).l} (e.g.
+     * docs/s1disasm/_incObj/75, 76 Boss - SYZ Main and Blocks.asm:84), which only
+     * displays the sprite — it never calls {@code MarkObjGone} / the {@code out_of_range}
+     * delete macro. The boss owns its entire lifecycle: it self-deletes from its escape
+     * routine once {@code v_limitright2} reaches {@code boss_*_end} and it has left the
+     * screen ({@link #runCameraExpandEscape(int)}). Without this, the boss is culled
+     * off-screen mid-escape and stops running {@code addq.w #2,(v_limitright2)}, freezing
+     * the right-boundary camera scroll short of {@code boss_*_end} (SYZ3 trace: camera
+     * stuck at 0x2CA4 instead of expanding to boss_syz_end 0x2D40). The GHZ boss happens
+     * to reach its end boundary just before the cull window, so it was already correct;
+     * this makes all five bosses match the ROM no-cull behavior.
+     */
+    @Override
+    public boolean isPersistent() {
+        return true;
     }
 
     // ========================================================================
@@ -210,5 +230,10 @@ public abstract class AbstractS1EggmanBossInstance extends AbstractBossInstance 
     @Override
     protected int getBossExplosionSfxId() {
         return Sonic1Sfx.BOSS_EXPLOSION.id;
+    }
+
+    @Override
+    protected int getBossExplosionObjectId() {
+        return Sonic1ObjectIds.EXPLOSION;
     }
 }

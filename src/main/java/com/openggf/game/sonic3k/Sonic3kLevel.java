@@ -1,6 +1,7 @@
 package com.openggf.game.sonic3k;
 
 import com.openggf.data.Rom;
+import com.openggf.game.GameServices;
 import com.openggf.game.sonic3k.constants.Sonic3kConstants;
 import com.openggf.graphics.GraphicsManager;
 import com.openggf.level.*;
@@ -28,6 +29,7 @@ import java.util.logging.Logger;
  * </ul>
  */
 public class Sonic3kLevel extends AbstractLevel {
+    private final boolean[] backgroundCollisionRows = new boolean[Sonic3kConstants.MAP_HEIGHT];
     private static final Logger LOG = Logger.getLogger(Sonic3kLevel.class.getName());
 
     private static final int BLOCK_GRID_SIDE = 8;
@@ -35,6 +37,14 @@ public class Sonic3kLevel extends AbstractLevel {
     private byte[] primaryCollisionIndexTable = new byte[0];
     private byte[] secondaryCollisionIndexTable = new byte[0];
     private final Integer minXOverride;
+    /**
+     * False for a level built off the frame thread ahead of its install: the
+     * constructor then skips palette/pattern publication and the installer
+     * calls {@link #publishGraphics} on the frame thread instead.
+     */
+    private final boolean publishGraphicsOnLoad;
+    /** Level-art sheets built alongside a prepared load, consumed once by the art provider. */
+    private Sonic3kObjectArtProvider.PreparedLevelArt preparedLevelArt;
     private int fgLayoutWidthBlocks = Sonic3kConstants.MAP_WIDTH;
     private int fgLayoutHeightBlocks = Sonic3kConstants.MAP_HEIGHT;
     private int bgLayoutWidthBlocks = Sonic3kConstants.MAP_WIDTH;
@@ -73,7 +83,35 @@ public class Sonic3kLevel extends AbstractLevel {
                         List<ObjectSpawn> objects,
                         List<RingSpawn> rings,
                         RingSpriteSheet ringSpriteSheet) throws IOException {
+        this(rom, zoneIndex, resourcePlan, primaryCollisionAddr, secondaryCollisionAddr,
+                interleavedCollision, layoutAddr, levelBoundariesAddr,
+                characterPaletteAddr, levelPaletteAddr, minXOverride,
+                objects, rings, ringSpriteSheet, true);
+    }
+
+    /**
+     * As the main constructor, with {@code publishGraphicsOnLoad} false when the
+     * level is being built off the frame thread (see
+     * {@link com.openggf.level.resources.PreparableLevelLoader}); the installer
+     * then publishes palettes and patterns through {@link #publishGraphics}.
+     */
+    public Sonic3kLevel(Rom rom,
+                        int zoneIndex,
+                        LevelResourcePlan resourcePlan,
+                        int primaryCollisionAddr,
+                        int secondaryCollisionAddr,
+                        boolean interleavedCollision,
+                        int layoutAddr,
+                        int levelBoundariesAddr,
+                        int characterPaletteAddr,
+                        int levelPaletteAddr,
+                        Integer minXOverride,
+                        List<ObjectSpawn> objects,
+                        List<RingSpawn> rings,
+                        RingSpriteSheet ringSpriteSheet,
+                        boolean publishGraphicsOnLoad) throws IOException {
         super(zoneIndex);
+        this.publishGraphicsOnLoad = publishGraphicsOnLoad;
         this.objects = objects != null ? objects : Collections.emptyList();
         this.rings = rings != null ? rings : Collections.emptyList();
         this.ringSpriteSheet = ringSpriteSheet;
@@ -88,6 +126,43 @@ public class Sonic3kLevel extends AbstractLevel {
         loadMap(rom, layoutAddr);
         loadBoundaries(rom, levelBoundariesAddr);
         validateResourceReferences();
+    }
+
+    /**
+     * Publishes this level's palettes and patterns to the graphics manager,
+     * exactly as the constructor does when {@code publishGraphicsOnLoad} is
+     * true, but with the pattern uploads batched into one atlas upload.
+     * No-op without an initialised GL context, matching the constructor.
+     */
+    public synchronized void publishGraphics(GraphicsManager graphics) {
+        if (graphics == null || !graphics.isGlInitialized()) {
+            return;
+        }
+        for (int i = 0; i < palettes.length; i++) {
+            graphics.cachePaletteTexture(palettes[i], i);
+        }
+        graphics.beginPatternAtlasBatch();
+        try {
+            for (int i = 0; i < patternCount; i++) {
+                if (patterns[i] != null) {
+                    graphics.cachePatternTexture(patterns[i], i);
+                }
+            }
+        } finally {
+            graphics.endPatternAtlasBatch();
+        }
+    }
+
+    /** Attaches level-art sheets built alongside a prepared load. */
+    public void attachPreparedLevelArt(Sonic3kObjectArtProvider.PreparedLevelArt art) {
+        this.preparedLevelArt = art;
+    }
+
+    /** Removes and returns prepared level-art sheets, or {@code null} when none were attached. */
+    public Sonic3kObjectArtProvider.PreparedLevelArt takePreparedLevelArt() {
+        Sonic3kObjectArtProvider.PreparedLevelArt art = preparedLevelArt;
+        preparedLevelArt = null;
+        return art;
     }
 
     // ===== Level interface overrides =====
@@ -107,11 +182,21 @@ public class Sonic3kLevel extends AbstractLevel {
         return layer == 1 ? bgLayoutHeightBlocks : fgLayoutHeightBlocks;
     }
 
+    @Override
+    public boolean hasBackgroundCollisionRowAt(int y) {
+        // Find_Tile_BG selects a row with (y >> 5) & $7C, i.e. a 32-row
+        // 128-pixel block grid. Rows whose interleaved BG pointer word is zero
+        // have no layout source and must not wrap through the declared visual
+        // BG height.
+        int row = (y & 0x0FFF) >>> 7;
+        return backgroundCollisionRows[row];
+    }
+
     // ===== Loading methods =====
 
     private void loadPalettes(Rom rom, int characterPaletteAddr, int levelPaletteAddr) throws IOException {
         palettes = new Palette[PALETTE_COUNT];
-        GraphicsManager graphicsMan = GraphicsManager.getInstance();
+        GraphicsManager graphicsMan = publishGraphicsOnLoad ? GameServices.graphics() : null;
 
         // Palette 0: character palette (Sonic)
         palettes[0] = new Palette();
@@ -139,7 +224,7 @@ public class Sonic3kLevel extends AbstractLevel {
             }
         }
 
-        if (graphicsMan.isGlInitialized()) {
+        if (publishGraphicsOnLoad && graphicsMan.isGlInitialized()) {
             for (int i = 0; i < palettes.length; i++) {
                 graphicsMan.cachePaletteTexture(palettes[i], i);
             }
@@ -147,7 +232,7 @@ public class Sonic3kLevel extends AbstractLevel {
     }
 
     private void loadPatternsWithPlan(Rom rom, LevelResourcePlan plan) throws IOException {
-        GraphicsManager graphicsMan = GraphicsManager.getInstance();
+        GraphicsManager graphicsMan = publishGraphicsOnLoad ? GameServices.graphics() : null;
         ResourceLoader loader = new ResourceLoader(rom);
 
         byte[] result = loader.loadWithOverlays(plan.getPatternOps(), 0x10000);
@@ -166,7 +251,7 @@ public class Sonic3kLevel extends AbstractLevel {
             byte[] subArray = Arrays.copyOfRange(result, i * Pattern.PATTERN_SIZE_IN_ROM,
                     (i + 1) * Pattern.PATTERN_SIZE_IN_ROM);
             patterns[i].fromSegaFormat(subArray);
-            if (graphicsMan.isGlInitialized()) {
+            if (publishGraphicsOnLoad && graphicsMan.isGlInitialized()) {
                 graphicsMan.cachePatternTexture(patterns[i], i);
             }
         }
@@ -288,7 +373,7 @@ public class Sonic3kLevel extends AbstractLevel {
         int requiredPatternCount = startPatternIndex + overlayPatternCount;
         ensurePatternCapacity(requiredPatternCount);
 
-        GraphicsManager graphics = GraphicsManager.getInstance();
+        GraphicsManager graphics = GameServices.graphics();
         graphics.beginPatternAtlasBatch();
         try {
             byte[] tileBytes = new byte[Pattern.PATTERN_SIZE_IN_ROM];
@@ -360,21 +445,22 @@ public class Sonic3kLevel extends AbstractLevel {
         int requiredChunkCount = startChunkIndex + overlayChunkCount;
         ensureChunkCapacity(requiredChunkCount);
 
+        // Rewind keyframes share the live chunks array by reference
+        // (LevelSnapshot contract): write into a cloned array with freshly
+        // constructed Chunk instances so previously captured keyframes keep
+        // the pre-overlay terrain and collision.
+        Chunk[] newChunks = chunks.clone();
         byte[] chunkBytes = new byte[Chunk.CHUNK_SIZE_IN_ROM];
         for (int i = 0; i < overlayChunkCount; i++) {
             int src = i * Chunk.CHUNK_SIZE_IN_ROM;
             System.arraycopy(overlayData, src, chunkBytes, 0, Chunk.CHUNK_SIZE_IN_ROM);
 
             int chunkIndex = startChunkIndex + i;
-            Chunk chunk = chunks[chunkIndex];
-            if (chunk == null) {
-                chunk = new Chunk();
-                chunks[chunkIndex] = chunk;
-            }
-
             int solidIndex = readCollisionIndex(primaryCollisionIndexTable, chunkIndex);
             int altSolidIndex = readCollisionIndex(secondaryCollisionIndexTable, chunkIndex);
+            Chunk chunk = new Chunk();
             chunk.fromSegaFormat(chunkBytes, solidIndex, altSolidIndex);
+            newChunks[chunkIndex] = chunk;
         }
 
         // Some event paths intentionally patch only a subset of the chunk table.
@@ -383,10 +469,40 @@ public class Sonic3kLevel extends AbstractLevel {
         if (clearTrailing && requiredChunkCount < chunkCount) {
             byte[] emptyChunkBytes = new byte[Chunk.CHUNK_SIZE_IN_ROM];
             for (int i = requiredChunkCount; i < chunkCount; i++) {
-                if (chunks[i] != null) {
-                    chunks[i].fromSegaFormat(emptyChunkBytes, 0, 0);
+                if (newChunks[i] != null) {
+                    Chunk cleared = new Chunk();
+                    cleared.fromSegaFormat(emptyChunkBytes, 0, 0);
+                    newChunks[i] = cleared;
                 }
             }
+        }
+        chunks = newChunks;
+    }
+
+    /**
+     * Rotates a 128x128 block definition's 16x16 descriptors right by the
+     * given number of grid entries (row-major), preserving rewind snapshots
+     * via copy-on-write.
+     *
+     * <p>ROM: {@code LBZ1_RotateChunks} rotates chunk {@code $DB}'s 64-word
+     * chunk-table definition by 24 words during {@code Adjust_LBZ2Layout},
+     * shifting the chunk graphics down three 16x16 rows.
+     */
+    public synchronized void rotateBlockChunkDescs(int blockIndex, int rotateBy) {
+        Block block = getBlock(blockIndex);
+        if (block == null) {
+            return;
+        }
+        block.cowEnsureWritable(currentEpoch());
+        int side = block.getGridSide();
+        int total = side * side;
+        ChunkDesc[] original = new ChunkDesc[total];
+        for (int i = 0; i < total; i++) {
+            original[i] = block.getChunkDesc(i % side, i / side);
+        }
+        for (int i = 0; i < total; i++) {
+            ChunkDesc source = original[((i - rotateBy) % total + total) % total];
+            block.setChunkDesc(i % side, i / side, source);
         }
     }
 
@@ -404,11 +520,17 @@ public class Sonic3kLevel extends AbstractLevel {
 
     /**
      * Restores all chunks from a previously saved snapshot.
+     * Installs fresh Chunk instances into a cloned array so rewind keyframes
+     * sharing the previous array (LevelSnapshot contract) are not mutated.
      */
     public void restoreChunks(int[][] snapshot) {
+        Chunk[] newChunks = chunks.clone();
         for (int i = 0; i < snapshot.length && i < chunkCount; i++) {
-            chunks[i].restoreState(snapshot[i]);
+            Chunk chunk = new Chunk();
+            chunk.restoreState(snapshot[i]);
+            newChunks[i] = chunk;
         }
+        chunks = newChunks;
     }
 
     /**
@@ -445,28 +567,33 @@ public class Sonic3kLevel extends AbstractLevel {
         int requiredBlockCount = startBlockIndex + overlayBlockCount;
         ensureBlockCapacity(requiredBlockCount);
 
+        // Same rewind-keyframe isolation contract as applyChunkOverlay: clone
+        // the array and install fresh Block instances instead of mutating
+        // entries shared with captured LevelSnapshots.
+        Block[] newBlocks = blocks.clone();
         byte[] blockBytes = new byte[LevelConstants.BLOCK_SIZE_IN_ROM];
         for (int i = 0; i < overlayBlockCount; i++) {
             int src = i * LevelConstants.BLOCK_SIZE_IN_ROM;
             System.arraycopy(overlayData, src, blockBytes, 0, LevelConstants.BLOCK_SIZE_IN_ROM);
 
             int blockIndex = startBlockIndex + i;
-            Block block = blocks[blockIndex];
-            if (block == null) {
-                block = new Block();
-                blocks[blockIndex] = block;
-            }
+            Block prior = newBlocks[blockIndex];
+            Block block = prior != null ? new Block(prior.getGridSide()) : new Block();
             block.fromSegaFormat(blockBytes);
+            newBlocks[blockIndex] = block;
         }
 
         if (clearTrailing && requiredBlockCount < blockCount) {
             byte[] emptyBlockBytes = new byte[LevelConstants.BLOCK_SIZE_IN_ROM];
             for (int i = requiredBlockCount; i < blockCount; i++) {
-                if (blocks[i] != null) {
-                    blocks[i].fromSegaFormat(emptyBlockBytes);
+                if (newBlocks[i] != null) {
+                    Block cleared = new Block(newBlocks[i].getGridSide());
+                    cleared.fromSegaFormat(emptyBlockBytes);
+                    newBlocks[i] = cleared;
                 }
             }
         }
+        blocks = newBlocks;
     }
 
     private void ensureChunkCapacity(int minCount) {
@@ -532,6 +659,11 @@ public class Sonic3kLevel extends AbstractLevel {
         }
 
         byte[] layoutData = rom.readBytes(layoutAddr, Sonic3kConstants.LEVEL_LAYOUT_TOTAL_SIZE);
+        for (int row = 0; row < backgroundCollisionRows.length; row++) {
+            int ptrPos = Sonic3kConstants.LEVEL_LAYOUT_HEADER_SIZE + 2 + row * 4;
+            int rowPointerWord = ((layoutData[ptrPos] & 0xFF) << 8) | (layoutData[ptrPos + 1] & 0xFF);
+            backgroundCollisionRows[row] = decodeLayoutRowOffset(rowPointerWord) >= 0;
+        }
 
         // Parse header
         int fgColsPerRow = ((layoutData[0] & 0xFF) << 8) | (layoutData[1] & 0xFF);

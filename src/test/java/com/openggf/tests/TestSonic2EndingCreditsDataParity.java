@@ -1,10 +1,10 @@
 package com.openggf.tests;
 
 import com.openggf.game.sonic2.credits.Sonic2CreditsData;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class TestSonic2EndingCreditsDataParity {
 
@@ -41,3 +41,5 @@ public class TestSonic2EndingCreditsDataParity {
         assertArrayEquals(expected, Sonic2CreditsData.SUPER_SONIC_FRAMES);
     }
 }
+
+

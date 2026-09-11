@@ -7,6 +7,7 @@ import com.openggf.level.LevelManager;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnCoordinateZeroPairRewindRecreatable;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.level.objects.SubpixelMotion;
@@ -30,7 +31,7 @@ import java.util.List;
  * Animations: Uses shrapnel animation (Ani_Bomb index 4): frames $A, $B at speed 3.
  */
 public class Sonic1BombShrapnelInstance extends AbstractObjectInstance
-        implements TouchResponseProvider {
+        implements TouchResponseProvider, SpawnCoordinateZeroPairRewindRecreatable {
 
     // From disassembly: move.b #$98,obColType(a1)
     // $80 = HURT category, $18 = size index (width 4, height 4)
@@ -57,19 +58,48 @@ public class Sonic1BombShrapnelInstance extends AbstractObjectInstance
     private final SubpixelMotion.State motionState;
     private int animTickCounter;
     private boolean destroyed;
+    // Non-final so the generic rewind field capturer records it like the other
+    // scalar state; it is only read by skipsSameFrameUpdateAfterSpawn() at spawn
+    // scheduling and is inert afterwards.
+    private boolean deferFirstMove;
 
     /**
      * Creates a shrapnel piece at the given position with the given velocity.
+     * Used by the rewind recreate path (no spawn-frame move deferral needed
+     * because the object is reconstructed mid-flight, not freshly spawned).
      *
      * @param x          Spawn X position (from fuse/bomb position)
      * @param y          Spawn Y position (from original bomb Y)
      * @param xVel       Initial X velocity (from Bom_ShrSpeed)
      * @param yVel       Initial Y velocity (from Bom_ShrSpeed)
-     * @param levelManager Level manager reference
      */
     public Sonic1BombShrapnelInstance(int x, int y, int xVel, int yVel) {
+        this(x, y, xVel, yVel, false);
+    }
+
+    /**
+     * Creates a shrapnel piece, optionally deferring its first {@code SpeedToPos}
+     * move by one frame.
+     * <p>
+     * ROM parity (docs/s1disasm/_incObj/5F Badnik - Walking Bomb.asm:181-220):
+     * {@code Bom_BurnFuseAndExplode} makes the FIRST shrapnel reuse the fuse's slot
+     * (movea.l a0,a1) and falls straight through to {@code Bom_Shrapnel} —
+     * {@code SpeedToPos} runs on the expiry frame, so piece 0 moves immediately. The
+     * other three are created via {@code FindNextFreeObj} with a cleared
+     * {@code obRoutine}, so on their creation frame they execute {@code Bom_Main}
+     * (routine 0), which only sets {@code obRoutine = obSubtype} (= 6) and returns
+     * WITHOUT calling SpeedToPos (Walking Bomb.asm:30-33). They first move on the
+     * following frame. The engine spawns all four as ready-to-move shrapnel, so
+     * pieces 1-3 moved one frame too early — putting the hitting piece one step
+     * ahead (1px low) and missing the standing player's ReactToItem box at
+     * SLZ3 trace f3249. Deferring pieces 1-3's first update reproduces the
+     * Bom_Main creation-frame hold.
+     *
+     * @param deferFirstMove true for FindNextFreeObj-created pieces (index 1-3)
+     */
+    public Sonic1BombShrapnelInstance(int x, int y, int xVel, int yVel, boolean deferFirstMove) {
         super(new ObjectSpawn(x, y, 0x5F, 6, 0, false, 0), "BombShrapnel");
-        
+
         this.currentX = x;
         this.currentY = y;
         this.xVelocity = xVel;
@@ -77,10 +107,19 @@ public class Sonic1BombShrapnelInstance extends AbstractObjectInstance
         this.motionState = new SubpixelMotion.State(x, y, 0, 0, xVel, yVel);
         this.animTickCounter = 0;
         this.destroyed = false;
+        this.deferFirstMove = deferFirstMove;
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    protected boolean skipsSameFrameUpdateAfterSpawn() {
+        // Pieces 1-3 run Bom_Main (no move) on their creation frame; only the
+        // fuse-slot-reuse first piece moves the same frame. See the deferring
+        // constructor's Javadoc for the ROM citation.
+        return deferFirstMove;
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (destroyed) {
             return;
@@ -105,9 +144,16 @@ public class Sonic1BombShrapnelInstance extends AbstractObjectInstance
         // Apply gravity
         yVelocity += GRAVITY;
 
-        // Check if off-screen (tst.b obRender(a0) / bpl.w DeleteObject)
-        // bset #7,obRender(a1) was set at spawn - bit 7 = on-screen flag
-        if (!isOnScreenX(160)) {
+        // ROM Bom_Shrapnel deletes via the render flag, not a raw camera margin:
+        //   tst.b obRender(a0) / bpl.w DeleteObject
+        // (docs/s1disasm/_incObj/5F Badnik - Walking Bomb.asm:218-219). obRender
+        // bit 7 is set by BuildSprites when the sprite's box overlaps the screen
+        // (X bound [cam-obActWid, cam+320+obActWid), obActWid=12 for the shrapnel;
+        // docs/s1disasm/_inc/BuildSprites.asm:47-58). The engine previously used
+        // isOnScreenX(160) (raw [cam-160, cam+480]) which keeps shrapnel alive far
+        // longer than ROM, changing the FindFreeObj survival set (SLZ3 f3249).
+        // isWithinSolidContactBounds() is the ROM obRender bit-7 render-box test.
+        if (!isWithinSolidContactBounds()) {
             destroyed = true;
             setDestroyed(true);
             return;
@@ -146,8 +192,20 @@ public class Sonic1BombShrapnelInstance extends AbstractObjectInstance
 
     @Override
     public boolean isPersistent() {
-        // DisplaySprite: persists while on screen
-        return !destroyed && isOnScreenX(160);
+        // ROM Bom_Shrapnel keeps the shrapnel only while obRender bit 7 is set
+        // (the render-box on-screen test, same bound as the self-delete above);
+        // align the keep-alive with that bound, not the raw isOnScreenX(160).
+        return !destroyed && isWithinSolidContactBounds();
+    }
+
+    /**
+     * ROM shrapnel display width: {@code obActWid = 24/2 = 12} (inherited from
+     * Bom_Main, docs/s1disasm/_incObj/5F Badnik - Walking Bomb.asm:28). Drives
+     * the BuildSprites obRender on-screen X bound used for the delete/keep-alive.
+     */
+    @Override
+    public int getOnScreenHalfWidth() {
+        return 12;
     }
 
     @Override

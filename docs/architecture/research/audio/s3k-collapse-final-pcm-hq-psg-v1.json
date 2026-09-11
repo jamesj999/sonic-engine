@@ -1,0 +1,49 @@
+{
+  "schema": "openggf.s3k-collapse-final-pcm-hq-psg.v1",
+  "purpose": "Comparison-only proof that Sound_59 ends on time and that its audible post-mute tail belongs to the GPGX HQ PSG renderer.",
+  "authority": {
+    "game": "sonic3k-locked-on",
+    "rom_sha1": "cfbf98c36c776677290a872547ac47c53d2761d6",
+    "native_core": "BizHawk 2.11 Genesis Plus GX",
+    "sound_id": 89,
+    "sound_label": "Sound_59"
+  },
+  "native_configuration": {
+    "hq_psg": 1,
+    "global_filter": "None",
+    "source_lock": "tools/bizhawk-headless/native/gpgx-audio-observer/source-lock.json",
+    "hq_setting_source": "waterbox/gpgx/cinterface/cinterface.c:850",
+    "hq_delta_source": "waterbox/gpgx/Genesis-Plus-GX/core/sound/psg.c:264-270"
+  },
+  "capture": {
+    "runs": 2,
+    "frames": 125,
+    "a_b_byte_identical": true,
+    "jsonl_sha256": "5c6bfe3382749fa31137128a3bfd87d191da17d6ad33ece8c39d360e428ce7a3",
+    "overflow": 0,
+    "fault": 0,
+    "sync_settings_source": "tools/bizhawk-headless/src/Core/GpgxHost.cs:242-259"
+  },
+  "native_observation": {
+    "raw_psg_terminal_frame": 121,
+    "raw_psg_silent_from_frame": 122,
+    "raw_psg_terminal_rms": 44.695811,
+    "final_pcm_rms_frames_121_to_124": [
+      88.917,
+      21.669,
+      5.142,
+      1.273
+    ]
+  },
+  "openggf_comparison": {
+    "presentation_frame_offset": 1,
+    "hq_psg_rms_frames_122_to_125": [
+      76.0858,
+      18.1241,
+      4.29095,
+      1.06394
+    ],
+    "comparison": "Decay ratios are compared after aligning the request/admission frame. Runtime values are not hydrated from this artifact."
+  },
+  "ruling": "Do not extend Sound_59 or synthesize reverb. Select the existing band-limited PSG path for every SMPS driver, matching GPGX hq_psg=1."
+}

@@ -59,7 +59,7 @@ public class Sonic2ScrollHandlerProvider implements ScrollHandlerProvider {
             arzHandler = new SwScrlArz(tables);
             cnzHandler = new SwScrlCnz(tables);
             cpzHandler = new SwScrlCpz(tables);
-            dezHandler = new SwScrlDez(tables);
+            dezHandler = new SwScrlDez(tables, bgCamera);
             ehzHandler = new SwScrlEhz(tables);
             htzHandler = new SwScrlHtz(tables, bgCamera);
             mczHandler = new SwScrlMcz(tables);
@@ -223,8 +223,21 @@ public class Sonic2ScrollHandlerProvider implements ScrollHandlerProvider {
         if (dezHandler == null) {
             return false;
         }
+        // The ending supplies Camera_BG_Y_pos as a per-frame cutscene value.
+        // Keep the gameplay-owned BackgroundCamera unchanged while exposing that
+        // temporary ROM value to SwScrl_DEZ for this one update.
+        int previousBgY = bgCamera != null ? bgCamera.getBgYPos() : 0;
+        if (bgCamera != null) {
+            bgCamera.setBgYPos(bgVscroll);
+        }
         dezHandler.setVscrollFactorBG(bgVscroll);
-        dezHandler.update(horizScrollBuf, 0, 0, frameCounter, actId);
+        try {
+            dezHandler.update(horizScrollBuf, 0, 0, frameCounter, actId);
+        } finally {
+            if (bgCamera != null) {
+                bgCamera.setBgYPos(previousBgY);
+            }
+        }
         return true;
     }
 }

@@ -1,6 +1,8 @@
 package com.openggf.game.sonic1.audio;
 
 import com.openggf.audio.smps.SmpsSequencerConfig;
+import com.openggf.audio.smps.SmpsSequencerConfig.FmSfxTakeoverMode;
+import com.openggf.audio.smps.SmpsSequencerConfig.FmVoiceWriteProfile;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -65,12 +67,54 @@ public final class Sonic1SmpsSequencerConfig {
                 .fmChannelOrder(FM_CHANNEL_ORDER)
                 .psgChannelOrder(PSG_CHANNEL_ORDER)
                 .tempoMode(SmpsSequencerConfig.TempoMode.TIMEOUT)
+                .palUpdateMode(SmpsSequencerConfig.PalUpdateMode.NONE)
                 .coordFlagParamOverrides(coordOverrides)
                 .applyModOnNote(false)   // S1: don't apply modulation during note start (ModAlgo = 68k)
-                .halveModSteps(false)    // S1: don't halve mod steps (68k driver has no srl a)
+                .halveModSteps(true)     // S1 cfModulation and FinishTrackUpdate both use lsr.b #1
                 .extraTrkEndFlags(Set.of(0xEE))
                 .relativePointers(true)  // S1: PC-relative pointers for F6/F7/F8
                 .tempoOnFirstTick(true)  // S1: process tempo on first frame (DOTEMPO)
+                .stepModulationAtRest(true) // DoModulation has no rest check (SD:483-490)
+                .direct68kDriver(true)   // S1 writes the YM/PSG cores from the 68k driver
+                .fmVoiceWriteProfile(FmVoiceWriteProfile.S1_68K)
+                // The shipped Sound_PlaySFX initializes track RAM only. SetVoice and the
+                // track's own note-off establish the takeover during UpdateMusic.
+                .fmSfxTakeoverMode(FmSfxTakeoverMode.REGISTER_SEQUENCE)
+                // Sound_PlaySFX (SD:977-1087) emits no PSG takeover write
+                // except the explicit PSG3 DF/FF pair in its own load path.
+                .psgSfxTakeoverMode(
+                        SmpsSequencerConfig.PsgSfxTakeoverMode.S1_PSG3_SILENCE_PAIR)
+                // Sound_PlaySpecial's tail (SD:1183-1191) writes a second PSG
+                // pair when the normal SFX PSG3 slot is already playing, built
+                // from the stale d4 its own load loop left behind.
+                .specialSfxPsg3SilenceMode(
+                        SmpsSequencerConfig.SpecialSfxPsg3SilenceMode
+                                .S1_STALE_VOICE_CONTROL_PAIR)
+                // Sound_PlaySFX's header loader sets PlaybackControl bit 2 on
+                // the displaced MUSIC track while loading each SFX track --
+                // .sfx_loadloop for FM (SD:1029) and .sfxinitpsg for PSG
+                // (SD:1037) -- and it is reached from PlaySoundID at the top of
+                // UpdateMusic (SD:202), before the DAC/FM/PSG music walk
+                // (SD:208-227). So the music track is already overridden on the
+                // very invocation that admits the SFX, and emits no chip write
+                // of its own, even though the SFX track has written nothing yet.
+                .sfxChannelOwnershipMode(
+                        SmpsSequencerConfig.SfxChannelOwnershipMode.ADMISSION)
+                // cfStopTrack (SD:2489-2563): the completed SFX already sent
+                // its note-off. FM restores voice/pan at rest; PSG clears the
+                // override at rest and only re-latches noise when applicable.
+                .fmSfxReleaseMode(
+                        SmpsSequencerConfig.FmSfxReleaseMode.ROM_VOICE_RESTORE)
+                .psgSfxReleaseMode(
+                        SmpsSequencerConfig.PsgSfxReleaseMode.ROM_REST_RESTORE)
+                // UpdateMusic walks fixed SFX RAM slots (FM3..5, then PSG1..3),
+                // independently of the order used by the SFX header loader.
+                .sfxTrackWalkMode(
+                        SmpsSequencerConfig.SfxTrackWalkMode.CHANNEL_RAM_ORDER)
+                // FixBugs=0 SendVoiceTL addresses VoicePtr from the driver-RAM
+                // base for ordinary SFX, aliasing v_special_voice_ptr.
+                .fmVolumeVoiceBankMode(
+                        SmpsSequencerConfig.FmVolumeVoiceBankMode.S1_SPECIAL_POINTER_BUG)
                 .build();
     }
 

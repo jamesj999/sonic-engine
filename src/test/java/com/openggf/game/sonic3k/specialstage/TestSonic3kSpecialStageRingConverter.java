@@ -135,3 +135,5 @@ class TestSonic3kSpecialStageRingConverter {
         assertTrue(queue.addRing(0x66));
     }
 }
+
+

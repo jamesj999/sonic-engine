@@ -1,0 +1,2 @@
+{"boundary":"vint_service","event":"hardware_work_completed","kind":"kos_module_queue","ordinal":2,"raw_frame":0,"submission_fingerprint":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+{"boundary":"post_objects","event":"hardware_work_completed","kind":"kos_module_queue","ordinal":1,"raw_frame":0,"submission_fingerprint":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}

@@ -1,20 +1,19 @@
 package com.openggf.tests;
 
-import org.junit.Ignore;
-import org.junit.Rule;
-import org.junit.Test;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 import com.openggf.data.Rom;
 import com.openggf.game.GameServices;
 import com.openggf.level.WaterSystem;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
 
 import java.io.IOException;
 
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
  * TODO #5 coverage: WaterSystem.getDistortionTable() uses a generated sine wave
@@ -28,9 +27,6 @@ import static org.junit.Assert.assertNotNull;
  */
 @RequiresRom(SonicGame.SONIC_2)
 public class TestTodo5_WaterDistortionTable {
-    @Rule
-    public RequiresRomRule romRule = new RequiresRomRule();
-
     /**
      * Expected SwScrl_RippleData values from s2.asm lines 15409-15413.
      * 66 bytes of horizontal pixel offsets for the water rippling effect.
@@ -56,7 +52,7 @@ public class TestTodo5_WaterDistortionTable {
      */
     @Test
     public void testRomRippleDataMatchesDisassembly() throws IOException {
-        Rom rom = romRule.rom();
+        Rom rom = com.openggf.tests.TestEnvironment.currentRom();
 
         // Search for the ripple data pattern in ROM.
         // From disassembly label byte_C682: this address in the S2 ROM is
@@ -66,17 +62,13 @@ public class TestTodo5_WaterDistortionTable {
         int rippleAddr = findRippleData(rom);
         if (rippleAddr < 0) {
             // If we can't find it, the test documents the expected data
-            org.junit.Assume.assumeTrue(
-                    "Could not locate SwScrl_RippleData in ROM - skipping ROM comparison", false);
+            Assumptions.assumeTrue(false, "Could not locate SwScrl_RippleData in ROM - skipping ROM comparison");
             return;
         }
 
         byte[] romData = rom.readBytes(rippleAddr, EXPECTED_RIPPLE_DATA.length);
         for (int i = 0; i < EXPECTED_RIPPLE_DATA.length; i++) {
-            assertEquals(
-                    String.format("Ripple byte [%d] at ROM offset 0x%X", i, rippleAddr + i),
-                    EXPECTED_RIPPLE_DATA[i],
-                    romData[i] & 0xFF);
+            assertEquals(EXPECTED_RIPPLE_DATA[i], romData[i] & 0xFF, String.format("Ripple byte [%d] at ROM offset 0x%X", i, rippleAddr + i));
         }
     }
 
@@ -88,8 +80,8 @@ public class TestTodo5_WaterDistortionTable {
     public void testGeneratedDistortionTableProperties() {
         WaterSystem waterSystem = GameServices.water();
         int[] table = waterSystem.getDistortionTable();
-        assertNotNull("Distortion table should not be null", table);
-        assertEquals("Distortion table should be 66 entries", 66, table.length);
+        assertNotNull(table, "Distortion table should not be null");
+        assertEquals(66, table.length, "Distortion table should be 66 entries");
     }
 
     /**
@@ -108,9 +100,8 @@ public class TestTodo5_WaterDistortionTable {
         // The ROM ripple data has 66 entries with values 0-3.
         // The engine table has 64 entries with values generated from sin().
         // When implemented, the engine should use the ROM's 66-byte table directly.
-        assertEquals("Table size should match ROM ripple data", EXPECTED_RIPPLE_DATA.length, engineTable.length);
-        assertArrayEquals("Engine distortion should match ROM ripple data",
-                EXPECTED_RIPPLE_DATA, engineTable);
+        assertEquals(EXPECTED_RIPPLE_DATA.length, engineTable.length, "Table size should match ROM ripple data");
+        assertArrayEquals(EXPECTED_RIPPLE_DATA, engineTable, "Engine distortion should match ROM ripple data");
     }
 
     /**
@@ -153,3 +144,6 @@ public class TestTodo5_WaterDistortionTable {
         return -1;
     }
 }
+
+
+

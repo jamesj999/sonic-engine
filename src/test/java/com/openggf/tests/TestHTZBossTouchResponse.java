@@ -1,10 +1,10 @@
 package com.openggf.tests;
 
+import com.openggf.game.session.SessionManager;
 import com.openggf.game.GameServices;
-import com.openggf.game.RuntimeManager;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import com.openggf.game.sonic2.constants.Sonic2ObjectIds;
 import com.openggf.game.sonic2.objects.bosses.Sonic2HTZBossInstance;
 import com.openggf.level.LevelManager;
@@ -15,11 +15,12 @@ import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.TouchResponseTable;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
+import java.lang.reflect.Field;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -39,12 +40,16 @@ public class TestHTZBossTouchResponse {
     private AbstractPlayableSprite player;
     private Sonic2HTZBossInstance boss;
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
-        RuntimeManager.createGameplay();
+        TestEnvironment.resetAll();
         // Position camera at boss arena so isOnScreenForTouch() passes for the boss.
-        // The default camera bounds (x=0, width=320) exclude HTZ_BOSS_X=0x3040.
+        // The default camera bounds (x=0, y=0, 320x224) exclude HTZ_BOSS_X=0x3040
+        // and HTZ_BOSS_Y=0x0580. ROM parity (BuildSprites Y check, see
+        // AbstractObjectInstance#isOnScreenForTouch) requires the camera Y to
+        // also be within range so the boss's render flag bit 7 stays set.
         GameServices.camera().setX((short) HTZ_BOSS_X);
+        GameServices.camera().setY((short) HTZ_BOSS_Y);
         touchTable = mock(TouchResponseTable.class);
         when(touchTable.getWidthRadius(HTZ_BOSS_SIZE_INDEX)).thenReturn(32);
         when(touchTable.getHeightRadius(HTZ_BOSS_SIZE_INDEX)).thenReturn(32);
@@ -61,6 +66,7 @@ public class TestHTZBossTouchResponse {
         when(player.getYRadius()).thenReturn((short) 20);
         when(player.getCrouching()).thenReturn(false);
         when(player.getRolling()).thenReturn(true);
+        when(player.getAnimationId()).thenReturn(2);
         when(player.getSpindash()).thenReturn(false);
         when(player.getInvincibleFrames()).thenReturn(0);
         when(player.getInvulnerable()).thenReturn(false);
@@ -70,9 +76,9 @@ public class TestHTZBossTouchResponse {
         when(player.getYSpeed()).thenReturn((short) -0x300);
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
-        RuntimeManager.destroyCurrent();
+        SessionManager.clear();
     }
 
     @Test
@@ -87,13 +93,49 @@ public class TestHTZBossTouchResponse {
         assertEquals(8, boss.getState().hitCount);
         objectManager.addDynamicObject(boss);
 
-        objectManager.update(0, player, List.of(), 1);
+        objectManager.update(GameServices.camera().getX(), player, List.of(), 1);
 
         assertEquals(7, boss.getState().hitCount);
         assertTrue(boss.getState().invulnerable);
         // ROM-accurate: boss bounce only modifies velocities, does not set air flag
         verify(player).setXSpeed(eq((short) -0x200));
         verify(player).setYSpeed(eq((short) 0x300));
+    }
+
+    @Test
+    public void defeatRoutineCountdownStartsOnFrameAfterFinalHit() throws Exception {
+        boss.getState().hitCount = 1;
+        objectManager.addDynamicObject(boss);
+
+        objectManager.update(GameServices.camera().getX(), player, List.of(), 1);
+
+        assertTrue(boss.getState().defeated);
+        assertEquals(0xB3, readPrivateInt(boss, "defeatTimer"));
+    }
+
+    @Test
+    public void firstFleeFrameAlsoAdvancesCameraRelease() throws Exception {
+        boss.getState().defeated = true;
+        boss.getState().routineSecondary = 8;
+        writePrivateInt(boss, "defeatTimer", -0x3B);
+        writePrivateBoolean(boss, "defeatFleeStarted", false);
+        GameServices.camera().setMaxX((short) 0x2F5E);
+        int initialY = boss.getState().y;
+
+        objectManager.addDynamicObject(boss);
+        objectManager.update(GameServices.camera().getX(), player, List.of(), 1);
+
+        // ROM Obj52_Mobile_Flee (docs/s2disasm/s2.asm:64598-64606) falls through to
+        // loc_30170 (docs/s2disasm/s2.asm:64608-64612) in the SAME frame it sets
+        // Boss_defeated_flag, so y_pos and Camera_Max_X_pos advance immediately.
+        assertTrue(GameServices.gameState().isBossDefeatedFlag());
+        assertEquals(initialY + 2, boss.getState().y);
+        assertEquals((short) 0x2F60, GameServices.camera().getMaxX());
+
+        objectManager.update(GameServices.camera().getX(), player, List.of(), 2);
+
+        assertEquals(initialY + 4, boss.getState().y);
+        assertEquals((short) 0x2F62, GameServices.camera().getMaxX());
     }
 
     @Test
@@ -105,6 +147,7 @@ public class TestHTZBossTouchResponse {
         when(dynamicPlayer.getYRadius()).thenReturn((short) 20);
         when(dynamicPlayer.getCrouching()).thenReturn(false);
         when(dynamicPlayer.getRolling()).thenAnswer(invocation -> rolling.get());
+        when(dynamicPlayer.getAnimationId()).thenAnswer(invocation -> rolling.get() ? 2 : 0);
         when(dynamicPlayer.getSpindash()).thenReturn(false);
         when(dynamicPlayer.getInvincibleFrames()).thenReturn(0);
         when(dynamicPlayer.getInvulnerable()).thenReturn(false);
@@ -116,13 +159,32 @@ public class TestHTZBossTouchResponse {
         objectManager.addDynamicObject(boss);
 
         // First frame: overlap begins while not attacking.
-        objectManager.update(0, dynamicPlayer, List.of(), 1);
+        objectManager.update(GameServices.camera().getX(), dynamicPlayer, List.of(), 1);
         assertEquals(8, boss.getState().hitCount);
 
         // Second frame: still overlapping, now attacking.
         rolling.set(true);
-        objectManager.update(0, dynamicPlayer, List.of(), 2);
+        objectManager.update(GameServices.camera().getX(), dynamicPlayer, List.of(), 2);
         assertEquals(7, boss.getState().hitCount);
+    }
+
+    @Test
+    public void removedBossDoesNotRemainAsATouchCandidateAfterReplacement() {
+        objectManager.addDynamicObject(boss);
+        objectManager.update(GameServices.camera().getX(), player, List.of(), 1);
+        assertEquals(7, boss.getState().hitCount);
+
+        objectManager.removeDynamicObject(boss);
+
+        Sonic2HTZBossInstance replacement = new Sonic2HTZBossInstance(
+                new ObjectSpawn(HTZ_BOSS_X, HTZ_BOSS_Y, Sonic2ObjectIds.HTZ_BOSS, 0, 0, false, 0));
+        objectManager.addDynamicObject(replacement);
+        objectManager.update(GameServices.camera().getX(), player, List.of(), 2);
+
+        assertEquals(7, boss.getState().hitCount,
+                "Removed boss should not remain in the touch candidate set");
+        assertEquals(7, replacement.getState().hitCount,
+                "Replacement boss should still be touch-damageable after add/remove cycles");
     }
 
     private static final class NoOpObjectRegistry implements ObjectRegistry {
@@ -139,5 +201,23 @@ public class TestHTZBossTouchResponse {
         public String getPrimaryName(int objectId) {
             return "Test";
         }
+    }
+
+    private static int readPrivateInt(Object target, String fieldName) throws Exception {
+        Field field = target.getClass().getDeclaredField(fieldName);
+        field.setAccessible(true);
+        return field.getInt(target);
+    }
+
+    private static void writePrivateInt(Object target, String fieldName, int value) throws Exception {
+        Field field = target.getClass().getDeclaredField(fieldName);
+        field.setAccessible(true);
+        field.setInt(target, value);
+    }
+
+    private static void writePrivateBoolean(Object target, String fieldName, boolean value) throws Exception {
+        Field field = target.getClass().getDeclaredField(fieldName);
+        field.setAccessible(true);
+        field.setBoolean(target, value);
     }
 }

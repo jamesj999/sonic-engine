@@ -1,10 +1,9 @@
 package com.openggf.game.sonic2;
 
 import com.openggf.data.Rom;
+import com.openggf.game.AbstractHeaderNameRomDetector;
 import com.openggf.game.GameModule;
-import com.openggf.game.RomDetector;
 
-import java.io.IOException;
 import java.util.logging.Logger;
 
 /**
@@ -16,7 +15,7 @@ import java.util.logging.Logger;
  *   <li>ROM header format validation</li>
  * </ul>
  */
-public class Sonic2RomDetector implements RomDetector {
+public class Sonic2RomDetector extends AbstractHeaderNameRomDetector {
     private static final Logger LOGGER = Logger.getLogger(Sonic2RomDetector.class.getName());
 
     // Expected strings in ROM header
@@ -27,40 +26,17 @@ public class Sonic2RomDetector implements RomDetector {
 
     @Override
     public boolean canHandle(Rom rom) {
-        if (rom == null || !rom.isOpen()) {
-            return false;
-        }
-
-        try {
-            // Check domestic name (normalize whitespace for comparison)
-            String domesticName = rom.readDomesticName();
-            if (domesticName != null && normalizeWhitespace(domesticName).contains(SONIC_2_NAME)) {
-                LOGGER.fine("Sonic 2 detected via domestic name: " + domesticName);
-                return true;
-            }
-
-            // Check international name (normalize whitespace for comparison)
-            String intlName = rom.readInternationalName();
-            if (intlName != null && normalizeWhitespace(intlName).contains(SONIC_2_NAME)) {
-                LOGGER.fine("Sonic 2 detected via international name: " + intlName);
-                return true;
-            }
-
-            LOGGER.fine("ROM names did not match Sonic 2: domestic='" + domesticName +
-                    "', international='" + intlName + "'");
-            return false;
-        } catch (IOException e) {
-            LOGGER.warning("Error reading ROM header: " + e.getMessage());
-            return false;
-        }
+        return canHandleHeaderName(rom);
     }
 
-    /**
-     * Normalizes whitespace in a string by collapsing multiple spaces into one
-     * and converting to uppercase for comparison.
-     */
-    private String normalizeWhitespace(String input) {
-        return input.toUpperCase().replaceAll("\\s+", " ").trim();
+    @Override
+    protected boolean matchesNormalizedName(String normalizedName) {
+        return normalizedName.contains(SONIC_2_NAME);
+    }
+
+    @Override
+    protected Logger logger() {
+        return LOGGER;
     }
 
     @Override

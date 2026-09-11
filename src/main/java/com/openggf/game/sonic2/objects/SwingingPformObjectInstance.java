@@ -11,10 +11,14 @@ import com.openggf.graphics.RenderPriority;
 import com.openggf.level.PatternDesc;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SolidContact;
+import com.openggf.level.objects.SolidExecutionMode;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
+import com.openggf.level.objects.SolidRoutineProfile;
 import com.openggf.level.render.SpriteMappingFrame;
 import com.openggf.level.render.SpriteMappingPiece;
 import com.openggf.level.render.SpritePieceRenderer;
@@ -59,7 +63,7 @@ import java.util.logging.Logger;
  * decreases it. Max angle is 0x40 (90 degrees), giving ~4 pixels of Y offset.
  */
 public class SwingingPformObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
 
     private static final Logger LOGGER = Logger.getLogger(SwingingPformObjectInstance.class.getName());
 
@@ -71,7 +75,13 @@ public class SwingingPformObjectInstance extends AbstractObjectInstance
     // Format: [width_pixels, y_radius]
     private static final int[][] PROPERTIES = {
             {0x20, 0x08},  // Property 0: 32px wide, 8px radius
-            {0x1C, 0x32},  // Property 1: 28px wide, 50px radius (buggy: should be 0x30)
+            // Property 1: 28px wide, 48px radius. Retail REV01 builds with fixBugs = 0
+            // (docs/s2disasm/s2.asm:27), so Obj82_Properties resolves to the non-fixBugs
+            // 'else' branch dc.b $1C,$30 (docs/s2disasm/s2.asm:57094-57096). The fixBugs
+            // branch would be $1C,$32, but using it places a rider ~2-3px too high on the
+            // pillar top (objTopHeight too large in SolidObject_Landed,
+            // docs/s2disasm/s2.asm:35582-35616).
+            {0x1C, 0x30},  // Property 1: 28px wide, 48px radius (retail REV01 / non-fixBugs)
             {0x10, 0x10},  // Property 2: 16px wide, 16px radius (unused)
             {0x10, 0x10}   // Property 3: 16px wide, 16px radius (unused)
     };
@@ -119,6 +129,11 @@ public class SwingingPformObjectInstance extends AbstractObjectInstance
         updateDynamicSpawn(x, y);
     }
 
+    @Override
+    public SwingingPformObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new SwingingPformObjectInstance(ctx.spawn(), "SwingingPform");
+    }
+
     private void initFromSubtype() {
         int subtype = spawn.subtype();
 
@@ -160,6 +175,38 @@ public class SwingingPformObjectInstance extends AbstractObjectInstance
                 subtype, behaviorType, widthPixels, yRadius, mappingFrame, swingEnabled));
     }
 
+    /**
+     * {@code width_pixels(a0)} from {@code Obj82_Properties}
+     * (docs/s2disasm/s2.asm:57180-57182), which is what
+     * {@code BuildSprites}' horizontal cull compares against
+     * {@code x_pos - Camera_X_pos_copy} (docs/s2disasm/s2.asm:30568-30578).
+     */
+    @Override
+    public int getOnScreenHalfWidth() {
+        return widthPixels;
+    }
+
+    /**
+     * Retail Obj82 does NOT set {@code render_flags.explicit_height}: the
+     * shipped build takes the {@code fixBugs = 0} arm of Obj82_Init's
+     * conditional, {@code move.b #1<<render_flags.level_fg,render_flags(a0)}
+     * (docs/s2disasm/s2.asm:57169-57174) -- the disassembly's own comment there
+     * reads "Same as Obj2B, this should use the accurate height flag". Without
+     * that bit {@code BuildSprites} takes {@code BuildSprites_ApproxYCheck},
+     * which compares against {@code spriteScreenPositionY(0-32)} and
+     * {@code spriteScreenPositionY(screen_height+32)}
+     * (docs/s2disasm/s2.asm:30604-30610) -- it "assume[s] Y radius to be 32
+     * pixels" regardless of the pillar's real {@code y_radius} of $30.
+     * <p>
+     * So 32 here is the ROM's own culling constant, not a margin chosen to fit
+     * anything, and {@link #usesCustomRenderHeight()} stays false because the
+     * ROM leaves the accurate-height bit clear.
+     */
+    @Override
+    public int getOnScreenHalfHeight() {
+        return 32;
+    }
+
     @Override
     public int getX() {
         return x;
@@ -170,19 +217,60 @@ public class SwingingPformObjectInstance extends AbstractObjectInstance
         return y;
     }
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) {
             return;
         }
 
-        // Update behavior based on type
+        // Update behavior based on type (Obj82_Types jump table).
+        // ROM Obj82_Main: jsr Obj82_Types (docs/s2disasm/s2.asm:57140).
+        // This runs unconditionally -- it sits BEFORE the on-screen gate below.
         updateBehavior(player);
 
-        // Update swinging animation
+        // ROM Obj82_Main gates everything after Obj82_Types on the render flag:
+        //   _btst #render_flags.on_screen,render_flags(a0)
+        //   _beq.s +                       (docs/s2disasm/s2.asm:57205-57206)
+        // and the '+' label lands past BOTH JmpTo23_SolidObject and loc_2A432,
+        // so an object whose flag is clear is neither solid nor swinging that
+        // frame. loc_2A432 (docs/s2disasm/s2.asm:57340-57365) holds the
+        // objoff_3E angle counter as well as the CalcSine y_pos write, so the
+        // freeze covers the angle: an off-screen platform mid-decay stays at its
+        // current offset instead of returning to objoff_30.
+        if (!isPreUpdateWithinRenderSpriteBounds(
+                getOnScreenHalfWidth(), getOnScreenHalfHeight())) {
+            updateDynamicSpawn(x, y);
+            return;
+        }
+
+        // Carry any riding player BEFORE the swing CalcSine writes the new y_pos.
+        // ROM Obj82_Main runs JmpTo23_SolidObject (rider carry,
+        // docs/s2disasm/s2.asm:57159) BEFORE loc_2A432 (swing CalcSine y_pos write,
+        // docs/s2disasm/s2.asm:57162). With the default AUTO_AFTER_UPDATE the rider
+        // carry would fire after updateSwinging() had already written the
+        // current-frame swing y, putting the rider (and downstream camera) 1px ahead
+        // of the ROM whenever the platform is moving. MANUAL_CHECKPOINT below lets us
+        // resolve the solid contact here, between the two ROM steps, so the rider
+        // follows the platform's previous-frame swing position like the ROM does.
+        services().solidExecution().resolveSolidNowAll();
+
+        // Update swinging animation (loc_2A432, docs/s2disasm/s2.asm:57162 ->
+        // 57280-57307: CalcSine -> y_pos). Runs AFTER the rider carry above.
         updateSwinging();
 
         updateDynamicSpawn(x, y);
+    }
+
+    /**
+     * Obj82 carries its rider via JmpTo23_SolidObject (docs/s2disasm/s2.asm:57159)
+     * BEFORE running the swing CalcSine motion loc_2A432 (docs/s2disasm/s2.asm:57162),
+     * so the rider follows the platform's previous-frame swing y. The default
+     * AUTO_AFTER_UPDATE checkpoint fires after the whole update() (after the swing has
+     * already written the new y), so we drive the checkpoint manually from update().
+     */
+    @Override
+    public SolidExecutionMode solidExecutionMode() {
+        return SolidExecutionMode.MANUAL_CHECKPOINT;
     }
 
     /**
@@ -228,12 +316,22 @@ public class SwingingPformObjectInstance extends AbstractObjectInstance
      * Corresponds to loc_2A392 in disassembly.
      */
     private void updateFalling() {
-        // Apply gravity
-        yVel += GRAVITY;
-
-        // Move
+        // ROM loc_2A392 (docs/s2disasm/s2.asm:57203-57205):
+        //   jsrto JmpTo16_ObjectMove   ; move y_pos by the CURRENT y_vel first
+        //   addi_.w #8,y_vel(a0)        ; THEN add gravity for next frame
+        // ObjectMove (docs/s2disasm/s2.asm:30192-30197) does
+        // y_pos(16.16) += y_vel << 8, i.e. the 8.8 subpixel y += y_vel. So the
+        // platform descends using last frame's velocity, and gravity only takes
+        // effect on the following frame. Adding gravity BEFORE moving (the prior
+        // order here) advanced the platform one velocity step early, which carried
+        // the riding player 1px ahead of the ROM every falling frame (ARZ2 trace
+        // first-divergence frame 264: slot 22 Obj82 type 2).
+        // Move with current velocity.
         subY += yVel;
         y = subY >> 8;
+
+        // Apply gravity AFTER the move (ROM addi_.w #8,y_vel after ObjectMove).
+        yVel += GRAVITY;
 
         // Check floor collision using ObjectTerrainUtils (mirrors ROM's ObjCheckFloorDist)
         TerrainCheckResult result = ObjectTerrainUtils.checkFloorDist(x, y, yRadius);
@@ -252,12 +350,18 @@ public class SwingingPformObjectInstance extends AbstractObjectInstance
      * Corresponds to loc_2A3B6 in disassembly.
      */
     private void updateRising() {
-        // Apply anti-gravity
-        yVel -= GRAVITY;
-
-        // Move
+        // ROM loc_2A3B6 (docs/s2disasm/s2.asm:57218-57220):
+        //   jsrto JmpTo16_ObjectMove   ; move y_pos by the CURRENT y_vel first
+        //   subi_.w #8,y_vel(a0)        ; THEN apply anti-gravity for next frame
+        // Same move-then-accelerate order as the falling routine above; apply the
+        // velocity before decrementing it so the platform (and rider) does not lead
+        // the ROM by one step.
+        // Move with current velocity.
         subY += yVel;
         y = subY >> 8;
+
+        // Apply anti-gravity AFTER the move (ROM subi_.w #8,y_vel after ObjectMove).
+        yVel -= GRAVITY;
 
         // Check ceiling collision using ObjectTerrainUtils (mirrors ROM's ObjCheckCeilingDist)
         TerrainCheckResult result = ObjectTerrainUtils.checkCeilingDist(x, y, yRadius);
@@ -463,15 +567,71 @@ public class SwingingPformObjectInstance extends AbstractObjectInstance
 
     @Override
     public SolidObjectParams getSolidParams() {
-        // Use widthPixels as half-width and yRadius as half-height
-        // For property 0: widthPixels=32, yRadius=8 (small platform)
-        // For property 1: widthPixels=28, yRadius=50 (tall pillar)
-        return new SolidObjectParams(widthPixels, yRadius, yRadius + 1);
+        // ROM Obj82_Main builds the SolidObject collision box from the property
+        // table values, but NOT 1:1 (docs/s2disasm/s2.asm:57145-57151):
+        //   moveq   #0,d1
+        //   move.b  width_pixels(a0),d1
+        //   addi.w  #$B,d1            ; d1 = width_pixels + 0xB  (SolidObject half-width)
+        //   moveq   #0,d2
+        //   move.b  y_radius(a0),d2   ; d2 = y_radius            (air/jumping half-height)
+        //   move.w  d2,d3
+        //   addq.w  #1,d3             ; d3 = y_radius + 1        (ground/walking half-height)
+        // The +0xB widens the SolidObject box beyond the raw property width, so the
+        // standing/ExitPlatform x-range that keeps a rider attached is
+        // x_player - x_obj in [-d1, d1) = [-(width_pixels+0xB), width_pixels+0xB).
+        // Without the +0xB the engine half-width was width_pixels (0x1C), unseating
+        // the rider ~0xB px too early on the pillar's right edge: in the ARZ2 trace
+        // the leader walked off the s27 pillar at x_player-x_obj=0x1E (relX 58),
+        // one frame before the ROM (which keeps him on until 0x27), so the frame-483
+        // jump fired airborne instead of from the on-object ground state.
+        // (Retail REV01 builds with fixBugs = 0 (docs/s2disasm/s2.asm:27), so the
+        // pillar-specific subq.w #2,d3 at s2.asm:57152-57156 does NOT apply.)
+        return SolidObjectParams.of(widthPixels + 0xB, yRadius, yRadius + 1);
     }
 
     @Override
     public boolean isTopSolidOnly() {
-        return true;  // Platform is only solid from the top
+        // Obj82_Main calls JmpTo23_SolidObject (docs/s2disasm/s2.asm:57221), and
+        // that thunk resolves to SolidObject (docs/s2disasm/s2.asm:35014) -- the
+        // full four-sided routine, not one of the top-only platform entries. So
+        // SolidObject_ChkBounds' axis choice applies: with d5 (horizontal distance
+        // to the nearer edge) and d1 (vertical distance), cmp.w d1,d5 / bhi
+        // SolidObject_TopBottom (docs/s2disasm/s2.asm:35407-35408) takes the TOP
+        // path only when the horizontal distance is STRICTLY greater; otherwise the
+        // contact resolves through SolidObject_LeftRight, which corrects x by
+        // sub.w d0,x_pos(a1) at SolidObject_AtEdge (docs/s2disasm/s2.asm:35438) and
+        // returns a side contact without landing.
+        //
+        // Reporting top-solid-only here skipped both side branches, so every
+        // contact reached the vertical landing check. In ARZ2 that turned a
+        // clipped corner on a pillar into a landing: at seg13_arz2 frame 344 the
+        // box is exactly the ROM's (relX 75, relY 5, d2 67, d4 134 against a
+        // half-width of width_pixels+$B) and the distances are absDistX 3,
+        // absDistY 5, so the ROM pushes Sonic +3px clear and keeps him falling at
+        // y_vel $0B60 while the engine seated him on the pillar.
+        return false;
+    }
+
+    @Override
+    public SolidRoutineProfile getSolidRoutineProfile() {
+        // Build from this provider so usesPlatformObjectLandingSnap()=false is
+        // honoured: Obj82 is a SolidObject (Obj82_Main calls JmpTo23_SolidObject,
+        // docs/s2disasm/s2.asm:57159), not a PlatformObject, so SolidObject_Landed's
+        // playerY - distY + 3 result must be preserved rather than overwritten by the
+        // PlatformObject_ChkYRange absolute snap. See usesPlatformObjectLandingSnap().
+        return SolidRoutineProfile.fromProvider(this);
+    }
+
+    @Override
+    public boolean usesPlatformObjectLandingSnap() {
+        // Obj82 uses SolidObject_Landed (docs/s2disasm/s2.asm:35582-35616:
+        // sub.w d3,y_pos / subq #1,y_pos), reached via JmpTo23_SolidObject at
+        // docs/s2disasm/s2.asm:57159 -- NOT PlatformObject_ChkYRange's absolute
+        // anchorY - groundHalfHeight - y_radius - 1 snap. The shared
+        // resolveContactInternal already computes the SolidObject landed centre
+        // (playerY - distY + 3) correctly; the PlatformObject override would use
+        // groundHalfHeight (= y_radius + 1) and land the rider 1px too high.
+        return false;
     }
 
     @Override
@@ -510,4 +670,3 @@ public class SwingingPformObjectInstance extends AbstractObjectInstance
     }
 
 }
-

@@ -3,16 +3,23 @@ package com.openggf.game.sonic1.objects;
 import com.openggf.audio.AudioManager;
 import com.openggf.game.sonic1.audio.Sonic1Sfx;
 import com.openggf.game.PlayableEntity;
+import com.openggf.game.solid.ContactKind;
+import com.openggf.game.solid.PlayerSolidContactResult;
+import com.openggf.game.solid.SolidCheckpointBatch;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.LevelManager;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
+import com.openggf.level.objects.ObjectPlayerParticipationPolicy;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.SolidContact;
+import com.openggf.level.objects.SolidExecutionMode;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
+import com.openggf.level.objects.SolidRoutineProfile;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -41,7 +48,7 @@ import java.util.List;
  * Reference: docs/s1disasm/_incObj/36 Spikes.asm
  */
 public class Sonic1SpikeObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, SpawnRewindRecreatable {
 
     // Spik_Var table: frame index and actWidth per visual type (high nybble)
     // From disassembly: dc.b frame, width pairs
@@ -54,12 +61,14 @@ public class Sonic1SpikeObjectInstance extends AbstractObjectInstance
     private static final int RETRACT_DELAY = 60;       // move.w #60,objoff_38(a0)
     // From disassembly: move.b #4,obPriority(a0)
     private static final int PRIORITY = 4;
+    private static final ObjectPlayerParticipationPolicy PLAYER_PARTICIPATION =
+            ObjectPlayerParticipationPolicy.ALL_ENGINE_PLAYERS;
 
-    private final int baseX;
-    private final int baseY;
-    private final int frameIndex;
-    private final int actWidth;
-    private final int movementType;
+    private int baseX;
+    private int baseY;
+    private int frameIndex;
+    private int actWidth;
+    private int movementType;
 
     private int currentX;
     private int currentY;
@@ -87,15 +96,59 @@ public class Sonic1SpikeObjectInstance extends AbstractObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
+    public int getOutOfRangeReferenceX() {
+        // ROM Spikes_Display checks out_of_range against spikes_origX (objoff_30),
+        // the spawn-origin X, NOT the current (moved) obX:
+        //   out_of_range.w DeleteObject,spikes_origX(a0)
+        // (docs/s1disasm/_incObj/36 Spikes.asm:163,167; spikes_origX set at :47).
+        // Horizontal-moving spikes (subtype $x2) extend their obX away from the
+        // origin each frame, so anchoring the unload window on the moved getX()
+        // (the default) culls them up to a chunk early when the extended tip
+        // crosses the despawn threshold while the origin is still in range. MZ3:
+        // the sideways spike at origin (0xDEC,0x710) spawned at f6527 then the
+        // moved-getX() out_of_range deleted it at f6528, ~285 frames before the
+        // player rolling-jumps into its solid underside at f6813. Anchoring on
+        // baseX (= spikes_origX) keeps it loaded exactly as long as ROM does.
+        return baseX;
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         updateMovement();
         updateDynamicSpawn(currentX, currentY);
+        SolidCheckpointBatch batch = checkpointAll();
+        List<PlayableEntity> players = services().playerQuery().playersFor(PLAYER_PARTICIPATION);
+        if (players.isEmpty() && playerEntity != null) {
+            players = List.of(playerEntity);
+        }
+        for (PlayableEntity candidate : players) {
+            if (candidate instanceof AbstractPlayableSprite player) {
+                applyCheckpointContact(player, batch.perPlayer().get(candidate), vIntRunCount);
+            }
+        }
     }
 
     @Override
     public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
+        handleSolidContact(player, contact, frameCounter);
+    }
+
+    @Override
+    public SolidExecutionMode solidExecutionMode() {
+        return SolidExecutionMode.MANUAL_CHECKPOINT;
+    }
+
+    private void applyCheckpointContact(AbstractPlayableSprite player,
+                                        PlayerSolidContactResult result,
+                                        int vIntRunCount) {
+        if (player == null || result == null || result.kind() == ContactKind.NONE) {
+            return;
+        }
+        handleSolidContact(player, contactFrom(result), vIntRunCount);
+    }
+
+    private void handleSolidContact(AbstractPlayableSprite player, SolidContact contact, int frameCounter) {
         if (player == null) {
             return;
         }
@@ -127,7 +180,7 @@ public class Sonic1SpikeObjectInstance extends AbstractObjectInstance
         //   move.l d3,obY(a0)
         // ROM rewind: sub.l d0,d3 where d3=obY_full, d0=obVelY<<8
         // This operates on the top-left Y (obY), not centre Y.
-        // The engine stores yPixel (top-left) + ySubpixel separately.
+        // The engine stores yPixel (top-left) + sub-pixel accumulator separately.
         // Combine, subtract, split back. Use move() with negative velocity
         // to replicate sub.l: move(-velX, -velY) reverses SpeedToPos.
         if (player instanceof AbstractPlayableSprite aps) {
@@ -160,15 +213,54 @@ public class Sonic1SpikeObjectInstance extends AbstractObjectInstance
     }
 
     @Override
+    public boolean carriesRiderOnHorizontalMove(PlayableEntity player) {
+        // ROM Spikes do NOT drag a standing rider horizontally. The Spikes
+        // standing branch reaches MvSonicOnPtfm via the shared SolidObject
+        // routine (sub SolidObject.asm:46-55, .stand), which carries the rider
+        // by the X-delta between d4 (the carry-reference X) and the object's
+        // current obX. The Spikes caller passes the object's *post-move* obX as
+        // the carry reference:
+        //   bsr.w Spikes_Move        ; updates obX to the new position FIRST
+        //   ...
+        //   move.w obX(a0),d4        ; d4 = already-moved obX (36 Spikes.asm:52,96)
+        // so MvSonicOnPtfm's "sub.w obX(a0),d2" computes a ZERO delta
+        // (sub MvSonicOnPtfm.asm:38-39) and the standing rider is not carried.
+        // A horizontally-moving spike (subtype $x2) therefore slides out from
+        // under a standing player, who stays put and walks off the edge — the
+        // MZ1 trace at f4230 (player x stays 0x0B35 while the spike moves
+        // 0x0B34->0x0B3C, then the player drops off and falls at f4234).
+        // This matches ALL spikes (every Spikes caller passes the post-move
+        // obX), so it is an object-wide property, not a zone carve-out.
+        return false;
+    }
+
+    @Override
     public SolidObjectParams getSolidParams() {
         if (isSideways()) {
             // ROM: d2 = 4 (frame 5) or $14 (frame 1). d3 = d2 + 1 (addq.w #1,d3).
             int d2 = (frameIndex == 5) ? 4 : 0x14;
-            return new SolidObjectParams(0x1B, d2, d2 + 1);
+            return SolidObjectParams.of(0x1B, d2, d2 + 1);
         }
         // Spik_Upright: d1=obActWid+$B, d2=$10, d3=$11. ROM-exact.
-        return new SolidObjectParams(actWidth + 0x0B, 0x10, 0x11);
+        return SolidObjectParams.of(actWidth + 0x0B, 0x10, 0x11);
     }
+
+    @Override
+    public SolidRoutineProfile getSolidRoutineProfile() {
+        // Spikes call the shared S1 SolidObject routine, whose horizontal
+        // bounds reject only values above 2*d1 (`bhi`). A player exactly flush
+        // with the right face therefore remains a side contact.
+        return SolidRoutineProfile.fullSolid(usesStickyContactBuffer(), true, false);
+    }
+
+    @Override
+    public boolean usesInstanceSolidStateLatchKey() {
+        // SolidObject stores its standing/pushing bits in the live Obj36 SST.
+        // Moving spike variants rebuild their engine spawn as displacement
+        // changes, but that transient placement is not a new native object.
+        return true;
+    }
+
     @Override
     public int getX() {
         return currentX;
@@ -195,6 +287,19 @@ public class Sonic1SpikeObjectInstance extends AbstractObjectInstance
 
     private boolean isSideways() {
         return frameIndex == 1 || frameIndex == 5;
+    }
+
+    protected SolidCheckpointBatch checkpointAll() {
+        return services().solidExecution().resolveSolidNowAll();
+    }
+
+    private SolidContact contactFrom(PlayerSolidContactResult result) {
+        return switch (result.kind()) {
+            case TOP -> new SolidContact(true, false, false, true, false);
+            case SIDE -> new SolidContact(false, true, false, false, result.pushingNow());
+            case BOTTOM -> new SolidContact(false, false, true, false, false);
+            case NONE, CRUSH -> null;
+        };
     }
 
     /**

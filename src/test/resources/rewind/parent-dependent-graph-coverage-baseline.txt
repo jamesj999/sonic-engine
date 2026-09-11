@@ -1,0 +1,6 @@
+# status|class|evidence
+# covered = focused graph/object-manager rewind test exists for this family.
+# session-tail = still needs a real session/family harness before claiming graph-safe restore.
+# All formerly parent-dependent rows are now classified as graph-covered by
+# RewindRoundTripHarness.GRAPH_COVERED_ISOLATED_PROBE_CLASSES and guarded by
+# TestGraphCoveredIsolatedProbeClassification.

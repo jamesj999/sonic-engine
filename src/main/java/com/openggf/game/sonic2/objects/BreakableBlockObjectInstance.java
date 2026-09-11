@@ -2,6 +2,7 @@ package com.openggf.game.sonic2.objects;
 import com.openggf.level.objects.BoxObjectInstance;
 
 import com.openggf.game.sonic2.constants.Sonic2Constants;
+import com.openggf.game.sonic2.constants.Sonic2AnimationIds;
 import com.openggf.game.PlayableEntity;
 
 import com.openggf.audio.GameSound;
@@ -30,7 +31,7 @@ import java.util.logging.Logger;
  * - Plays SLOW_SMASH sound effect (0xCB)
  */
 public class BreakableBlockObjectInstance extends BoxObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
 
     private static final Logger LOGGER = Logger.getLogger(BreakableBlockObjectInstance.class.getName());
 
@@ -70,15 +71,20 @@ public class BreakableBlockObjectInstance extends BoxObjectInstance
     private static final int FRAME_INTACT = 0;
     private static final int FRAME_FRAGMENT_BASE = 1;  // Fragments use frames 1-4 (legacy fallback)
 
-    private final int halfWidth;
+    private int halfWidth;
     private boolean broken;
-    private boolean playerWasRolling;
+    private boolean solidForRemainingParticipantsThisFrame;
     private boolean initialized;
 
     public BreakableBlockObjectInstance(ObjectSpawn spawn, String name) {
         super(spawn, name, resolveHalfWidth(), HALF_HEIGHT, 0.6f, 0.6f, 0.8f, false);
         this.halfWidth = resolveHalfWidth();
         this.broken = false;
+    }
+
+    @Override
+    public BreakableBlockObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new BreakableBlockObjectInstance(ctx.spawn(), getName());
     }
 
     private void ensureInitialized() {
@@ -96,76 +102,40 @@ public class BreakableBlockObjectInstance extends BoxObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         ensureInitialized();
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        if (broken) {
-            return;
-        }
-
-        // Check if player is standing on us and rolling
-        // The original tracks player animation state each frame
-        if (player != null) {
-            playerWasRolling = player.getRolling();
-
-            // Check for breaking from below - when player is rolling and moving upward
-            // We handle this here because isSolidFor returns false for this case,
-            // so onSolidContact won't be called
-            if (player.getRolling() && player.getYSpeed() < 0) {
-                if (isPlayerOverlapping(player)) {
-                    // Create a synthetic contact for breaking from below
-                    SolidContact contact = new SolidContact(false, false, true, false, false);
-                    breakBlock(player, contact);
-                }
-            }
-        }
-    }
-
-    /**
-     * Check if the player overlaps with this block's collision area.
-     */
-    private boolean isPlayerOverlapping(AbstractPlayableSprite player) {
-        int blockX = spawn.x();
-        int blockY = spawn.y();
-        int playerX = player.getCentreX();
-        int playerY = player.getCentreY();
-        int playerYRadius = player.getYRadius();
-
-        // Check X overlap
-        int dx = Math.abs(playerX - blockX);
-        if (dx >= halfWidth + 11) {
-            return false;
-        }
-
-        // Check Y overlap - player's top must be near or overlapping block's bottom
-        int playerTop = playerY - playerYRadius;
-        int blockBottom = blockY + HALF_HEIGHT;
-        int blockTop = blockY - HALF_HEIGHT;
-
-        // Player is overlapping if their top is within the block's vertical range
-        return playerTop <= blockBottom && playerTop >= blockTop - playerYRadius;
+        // ROM Obj32_Main (s2.asm:48889-48905) runs SolidObject and then checks the
+        // BLOCK's own standing_mask (status bits 6/7). No special "rolling player
+        // moving up" detection is done here: side/below collisions are handled by
+        // SolidObject's ceiling/push paths and never break the block. The per-player
+        // break decision is made in onSolidContact below, using the SolidContact's
+        // standing flag (set by SolidObject when that player is currently standing
+        // on this object).
     }
 
     @Override
     public SolidObjectParams getSolidParams() {
         // From disassembly: width_pixels = $10 (CPZ) / $18 (HTZ)
         // SolidObject routine uses: halfWidth + 11 for x check, halfHeight for y check
-        return new SolidObjectParams(halfWidth + 11, HALF_HEIGHT, HALF_HEIGHT + 1);
+        return SolidObjectParams.of(halfWidth + 11, HALF_HEIGHT, HALF_HEIGHT + 1);
+    }
+
+    @Override
+    public boolean usesInclusiveRightEdge() {
+        // Obj32 calls the ordinary SolidObject helper. Its X gate branches out
+        // only on `bhi`, so relX == 2*d1 remains a zero-distance side contact
+        // (docs/s2disasm/s2.asm:35347-35354). HTZ1 reaches that exact right
+        // edge on the roll-landing frame; retaining the contact publishes the
+        // native Status_Push bit for the following SAnim_Push timer gate.
+        return true;
     }
 
     @Override
     public boolean isSolidFor(PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        // Block is not solid once broken
-        if (broken) {
-            return false;
-        }
-        // Don't be solid for rolling players moving upward - they should break through
-        // The break detection is handled in update() instead
-        if (player.getRolling() && player.getYSpeed() < 0) {
-            return false;
-        }
-        return true;
+        // Block is not solid once broken. ROM keeps the block fully solid before it
+        // breaks (Obj32_Main always invokes SolidObject); a rolling player moving
+        // upward hits the underside as a ceiling collision, not a break.
+        return !broken || solidForRemainingParticipantsThisFrame;
     }
 
     @Override
@@ -175,13 +145,22 @@ public class BreakableBlockObjectInstance extends BoxObjectInstance
             return;
         }
 
-        // Break the block if player is rolling and either:
-        // 1. Standing on top of the block
-        // 2. Hitting from below (e.g., exiting a spin tube upward)
-        // 3. Hitting from the side while rolling
-        boolean isRolling = playerWasRolling || player.getRolling();
-
-        if (isRolling && (contact.standing() || contact.touchBottom() || contact.touchSide())) {
+        // ROM Obj32_Main snapshots player anim before SolidObject, then checks
+        // standing bits after SolidObject (docs/s2disasm/s2.asm:49295-49350).
+        int preContactAnimationId = services().objectManager() != null
+                ? services().objectManager().getPreContactAnimationId()
+                : player.getAnimationId();
+        boolean wasRollAnimating = preContactAnimationId == Sonic2AnimationIds.ROLL.id();
+        //   andi.b #standing_mask,d0         ; only break if a player is STANDING on the block
+        //   bne.s  Obj32_SupportingSomeone
+        //   ; ... checks each standing player's saved anim individually:
+        //   ; - MainCharacter standing && saved anim==Roll  -> Obj32_BouncePlayer(MainCharacter)
+        //   ; - Sidekick standing      && saved anim==Roll  -> Obj32_BouncePlayer(Sidekick)
+        // Side and below contacts NEVER break the block in ROM. Each player's own
+        // saved animation determines if THIS player triggers the break (the engine's
+        // previous player cache leaked Sonic's roll signal into Tails'
+        // onSolidContact call, knocking Tails airborne via the side-touch path).
+        if (contact.standing() && wasRollAnimating) {
             breakBlock(player, contact);
         }
     }
@@ -192,20 +171,27 @@ public class BreakableBlockObjectInstance extends BoxObjectInstance
         }
 
         broken = true;
+        // ROM Obj32_Main runs one SolidObject pass for both players before it
+        // branches on the block standing bits and destroys itself. The engine
+        // receives per-player callbacks; keep the block solid for later
+        // participants in this same callback batch so the first breaker does not
+        // erase the other player's pre-destroy support one frame early.
+        solidForRemainingParticipantsThisFrame = true;
 
         // Mark as broken in persistence table (stays broken on respawn/revisit)
         ObjectManager objectManager = services().objectManager();
-        if (objectManager != null) {
-            objectManager.markRemembered(spawn);
-        }
+        ObjectLifetimeOps.markSpawnRemembered(objectManager, spawn);
 
+        short preservedCentreY = player.getCentreY();
         // Force player into rolling state with proper hitbox (disassembly lines 48916-48919)
         // bset #status.player.rolling,status(a1)
         // move.b #$E,y_radius(a1)
         // move.b #7,x_radius(a1)
         // move.b #AniIDSonAni_Roll,anim(a1)
-        // setRolling(true) handles radius change and animation internally
+        // setRolling(true) handles radius change and animation internally, but
+        // ROM writes y_radius/x_radius/status without changing y_pos.
         player.setRolling(true);
+        player.setCentreYPreserveSubpixel(preservedCentreY);
 
         // Handle velocity based on contact direction:
         // - Standing on top: bounce upward
@@ -233,10 +219,9 @@ public class BreakableBlockObjectInstance extends BoxObjectInstance
 
         // Spawn points display popup
         if (objectManager != null) {
-            PointsObjectInstance points = new PointsObjectInstance(
+            spawnFreeChild(() -> new PointsObjectInstance(
                     new ObjectSpawn(spawn.x(), spawn.y(), 0x29, 0, 0, false, 0),
-                    services(), 100);
-            objectManager.addDynamicObject(points);
+                    services(), 100));
         }
 
         // Mark this object as destroyed so it stops rendering/updating
@@ -278,14 +263,15 @@ public class BreakableBlockObjectInstance extends BoxObjectInstance
 
             for (int i = 0; i < count; i++) {
                 SpriteMappingPiece piece = pieces.get(i);
-                BreakableBlockFragmentInstance fragment = new BreakableBlockFragmentInstance(
+                int velX = velocities[i][0];
+                int velY = velocities[i][1];
+                spawnFreeChild(() -> new BreakableBlockFragmentInstance(
                         spawn.x(),
                         spawn.y(),
-                        velocities[i][0],
-                        velocities[i][1],
+                        velX,
+                        velY,
                         piece,
-                        renderer);
-                objectManager.addDynamicObject(fragment);
+                        renderer));
             }
             return;
         }
@@ -296,9 +282,8 @@ public class BreakableBlockObjectInstance extends BoxObjectInstance
             int velY = CPZ_FRAGMENT_VELOCITIES[i][1];
             int frameIndex = FRAME_FRAGMENT_BASE + i;
 
-            BreakableBlockFragmentInstance fragment = new BreakableBlockFragmentInstance(
-                    spawn.x(), spawn.y(), velX, velY, frameIndex, renderManager);
-            objectManager.addDynamicObject(fragment);
+            spawnFreeChild(() -> new BreakableBlockFragmentInstance(
+                    spawn.x(), spawn.y(), velX, velY, frameIndex, renderManager));
         }
     }
 
@@ -354,7 +339,7 @@ public class BreakableBlockObjectInstance extends BoxObjectInstance
      * Inner class for the fragment objects that fly apart when the block breaks.
      * These are simple falling objects with initial velocity that despawn when off-screen.
      */
-    public static class BreakableBlockFragmentInstance extends AbstractObjectInstance {
+    public static class BreakableBlockFragmentInstance extends AbstractObjectInstance implements RewindRecreatable {
 
         private static final int GRAVITY = 0x18;  // From disassembly: addi.w #$18,y_vel(a0)
 
@@ -367,7 +352,7 @@ public class BreakableBlockObjectInstance extends BoxObjectInstance
         private final SpriteMappingPiece piece;
         private final PatternSpriteRenderer renderer;
         private final List<SpriteMappingPiece> pieceList;
-        private final int frameIndex;
+        private int frameIndex;
         private final ObjectRenderManager renderManager;
 
         public BreakableBlockFragmentInstance(int x, int y, int velX, int velY, SpriteMappingPiece piece,
@@ -402,8 +387,20 @@ public class BreakableBlockObjectInstance extends BoxObjectInstance
             this.renderManager = renderManager;
         }
 
+        public BreakableBlockFragmentInstance(int x, int y, int velX, int velY) {
+            this(x, y, velX, velY, 0, null);
+        }
+
         @Override
-        public void update(int frameCounter, PlayableEntity playerEntity) {
+        public BreakableBlockFragmentInstance recreateForRewind(RewindRecreateContext ctx) {
+            ObjectRenderManager manager = ctx.objectServices() != null
+                    ? ctx.objectServices().renderManager()
+                    : null;
+            return new BreakableBlockFragmentInstance(ctx.spawn().x(), ctx.spawn().y(), 0, 0, 0, manager);
+        }
+
+        @Override
+        public void update(int vIntRunCount, PlayableEntity playerEntity) {
             AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
             if (isDestroyed()) {
                 return;
@@ -455,4 +452,3 @@ public class BreakableBlockObjectInstance extends BoxObjectInstance
         }
     }
 }
-

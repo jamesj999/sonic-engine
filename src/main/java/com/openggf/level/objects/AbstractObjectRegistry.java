@@ -1,6 +1,7 @@
 package com.openggf.level.objects;
 
 import com.openggf.level.LevelManager;
+import com.openggf.game.GameServices;
 
 import java.util.HashMap;
 import java.util.List;
@@ -63,7 +64,7 @@ public abstract class AbstractObjectRegistry implements ObjectRegistry {
      * direct LevelManager singleton lookups.
      */
     protected int currentRomZoneId() {
-        LevelManager levelManager = LevelManager.getInstance();
+        LevelManager levelManager = GameServices.levelOrNull();
         return levelManager != null ? levelManager.getRomZoneId() : -1;
     }
 
@@ -74,7 +75,7 @@ public abstract class AbstractObjectRegistry implements ObjectRegistry {
      * {@code TestRuntimeSingletonGuard}).
      */
     protected com.openggf.level.Level currentLevel() {
-        LevelManager levelManager = LevelManager.getInstance();
+        LevelManager levelManager = GameServices.levelOrNull();
         return levelManager != null ? levelManager.getCurrentLevel() : null;
     }
 

@@ -6,10 +6,17 @@ import com.openggf.game.PlayableEntity;
 import com.openggf.game.sonic2.constants.Sonic2ObjectIds;
 import com.openggf.game.sonic2.Sonic2ObjectArtKeys;
 import com.openggf.game.sonic2.Sonic2Rng;
+import com.openggf.game.sonic2.constants.Sonic2Constants;
+import com.openggf.game.sonic2.resources.Sonic2PlcRequests;
+import com.openggf.game.sonic2.resources.Sonic2PlcService;
 import com.openggf.graphics.GLCommand;
+import com.openggf.level.objects.ObjectPlayerParticipationPolicy;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.ObjectServices;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.TouchResponseResult;
 import com.openggf.level.objects.boss.AbstractBossInstance;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
@@ -30,7 +37,7 @@ import java.util.List;
  * - SUBA: Defeat bounce/settle
  * - SUBC: Flee off-screen
  */
-public class Sonic2ARZBossInstance extends AbstractBossInstance {
+public class Sonic2ARZBossInstance extends AbstractBossInstance implements RewindRecreatable {
 
     private static final int RENDER_X_FLIP = 0x01;
 
@@ -94,6 +101,8 @@ public class Sonic2ARZBossInstance extends AbstractBossInstance {
     private int bossCollisionRoutine;
     private boolean targetFlag;
     private boolean initialized;
+    /** Publication latch; keeps an equality-timed animal/explosion request retryable. */
+    private boolean animalExplosionSubmitted;
 
     // Multi-sprite data
     private int mainMapFrame;
@@ -111,6 +120,11 @@ public class Sonic2ARZBossInstance extends AbstractBossInstance {
 
     public Sonic2ARZBossInstance(ObjectSpawn spawn) {
         super(spawn, "ARZ Boss");
+    }
+
+    @Override
+    public Sonic2ARZBossInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new Sonic2ARZBossInstance(ctx.spawn());
     }
 
     @Override
@@ -135,12 +149,43 @@ public class Sonic2ARZBossInstance extends AbstractBossInstance {
 
     @Override
     protected int getPaletteLineForFlash() {
-        return 0; // ARZ flashes palette line 0
+        // Obj89_Main_Flash writes Normal_palette_line2+2: color 1 of the
+        // second CRAM line, not Sonic's first line.
+        return 1;
     }
 
     @Override
     protected int getCollisionSizeIndex() {
         return 0x0F;
+    }
+
+    @Override
+    protected boolean usesBaseHitHandler() {
+        // Obj89 handles boss_invulnerable_time inside Obj89_Main_HandleHoveringAndHits
+        // after writing the current-frame hover position, not through Boss_HandleHits.
+        // docs/s2disasm/s2.asm:65079-65112
+        return false;
+    }
+
+    @Override
+    public void onPlayerAttack(PlayableEntity player, TouchResponseResult result) {
+        if (state.invulnerable || state.defeated || state.hitCount <= 0) {
+            return;
+        }
+
+        // ROM Touch_Enemy_Part2 only decrements boss_hitcount2/collision state here.
+        // Obj89_Main_HandleHoveringAndHits observes the zero hit count later in this
+        // object's own routine and selects the defeat routine after the hover write.
+        // docs/s2disasm/s2.asm:85266-85275,65079-65124
+        state.hitCount--;
+        if (state.hitCount == 0) {
+            return;
+        }
+
+        state.invulnerable = true;
+        state.invulnerabilityTimer = getInvulnerabilityDuration();
+        services().playSfx(getBossHitSfxId());
+        paletteFlasher.startFlash();
     }
 
     @Override
@@ -155,6 +200,7 @@ public class Sonic2ARZBossInstance extends AbstractBossInstance {
 
     @Override
     protected void onDefeatStarted() {
+        if (!isDefeatEntryPrepared() && !Sonic2PlcRequests.append(services(), Sonic2Constants.PLC_CAPSULE)) return;
         bossCountdown = DEFEAT_TIMER_START;
         state.routine = MAIN_SUB8;
         bossAnim[2] = 0x05;
@@ -163,48 +209,88 @@ public class Sonic2ARZBossInstance extends AbstractBossInstance {
     }
 
     @Override
-    protected void updateBossLogic(int frameCounter, PlayableEntity playerEntity) {
+    protected boolean prepareDefeatEntry() {
+        return Sonic2PlcRequests.append(services(), Sonic2Constants.PLC_CAPSULE);
+    }
+
+    @Override
+    protected void updateBossLogic(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (!initialized) {
             if (!checkInitConditions(player)) {
                 return;
             }
             finishInitialization();
+            // ROM Obj89_Init initializes the boss/pillars and returns; Obj89_Main_Sub0
+            // starts moving the boss on the next object dispatch.
+            // docs/s2disasm/s2.asm:64778-64870,64905-64918
+            return;
         }
 
         if (bossCollisionRoutine != 0) {
-            checkHammerCollision(frameCounter, player);
+            checkHammerCollision(vIntRunCount, player);
         }
 
         switch (state.routine) {
             case MAIN_SUB0 -> updateMainSub0(player);
             case MAIN_SUB2 -> updateMainSub2(player);
             case MAIN_SUB4 -> updateMainSub4(player);
-            case MAIN_SUB6 -> updateMainSub6(frameCounter, player);
-            case MAIN_SUB8 -> updateMainSub8(frameCounter);
+            case MAIN_SUB6 -> updateMainSub6(vIntRunCount, player);
+            case MAIN_SUB8 -> updateMainSub8(vIntRunCount);
             case MAIN_SUBA -> updateMainSubA(player);
             case MAIN_SUBC -> updateMainSubC(player);
         }
     }
 
     private boolean checkInitConditions(AbstractPlayableSprite player) {
-        var sidekicks = services().sidekicks();
-        if (!sidekicks.isEmpty()) {
-            AbstractPlayableSprite mainPlayer = services().camera().getFocusedSprite();
-            if (mainPlayer != null) {
-                int mainX = mainPlayer.getCentreX();
-                if (mainX < PLAYER_CHECK_LEFT_X || mainX > PLAYER_CHECK_RIGHT_X) {
-                    return false;
-                }
+        Sonic2PlcService plcService = services().gameService(Sonic2PlcService.class);
+        if (plcService != null && plcService.isBusy()) {
+            return false;
+        }
+        var participants = services().playerQuery().playersFor(
+                ObjectPlayerParticipationPolicy.MAIN_PLUS_ENGINE_SIDEKICKS_AS_NATIVE_P2_EXTENDED);
+        if (participants.size() <= 1) {
+            return true;
+        }
+
+        if (!isInPillarRaiseWindow(player)) {
+            return false;
+        }
+
+        for (PlayableEntity participant : participants) {
+            if (participant == player || hasArzBossSidekickFlightBypass(participant)) {
+                continue;
             }
-            for (PlayableEntity sidekick : sidekicks) {
-                int sidekickX = sidekick.getCentreX();
-                if (sidekickX < PLAYER_CHECK_LEFT_X || sidekickX > PLAYER_CHECK_RIGHT_X) {
-                    return false;
-                }
+            if (!isInPillarRaiseWindow(participant)) {
+                return false;
             }
         }
         return true;
+    }
+
+    private static boolean isInPillarRaiseWindow(PlayableEntity participant) {
+        int x = participant.getCentreX();
+        return x >= PLAYER_CHECK_LEFT_X && x <= PLAYER_CHECK_RIGHT_X;
+    }
+
+    private static boolean hasArzBossSidekickFlightBypass(PlayableEntity participant) {
+        if (!(participant instanceof AbstractPlayableSprite sprite)) {
+            return false;
+        }
+
+        int objectControl = 0;
+        if (sprite.isObjectControlled()) {
+            objectControl |= 0x80;
+        }
+        if (sprite.isObjectControlAllowsCpu()) {
+            objectControl |= 0x40;
+        }
+        if (sprite.isObjectControlSuppressesMovement()) {
+            objectControl |= 0x01;
+        }
+        // Obj89_Init skips the Tails X check when Sidekick+obj_control is $81.
+        // docs/s2disasm/s2.asm:64791-64792
+        return objectControl == 0x81;
     }
 
     private void finishInitialization() {
@@ -301,7 +387,7 @@ public class Sonic2ARZBossInstance extends AbstractBossInstance {
         animateBoss();
     }
 
-    private void updateMainSub6(int frameCounter, AbstractPlayableSprite player) {
+    private void updateMainSub6(int vIntRunCount, AbstractPlayableSprite player) {
         if (bossCountdown == 0x14) {
             hammerFlags |= 0x01;
             bossCollisionRoutine = 1;
@@ -319,12 +405,12 @@ public class Sonic2ARZBossInstance extends AbstractBossInstance {
         animateBoss();
     }
 
-    private void updateMainSub8(int frameCounter) {
+    private void updateMainSub8(int vIntRunCount) {
         bossCountdown--;
         if (bossCountdown < 0) {
             setupEscapeAnim();
         } else {
-            if ((frameCounter & 7) == 0) {
+            if ((vIntRunCount & 7) == 0) {
                 spawnDefeatExplosion();
             }
         }
@@ -342,7 +428,10 @@ public class Sonic2ARZBossInstance extends AbstractBossInstance {
             bossYVel += 0x18;
         } else if (bossCountdown < 0x18) {
             bossYVel -= 8;
-        } else if (bossCountdown == 0x18) {
+        } else if (bossCountdown >= 0x18 && !animalExplosionSubmitted) {
+            if (!Sonic2PlcRequests.append(services(), Sonic2Constants.PLC_ANIMALS_ARZ,
+                    Sonic2Constants.PLC_EXPLOSION)) return;
+            animalExplosionSubmitted = true;
             bossYVel = 0;
             int levelMusic = services().getCurrentLevelMusicId();
             if (levelMusic >= 0) {
@@ -367,7 +456,16 @@ public class Sonic2ARZBossInstance extends AbstractBossInstance {
             camera.setMaxX((short) (camera.getMaxX() + 2));
         } else if (!isOnScreen()) {
             setDestroyed(true);
-            services().gameState().setCurrentBossId(0);
+            // ROM: Current_Boss_ID is NEVER cleared in Sonic 2. It is written only by
+            // the boss-arena setup routines (`move.b #N,(Current_Boss_ID).w`, ids 1-9)
+            // and read by `tst.b`; docs/s2disasm/s2.asm contains no `clr.b` or
+            // `move.b #0` for it, so it resets only via the level-load RAM clear and
+            // persists to the end of the act. Sonic_Boundary's right-hand test widens
+            // the side boundary by $40 only when it is zero (s2.asm:37243-37251), so
+            // clearing it here let the character run 64px past the ROM's clamp.
+            // Contrast S1, which DOES clear at the Egg Prison
+            // (s1disasm/_incObj/3E Prison Capsule.asm:97), and S3K, which clears
+            // Boss_flag at 31 sites. S2 is the exception.
             return;
         }
         bossMoveObject();
@@ -400,6 +498,26 @@ public class Sonic2ARZBossInstance extends AbstractBossInstance {
             state.defeated = true;
             services().gameState().addScore(1000);
             onDefeatStarted();
+            return;
+        }
+
+        if (state.invulnerable) {
+            updateArzInvulnerability();
+        }
+    }
+
+    private void updateArzInvulnerability() {
+        if (state.invulnerabilityTimer <= 0) {
+            state.invulnerable = false;
+            paletteFlasher.stopFlash();
+            return;
+        }
+
+        paletteFlasher.update();
+        state.invulnerabilityTimer--;
+        if (state.invulnerabilityTimer <= 0) {
+            state.invulnerable = false;
+            paletteFlasher.stopFlash();
         }
     }
 
@@ -447,7 +565,7 @@ public class Sonic2ARZBossInstance extends AbstractBossInstance {
         }
     }
 
-    private void checkHammerCollision(int frameCounter, AbstractPlayableSprite player) {
+    private void checkHammerCollision(int vIntRunCount, AbstractPlayableSprite player) {
         if (bossCollisionRoutine == 0 || player == null) {
             return;
         }
@@ -471,7 +589,7 @@ public class Sonic2ARZBossInstance extends AbstractBossInstance {
             }
             boolean hadRings = player.getRingCount() > 0;
             if (hadRings && !player.hasShield()) {
-                services().spawnLostRings(player, frameCounter);
+                services().spawnLostRings(player, vIntRunCount);
             }
             player.applyHurtOrDeath(hammerX, false, hadRings);
         }
@@ -565,13 +683,11 @@ public class Sonic2ARZBossInstance extends AbstractBossInstance {
 
         ObjectSpawn leftSpawn = new ObjectSpawn(LEFT_PILLAR_X, PILLAR_START_Y,
                 Sonic2ObjectIds.ARZ_BOSS, 0x04, 0, false, spawn.rawYWord());
-        ARZBossPillar left = new ARZBossPillar(leftSpawn, this);
-        services().objectManager().addDynamicObject(left);
+        spawnFreeChild(() -> new ARZBossPillar(leftSpawn, this));
 
         ObjectSpawn rightSpawn = new ObjectSpawn(RIGHT_PILLAR_X, PILLAR_START_Y,
                 Sonic2ObjectIds.ARZ_BOSS, 0x04, RENDER_X_FLIP, false, spawn.rawYWord());
-        ARZBossPillar right = new ARZBossPillar(rightSpawn, this);
-        services().objectManager().addDynamicObject(right);
+        spawnFreeChild(() -> new ARZBossPillar(rightSpawn, this));
     }
 
     /**
@@ -589,13 +705,11 @@ public class Sonic2ARZBossInstance extends AbstractBossInstance {
 
         ObjectSpawn eyesSpawn = new ObjectSpawn(eyesX, eyesY, Sonic2ObjectIds.ARZ_BOSS,
                 0x08, eyesFlags, false, spawn.rawYWord());
-        ARZBossEyes eyes = new ARZBossEyes(eyesSpawn);
-        services().objectManager().addDynamicObject(eyes);
+        ARZBossEyes eyes = spawnFreeChild(() -> new ARZBossEyes(eyesSpawn));
 
         ObjectSpawn arrowSpawn = new ObjectSpawn(eyesX, eyesY, Sonic2ObjectIds.ARZ_BOSS,
                 0x06, eyesFlags, false, spawn.rawYWord());
-        ARZBossArrow arrow = new ARZBossArrow(arrowSpawn, this, eyes, !leftPillar);
-        services().objectManager().addDynamicObject(arrow);
+        spawnFreeChild(() -> new ARZBossArrow(arrowSpawn, this, eyes, !leftPillar));
     }
 
     // ========================================================================
@@ -667,6 +781,14 @@ public class Sonic2ARZBossInstance extends AbstractBossInstance {
     }
 
     @Override
+    public boolean isPersistent() {
+        // Obj89_Main_SubC owns the post-defeat camera release: it increments
+        // Camera_Max_X_pos to $2C00 before testing the on-screen bit and deleting.
+        // docs/s2disasm/s2.asm:65267-65278
+        return true;
+    }
+
+    @Override
     protected boolean isOnScreen() {
         Camera camera = services().camera();
         int screenX = state.x - camera.getX();
@@ -688,5 +810,10 @@ public class Sonic2ARZBossInstance extends AbstractBossInstance {
     @Override
     protected int getBossExplosionSfxId() {
         return Sonic2Sfx.BOSS_EXPLOSION.id;
+    }
+
+    @Override
+    protected int getBossExplosionObjectId() {
+        return com.openggf.game.sonic2.constants.Sonic2ObjectIds.BOSS_EXPLOSION;
     }
 }

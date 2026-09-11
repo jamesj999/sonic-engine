@@ -9,7 +9,10 @@ import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.ObjectServices;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SubpixelMotion;
+import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -34,7 +37,13 @@ import java.util.List;
  *     Sub 6: Retract (reverse velocity), then signal parent and delete
  *   Routine 4 (FALLING): Parent died - fall with gravity and delete after timer
  */
-public class ShellcrackerClawInstance extends AbstractObjectInstance {
+public class ShellcrackerClawInstance extends AbstractObjectInstance
+        implements TouchResponseProvider, RewindRecreatable {
+    // From ObjA0_SubObjData (s2.asm:75308): collision_flags = $9A
+    // = 0x80 (HURT category) | $1A (x_radius=$C → size index $1A).
+    // The claw hurts the player every frame it exists (ENEMY/HURT poll rule —
+    // no consumed-once "already hit" latch).
+    private static final int COLLISION_SIZE_INDEX = 0x1A;
     // Staggered initial delays per piece index (byte_381A4)
     // Index is pieceIndex/2: 0→0, 1→3, 2→5, 3→7, 4→9, 5→11, 6→13, 7→15
     private static final int[] INITIAL_DELAYS = {0, 3, 5, 7, 9, 11, 13, 15};
@@ -68,10 +77,11 @@ public class ShellcrackerClawInstance extends AbstractObjectInstance {
         RETRACTING,      // Sub 6: move back
         FALLING          // Routine 4: parent dead, falling
     }
-
     private final ShellcrackerBadnikInstance parent;
-    private final int pieceIndex; // 0, 2, 4, 6, 8, 10, 12, 14
-    private final boolean facingRight;
+    // Un-final for rewind: GenericFieldCapturer reapplies these captured non-spawn
+    // scalars after the parent-relink recreate hook rebuilds the claw with placeholders.
+    private int pieceIndex; // 0, 2, 4, 6, 8, 10, 12, 14
+    private boolean facingRight;
     private int currentX;
     private int currentY;
     private final SubpixelMotion.State motionState = new SubpixelMotion.State(0, 0, 0, 0, 0, 0);
@@ -81,6 +91,7 @@ public class ShellcrackerClawInstance extends AbstractObjectInstance {
     private int timer;
     private int retractTimer; // objoff_2B - separate timer for retraction
     private int animFrame;
+    private boolean initRoutinePending;
 
     public ShellcrackerClawInstance(ObjectSpawn parentSpawn, ShellcrackerBadnikInstance parent,
                                     int x, int y, int pieceIndex, boolean facingRight) {
@@ -108,11 +119,32 @@ public class ShellcrackerClawInstance extends AbstractObjectInstance {
         // Set initial delay from table
         this.timer = INITIAL_DELAYS[index];
         this.state = State.INITIAL_DELAY;
+        this.initRoutinePending = true;
+    }
+
+    private ShellcrackerClawInstance() {
+        this(new ObjectSpawn(0, 0, 0, 0, 0, false, 0), null, 0, 0, 0, false);
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        ObjectSpawn spawn = ctx.spawn();
+        ShellcrackerBadnikInstance parent = Sonic2BadnikChildRewindLinks.nearestShellcracker(ctx);
+        return parent != null
+                ? new ShellcrackerClawInstance(spawn, parent, spawn.x(), spawn.y(), 0, false)
+                : null;
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
+        if (initRoutinePending) {
+            // ROM ObjA0_Init performs setup and ends at JmpTo39_MarkObjGone
+            // (s2.asm:75123-75142). Same-frame spawned child slots therefore do
+            // not enter loc_381AC active logic until the next ExecuteObjects pass.
+            initRoutinePending = false;
+            return;
+        }
         // ROM: loc_381AC checks parent alive before processing sub-states
         if (state != State.FALLING && !checkParentAlive()) {
             // Parent died - now in FALLING state, process it
@@ -124,6 +156,11 @@ public class ShellcrackerClawInstance extends AbstractObjectInstance {
             case RETRACTING -> updateRetracting();
             case FALLING -> updateFalling();
         }
+        // ROM ObjA0 paths end in JmpTo39_MarkObjGone (off-screen despawn by spawn-X
+        // windowing, s2.asm:75138). Dynamic child objects are culled centrally by
+        // ObjectManager.Placement off-screen windowing, so no per-object despawn is
+        // added here. The claw also self-deletes in every state path (retract done,
+        // fall-timer expiry), so it cannot leak even outside the cull window.
     }
 
     /**
@@ -241,6 +278,22 @@ public class ShellcrackerClawInstance extends AbstractObjectInstance {
             return false;
         }
         return true;
+    }
+
+    @Override
+    public int getCollisionFlags() {
+        // HURT category (0x80) + size index ($1A) → $9A (ObjA0_SubObjData, s2.asm:75308)
+        return 0x80 | (COLLISION_SIZE_INDEX & 0x3F);
+    }
+
+    @Override
+    public int getCollisionProperty() {
+        return 0;
+    }
+
+    @Override
+    public ObjectSpawn getSpawn() {
+        return buildSpawnAt(currentX, currentY);
     }
 
     @Override

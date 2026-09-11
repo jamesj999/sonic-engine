@@ -4,16 +4,14 @@ import com.openggf.game.GameServices;
 import com.openggf.level.LevelManager;
 import com.openggf.level.objects.ObjectManager;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Regression test for GHZ3 bridge terrain collision.
@@ -25,9 +23,6 @@ import static org.junit.Assert.assertTrue;
  */
 @RequiresRom(SonicGame.SONIC_1)
 public class TestS1Ghz3BridgeTerrainCollision {
-
-    @ClassRule public static RequiresRomRule romRule = new RequiresRomRule();
-
     private static final int ZONE_GHZ = 0;
     private static final int ACT_3 = 2;
 
@@ -44,17 +39,17 @@ public class TestS1Ghz3BridgeTerrainCollision {
     private static SharedLevel sharedLevel;
     private HeadlessTestFixture fixture;
 
-    @BeforeClass
+    @BeforeAll
     public static void loadLevel() throws Exception {
         sharedLevel = SharedLevel.load(SonicGame.SONIC_1, ZONE_GHZ, ACT_3);
     }
 
-    @AfterClass
+    @AfterAll
     public static void cleanup() {
         if (sharedLevel != null) sharedLevel.dispose();
     }
 
-    @Before
+    @BeforeEach
     public void setUp() {
         fixture = HeadlessTestFixture.builder()
                 .withSharedLevel(sharedLevel)
@@ -131,14 +126,12 @@ public class TestS1Ghz3BridgeTerrainCollision {
                                     .append(" romRight=").append(spawn.x() + lc * 8 - 8);
                         }
                     }
-                    assertFalse(
-                            "Sonic stuck at x=" + x + " y=" + y + " frame=" + frame
+                    assertFalse(true, "Sonic stuck at x=" + x + " y=" + y + " frame=" + frame
                                     + " gSpeed=" + gSpeed + " xSpeed=" + xSpeed
                                     + " pushing=" + pushing + " onObject=" + onObject
                                     + " air=" + air + " riding=" + riding
                                     + bridgeInfo
-                                    + " — wall collision with terrain beside bridge",
-                            true);
+                                    + " â€” wall collision with terrain beside bridge");
                 }
             } else {
                 stuckCount = 0;
@@ -146,8 +139,9 @@ public class TestS1Ghz3BridgeTerrainCollision {
             lastX = x;
         }
 
-        assertTrue("Sonic should have passed x=" + (PUSH_BUG_X + 20)
-                        + " but reached x=" + fixture.sprite().getCentreX(),
-                passedBridgeArea);
+        assertTrue(passedBridgeArea, "Sonic should have passed x=" + (PUSH_BUG_X + 20)
+                        + " but reached x=" + fixture.sprite().getCentreX());
     }
 }
+
+

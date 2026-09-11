@@ -1,0 +1,19 @@
+{
+  "game": "s1",
+  "trace_type": "credits_demo",
+  "input_source": "rom_ending_demo",
+  "credits_demo_index": 6,
+  "credits_demo_slug": "sbz2_credits_demo",
+  "zone": "sbz",
+  "zone_id": 5,
+  "act": 2,
+  "bk2_frame_offset": 0,
+  "trace_frame_count": 535,
+  "start_x": "0x01B0",
+  "start_y": "0x072C",
+  "recording_date": "2026-04-05",
+  "lua_script_version": "credits-retro-1.4",
+  "csv_version": 4,
+  "rom_checksum": "",
+  "notes": ""
+}

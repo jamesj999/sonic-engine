@@ -9,6 +9,8 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
@@ -42,7 +44,7 @@ import java.util.logging.Logger;
  * </ul>
  */
 public class MCZBridgeObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
 
     private static final Logger LOGGER = Logger.getLogger(MCZBridgeObjectInstance.class.getName());
 
@@ -64,7 +66,7 @@ public class MCZBridgeObjectInstance extends AbstractObjectInstance
     private static final int WIDTH_PIXELS = 0x80;
 
     // State variables
-    private final int switchId;         // ButtonVine trigger ID
+    private int switchId;               // ButtonVine trigger ID
     private int mappingFrame;           // Current display frame (0-4)
     private int animId;                 // 0 = close anim, 1 = open anim
     private int frameIndex;             // Index into current frame array
@@ -92,7 +94,12 @@ public class MCZBridgeObjectInstance extends AbstractObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public MCZBridgeObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new MCZBridgeObjectInstance(ctx.spawn(), getName());
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) {
             return;
@@ -149,6 +156,25 @@ public class MCZBridgeObjectInstance extends AbstractObjectInstance
     @Override
     public boolean isTopSolidOnly() {
         return true;
+    }
+
+    /**
+     * Obj77 calls the generic {@code SolidObject} routine ({@code JmpTo20_SolidObject}
+     * at s2.asm:55824-55829: {@code d1=$4B, d2=8, d3=d2+1=9, d4=x_pos}), NOT
+     * {@code PlatformObject}. A new airborne landing therefore resolves through
+     * {@code SolidObject_Landed} (s2.asm:35582-35621), whose centre is
+     * {@code playerY - distY + 3} (== {@code anchorY - (airHalfHeight + y_radius) - 1});
+     * {@code resolveContactInternal} already produces that value exactly. The
+     * default {@code PlatformObject_ChkYRange} snap
+     * ({@code anchorY - groundHalfHeight - y_radius - 1}, s2.asm:35696-35712) is the
+     * wrong formula here: it uses {@code groundHalfHeight=9} and the post-unroll
+     * standing {@code y_radius=$13}, landing the player one pixel too low
+     * (MCZ trace f1085: 0x056B vs ROM 0x056C). Opt this SolidObject-based gate out
+     * of the platform snap so the SolidObject_Landed result is preserved.
+     */
+    @Override
+    public boolean usesPlatformObjectLandingSnap() {
+        return false;
     }
 
     @Override

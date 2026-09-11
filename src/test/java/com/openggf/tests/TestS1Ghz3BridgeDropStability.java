@@ -4,16 +4,14 @@ import com.openggf.game.GameServices;
 import com.openggf.level.LevelManager;
 import com.openggf.level.objects.ObjectManager;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Regression test for bridge drop stability in GHZ3.
@@ -25,9 +23,6 @@ import static org.junit.Assert.assertTrue;
  */
 @RequiresRom(SonicGame.SONIC_1)
 public class TestS1Ghz3BridgeDropStability {
-
-    @ClassRule public static RequiresRomRule romRule = new RequiresRomRule();
-
     private static final int ZONE_GHZ = 0;
     private static final int ACT_3 = 2;
 
@@ -43,17 +38,17 @@ public class TestS1Ghz3BridgeDropStability {
     private static SharedLevel sharedLevel;
     private HeadlessTestFixture fixture;
 
-    @BeforeClass
+    @BeforeAll
     public static void loadLevel() throws Exception {
         sharedLevel = SharedLevel.load(SonicGame.SONIC_1, ZONE_GHZ, ACT_3);
     }
 
-    @AfterClass
+    @AfterAll
     public static void cleanup() {
         if (sharedLevel != null) sharedLevel.dispose();
     }
 
-    @Before
+    @BeforeEach
     public void setUp() {
         fixture = HeadlessTestFixture.builder()
                 .withSharedLevel(sharedLevel)
@@ -75,10 +70,10 @@ public class TestS1Ghz3BridgeDropStability {
 
         // Sonic should now be on the bridge in ground mode
         boolean landed = !fixture.sprite().getAir() && fixture.sprite().isOnObject();
-        assertTrue("Sonic should have landed on bridge after " + SETTLE_FRAMES
+        assertTrue(landed, "Sonic should have landed on bridge after " + SETTLE_FRAMES
                 + " frames, air=" + fixture.sprite().getAir()
                 + " onObject=" + fixture.sprite().isOnObject()
-                + " y=" + fixture.sprite().getCentreY(), landed);
+                + " y=" + fixture.sprite().getCentreY());
 
         // Track air/ground oscillation over the stability window
         int airFrames = 0;
@@ -103,14 +98,14 @@ public class TestS1Ghz3BridgeDropStability {
 
         // Sonic should remain stably on the bridge with no air/ground oscillation.
         // A transition count > 1 indicates the landing/riding positions are mismatched.
-        assertFalse("Sonic oscillated between air/ground " + transitions + " times over "
+        assertFalse(transitions > 1, "Sonic oscillated between air/ground " + transitions + " times over "
                         + STABILITY_FRAMES + " frames (airFrames=" + airFrames
                         + " groundFrames=" + groundFrames
-                        + ") — landing and riding Y positions are mismatched",
-                transitions > 1);
+                        + ") â€” landing and riding Y positions are mismatched");
 
         // Sonic should be in ground contact, not airborne
-        assertFalse("Sonic should not be airborne while standing on bridge",
-                fixture.sprite().getAir());
+        assertFalse(fixture.sprite().getAir(), "Sonic should not be airborne while standing on bridge");
     }
 }
+
+

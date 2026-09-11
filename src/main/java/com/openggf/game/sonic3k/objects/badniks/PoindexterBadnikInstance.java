@@ -3,6 +3,7 @@ package com.openggf.game.sonic3k.objects.badniks;
 import com.openggf.game.PlayableEntity;
 import com.openggf.game.sonic3k.Sonic3kObjectArtKeys;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.physics.SwingMotion;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -28,7 +29,7 @@ import com.openggf.sprites.playable.AbstractPlayableSprite;
  * {@code $0A} (ENEMY, size $0A) when retracted — player can defeat by attacking.
  * {@code $86} (HURT, size $06) when spikes extended (frame 2) — damages player on contact.
  */
-public final class PoindexterBadnikInstance extends AbstractS3kBadnikInstance {
+public final class PoindexterBadnikInstance extends AbstractS3kBadnikInstance implements SpawnRewindRecreatable {
 
     // From disassembly: collision_flags values
     // move.b #$A,collision_flags(a0)          ; default: enemy, size $0A
@@ -38,6 +39,8 @@ public final class PoindexterBadnikInstance extends AbstractS3kBadnikInstance {
 
     // From ObjDat_Poindexter: dc.w $280 (priority)
     private static final int PRIORITY_BUCKET = 5;
+    private static final int RENDER_HALF_SIZE = 0x14;
+    private static final int WAIT_OFFSCREEN_MARGIN = 0x20;
 
     // From disassembly: move.w #-$40,d4 / jsr Set_VelocityXTrackSonic
     private static final int X_SPEED = 0x40;
@@ -67,7 +70,9 @@ public final class PoindexterBadnikInstance extends AbstractS3kBadnikInstance {
     private int animIndex;        // Current index into ANIM_FRAMES/ANIM_DELAYS
     private int animTimer;        // Countdown for current frame's display duration
 
-    private boolean velocityInitialized;
+    private boolean waitingForOnscreen = true;
+    private boolean initialized;
+    private boolean collisionFlagsWritten;
 
     public PoindexterBadnikInstance(ObjectSpawn spawn) {
         super(spawn, "Poindexter",
@@ -83,13 +88,7 @@ public final class PoindexterBadnikInstance extends AbstractS3kBadnikInstance {
         this.waitTimer = subtype * 4;
         this.waitResetValue = subtype * 8;
 
-        // From disassembly: move.w #$20,d0 / move.w d0,y_vel(a0)
-        this.yVelocity = INITIAL_Y_VEL;
-
-        // From disassembly: bclr #0,$38(a0)
-        this.swingDown = false;
-
-        // Animation: anim_frame_timer ($24) starts at 0 from object creation.
+        // Animation: anim_frame_timer ($24) starts at 0 from object setup.
         // On first Animate_RawMultiDelay call, subq makes it negative → immediately
         // advances anim_frame from 0 to 2, reading the SECOND pair (frame 1, delay 4).
         // The first pair (frame 0, $7F) is only used by the $FC loop command.
@@ -99,14 +98,28 @@ public final class PoindexterBadnikInstance extends AbstractS3kBadnikInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
-        if (destroyed) return;
+    protected void updateMovement(int vIntRunCount, PlayableEntity playerEntity) {
+        if (isDestroyed()) return;
 
-        // Deferred init: Set_VelocityXTrackSonic requires player position,
-        // not available during construction (services() not yet injected).
-        if (!velocityInitialized) {
-            initXVelocity((AbstractPlayableSprite) playerEntity);
-            velocityInitialized = true;
+        // Obj_Poindexter starts with Obj_WaitOffscreen. The helper installs a
+        // temporary offscreen object and restores the normal operation pointer
+        // only after Render_Sprites marks it visible; the restored routine runs
+        // on the following object tick.
+        if (waitingForOnscreen) {
+            if (!isWithinRenderSpriteBounds(WAIT_OFFSCREEN_MARGIN, WAIT_OFFSCREEN_MARGIN)) {
+                updateDynamicSpawn(currentX, currentY);
+                return;
+            }
+            waitingForOnscreen = false;
+            updateDynamicSpawn(currentX, currentY);
+            return;
+        }
+
+        if (!initialized) {
+            initializeRomSetupState((AbstractPlayableSprite) playerEntity);
+            initialized = true;
+            updateDynamicSpawn(currentX, currentY);
+            return;
         }
 
         // From disassembly routine 2 execution order:
@@ -126,6 +139,15 @@ public final class PoindexterBadnikInstance extends AbstractS3kBadnikInstance {
 
         // Obj_Wait: patrol timer → direction reversal callback
         updateWaitTimer();
+
+        // loc_882E6 writes collision_flags after movement/animation/wait.
+        collisionFlagsWritten = true;
+    }
+
+    private void initializeRomSetupState(AbstractPlayableSprite player) {
+        initXVelocity(player);
+        yVelocity = INITIAL_Y_VEL;
+        swingDown = false;
     }
 
     /**
@@ -219,9 +241,34 @@ public final class PoindexterBadnikInstance extends AbstractS3kBadnikInstance {
      */
     @Override
     public int getCollisionFlags() {
+        if (waitingForOnscreen || !initialized || !collisionFlagsWritten) {
+            return 0;
+        }
         if (mappingFrame == SPIKES_FRAME) {
             return COLLISION_FLAGS_HURT;
         }
         return COLLISION_FLAGS_NORMAL;
+    }
+
+    @Override
+    public int getOnScreenHalfWidth() {
+        return RENDER_HALF_SIZE;
+    }
+
+    @Override
+    public int getOnScreenHalfHeight() {
+        return RENDER_HALF_SIZE;
+    }
+
+    int getXVelocityForTest() {
+        return xVelocity;
+    }
+
+    boolean isWaitingForOnscreenForTest() {
+        return waitingForOnscreen;
+    }
+
+    boolean isInitializedForTest() {
+        return initialized;
     }
 }

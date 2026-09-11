@@ -3,6 +3,7 @@ package com.openggf.game.sonic2.events;
 import com.openggf.game.sonic2.audio.Sonic2Music;
 import com.openggf.game.GameServices;
 import com.openggf.game.sonic2.constants.Sonic2ObjectIds;
+import com.openggf.game.sonic2.constants.Sonic2Constants;
 import com.openggf.game.sonic2.objects.bosses.Sonic2CPZBossInstance;
 import com.openggf.level.WaterSystem;
 import com.openggf.level.objects.ObjectSpawn;
@@ -30,6 +31,7 @@ public class Sonic2CPZEvents extends Sonic2ZoneEvents {
 
     @Override
     public void update(int act, int frameCounter) {
+        retryPendingPlc();
         if (act != 1) {
             // Only Act 2 has water rise events
             return;
@@ -38,15 +40,18 @@ public class Sonic2CPZEvents extends Sonic2ZoneEvents {
         updateCPZBossEvents();
     }
 
+    public boolean isCpzWaterTriggered()       { return cpzWaterTriggered; }
+    public void setCpzWaterTriggered(boolean v){ cpzWaterTriggered = v; }
+
     private void updateCPZWaterRise() {
         if (cpzWaterTriggered) {
             return;
         }
         final int ZONE_ID_CPZ_ROM = 0x0D;
         final int WATER_RISE_TRIGGER_X = 0x1E80;
-        final int WATER_TARGET_Y = 0x508;
+        final int WATER_TARGET_Y = 0x510;
         var player = camera().getFocusedSprite();
-        if (player != null && player.getX() >= WATER_RISE_TRIGGER_X) {
+        if (player != null && player.getCentreX() >= WATER_RISE_TRIGGER_X) {
             waterSystem().setWaterLevelTarget(
                     ZONE_ID_CPZ_ROM, 1, WATER_TARGET_Y);
             cpzWaterTriggered = true;
@@ -73,6 +78,7 @@ public class Sonic2CPZEvents extends Sonic2ZoneEvents {
                     bossSpawnDelay = 0;
                     audio().fadeOutMusic();
                     gameState().setCurrentBossId(1);
+                    requestSonic2Plc(Sonic2Constants.PLC_CPZ_BOSS);
                 }
             }
             case 4 -> {

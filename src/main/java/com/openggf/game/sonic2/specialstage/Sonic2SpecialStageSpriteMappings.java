@@ -64,11 +64,9 @@ public final class Sonic2SpecialStageSpriteMappings {
     // Art section offsets - each animation type has its own section in the art data
     // From s2.asm: SSPlayer_DPLCPtrs
     // The DPLC source offsets are RELATIVE to each section's start
-    private static final int ART_OFFSET_UPRIGHT = 0x00;     // tiles_to_bytes($000) - 0x58 tiles
     private static final int ART_OFFSET_DIAGONAL = 0x58;    // tiles_to_bytes($058) - 0xCC tiles
     private static final int ART_OFFSET_HORIZONTAL = 0x124; // tiles_to_bytes($124) - 0x4D tiles
     private static final int ART_OFFSET_BALL = 0x171;       // tiles_to_bytes($171) - 0x12 tiles
-
     /**
      * Sonic special stage sprite mappings.
      * 18 frames total, ported from obj09.asm with tile indices converted using DPLC data.
@@ -329,6 +327,136 @@ public final class Sonic2SpecialStageSpriteMappings {
             p( 0x00,  0x0C, 2, 1, ART_OFFSET_BALL + 0x08, 1, 0)
         )
     };
+
+    public static final int TAILS_UPRIGHT_ART_BASE = 0x183;
+    public static final int TAILS_DIAGONAL_ART_BASE = 0x1C0;
+    public static final int TAILS_HORIZONTAL_ART_BASE = 0x264;
+    public static final int TAILS_BALL_ART_BASE = 0x29E;
+    public static final int TAILS_TAILS_UPRIGHT_ART_BASE = 0x2AE;
+    public static final int TAILS_TAILS_DIAGONAL_ART_BASE = 0x2E3;
+    public static final int TAILS_TAILS_HORIZONTAL_ART_BASE = 0x31E;
+
+    private static final int[] TAILS_ART_BASES = {
+        TAILS_UPRIGHT_ART_BASE, TAILS_UPRIGHT_ART_BASE, TAILS_UPRIGHT_ART_BASE, TAILS_UPRIGHT_ART_BASE,
+        TAILS_DIAGONAL_ART_BASE, TAILS_DIAGONAL_ART_BASE, TAILS_DIAGONAL_ART_BASE, TAILS_DIAGONAL_ART_BASE,
+        TAILS_DIAGONAL_ART_BASE, TAILS_DIAGONAL_ART_BASE, TAILS_DIAGONAL_ART_BASE, TAILS_DIAGONAL_ART_BASE,
+        TAILS_HORIZONTAL_ART_BASE, TAILS_HORIZONTAL_ART_BASE, TAILS_HORIZONTAL_ART_BASE, TAILS_HORIZONTAL_ART_BASE,
+        TAILS_BALL_ART_BASE, TAILS_BALL_ART_BASE
+    };
+
+    // Obj09_MapRUnc_345FA records mappingFrame + $12 (Obj10).
+    private static final int[][][] TAILS_DPLC = {
+        {{9,0},{6,9},{1,0xF}}, {{4,0x10},{6,0x14},{4,0x1A},{4,0x1E}},
+        {{4,0x22},{6,0x26},{4,0x2C},{4,0x30}}, {{4,0x10},{6,0x14},{4,0x34},{4,0x38},{1,0x3C}},
+        {{4,0},{8,4},{8,0xC}}, {{2,0x14},{8,0x16},{9,0x1E},{2,0x27}},
+        {{1,0x29},{3,0x2A},{8,0x2D},{1,0x35},{6,0x36}}, {{1,0x3C},{16,0x3D},{1,0x4D},{2,0x4E}},
+        {{4,0x50},{4,0x54},{8,0x58},{6,0x60}}, {{1,0x66},{8,0x67},{1,0x6F},{8,0x70},{2,0x78}},
+        {{1,0x7A},{12,0x7B},{1,0x87},{4,0x88},{2,0x8C}}, {{1,0x8E},{12,0x8F},{1,0x9B},{8,0x9C}},
+        {{9,0},{8,9}}, {{4,0x11},{1,0x15},{12,0x16}}, {{2,0x22},{16,0x24}},
+        {{3,0x34},{3,0x37},{12,0x16}}, {{8,0}}, {{8,8}}
+    };
+
+    private static final int[] TAILS_TAILS_SOURCES = {
+        0,6,0xF,0x15,0x1B,0x23,0x2C, 0,9,0xF,0x15,0x1D,0x29,0x32,
+        0,6,0xF,0x15,0x1B,0x23,0x2C
+    };
+    private static final int[] TAILS_TAILS_RUN_LENGTHS = {
+        6,9,6,6,8,9,9, 9,6,6,8,12,9,9, 6,9,6,6,8,9,9
+    };
+
+    public static int getTailsArtBase(int mappingFrame) {
+        if (mappingFrame < 0 || mappingFrame >= TAILS_ART_BASES.length) {
+            throw new IllegalArgumentException("Invalid Obj10 mapping frame: " + mappingFrame);
+        }
+        return TAILS_ART_BASES[mappingFrame];
+    }
+
+    public static int getTailsTailsArtBase(int mappingFrame) {
+        if (mappingFrame < 0 || mappingFrame >= TAILS_TAILS_SOURCES.length) {
+            throw new IllegalArgumentException("Invalid Obj88 mapping frame: " + mappingFrame);
+        }
+        return mappingFrame < 7 ? TAILS_TAILS_UPRIGHT_ART_BASE
+                : mappingFrame < 14 ? TAILS_TAILS_DIAGONAL_ART_BASE : TAILS_TAILS_HORIZONTAL_ART_BASE;
+    }
+
+    /** Reverse the Obj10 frame's destination VRAM index through its DPLC runs. */
+    public static int translateTailsTileIndex(int mappingFrame, int destinationTile) {
+        if (mappingFrame < 0 || mappingFrame >= TAILS_DPLC.length || destinationTile < 0) {
+            throw new IllegalArgumentException("Invalid Obj10 frame or destination tile");
+        }
+        int destinationStart = 0;
+        for (int[] run : TAILS_DPLC[mappingFrame]) {
+            if (destinationTile < destinationStart + run[0]) {
+                return getTailsArtBase(mappingFrame) + run[1] + destinationTile - destinationStart;
+            }
+            destinationStart += run[0];
+        }
+        throw new IllegalArgumentException("Destination tile is outside frame DPLC: " + destinationTile);
+    }
+
+    /** Reverse the compact Obj88 record at mappingFrame + $24. */
+    public static int translateTailsTailsTileIndex(int mappingFrame, int destinationTile) {
+        if (mappingFrame < 0 || mappingFrame >= TAILS_TAILS_SOURCES.length
+                || destinationTile < 0 || destinationTile >= TAILS_TAILS_RUN_LENGTHS[mappingFrame]) {
+            throw new IllegalArgumentException("Invalid Obj88 frame or destination tile");
+        }
+        int base = getTailsTailsArtBase(mappingFrame);
+        return base + TAILS_TAILS_SOURCES[mappingFrame] + destinationTile;
+    }
+
+    private static SpriteFrame tailsFrame(int frame, int[]... pieces) {
+        SpritePiece[] result = new SpritePiece[pieces.length];
+        for (int i = 0; i < pieces.length; i++) {
+            int[] v = pieces[i];
+            result[i] = p(v[0], v[1], v[2], v[3], translateTailsTileIndex(frame, v[4]), v[5], 0);
+        }
+        return new SpriteFrame(result);
+    }
+
+    private static SpriteFrame tailsTailsFrame(int frame, int x, int y, int w, int h) {
+        return new SpriteFrame(p(x, y, w, h, translateTailsTailsTileIndex(frame, 0), 0, 0));
+    }
+
+    /** Obj10_MapUnc_34B3E, with destination indices reverse-translated per frame. */
+    public static final SpriteFrame[] TAILS_FRAMES = {
+        tailsFrame(0,new int[]{-12,-24,3,3,0,0},new int[]{-12,0,3,2,9,0},new int[]{-12,16,1,1,15,0}),
+        tailsFrame(1,new int[]{-16,-24,4,1,0,0},new int[]{-13,-16,3,2,4,0},new int[]{-16,0,4,1,10,0},new int[]{-8,8,2,2,14,0}),
+        tailsFrame(2,new int[]{-16,-24,4,1,0,0},new int[]{-13,-16,3,2,4,0},new int[]{-16,0,4,1,10,0},new int[]{-8,8,2,2,14,0}),
+        tailsFrame(3,new int[]{-16,-24,4,1,0,1},new int[]{-11,-16,3,2,4,1},new int[]{-16,0,4,1,10,0},new int[]{-8,8,2,2,14,0},new int[]{8,16,1,1,18,0}),
+        tailsFrame(4,new int[]{0,-31,2,2,0,0},new int[]{-8,-15,4,2,4,0},new int[]{-20,1,4,2,12,0}),
+        tailsFrame(5,new int[]{0,-31,1,2,0,0},new int[]{-9,-15,4,2,2,0},new int[]{-17,1,3,3,10,0},new int[]{7,1,1,2,19,0}),
+        tailsFrame(6,new int[]{0,-24,1,1,0,0},new int[]{-8,-20,3,1,1,0},new int[]{-16,-12,4,2,4,0},new int[]{16,-12,1,1,12,0},new int[]{-16,4,3,2,13,0}),
+        tailsFrame(7,new int[]{1,-23,1,1,0,0},new int[]{-16,-15,4,4,1,0},new int[]{16,-7,1,1,17,0},new int[]{-16,17,2,1,18,0}),
+        tailsFrame(8,new int[]{0,-30,2,2,0,0},new int[]{-8,-14,4,1,4,0},new int[]{-16,-6,2,4,8,0},new int[]{0,-6,3,2,16,0}),
+        tailsFrame(9,new int[]{0,-24,1,1,0,0},new int[]{-16,-16,4,2,1,0},new int[]{16,-8,1,1,9,0},new int[]{-16,0,4,2,10,0},new int[]{-16,16,2,1,18,0}),
+        tailsFrame(10,new int[]{0,-24,1,1,0,0},new int[]{-16,-16,4,3,1,0},new int[]{16,-8,1,1,13,0},new int[]{-24,8,4,1,14,0},new int[]{-16,16,2,1,18,0}),
+        tailsFrame(11,new int[]{0,-24,1,1,0,0},new int[]{-16,-16,4,3,1,0},new int[]{16,-8,1,1,13,0},new int[]{-24,8,4,2,14,0}),
+        tailsFrame(12,new int[]{-20,-8,3,3,0,0},new int[]{4,-16,2,4,9,0}),
+        tailsFrame(13,new int[]{-20,-8,2,2,0,0},new int[]{-12,8,1,1,4,0},new int[]{-4,-16,3,4,5,0}),
+        tailsFrame(14,new int[]{-20,-9,1,2,0,0},new int[]{-12,-16,4,4,2,0}),
+        tailsFrame(15,new int[]{-20,-8,1,3,0,0},new int[]{-12,-16,1,3,3,0},new int[]{-4,-16,3,4,6,0}),
+        tailsFrame(16,new int[]{-16,-16,2,4,0,0},new int[]{0,-16,2,4,0,1}),
+        tailsFrame(17,new int[]{-16,-16,2,4,0,0},new int[]{0,-16,2,4,0,1})
+    };
+
+    /** Obj88_MapUnc_34DA8. */
+    public static final SpriteFrame[] TAILS_TAILS_FRAMES = {
+        tailsTailsFrame(0,-6,-6,2,3), tailsTailsFrame(1,-8,0,3,3), tailsTailsFrame(2,-8,8,3,2),
+        tailsTailsFrame(3,-9,-1,2,3), tailsTailsFrame(4,-11,-9,2,4), tailsTailsFrame(5,-16,-9,3,3),
+        tailsTailsFrame(6,-16,-9,3,3), tailsTailsFrame(7,-12,0,3,3), tailsTailsFrame(8,-13,8,3,2),
+        tailsTailsFrame(9,-15,0,2,3), tailsTailsFrame(10,-12,-8,2,4), tailsTailsFrame(11,-14,-8,3,4),
+        tailsTailsFrame(12,-13,-8,3,3), tailsTailsFrame(13,-12,-8,3,3), tailsTailsFrame(14,-22,-4,3,2),
+        tailsTailsFrame(15,-19,-8,3,3), tailsTailsFrame(16,-19,-8,2,3), tailsTailsFrame(17,-19,-9,3,2),
+        tailsTailsFrame(18,-27,-11,4,2), tailsTailsFrame(19,-19,-16,3,3), tailsTailsFrame(20,-19,-16,3,3)
+    };
+
+    public static SpriteFrame getTailsFrame(int frameIndex) {
+        return frameIndex >= 0 && frameIndex < TAILS_FRAMES.length ? TAILS_FRAMES[frameIndex] : TAILS_FRAMES[0];
+    }
+
+    public static SpriteFrame getTailsTailsFrame(int frameIndex) {
+        return frameIndex >= 0 && frameIndex < TAILS_TAILS_FRAMES.length ? TAILS_TAILS_FRAMES[frameIndex] : TAILS_TAILS_FRAMES[0];
+    }
 
     /**
      * Get the sprite frame for a given mapping frame index.

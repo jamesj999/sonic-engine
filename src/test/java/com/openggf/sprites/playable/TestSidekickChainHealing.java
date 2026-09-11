@@ -73,6 +73,26 @@ class TestSidekickChainHealing {
     }
 
     @Test
+    void normalMiddleStopsChainWalkBeforeSettledThreshold() {
+        TestableSprite main = new TestableSprite("sonic");
+        TestableSprite sk1 = new TestableSprite("tails_p2");
+        TestableSprite sk2 = new TestableSprite("knux_p3");
+        sk1.setCpuControlled(true);
+        sk2.setCpuControlled(true);
+
+        SidekickCpuController ctrl1 = new SidekickCpuController(sk1, main);
+        SidekickCpuController ctrl2 = new SidekickCpuController(sk2, sk1);
+        sk1.setCpuController(ctrl1);
+        sk2.setCpuController(ctrl2);
+
+        ctrl1.forceStateForTest(SidekickCpuController.State.NORMAL, 0);
+
+        assertFalse(ctrl1.isSettled(), "Precondition: direct leader has not crossed the settled threshold");
+        assertSame(sk1, ctrl2.getEffectiveLeader(),
+            "A direct CPU leader in NORMAL should be usable immediately; settled only gates chain healing");
+    }
+
+    @Test
     void nullLeaderReturnsNull() {
         TestableSprite sk1 = new TestableSprite("tails_p2");
         sk1.setCpuControlled(true);
@@ -83,3 +103,4 @@ class TestSidekickChainHealing {
             "Null leader should return null (level transition case)");
     }
 }
+

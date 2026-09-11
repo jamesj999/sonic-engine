@@ -8,6 +8,7 @@ import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 import com.openggf.game.PlayableEntity;
@@ -37,7 +38,7 @@ import java.util.List;
  * Reference: docs/s1disasm/_incObj/44 GHZ Edge Walls.asm
  */
 public class Sonic1EdgeWallObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SpawnRewindRecreatable, SolidObjectProvider, SolidObjectListener {
 
     // From disassembly: move.w #$13,d1
     private static final int HALF_WIDTH = 0x13;
@@ -45,8 +46,8 @@ public class Sonic1EdgeWallObjectInstance extends AbstractObjectInstance
     // From disassembly: move.w #$28,d2
     private static final int HALF_HEIGHT = 0x28;
 
-    private final int frameIndex;
-    private final boolean solid;
+    private int frameIndex;
+    private boolean solid;
 
     public Sonic1EdgeWallObjectInstance(ObjectSpawn spawn) {
         super(spawn, "EdgeWall");
@@ -67,7 +68,7 @@ public class Sonic1EdgeWallObjectInstance extends AbstractObjectInstance
 
     @Override
     public SolidObjectParams getSolidParams() {
-        return new SolidObjectParams(HALF_WIDTH, HALF_HEIGHT, HALF_HEIGHT);
+        return SolidObjectParams.of(HALF_WIDTH, HALF_HEIGHT, HALF_HEIGHT);
     }
 
     @Override

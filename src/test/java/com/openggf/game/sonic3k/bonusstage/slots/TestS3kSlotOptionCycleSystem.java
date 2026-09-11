@@ -278,6 +278,34 @@ class TestS3kSlotOptionCycleSystem {
         assertArrayEquals(lastLockedFaces, resolvedFaces);
     }
 
+    // ROM sonic3k.asm:99684-99686 (loc_4C480): move.b (V_int_run_count+3).w,d0 /
+    // rol.b #4,d0 / andi.b #7,d0 -- an 8-bit ROTATE of the low byte. Commit
+    // 683c84993 fixed reel1Offset from Integer.rotateLeft (a 32-bit rotate
+    // that never wraps a set low bit back into bits 0-2 after a left-shift
+    // of 4, so the andi.b #7,d0 mask always read 0 and reel1Offset was a
+    // frame-invariant 0x2C) to an 8-bit rotateRight8 helper that reproduces
+    // rol.b #4,d0 exactly. Pin both claims here so a regression to the wide
+    // rotate is caught even if it doesn't move the trace frontier.
+    @Test
+    void pickTargetsReel1OffsetVariesWithFrameCounterInsteadOfBeingFrameInvariant() {
+        S3kSlotOptionCycleSystem system = new S3kSlotOptionCycleSystem();
+        GameRng rng = new GameRng(GameRng.Flavour.S3K);
+
+        S3kSlotStageState frame0 = S3kSlotStageState.bootstrap();
+        frame0.setOptionCycleState(0x08);
+        system.tick(frame0, 0x0000, rng);
+        assertEquals(0x2C, frame0.optionCycleReelVelocities()[1],
+                "frameCounter=0x0000 is the one input where the old and new formulas coincide");
+
+        S3kSlotStageState frameFF = S3kSlotStageState.bootstrap();
+        frameFF.setOptionCycleState(0x08);
+        system.tick(frameFF, 0x00FF, rng);
+        assertEquals(0x33, frameFF.optionCycleReelVelocities()[1],
+                "rotateRight8(0xFF, 4) & 7 == 7, giving reel1Offset (7-4+0x30)&0xFF == 0x33");
+        assertNotEquals(0x2C, frameFF.optionCycleReelVelocities()[1],
+                "the pre-fix Integer.rotateLeft path always produced the frame-invariant 0x2C here");
+    }
+
     private static Object readField(S3kSlotStageState state, String fieldName) throws Exception {
         Field field = S3kSlotStageState.class.getDeclaredField(fieldName);
         field.setAccessible(true);
@@ -288,3 +316,5 @@ class TestS3kSlotOptionCycleSystem {
         return (int) readField(state, fieldName);
     }
 }
+
+

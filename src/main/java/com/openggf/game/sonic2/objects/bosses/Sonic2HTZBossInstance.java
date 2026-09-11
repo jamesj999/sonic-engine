@@ -5,8 +5,12 @@ import com.openggf.game.sonic2.Sonic2ObjectArtKeys;
 import com.openggf.game.PlayableEntity;
 import com.openggf.game.sonic2.audio.Sonic2Music;
 import com.openggf.game.sonic2.audio.Sonic2Sfx;
+import com.openggf.game.sonic2.constants.Sonic2Constants;
+import com.openggf.game.sonic2.resources.Sonic2PlcRequests;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.boss.AbstractBossInstance;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.TrigLookupTable;
@@ -30,7 +34,7 @@ import java.util.List;
  * - SUB6: Descending and spawning lava balls
  * - SUB8: Defeated (explosion sequence)
  */
-public class Sonic2HTZBossInstance extends AbstractBossInstance {
+public class Sonic2HTZBossInstance extends AbstractBossInstance implements RewindRecreatable {
 
     // State machine constants (ROM: boss_routine values)
     private static final int SUB0_RISING = 0x00;
@@ -101,7 +105,7 @@ public class Sonic2HTZBossInstance extends AbstractBossInstance {
     private int actionTimer;
     private int defeatTimer;
     private int sineCounter;
-    private int currentFrameCounter;
+    private int currentVIntRunCount;
     private boolean defeatFleeStarted;
 
     // Child sprite state for eye animation (ROM: sub2_* fields, Boss_AnimationArray)
@@ -115,6 +119,11 @@ public class Sonic2HTZBossInstance extends AbstractBossInstance {
 
     public Sonic2HTZBossInstance(ObjectSpawn spawn) {
         super(spawn, "HTZ Boss");
+    }
+
+    @Override
+    public Sonic2HTZBossInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new Sonic2HTZBossInstance(ctx.spawn());
     }
 
     @Override
@@ -156,9 +165,9 @@ public class Sonic2HTZBossInstance extends AbstractBossInstance {
     }
 
     @Override
-    protected void updateBossLogic(int frameCounter, PlayableEntity playerEntity) {
+    protected void updateBossLogic(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        currentFrameCounter = frameCounter;
+        currentVIntRunCount = vIntRunCount;
 
         // Update eye animation (ROM: Boss_AnimationArray cycles frames 2,3 with delay 6)
         // ROM: s2.asm:63671-63676 - Boss_AnimationArray setup
@@ -349,17 +358,24 @@ public class Sonic2HTZBossInstance extends AbstractBossInstance {
 
         // Smoke phase (defeatTimer < 0)
         // ROM: Spawn smoke every 32 frames
-        if ((currentFrameCounter & 0x1F) == 0) {
+        if ((currentVIntRunCount & 0x1F) == 0) {
             spawnDefeatSmoke();
         }
 
         // Check if time to flee
         // ROM: cmpi.w #-$3C,(Boss_Countdown).w
         if (defeatTimer <= DEFEAT_FLEE_TIME) {
-            // ROM: Boss_defeated_flag is set once when flee starts.
+            // ROM: Obj52_Mobile_Flee (docs/s2disasm/s2.asm:64598-64606) plays the level
+            // music, queues the animal/explosion PLC and sets Boss_defeated_flag, then
+            // falls straight through to loc_30170 (s2.asm:64608-64612) in the SAME frame.
+            // No staging here: the previously observed one-frame handoff skew came from
+            // the missing routine-read-once defeat deferral, now modelled by
+            // defeatDeferralAppliesToThisBoss().
             if (!defeatFleeStarted) {
+                if (!Sonic2PlcRequests.append(services(), Sonic2Constants.PLC_ANIMALS_HTZ_MTZ_WFZ,
+                        Sonic2Constants.PLC_EXPLOSION)) return;
                 defeatFleeStarted = true;
-                services().gameState().setCurrentBossId(0);
+                services().gameState().setBossDefeatedFlag(true);
                 services().playMusic(Sonic2Music.HILL_TOP.id);
             }
 
@@ -382,6 +398,16 @@ public class Sonic2HTZBossInstance extends AbstractBossInstance {
             }
 
             camera.setMaxX((short) 0x3160);
+            // ROM: Current_Boss_ID is NEVER cleared in Sonic 2. It is written only by
+            // the boss-arena setup routines (`move.b #N,(Current_Boss_ID).w`, ids 1-9)
+            // and read by `tst.b`; docs/s2disasm/s2.asm contains no `clr.b` or
+            // `move.b #0` for it, so it resets only via the level-load RAM clear and
+            // persists to the end of the act. Sonic_Boundary's right-hand test widens
+            // the side boundary by $40 only when it is zero (s2.asm:37243-37251), so
+            // clearing it here let the character run 64px past the ROM's clamp.
+            // Contrast S1, which DOES clear at the Egg Prison
+            // (s1disasm/_incObj/3E Prison Capsule.asm:97), and S3K, which clears
+            // Boss_flag at 31 sites. S2 is the exception.
             setDestroyed(true);
         }
     }
@@ -474,15 +500,14 @@ public class Sonic2HTZBossInstance extends AbstractBossInstance {
 
         boolean flipped = (getCustomFlag(OBJOFF_SIDE_FLAG) == 0); // Left side = flipped
 
-        HTZBossFlamethrower flamethrower = new HTZBossFlamethrower(
+        HTZBossFlamethrower flamethrower = spawnChild(() -> new HTZBossFlamethrower(
                 this,
                 state.x,
                 state.y - 0x1C,  // ROM: subi.w #$1C,y_pos(a1)
                 flipped
-        );
+        ));
 
         childComponents.add(flamethrower);
-        services().objectManager().addDynamicObject(flamethrower);
     }
 
     /**
@@ -494,29 +519,12 @@ public class Sonic2HTZBossInstance extends AbstractBossInstance {
             return;
         }
 
-        boolean leftSide = (getCustomFlag(OBJOFF_SIDE_FLAG) == 0);
-
-        // Spawn left ball
-        HTZBossLavaBall leftBall = new HTZBossLavaBall(
-                this,
-                state.x,
-                state.y,
-                true,  // Left ball
-                leftSide
-        );
-        childComponents.add(leftBall);
-        services().objectManager().addDynamicObject(leftBall);
-
-        // Spawn right ball
-        HTZBossLavaBall rightBall = new HTZBossLavaBall(
-                this,
-                state.x,
-                state.y,
-                false, // Right ball
-                leftSide
-        );
-        childComponents.add(rightBall);
-        services().objectManager().addDynamicObject(rightBall);
+        // ROM Obj52_CreateLavaBall allocates one subtype-6 child. That child
+        // runs loc_2FF78 in its own slot, initializes itself as ball 0, then
+        // allocates ball 1 from the same starting coordinates.
+        HTZBossLavaBall firstBall = spawnFreeChild(() ->
+                HTZBossLavaBall.createInitialPairSpawner(this, state.x, state.y));
+        childComponents.add(firstBall);
     }
 
     /**
@@ -528,12 +536,10 @@ public class Sonic2HTZBossInstance extends AbstractBossInstance {
             return;
         }
 
-        HTZBossSmokeParticle smoke = new HTZBossSmokeParticle(
+        spawnFreeChild(() -> new HTZBossSmokeParticle(
                 state.x,
                 state.y - 0x28
-        );
-
-        services().objectManager().addDynamicObject(smoke);
+        ));
     }
 
     // Note: The ROM does NOT spawn an EggPrison from the HTZ boss code.
@@ -562,7 +568,22 @@ public class Sonic2HTZBossInstance extends AbstractBossInstance {
     }
 
     @Override
+    protected boolean defeatDeferralAppliesToThisBoss() {
+        // Obj52_Mobile reads boss_routine(a0) ONCE at the top of the object's update and
+        // jumps through off_2FD0E (docs/s2disasm/s2.asm:64194-64206). The hit handler
+        // loc_300A4 runs from inside the already-selected routine
+        // (docs/s2disasm/s2.asm:64528-64533), and Obj52_Defeat sets Boss_Countdown=$B3 /
+        // boss_routine=8 and returns (docs/s2disasm/s2.asm:64559-64566) — so
+        // Obj52_Mobile_Defeated's first `subi_.w #1,(Boss_Countdown).w`
+        // (docs/s2disasm/s2.asm:64570-64572) lands on the NEXT frame. The engine runs
+        // touch responses before this object's own update(), so defer the first defeat
+        // dispatch by one frame to restore that offset.
+        return true;
+    }
+
+    @Override
     protected void onDefeatStarted() {
+        if (!isDefeatEntryPrepared() && !Sonic2PlcRequests.append(services(), Sonic2Constants.PLC_CAPSULE)) return;
         // ROM: s2.asm:64036-64043
         // Initialize defeat timer
         defeatTimer = DEFEAT_TIMER_START;
@@ -570,6 +591,11 @@ public class Sonic2HTZBossInstance extends AbstractBossInstance {
 
         // Transition to defeated state
         state.routineSecondary = SUB8_DEFEATED;
+    }
+
+    @Override
+    protected boolean prepareDefeatEntry() {
+        return Sonic2PlcRequests.append(services(), Sonic2Constants.PLC_CAPSULE);
     }
 
     // Note: getCollisionFlags() is inherited from AbstractBossInstance which
@@ -581,6 +607,16 @@ public class Sonic2HTZBossInstance extends AbstractBossInstance {
     @Override
     public int getPriorityBucket() {
         return 4;  // ROM: move.b #4,priority(a0)
+    }
+
+    @Override
+    public boolean isPersistent() {
+        // Obj52's defeated flee routine is the owner of the post-boss camera
+        // expansion: it increments Camera_Max_X_pos until $3160, then deletes
+        // itself (docs/s2disasm/s2.asm:64084-64112). The generic object-side
+        // out-of-range unload must not retire the event-spawned boss before that
+        // loop completes.
+        return true;
     }
 
     @Override
@@ -627,5 +663,10 @@ public class Sonic2HTZBossInstance extends AbstractBossInstance {
     @Override
     protected int getBossExplosionSfxId() {
         return Sonic2Sfx.BOSS_EXPLOSION.id;
+    }
+
+    @Override
+    protected int getBossExplosionObjectId() {
+        return com.openggf.game.sonic2.constants.Sonic2ObjectIds.BOSS_EXPLOSION;
     }
 }

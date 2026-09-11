@@ -1,9 +1,8 @@
 package com.openggf.tests;
 
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import com.openggf.configuration.SonicConfiguration;
 import com.openggf.configuration.SonicConfigurationService;
 import com.openggf.data.Rom;
@@ -14,10 +13,9 @@ import com.openggf.level.*;
 import com.openggf.level.resources.LoadOp;
 import com.openggf.level.resources.ResourceLoader;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Verifies that the dynamically-calculated terrain swap offsets match
@@ -30,14 +28,10 @@ import static org.junit.Assert.*;
  */
 @RequiresRom(SonicGame.SONIC_3K)
 public class TestAizTerrainSwapAlignment {
-
-    @ClassRule
-    public static RequiresRomRule romRule = new RequiresRomRule();
-
     private static Object oldSkipIntros;
     private static SharedLevel sharedLevel;
 
-    @BeforeClass
+    @BeforeAll
     public static void loadLevel() throws Exception {
         SonicConfigurationService config = SonicConfigurationService.getInstance();
         oldSkipIntros = config.getConfigValue(SonicConfiguration.S3K_SKIP_INTROS);
@@ -45,7 +39,7 @@ public class TestAizTerrainSwapAlignment {
         sharedLevel = SharedLevel.load(SonicGame.SONIC_3K, 0, 0);
     }
 
-    @AfterClass
+    @AfterAll
     public static void cleanup() {
         SonicConfigurationService.getInstance().setConfigValue(
                 SonicConfiguration.S3K_SKIP_INTROS,
@@ -56,8 +50,8 @@ public class TestAizTerrainSwapAlignment {
     /**
      * Verify the terrain swap overlay offsets match the ROM's fixed values.
      * ROM AIZ1_Resize routine uses:
-     * - Pattern VRAM dest: tiles_to_bytes($0BE) → 190 tiles → 6080 bytes
-     * - Block_table dest: Block_table + $268 → 616 bytes
+     * - Pattern VRAM dest: tiles_to_bytes($0BE) â†’ 190 tiles â†’ 6080 bytes
+     * - Block_table dest: Block_table + $268 â†’ 616 bytes
      */
     @Test
     public void overlayOffsetsMatchRomFixedValues() throws Exception {
@@ -74,7 +68,7 @@ public class TestAizTerrainSwapAlignment {
         int patternOffset = primaryArt.length;
         int chunkOffset = primaryBlocks.length;
 
-        int expectedPatternOffset = 0x0BE * 32;  // $0BE tiles × 32 bytes = 6080
+        int expectedPatternOffset = 0x0BE * 32;  // $0BE tiles Ã— 32 bytes = 6080
         int expectedChunkOffset = 0x268;          // Block_table + $268 = 616 bytes
 
         System.out.printf("Primary art size: %d bytes (%d tiles), expected: %d bytes (%d tiles)%n",
@@ -82,10 +76,8 @@ public class TestAizTerrainSwapAlignment {
         System.out.printf("Primary blocks size: %d bytes, expected: %d bytes%n",
                 chunkOffset, expectedChunkOffset);
 
-        assertEquals("Pattern overlay offset (tiles) should match ROM's $0BE",
-                expectedPatternOffset, patternOffset);
-        assertEquals("Chunk overlay offset should match ROM's $268",
-                expectedChunkOffset, chunkOffset);
+        assertEquals(expectedPatternOffset, patternOffset, "Pattern overlay offset (tiles) should match ROM's $0BE");
+        assertEquals(expectedChunkOffset, chunkOffset, "Chunk overlay offset should match ROM's $268");
     }
 
     /**
@@ -190,6 +182,15 @@ public class TestAizTerrainSwapAlignment {
             }
             System.out.printf("  Pattern 0x%03X: nonZero=%d hasPixel15=%b%n", i, nonZeroCount, hasPixel15);
         }
+
+        // characterization upper bound: current red leakage; a fix to 0 still passes,
+        // a regression that increases it fails. Low-priority pal-2 FG tiles in the
+        // tree-canopy gap region currently leak red (pixel index 15) where BG sky
+        // should show; bound it at the observed value so improvements pass and
+        // regressions that increase the leak fail.
+        assertTrue(nonTransparentAtGaps <= 7904,
+                "Red (pixel-15) leakage in low-priority pal-2 FG tiles at canopy gaps must not exceed "
+                        + "the current observed bound (7904); was " + nonTransparentAtGaps);
     }
 
     /**
@@ -264,12 +265,18 @@ public class TestAizTerrainSwapAlignment {
         } else {
             System.out.println("WARNING: Terrain swap may NOT be applied (patterns don't match MainLevel)");
         }
+
+        // Regression guard: at least one overlay-start tile must match the MainLevel
+        // art and differ from entry 0's secondary art, proving the AIZ1 terrain swap
+        // overlay was actually applied during the skip-intro load.
+        assertTrue(anyDifference,
+                "Terrain swap must be applied (overlay-start patterns match MainLevel, not entry 0 secondary)");
     }
 
     /**
      * Check BG tile priorities in the tree area. The diary claims "All AIZ BG tiles are LOW priority"
      * which means the BG-high overlay (Fix #5) renders nothing for AIZ.
-     * On real VDP, BG-high renders ABOVE FG-low — if ANY BG tiles at tree positions are high priority,
+     * On real VDP, BG-high renders ABOVE FG-low â€” if ANY BG tiles at tree positions are high priority,
      * they would hide the FG-low red pixels.
      */
     @Test
@@ -392,6 +399,14 @@ public class TestAizTerrainSwapAlignment {
 
         System.out.printf("FG red low-pri tiles with BG-high coverage: %d, without: %d%n",
                 fgRedWithBgHigh, fgRedWithBgLow);
+
+        // Regression guard for the documented invariant: all AIZ BG tiles in the tree
+        // area are LOW priority, so the BG-high overlay renders nothing for AIZ and no
+        // BG-high tile can cover an FG-low red pixel.
+        assertEquals(0, bgHighCount,
+                "All AIZ BG tiles in the tree area must be low priority (no BG-high overlay for AIZ)");
+        assertEquals(0, fgRedWithBgHigh,
+                "No FG low-priority red tile may be covered by a high-priority BG tile");
     }
 
     /**
@@ -483,6 +498,13 @@ public class TestAizTerrainSwapAlignment {
             }
         }
         System.out.printf("FG refs to trailing tiles with pixel-15: %d%n", trailingRefsWithRed);
+
+        // Regression guard: no FG chunk may reference a trailing (non-overwritten,
+        // entry 0 secondary) tile that still contains red (pixel-15). Such a reference
+        // would render red through the canopy where the terrain swap should have
+        // replaced the art.
+        assertEquals(0, trailingRefsWithRed,
+                "No FG chunk may reference a trailing tile containing red (pixel-15)");
     }
 
     private boolean patternsMatch(Pattern a, Pattern b) {
@@ -496,3 +518,5 @@ public class TestAizTerrainSwapAlignment {
         return true;
     }
 }
+
+

@@ -99,4 +99,17 @@ public class Sonic3kSpecialStageBanner {
     public int getSlideOffset() { return slideOffset; }
     public boolean isVisible() { return phase != Phase.IDLE; }
     public boolean isShowPerfect() { return showPerfect; }
+
+    Sonic3kSpecialStageSnapshot.BannerSnapshot captureRewindSnapshot() {
+        return new Sonic3kSpecialStageSnapshot.BannerSnapshot(
+                phase, slideOffset, displayTimer, triggeredAdvance, showPerfect);
+    }
+
+    void restoreRewindSnapshot(Sonic3kSpecialStageSnapshot.BannerSnapshot snapshot) {
+        phase = snapshot.phase();
+        slideOffset = snapshot.slideOffset();
+        displayTimer = snapshot.displayTimer();
+        triggeredAdvance = snapshot.triggeredAdvance();
+        showPerfect = snapshot.showPerfect();
+    }
 }

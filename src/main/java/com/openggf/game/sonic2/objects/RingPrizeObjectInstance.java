@@ -2,9 +2,11 @@ package com.openggf.game.sonic2.objects;
 
 import com.openggf.game.PlayableEntity;
 import com.openggf.audio.GameSound;
+import com.openggf.game.rewind.RewindTransient;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
+import com.openggf.level.objects.NullableSpawnCoordinateZeroScalarArgsRewindRecreatable;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.rings.RingManager;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
@@ -28,7 +30,8 @@ import java.util.List;
  * <b>Key insight:</b> ObjDC does NOT use collision detection. Rings are awarded
  * automatically when displayDelay expires.
  */
-public class RingPrizeObjectInstance extends AbstractObjectInstance {
+public class RingPrizeObjectInstance extends AbstractObjectInstance
+        implements NullableSpawnCoordinateZeroScalarArgsRewindRecreatable {
 
     // State machine constants (from s2.asm ObjDC state routines)
     private static final int STATE_SPIRAL = 0;    // Moving toward center (ObjDC_Main)
@@ -41,14 +44,19 @@ public class RingPrizeObjectInstance extends AbstractObjectInstance {
     // Position tracking (16.16 fixed point for precision)
     private int currentX;      // 16.16 fixed point X
     private int currentY;      // 16.16 fixed point Y
-    private final int machineX; // Machine center X
-    private final int machineY; // Machine center Y
+    // Un-final: not spawn-derivable (cage center, distinct from spawn position) and not
+    // captured by GenericFieldCapturer when final. Reapplied by restoreObjectRewindState
+    // after recreate uses placeholder 0 (mirrors BombPrizeObjectInstance).
+    private int machineX; // Machine center X
+    private int machineY; // Machine center Y
 
     // Display delay before becoming collectible
     private int displayDelay;
 
     // Reference to parent counter (for decrementing)
     private final int[] prizeCounter;
+    @RewindTransient(reason = "Structural ObjD6 parent link; live prize children are spawned and owned by PointPokey.")
+    private PointPokeyObjectInstance parent;
 
     // Animation state
     private int animTimer = 0;
@@ -57,15 +65,14 @@ public class RingPrizeObjectInstance extends AbstractObjectInstance {
     // State machine
     private int state = STATE_SPIRAL;
     private boolean ringCollected = false;
-    private boolean destroyed = false;
 
     // Sparkle animation tracking
-    private int sparkleStartFrame = -1;
+    private int sparkleStartVIntRunCount = -1;
 
     // Reference to LevelManager for ring renderer
 
     // Frame counter for animation (stored from update for use in render)
-    private int lastFrameCounter = 0;
+    private int lastVIntRunCount = 0;
 
     /**
      * Creates a ring prize object.
@@ -79,6 +86,11 @@ public class RingPrizeObjectInstance extends AbstractObjectInstance {
      */
     public RingPrizeObjectInstance(int x, int y, int machineX, int machineY,
                                    int displayDelay, int[] prizeCounter) {
+        this(x, y, machineX, machineY, displayDelay, prizeCounter, null);
+    }
+
+    RingPrizeObjectInstance(int x, int y, int machineX, int machineY,
+                            int displayDelay, int[] prizeCounter, PointPokeyObjectInstance parent) {
         super(new ObjectSpawn(x, y, 0xDC, 0, 0, false, 0), "RingPrize");
         this.currentX = x << 16;  // Convert to 16.16 fixed point
         this.currentY = y << 16;
@@ -86,24 +98,29 @@ public class RingPrizeObjectInstance extends AbstractObjectInstance {
         this.machineY = machineY;
         this.displayDelay = displayDelay;
         this.prizeCounter = prizeCounter;
+        this.parent = parent;
+    }
+
+    RingPrizeObjectInstance(int x, int y, int ignoredSubtype, boolean ignoredFlag) {
+        this(x, y, x, y, 0, new int[]{0});
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        if (destroyed) {
+        if (isDestroyed()) {
             return;
         }
 
         // Store frame counter for animation in render
-        lastFrameCounter = frameCounter;
+        lastVIntRunCount = vIntRunCount;
 
         switch (state) {
             case STATE_SPIRAL:
-                updateSpiral(frameCounter, player);
+                updateSpiral(vIntRunCount, player);
                 break;
             case STATE_COLLECTED:
-                updateCollected(frameCounter);
+                updateCollected(vIntRunCount);
                 break;
             default:
                 break;
@@ -111,7 +128,7 @@ public class RingPrizeObjectInstance extends AbstractObjectInstance {
 
         // Check if off-screen for cleanup (only in spiral state)
         if (state == STATE_SPIRAL && !isOnScreen(64)) {
-            destroyed = true;
+            setDestroyed(true);
         }
     }
 
@@ -119,7 +136,7 @@ public class RingPrizeObjectInstance extends AbstractObjectInstance {
      * STATE_SPIRAL: Move toward machine center and count down display delay.
      * When delay reaches 0, collect ring and transition to STATE_COLLECTED.
      */
-    private void updateSpiral(int frameCounter, AbstractPlayableSprite player) {
+    private void updateSpiral(int vIntRunCount, AbstractPlayableSprite player) {
         // Move position toward machine center (1/16th of distance per frame)
         // Based on ObjDC_Main in s2.asm lines 25288-25307
         long machineX32 = (long) machineX << 16;
@@ -149,7 +166,7 @@ public class RingPrizeObjectInstance extends AbstractObjectInstance {
             if (displayDelay == 0) {
                 collectRing(player);
                 // Transition to sparkle state
-                sparkleStartFrame = frameCounter;
+                sparkleStartVIntRunCount = vIntRunCount;
                 state = STATE_COLLECTED;
             }
         }
@@ -159,14 +176,14 @@ public class RingPrizeObjectInstance extends AbstractObjectInstance {
      * STATE_COLLECTED: Ring stays at current position showing sparkle animation.
      * When sparkle animation completes, destroy the object.
      */
-    private void updateCollected(int frameCounter) {
+    private void updateCollected(int vIntRunCount) {
         // Ring no longer moves - stays at current position
 
         // Check if sparkle animation is complete
         RingManager ringManager = services().ringManager();
-        if (ringManager == null || sparkleStartFrame < 0) {
+        if (ringManager == null || sparkleStartVIntRunCount < 0) {
             // No sparkle available, destroy immediately
-            destroyed = true;
+            setDestroyed(true);
             return;
         }
 
@@ -175,18 +192,18 @@ public class RingPrizeObjectInstance extends AbstractObjectInstance {
 
         if (sparkleFrameCount <= 0) {
             // No sparkle animation, destroy immediately
-            destroyed = true;
+            setDestroyed(true);
             return;
         }
 
-        int elapsed = frameCounter - sparkleStartFrame;
+        int elapsed = vIntRunCount - sparkleStartVIntRunCount;
         if (elapsed < 0) {
             elapsed = 0;
         }
         int sparkleFrameOffset = elapsed / frameDelay;
         if (sparkleFrameOffset >= sparkleFrameCount) {
             // Sparkle animation complete, destroy the ring
-            destroyed = true;
+            setDestroyed(true);
         }
     }
 
@@ -209,8 +226,15 @@ public class RingPrizeObjectInstance extends AbstractObjectInstance {
             player.addRings(1);
         }
 
-        // Play ring sound
-        services().playSfx(GameSound.RING);
+        // ROM ObjDC -> CollectRing -> PlaySound2 uses the secondary SFX mailbox.
+        services().audioManager().playSecondarySfx(GameSound.RING);
+    }
+
+    @Override
+    public String traceDebugDetails() {
+        int counter = prizeCounter != null && prizeCounter.length > 0 ? prizeCounter[0] : -1;
+        return String.format("state=%d delay=%d collected=%d counter=%d anim=%d/%d",
+                state, displayDelay, ringCollected ? 1 : 0, counter, animFrame, animTimer);
     }
 
     @Override
@@ -225,7 +249,7 @@ public class RingPrizeObjectInstance extends AbstractObjectInstance {
 
     @Override
     public void appendRenderCommands(List<GLCommand> commands) {
-        if (destroyed) {
+        if (isDestroyed()) {
             return;
         }
 
@@ -243,7 +267,7 @@ public class RingPrizeObjectInstance extends AbstractObjectInstance {
         switch (state) {
             case STATE_SPIRAL:
                 // Draw animated spinning ring
-                ringManager.drawRingAt(screenX, screenY, lastFrameCounter);
+                ringManager.drawRingAt(screenX, screenY, lastVIntRunCount);
                 break;
             case STATE_COLLECTED:
                 // Draw sparkle animation
@@ -258,7 +282,7 @@ public class RingPrizeObjectInstance extends AbstractObjectInstance {
      * Draw the sparkle animation at the current position.
      */
     private void drawSparkle(RingManager ringManager, int x, int y) {
-        if (sparkleStartFrame < 0) {
+        if (sparkleStartVIntRunCount < 0) {
             return;
         }
 
@@ -270,7 +294,7 @@ public class RingPrizeObjectInstance extends AbstractObjectInstance {
             return;
         }
 
-        int elapsed = lastFrameCounter - sparkleStartFrame;
+        int elapsed = lastVIntRunCount - sparkleStartVIntRunCount;
         if (elapsed < 0) {
             elapsed = 0;
         }
@@ -312,8 +336,4 @@ public class RingPrizeObjectInstance extends AbstractObjectInstance {
         return RenderPriority.clamp(3);
     }
 
-    @Override
-    public boolean isDestroyed() {
-        return destroyed;
-    }
 }

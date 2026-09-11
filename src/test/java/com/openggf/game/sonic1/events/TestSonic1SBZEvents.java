@@ -2,20 +2,21 @@ package com.openggf.game.sonic1.events;
 
 import com.openggf.camera.Camera;
 import com.openggf.game.GameServices;
-import com.openggf.game.RuntimeManager;
+import com.openggf.game.session.SessionManager;
+import com.openggf.tests.TestEnvironment;
 import com.openggf.level.LevelManager;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectServices;
 import com.openggf.level.objects.TestObjectServices;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
 import java.util.List;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Tests for Scrap Brain Zone (Acts 1-2) and Final Zone dynamic level events.
@@ -33,9 +34,9 @@ public class TestSonic1SBZEvents {
     private Sonic1SBZEvents events;
     private Camera cam;
 
-    @Before
+    @BeforeEach
     public void setUp() {
-        RuntimeManager.createGameplay();
+        TestEnvironment.activeGameplayMode();
         GameServices.camera().resetState();
         cam = GameServices.camera();
         TestObjectServices testServices = new TestObjectServices();
@@ -46,10 +47,10 @@ public class TestSonic1SBZEvents {
         events.init();
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         clearConstructionContext();
-        RuntimeManager.destroyCurrent();
+        SessionManager.clear();
     }
 
     @SuppressWarnings("unchecked")
@@ -101,8 +102,7 @@ public class TestSonic1SBZEvents {
     public void testSBZ1_DefaultBoundary() {
         cam.setX((short) 0x1000);
         events.update(0);
-        assertEquals("maxYTarget should be 0x720 when X < 0x1880",
-                (short) 0x720, cam.getMaxYTarget());
+        assertEquals((short) 0x720, cam.getMaxYTarget(), "maxYTarget should be 0x720 when X < 0x1880");
     }
 
     /**
@@ -112,8 +112,7 @@ public class TestSonic1SBZEvents {
     public void testSBZ1_MidBoundary() {
         cam.setX((short) 0x1880);
         events.update(0);
-        assertEquals("maxYTarget should be 0x620 when X >= 0x1880",
-                (short) 0x620, cam.getMaxYTarget());
+        assertEquals((short) 0x620, cam.getMaxYTarget(), "maxYTarget should be 0x620 when X >= 0x1880");
     }
 
     /**
@@ -123,8 +122,7 @@ public class TestSonic1SBZEvents {
     public void testSBZ1_FinalBoundary() {
         cam.setX((short) 0x2000);
         events.update(0);
-        assertEquals("maxYTarget should be 0x2A0 when X >= 0x2000",
-                (short) 0x2A0, cam.getMaxYTarget());
+        assertEquals((short) 0x2A0, cam.getMaxYTarget(), "maxYTarget should be 0x2A0 when X >= 0x2000");
     }
 
     // ======== SBZ Act 2 (DLE_SBZ2) ========
@@ -136,9 +134,8 @@ public class TestSonic1SBZEvents {
     public void testSBZ2Routine0_DefaultBoundary() {
         cam.setX((short) 0x1000);
         events.update(1);
-        assertEquals("maxYTarget should be 0x800 when X < 0x1800",
-                (short) 0x800, cam.getMaxYTarget());
-        assertEquals("Should stay at routine 0", 0, events.getEventRoutine());
+        assertEquals((short) 0x800, cam.getMaxYTarget(), "maxYTarget should be 0x800 when X < 0x1800");
+        assertEquals(0, events.getEventRoutine(), "Should stay at routine 0");
     }
 
     /**
@@ -149,10 +146,8 @@ public class TestSonic1SBZEvents {
     public void testSBZ2Routine0_AdvancesAtThreshold() {
         cam.setX((short) 0x1E00);
         events.update(1);
-        assertEquals("maxYTarget should be 0x510 (boss_sbz2_y) when X >= 0x1800",
-                (short) 0x510, cam.getMaxYTarget());
-        assertEquals("Should advance to routine 2 when X >= 0x1E00",
-                2, events.getEventRoutine());
+        assertEquals((short) 0x510, cam.getMaxYTarget(), "maxYTarget should be 0x510 (boss_sbz2_y) when X >= 0x1800");
+        assertEquals(2, events.getEventRoutine(), "Should advance to routine 2 when X >= 0x1E00");
     }
 
     /**
@@ -163,8 +158,7 @@ public class TestSonic1SBZEvents {
         events.setEventRoutine(2);
         cam.setX((short) 0x1E00);
         events.update(1);
-        assertEquals("Should stay at routine 2 when X < 0x1EB0",
-                2, events.getEventRoutine());
+        assertEquals(2, events.getEventRoutine(), "Should stay at routine 2 when X < 0x1EB0");
     }
 
     /**
@@ -175,8 +169,7 @@ public class TestSonic1SBZEvents {
         events.setEventRoutine(2);
         cam.setX((short) 0x1EB0);
         events.update(1);
-        assertEquals("Should advance to routine 4 when X >= 0x1EB0",
-                4, events.getEventRoutine());
+        assertEquals(4, events.getEventRoutine(), "Should advance to routine 4 when X >= 0x1EB0");
     }
 
     /**
@@ -187,10 +180,8 @@ public class TestSonic1SBZEvents {
         events.setEventRoutine(4);
         cam.setX((short) 0x1F00);
         events.update(1);
-        assertEquals("Should lock minX to camera X",
-                (short) 0x1F00, cam.getMinX());
-        assertEquals("Should stay at routine 4 when X < 0x1F60",
-                4, events.getEventRoutine());
+        assertEquals((short) 0x1F00, cam.getMinX(), "Should lock minX to camera X");
+        assertEquals(4, events.getEventRoutine(), "Should stay at routine 4 when X < 0x1F60");
     }
 
     /**
@@ -201,8 +192,7 @@ public class TestSonic1SBZEvents {
         events.setEventRoutine(4);
         cam.setX((short) 0x1F60);
         events.update(1);
-        assertEquals("Should advance to routine 6 when X >= 0x1F60",
-                6, events.getEventRoutine());
+        assertEquals(6, events.getEventRoutine(), "Should advance to routine 6 when X >= 0x1F60");
     }
 
     /**
@@ -214,9 +204,8 @@ public class TestSonic1SBZEvents {
         cam.setX((short) 0x2050);
         short minXBefore = cam.getMinX();
         events.update(1);
-        assertEquals("Should stay at routine 6", 6, events.getEventRoutine());
-        assertEquals("Should not modify minX when X >= 0x2050",
-                minXBefore, cam.getMinX());
+        assertEquals(6, events.getEventRoutine(), "Should stay at routine 6");
+        assertEquals(minXBefore, cam.getMinX(), "Should not modify minX when X >= 0x2050");
     }
 
     /**
@@ -227,9 +216,8 @@ public class TestSonic1SBZEvents {
         events.setEventRoutine(6);
         cam.setX((short) 0x2000);
         events.update(1);
-        assertEquals("Should stay at routine 6", 6, events.getEventRoutine());
-        assertEquals("Should lock minX to camera X when X < 0x2050",
-                (short) 0x2000, cam.getMinX());
+        assertEquals(6, events.getEventRoutine(), "Should stay at routine 6");
+        assertEquals((short) 0x2000, cam.getMinX(), "Should lock minX to camera X when X < 0x2050");
     }
 
     // ======== Final Zone (DLE_FZ) ========
@@ -241,10 +229,8 @@ public class TestSonic1SBZEvents {
     public void testFZRoutine0_BelowThreshold() {
         cam.setX((short) 0x2100);
         events.updateFZ();
-        assertEquals("Should stay at routine 0 when X < 0x2148",
-                0, events.getEventRoutine());
-        assertEquals("Should lock minX to camera X",
-                (short) 0x2100, cam.getMinX());
+        assertEquals(0, events.getEventRoutine(), "Should stay at routine 0 when X < 0x2148");
+        assertEquals((short) 0x2100, cam.getMinX(), "Should lock minX to camera X");
     }
 
     /**
@@ -254,10 +240,8 @@ public class TestSonic1SBZEvents {
     public void testFZRoutine0_AdvancesAtThreshold() {
         cam.setX((short) 0x2148);
         events.updateFZ();
-        assertEquals("Should advance to routine 2 when X >= 0x2148",
-                2, events.getEventRoutine());
-        assertEquals("Should lock minX to camera X",
-                (short) 0x2148, cam.getMinX());
+        assertEquals(2, events.getEventRoutine(), "Should advance to routine 2 when X >= 0x2148");
+        assertEquals((short) 0x2148, cam.getMinX(), "Should lock minX to camera X");
     }
 
     /**
@@ -268,10 +252,8 @@ public class TestSonic1SBZEvents {
         events.setEventRoutine(2);
         cam.setX((short) 0x2200);
         events.updateFZ();
-        assertEquals("Should stay at routine 2 when X < 0x2300",
-                2, events.getEventRoutine());
-        assertEquals("Should lock minX to camera X",
-                (short) 0x2200, cam.getMinX());
+        assertEquals(2, events.getEventRoutine(), "Should stay at routine 2 when X < 0x2300");
+        assertEquals((short) 0x2200, cam.getMinX(), "Should lock minX to camera X");
     }
 
     /**
@@ -282,10 +264,8 @@ public class TestSonic1SBZEvents {
         events.setEventRoutine(2);
         cam.setX((short) 0x2300);
         events.updateFZ();
-        assertEquals("Should advance to routine 4 when X >= 0x2300",
-                4, events.getEventRoutine());
-        assertEquals("Should lock minX to camera X",
-                (short) 0x2300, cam.getMinX());
+        assertEquals(4, events.getEventRoutine(), "Should advance to routine 4 when X >= 0x2300");
+        assertEquals((short) 0x2300, cam.getMinX(), "Should lock minX to camera X");
     }
 
     /**
@@ -296,10 +276,8 @@ public class TestSonic1SBZEvents {
         events.setEventRoutine(4);
         cam.setX((short) 0x2400);
         events.updateFZ();
-        assertEquals("Should stay at routine 4 when X < 0x2450",
-                4, events.getEventRoutine());
-        assertEquals("Should lock minX to camera X",
-                (short) 0x2400, cam.getMinX());
+        assertEquals(4, events.getEventRoutine(), "Should stay at routine 4 when X < 0x2450");
+        assertEquals((short) 0x2400, cam.getMinX(), "Should lock minX to camera X");
     }
 
     /**
@@ -310,10 +288,8 @@ public class TestSonic1SBZEvents {
         events.setEventRoutine(4);
         cam.setX((short) 0x2450);
         events.updateFZ();
-        assertEquals("Should advance to routine 6 when X >= 0x2450",
-                6, events.getEventRoutine());
-        assertEquals("Should lock minX to camera X",
-                (short) 0x2450, cam.getMinX());
+        assertEquals(6, events.getEventRoutine(), "Should advance to routine 6 when X >= 0x2450");
+        assertEquals((short) 0x2450, cam.getMinX(), "Should lock minX to camera X");
     }
 
     /**
@@ -325,8 +301,8 @@ public class TestSonic1SBZEvents {
         cam.setX((short) 0x2500);
         short minXBefore = cam.getMinX();
         events.updateFZ();
-        assertEquals("Should stay at routine 6", 6, events.getEventRoutine());
-        assertEquals("Routine 6 should not modify minX", minXBefore, cam.getMinX());
+        assertEquals(6, events.getEventRoutine(), "Should stay at routine 6");
+        assertEquals(minXBefore, cam.getMinX(), "Routine 6 should not modify minX");
     }
 
     /**
@@ -337,8 +313,7 @@ public class TestSonic1SBZEvents {
         events.setEventRoutine(8);
         cam.setX((short) 0x2600);
         events.updateFZ();
-        assertEquals("Should stay at routine 8", 8, events.getEventRoutine());
-        assertEquals("Should lock minX to camera X",
-                (short) 0x2600, cam.getMinX());
+        assertEquals(8, events.getEventRoutine(), "Should stay at routine 8");
+        assertEquals((short) 0x2600, cam.getMinX(), "Should lock minX to camera X");
     }
 }

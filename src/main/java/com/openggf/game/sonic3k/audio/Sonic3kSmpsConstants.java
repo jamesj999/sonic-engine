@@ -58,6 +58,12 @@ public final class Sonic3kSmpsConstants {
     /** SEGA PCM sound ROM address. */
     public static final int SEGA_SOUND_ADDR = 0x0F8000;
 
+    /** Size of the S3K SEGA PCM sample. */
+    public static final int SEGA_SOUND_SIZE = 0x5E2F;
+
+    /** Source sample rate of the S3K SEGA PCM sample. */
+    public static final int SEGA_SOUND_SAMPLE_RATE = 0x3862;
+
     /** SFX bank base ROM address (SFX pointer list points here). */
     public static final int SFX_BANK_BASE = 0x0F8000;
 
@@ -135,20 +141,35 @@ public final class Sonic3kSmpsConstants {
     // System commands (sound queue IDs)
     // -----------------------------------------------------------------------
 
+    /** Out-of-table stop, routed by zPlaySoundByIndex to zStopAllSound. */
+    public static final int CMD_STOP = 0xE0;
+
     /** Fade out current music. */
-    public static final int CMD_FADE_OUT = 0xE0;
+    public static final int CMD_FADE_OUT = 0xE1;
+
+    /** Stop all sound and music through zStopAllSound. */
+    public static final int CMD_STOP_ALL = 0xE2;
+
+    /** Transiently silence all four PSG channels. */
+    public static final int CMD_PSG_SILENCE = 0xE3;
+
+    /** Stop the seven active SFX slots while preserving music state. */
+    public static final int CMD_STOP_SFX = 0xE4;
+
+    /** Alternate fade command routed to the same zFadeOutMusic routine. */
+    public static final int CMD_FADE_OUT_ALT = 0xE5;
+
+    /** Stop the active SEGA PCM sample. */
+    public static final int CMD_STOP_SEGA = 0xFE;
 
     /** Play "SEGA" PCM sample. */
-    public static final int CMD_SEGA = 0xE1;
+    public static final int CMD_SEGA = 0xFF;
 
-    /** Speed up current music (speed shoes on). */
-    public static final int CMD_SPEED_UP = 0xE2;
+    /** Direct zTempoSpeedup value written when speed shoes are collected. */
+    public static final int SPEED_MULTIPLIER_ON = 8;
 
-    /** Slow down current music (speed shoes off). */
-    public static final int CMD_SLOW_DOWN = 0xE3;
-
-    /** Stop all sound and music. */
-    public static final int CMD_STOP_ALL = 0xE4;
+    /** Engine semantic normal-speed value for the source's direct zero. */
+    public static final int SPEED_MULTIPLIER_OFF = 1;
 
     private Sonic3kSmpsConstants() {
     }

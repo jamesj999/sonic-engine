@@ -9,6 +9,7 @@ import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
@@ -48,7 +49,7 @@ import java.util.List;
  * Reference: docs/s1disasm/_incObj/6D Flamethrower.asm
  */
 public class Sonic1FlamethrowerObjectInstance extends AbstractObjectInstance
-        implements TouchResponseProvider {
+        implements TouchResponseProvider, SpawnRewindRecreatable {
 
     // ========================================================================
     // ROM Constants
@@ -107,19 +108,19 @@ public class Sonic1FlamethrowerObjectInstance extends AbstractObjectInstance
     // ========================================================================
 
     /** Whether this is a valve-style flamethrower (obStatus bit 1). */
-    private final boolean isValve;
+    private boolean isValve;
 
     /** The danger frame index for this variant. */
-    private final int dangerFrame;
+    private int dangerFrame;
 
     /** Timer (objoff_30): counts down each frame, triggers state toggle at 0. */
     private int timer;
 
     /** Flaming duration (objoff_32): stored from subtype upper nybble * 2. */
-    private final int flamingDuration;
+    private int flamingDuration;
 
     /** Pause duration (objoff_34): stored from subtype lower nybble * 0x20. */
-    private final int pauseDuration;
+    private int pauseDuration;
 
     /** Current animation index (0-3). Toggles bit 0 on state changes. */
     private int animIndex;
@@ -184,7 +185,7 @@ public class Sonic1FlamethrowerObjectInstance extends AbstractObjectInstance
     // ========================================================================
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) {
             return;

@@ -1,0 +1,348 @@
+{
+  "$defs": {
+    "case": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "expected_outcome": {
+                "const": "accept"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "normalized_semantics"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "expected_outcome": {
+                "const": "reject"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "exact_diagnostic",
+              "fault"
+            ]
+          }
+        }
+      ],
+      "properties": {
+        "consumer_entry": {
+          "enum": [
+            "com.openggf.game.sonic1.specialstage.Sonic1SpecialStageTraceData.load",
+            "com.openggf.game.sonic3k.specialstage.S3kSpecialStageTraceData.load",
+            "com.openggf.trace.SpecialStageTraceData.load",
+            "com.openggf.trace.TraceData.load",
+            "com.openggf.trace.TraceRunManifest.load+validate"
+          ]
+        },
+        "consumer_expectation": {
+          "$ref": "#/$defs/consumerExpectation"
+        },
+        "exact_diagnostic": {
+          "type": "string"
+        },
+        "expected_outcome": {
+          "$ref": "#/$defs/outcome"
+        },
+        "fault": {
+          "$ref": "#/$defs/fault"
+        },
+        "id": {
+          "type": "string"
+        },
+        "materialization": {
+          "$ref": "#/$defs/materialization"
+        },
+        "normalized_semantics": {
+          "type": "object"
+        },
+        "producer_entry": {
+          "const": "traces.validate_trace_v5.Validation.run"
+        },
+        "root": {
+          "type": "string"
+        },
+        "rules": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "root",
+        "rules",
+        "expected_outcome",
+        "producer_entry",
+        "consumer_entry",
+        "consumer_expectation"
+      ],
+      "type": "object"
+    },
+    "consumerExpectation": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "outcome": {
+              "const": "accept"
+            },
+            "semantics_ref": {
+              "const": "#/normalized_semantics"
+            }
+          },
+          "required": [
+            "outcome",
+            "semantics_ref"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "normalized_semantics": {
+              "type": "object"
+            },
+            "outcome": {
+              "const": "accept"
+            }
+          },
+          "required": [
+            "outcome",
+            "normalized_semantics"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "diagnostic": {
+              "$ref": "#/$defs/diagnostic"
+            },
+            "outcome": {
+              "const": "reject"
+            }
+          },
+          "required": [
+            "outcome",
+            "diagnostic"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "diagnostic": {
+      "additionalProperties": false,
+      "properties": {
+        "exception_class": {
+          "type": "string"
+        },
+        "message": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "message_match": {
+          "enum": [
+            "exact",
+            "contains"
+          ]
+        }
+      },
+      "required": [
+        "exception_class",
+        "message_match",
+        "message"
+      ],
+      "type": "object"
+    },
+    "fault": {
+      "minProperties": 2,
+      "required": [
+        "rule",
+        "kind"
+      ],
+      "type": "object"
+    },
+    "file": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "logical_size"
+                  ]
+                },
+                {
+                  "required": [
+                    "logical_sha256"
+                  ]
+                }
+              ]
+            }
+          },
+          "if": {
+            "properties": {
+              "path": {
+                "pattern": "\\.gz$"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "logical_size",
+              "logical_sha256"
+            ]
+          }
+        }
+      ],
+      "properties": {
+        "case_id": {
+          "type": "string"
+        },
+        "expectation_ref": {
+          "type": "string"
+        },
+        "expected_outcome": {
+          "$ref": "#/$defs/outcome"
+        },
+        "logical_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "logical_size": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "parser_ref": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "stored_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "stored_size": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "stored_size",
+        "stored_sha256",
+        "case_id",
+        "expected_outcome",
+        "parser_ref",
+        "expectation_ref"
+      ],
+      "type": "object"
+    },
+    "materialization": {
+      "additionalProperties": false,
+      "properties": {
+        "encoding": {
+          "const": "base64"
+        },
+        "source": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "target",
+        "encoding"
+      ],
+      "type": "object"
+    },
+    "outcome": {
+      "enum": [
+        "accept",
+        "reject"
+      ]
+    },
+    "ruleCoverage": {
+      "additionalProperties": false,
+      "properties": {
+        "accept_cases": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "reject_cases": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "accept_cases",
+        "reject_cases"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/OpenGGF/TraceChaser/contracts/v5/manifest.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "cases": {
+      "items": {
+        "$ref": "#/$defs/case"
+      },
+      "type": "array"
+    },
+    "consumer_expectation_format": {
+      "const": "openggf-trace-v5-consumer-expectation-v1"
+    },
+    "contract_version": {
+      "const": 1
+    },
+    "files": {
+      "items": {
+        "$ref": "#/$defs/file"
+      },
+      "type": "array"
+    },
+    "format": {
+      "const": "tracechaser-v5-artifact-manifest-v1"
+    },
+    "rule_coverage": {
+      "additionalProperties": {
+        "$ref": "#/$defs/ruleCoverage"
+      },
+      "type": "object"
+    }
+  },
+  "required": [
+    "format",
+    "contract_version",
+    "consumer_expectation_format",
+    "rule_coverage",
+    "cases",
+    "files"
+  ],
+  "title": "TraceChaser trace-v5 semantic conformance manifest",
+  "type": "object"
+}

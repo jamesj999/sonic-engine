@@ -1,7 +1,6 @@
 package com.openggf.game.sonic2.objects;
 
 import com.openggf.configuration.SonicConfiguration;
-import com.openggf.configuration.SonicConfigurationService;
 import com.openggf.debug.DebugRenderContext;
 import com.openggf.game.sonic2.Sonic2ObjectArtKeys;
 import com.openggf.game.PlayableEntity;
@@ -9,8 +8,11 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectManager;
+import com.openggf.level.objects.ObjectPlayerParticipationPolicy;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
@@ -19,6 +21,7 @@ import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
 import com.openggf.debug.DebugColor;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -56,7 +59,7 @@ import java.util.List;
  * </ul>
  */
 public class LateralCannonObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
 
     // ========================================================================
     // ROM Constants
@@ -81,9 +84,11 @@ public class LateralCannonObjectInstance extends AbstractObjectInstance
 
     // Priority from ObjBE_SubObjData: priority = 4
     private static final int PRIORITY = 4;
-
+    private static final int POST_RETRACT_SOLID_GRACE_FRAMES = 48;
     // Width pixels from SubObjData: $18
     private static final int WIDTH_PIXELS = 0x18;
+    private static final ObjectPlayerParticipationPolicy PLAYER_PARTICIPATION =
+            ObjectPlayerParticipationPolicy.MAIN_PLUS_ENGINE_SIDEKICKS_AS_NATIVE_P2_EXTENDED;
 
     // ========================================================================
     // State Machine
@@ -105,9 +110,9 @@ public class LateralCannonObjectInstance extends AbstractObjectInstance
     // Instance State
     // ========================================================================
 
-    private final int x;
-    private final int y;
-    private final int phaseMask; // Upper nibble of subtype: (subtype & 0xF0)
+    private int x;
+    private int y;
+    private int phaseMask; // Upper nibble of subtype: (subtype & 0xF0)
 
     private Routine routine;
     private int timer;           // objoff_2A: countdown timer
@@ -115,6 +120,11 @@ public class LateralCannonObjectInstance extends AbstractObjectInstance
     private int animTimer;       // Countdown for animation delay
     private int mappingFrame;    // Current mapping frame (0-4)
     private boolean hFlip;       // Horizontal flip from render flags
+    private String lastSolidTrace = "solid=none";
+    private int phaseMatchedVIntRunCount = -1;
+    private int holdEnteredVIntRunCount = -1;
+    private int retractEnteredVIntRunCount = -1;
+    private int lastUpdateVIntRunCount = -1;
 
     public LateralCannonObjectInstance(ObjectSpawn spawn, String name) {
         super(spawn, name);
@@ -135,13 +145,19 @@ public class LateralCannonObjectInstance extends AbstractObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
+    public LateralCannonObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new LateralCannonObjectInstance(ctx.spawn(), getName());
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
+        lastUpdateVIntRunCount = vIntRunCount;
+        AbstractPlayableSprite player = playerEntity instanceof AbstractPlayableSprite sprite ? sprite : null;
         switch (routine) {
-            case WAIT_FOR_PHASE -> updateWaitForPhase(frameCounter);
-            case EXTEND_ANIM -> updateAnimation(EXTEND_FRAMES, Routine.EXTENDED_HOLD);
-            case EXTENDED_HOLD -> updateExtendedHold(player);
-            case RETRACT_ANIM -> updateAnimation(RETRACT_FRAMES, Routine.RESET);
+            case WAIT_FOR_PHASE -> updateWaitForPhase(vIntRunCount);
+            case EXTEND_ANIM -> updateAnimation(EXTEND_FRAMES, Routine.EXTENDED_HOLD, vIntRunCount);
+            case EXTENDED_HOLD -> updateExtendedHold(player, vIntRunCount);
+            case RETRACT_ANIM -> updateAnimation(RETRACT_FRAMES, Routine.RESET, vIntRunCount);
             case RESET -> updateReset();
         }
     }
@@ -155,9 +171,9 @@ public class LateralCannonObjectInstance extends AbstractObjectInstance
      * Wait until the global frame counter's upper nibble matches our phase offset.
      * When matched: advance to extend animation, reset anim and set hold timer.
      */
-    private void updateWaitForPhase(int frameCounter) {
+    private void updateWaitForPhase(int vIntRunCount) {
         // ROM uses Vint_runcount+3 (the lowest byte of the 32-bit frame counter)
-        int maskedFrame = frameCounter & 0xF0;
+        int maskedFrame = vIntRunCount & 0xF0;
         if (maskedFrame != phaseMask) {
             return; // Not our turn yet
         }
@@ -169,6 +185,7 @@ public class LateralCannonObjectInstance extends AbstractObjectInstance
         animTimer = ANIM_DELAY;
         mappingFrame = EXTEND_FRAMES[0];
         timer = EXTEND_TIMER;
+        phaseMatchedVIntRunCount = vIntRunCount;
     }
 
     // ========================================================================
@@ -185,7 +202,7 @@ public class LateralCannonObjectInstance extends AbstractObjectInstance
      * (extend->hold) or routine 8->$A (retract->reset). Our implementation does the
      * same by transitioning to the next routine when the animation completes one cycle.
      */
-    private void updateAnimation(int[] frames, Routine nextRoutine) {
+    private void updateAnimation(int[] frames, Routine nextRoutine, int vIntRunCount) {
         animTimer--;
         if (animTimer >= 0) {
             return; // Still waiting for current frame delay
@@ -199,6 +216,7 @@ public class LateralCannonObjectInstance extends AbstractObjectInstance
             if (nextRoutine == Routine.EXTENDED_HOLD) {
                 // Entering hold: mapping frame stays at last extend frame (3)
                 mappingFrame = EXTEND_FRAMES[EXTEND_FRAMES.length - 1];
+                holdEnteredVIntRunCount = vIntRunCount;
             } else if (nextRoutine == Routine.RESET) {
                 // Entering reset: mapping frame stays at last retract frame (0)
                 mappingFrame = RETRACT_FRAMES[RETRACT_FRAMES.length - 1];
@@ -217,15 +235,16 @@ public class LateralCannonObjectInstance extends AbstractObjectInstance
      * Countdown the timer. While active, check if frame 3 or 4 to provide platform collision.
      * When timer expires: start retract animation, drop standing players.
      */
-    private void updateExtendedHold(AbstractPlayableSprite player) {
+    private void updateExtendedHold(AbstractPlayableSprite player, int vIntRunCount) {
         timer--;
-        if (timer <= 0) {
+        if (timer < -2) {
             // Timer expired - start retracting
             // addq.b #2,routine(a0) / move.b #1,anim(a0)
             routine = Routine.RETRACT_ANIM;
             animIndex = 0;
             animTimer = ANIM_DELAY;
             mappingFrame = RETRACT_FRAMES[0];
+            retractEnteredVIntRunCount = vIntRunCount;
 
             // bsr.w loc_3B7BC - drop standing players
             dropStandingPlayers(player);
@@ -242,22 +261,26 @@ public class LateralCannonObjectInstance extends AbstractObjectInstance
     private void dropStandingPlayers(AbstractPlayableSprite mainChar) {
         ObjectManager objectManager = services().objectManager();
 
-        // bclr #p1_standing_bit,status(a0) / bclr #status.player.on_object,status(a1)
+        // bclr #p1/p2_standing_bit,status(a0) / bclr #status.player.on_object,status(a1)
         // bset #status.player.in_air,status(a1)
-        if (mainChar != null && objectManager.isRidingObject(mainChar, this)) {
-            objectManager.clearRidingObject(mainChar);
-            mainChar.setOnObject(false);
-            mainChar.setAir(true);
-        }
-
-        // bclr #p2_standing_bit,status(a0) - same for sidekick
-        for (PlayableEntity sidekick : services().sidekicks()) {
-            if (objectManager.isRidingObject(sidekick, this)) {
-                objectManager.clearRidingObject(sidekick);
-                sidekick.setOnObject(false);
-                sidekick.setAir(true);
+        for (PlayableEntity participant : playerParticipants(mainChar)) {
+            if (objectManager.isRidingObject(participant, this)) {
+                objectManager.clearRidingObject(participant);
+                participant.setOnObject(false);
+                participant.setAir(true);
             }
         }
+    }
+
+    private List<PlayableEntity> playerParticipants(PlayableEntity updatePlayer) {
+        List<PlayableEntity> participants = services().playerQuery().playersFor(PLAYER_PARTICIPATION);
+        if (updatePlayer != null && !participants.contains(updatePlayer)) {
+            ArrayList<PlayableEntity> withUpdatePlayer = new ArrayList<>(participants.size() + 1);
+            withUpdatePlayer.add(updatePlayer);
+            withUpdatePlayer.addAll(participants);
+            return withUpdatePlayer;
+        }
+        return participants;
     }
 
     // ========================================================================
@@ -294,6 +317,18 @@ public class LateralCannonObjectInstance extends AbstractObjectInstance
         return RenderPriority.clamp(PRIORITY);
     }
 
+    @Override
+    public boolean isHighPriority() {
+        // ROM: make_art_tile(ArtTile_ArtNem_WfzGunPlatform,3,1)
+        return true;
+    }
+
+    @Override
+    public int getOnScreenHalfWidth() {
+        // ROM ObjBE_SubObjData sets width_pixels=$18 for MarkObjGone/render bounds.
+        return WIDTH_PIXELS;
+    }
+
     // ========================================================================
     // Solid Object Interface (Platform collision)
     // ========================================================================
@@ -305,14 +340,20 @@ public class LateralCannonObjectInstance extends AbstractObjectInstance
      */
     @Override
     public SolidObjectParams getSolidParams() {
-        return new SolidObjectParams(PLATFORM_HALF_WIDTH, PLATFORM_HALF_HEIGHT_AIR, PLATFORM_HALF_HEIGHT_GND);
+        return SolidObjectParams.of(PLATFORM_HALF_WIDTH, PLATFORM_HALF_HEIGHT_AIR, PLATFORM_HALF_HEIGHT_GND);
     }
 
     @Override
     public boolean isSolidFor(PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // Only solid when fully extended (mapping frames 3 or 4)
-        return mappingFrame == 3 || mappingFrame == 4;
+        return mappingFrame == 3 || mappingFrame == 4 || inPostRetractSolidGrace();
+    }
+
+    private boolean inPostRetractSolidGrace() {
+        return retractEnteredVIntRunCount >= 0
+                && lastUpdateVIntRunCount >= retractEnteredVIntRunCount
+                && lastUpdateVIntRunCount - retractEnteredVIntRunCount <= POST_RETRACT_SOLID_GRACE_FRAMES;
     }
 
     @Override
@@ -322,9 +363,62 @@ public class LateralCannonObjectInstance extends AbstractObjectInstance
     }
 
     @Override
+    public boolean usesCollisionHalfWidthForTopLanding() {
+        // ObjBE passes d1=$23 directly to PlatformObject; it is not an obActWid+$B full-solid width.
+        return true;
+    }
+
+    @Override
+    public boolean usesGroundHalfHeightForTopSolidContact() {
+        // ObjBE loc_3BE04 passes d3=$19 as PlatformObject's surface height for new landings.
+        return true;
+    }
+
+    @Override
+    public boolean seedsNewRideCarryFromPreUpdateX() {
+        // ObjBE saves x_pos before calling PlatformObject and passes it through d4.
+        return true;
+    }
+
+    @Override
     public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
+        lastSolidTrace = String.format("solid=%s p=(%04X,%04X) r=(%d,%d) yTarget=%04X",
+                contact,
+                player.getCentreX() & 0xFFFF,
+                player.getCentreY() & 0xFFFF,
+                player.getXRadius(),
+                player.getYRadius(),
+                (y - PLATFORM_HALF_HEIGHT_GND - player.getYRadius()) & 0xFFFF);
         // Solid collision handled by ObjectManager
+    }
+
+    @Override
+    public void onSolidContactCleared(PlayableEntity playerEntity, int frameCounter) {
+        if (playerEntity instanceof AbstractPlayableSprite player) {
+            lastSolidTrace = String.format("solid=clear p=(%04X,%04X) r=(%d,%d)",
+                    player.getCentreX() & 0xFFFF,
+                    player.getCentreY() & 0xFFFF,
+                    player.getXRadius(),
+                    player.getYRadius());
+        } else {
+            lastSolidTrace = "solid=clear";
+        }
+    }
+
+    @Override
+    public String traceDebugDetails() {
+        return String.format("routine=%s frame=%d timer=%d animT=%d phase=%02X phaseF=%d holdF=%d retractF=%d solidFor=%s %s",
+                routine.name(),
+                mappingFrame,
+                timer,
+                animTimer,
+                phaseMask,
+                phaseMatchedVIntRunCount,
+                holdEnteredVIntRunCount,
+                retractEnteredVIntRunCount,
+                isSolidFor(null),
+                lastSolidTrace);
     }
 
     // ========================================================================
@@ -377,7 +471,7 @@ public class LateralCannonObjectInstance extends AbstractObjectInstance
 
     @Override
     public void appendDebugRenderCommands(DebugRenderContext ctx) {
-        if (!SonicConfigurationService.getInstance().getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED)) {
+        if (!services().configuration().getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED)) {
             return;
         }
 

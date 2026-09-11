@@ -2,8 +2,8 @@ package com.openggf.game.sonic1.specialstage;
 
 import com.openggf.data.Rom;
 import com.openggf.level.Pattern;
-import com.openggf.tools.EnigmaReader;
-import com.openggf.tools.NemesisReader;
+import com.openggf.data.compression.EnigmaReader;
+import com.openggf.data.compression.NemesisReader;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;

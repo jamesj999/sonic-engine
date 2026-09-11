@@ -7,6 +7,9 @@ import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.PerObjectRewindSnapshot;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
@@ -19,7 +22,7 @@ import java.util.List;
  * Moves with configurable velocity and optional gravity.
  */
 public class BadnikProjectileInstance extends AbstractObjectInstance
-        implements TouchResponseProvider {
+        implements TouchResponseProvider, RewindRecreatable {
 
     public enum ProjectileType {
         BUZZER_STINGER,
@@ -36,18 +39,25 @@ public class BadnikProjectileInstance extends AbstractObjectInstance
 
     private static final int COLLISION_SIZE_STINGER = 0x18; // From disassembly $98 & 0x3F
     private static final int COLLISION_SIZE_COCONUT = 0x0B; // From disassembly $8B & 0x3F
-    private static final int COLLISION_SIZE_SPINY_SPIKE = 0x0B; // Same as coconut
+    // CPZ Spiny shot is Obj98 with subtype $34 -> ObjA6_SubObjData, whose
+    // subObjData collision byte is $98 (s2.asm:74659-74660, 76491). $98 & 0x3F =
+    // 0x18 -> Touch_Sizes index 0x18 = 4x4 (s2.asm:85078). It is NOT the coconut
+    // 0x8B/0x0B (8x8) size; the earlier "same as coconut" value made the spike
+    // touchbox twice too tall/wide and produced phantom hits the ROM never has.
+    private static final int COLLISION_SIZE_SPINY_SPIKE = 0x18; // ObjA6_SubObjData: $98 & 0x3F
     private static final int COLLISION_SIZE_REXON_FIREBALL = 0x18; // From disassembly $98 & 0x3F
     private static final int COLLISION_SIZE_OCTUS_BULLET = 0x18; // From disassembly $98 & 0x3F
     private static final int COLLISION_SIZE_AQUIS_BULLET = 0x18; // From disassembly $98 & 0x3F
     private static final int COLLISION_SIZE_ASTERON_SPIKE = 0x18; // From ObjA4_SubObjData2: collision_flags=$98
     private static final int COLLISION_SIZE_NEBULA_BOMB = 0x0B; // From Obj99_SubObjData: collision_flags=$8B
     private static final int COLLISION_SIZE_CLUCKER_SHOT = 0x18; // From ObjAD_SubObjData3: collision_flags=$98
+    private static final int[] AQUIS_BULLET_FRAMES = {5, 6, 7, 6};
     private static final int GRAVITY_COCONUT = 0x20; // Obj98_CoconutFall
     private static final int GRAVITY_SPINY_SPIKE = 0x20; // From disassembly +$20 per frame
     private static final int GRAVITY_REXON_FIREBALL = 0x80; // From disassembly $80 per frame
+    private static final boolean ASTERON_HIGH_PRIORITY_SPRITE = true;
 
-    private final ProjectileType type;
+    private ProjectileType type;
     private int currentX;
     private int currentY;
     private int xVelocity; // In subpixels (8.8 fixed point)
@@ -57,12 +67,19 @@ public class BadnikProjectileInstance extends AbstractObjectInstance
     private int gravity;
     private int collisionSizeIndex;
     private int animFrame;
+    private int aquisBulletAnimTimer;
+    private int aquisBulletAnimIndex;
     private boolean hFlip;
     private int initialDelay; // Frames to wait before moving (Octus bullet: 0x0F)
     private int fixedFrame = -1; // Fixed mapping frame override (Asteron spikes use different frames per projectile)
     private boolean paletteBlink; // Toggles every frame for Nebula bomb (ROM: bchg palette_bit_0)
     private int cluckerAnimTimer; // Clucker shot animation timer (counts down from duration)
     private int cluckerAnimIndex; // Clucker shot animation index (0-7, cycles through 8 frames)
+    private boolean loadSubObjectInitPending;
+
+    private BadnikProjectileInstance(ObjectSpawn spawn) {
+        this(spawn, ProjectileType.BUZZER_STINGER, spawn.x(), spawn.y(), 0, 0, false, false);
+    }
 
     /**
      * Create a new projectile.
@@ -112,6 +129,8 @@ public class BadnikProjectileInstance extends AbstractObjectInstance
             case AQUIS_BULLET -> {
                 this.gravity = 0;
                 this.collisionSizeIndex = COLLISION_SIZE_AQUIS_BULLET;
+                this.animFrame = 0;
+                this.aquisBulletAnimTimer = 3;
             }
             case ASTERON_SPIKE -> {
                 this.gravity = 0;
@@ -159,12 +178,50 @@ public class BadnikProjectileInstance extends AbstractObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        ObjectSpawn spawn = ctx.spawn();
+        if (ctx.state().objectSubclassExtra()
+                instanceof PerObjectRewindSnapshot.BadnikProjectileRewindExtra extra) {
+            return new BadnikProjectileInstance(
+                    spawn,
+                    ProjectileType.valueOf(extra.projectileType()),
+                    extra.currentX(),
+                    extra.currentY(),
+                    extra.xVelocity(),
+                    extra.yVelocity(),
+                    extra.applyGravity(),
+                    extra.hFlip(),
+                    extra.initialDelay(),
+                    extra.fixedFrame());
+        }
+        // Synthetic generic-recreate probes may not carry subclass extras.
+        return new BadnikProjectileInstance(spawn);
+    }
+
+    /**
+     * ROM Obj98 first runs routine 0, which only calls LoadSubObject and then
+     * advances to routine 2. Children allocated after the current object can
+     * execute that init routine in the same ExecuteObjects pass, before their
+     * first movement frame.
+     */
+    public void deferFirstMovementForLoadSubObjectInit() {
+        this.loadSubObjectInitPending = true;
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
+        if (loadSubObjectInitPending) {
+            loadSubObjectInitPending = false;
+            return;
+        }
+        boolean usesRomRangeUnload = type == ProjectileType.BUZZER_STINGER
+                || type == ProjectileType.OCTUS_BULLET
+                || type == ProjectileType.AQUIS_BULLET;
         // Initial delay: projectile stays stationary (Octus bullet: 16 frames)
         if (initialDelay > 0) {
             initialDelay--;
-            animFrame = ((frameCounter >> 2) & 1);
+            animFrame = ((vIntRunCount >> 2) & 1);
             return;
         }
 
@@ -182,13 +239,20 @@ public class BadnikProjectileInstance extends AbstractObjectInstance
         currentX = motionState.x;
         currentY = motionState.y;
 
-        // Check if off-screen (with margin) and destroy
-        if (!isOnScreen(32)) {
+        if (!usesRomRangeUnload && !isOnScreen(projectileScreenMargin())) {
             setDestroyed(true);
         }
 
         // Animation cycling
-        if (type == ProjectileType.CLUCKER_SHOT) {
+        if (type == ProjectileType.AQUIS_BULLET) {
+            // Ani_obj50_Bullet: dc.b 3, 5, 6, 7, 6, $FF.
+            aquisBulletAnimTimer--;
+            if (aquisBulletAnimTimer < 0) {
+                aquisBulletAnimTimer = 3;
+                animFrame = (animFrame + 1) & 3;
+            }
+            aquisBulletAnimIndex = animFrame;
+        } else if (type == ProjectileType.CLUCKER_SHOT) {
             // Ani_CluckerShot: duration 3, frames $D-$14, end $FF (loop)
             // 8 frames total, each held for 4 game frames (duration 3 = 3+1 ticks)
             cluckerAnimTimer--;
@@ -202,7 +266,7 @@ public class BadnikProjectileInstance extends AbstractObjectInstance
             }
             animFrame = cluckerAnimIndex;
         } else {
-            animFrame = ((frameCounter >> 2) & 1);
+            animFrame = ((vIntRunCount >> 2) & 1);
         }
 
         // Nebula bomb: toggle palette every frame (ROM: bchg #palette_bit_0)
@@ -211,8 +275,26 @@ public class BadnikProjectileInstance extends AbstractObjectInstance
         }
     }
 
+    private int projectileScreenMargin() {
+        if (type == ProjectileType.ASTERON_SPIKE) {
+            if (xVelocity == 0 && yVelocity < 0) {
+                return 32 + Math.max(1, Math.abs(yVelocity >> 8));
+            }
+            if (xVelocity > 0) {
+                return 4;
+            }
+            if (xVelocity < 0 && yVelocity > 0) {
+                return 32 + Math.max(1, Math.abs(xVelocity >> 8));
+            }
+        }
+        return 32;
+    }
+
     @Override
     public int getCollisionFlags() {
+        if (loadSubObjectInitPending) {
+            return 0;
+        }
         // HURT category (0x80) + size index
         return 0x80 | (collisionSizeIndex & 0x3F);
     }
@@ -244,6 +326,9 @@ public class BadnikProjectileInstance extends AbstractObjectInstance
         if (type == ProjectileType.CLUCKER_SHOT) {
             return RenderPriority.clamp(5);
         }
+        if (type == ProjectileType.AQUIS_BULLET) {
+            return RenderPriority.clamp(3);
+        }
         return RenderPriority.clamp(4);
     }
 
@@ -257,6 +342,7 @@ public class BadnikProjectileInstance extends AbstractObjectInstance
         PatternSpriteRenderer renderer;
         int frame;
         int paletteOverride = -1; // -1 = use sprite sheet default
+        boolean forceHighPriority = false;
 
         switch (type) {
             case BUZZER_STINGER:
@@ -289,13 +375,14 @@ public class BadnikProjectileInstance extends AbstractObjectInstance
                 break;
             case AQUIS_BULLET:
                 renderer = renderManager.getRenderer(Sonic2ObjectArtKeys.AQUIS);
-                // Aquis bullet uses frames 5-7 (animation 2: dc.b 3, 5, 6, 7, 6, $FF)
-                frame = 5 + (animFrame % 3);
+                frame = AQUIS_BULLET_FRAMES[animFrame % AQUIS_BULLET_FRAMES.length];
                 break;
             case ASTERON_SPIKE:
                 renderer = renderManager.getRenderer(Sonic2ObjectArtKeys.ASTERON);
                 // Each Asteron spike has a fixed frame set at creation (frames 2-4)
+                // ROM ObjA4_SubObjData2: make_art_tile(ArtTile_ArtNem_MtzSupernova,0,1).
                 frame = fixedFrame >= 0 ? fixedFrame : 2;
+                forceHighPriority = true;
                 break;
             case TURTLOID_SHOT:
                 renderer = renderManager.getRenderer(Sonic2ObjectArtKeys.TURTLOID);
@@ -323,6 +410,68 @@ public class BadnikProjectileInstance extends AbstractObjectInstance
             return;
         }
 
-        renderer.drawFrameIndex(frame, currentX, currentY, hFlip, false, paletteOverride);
+        if (forceHighPriority) {
+            renderer.drawFrameIndexForcedPriority(
+                    frame, currentX, currentY, hFlip, false, paletteOverride, ASTERON_HIGH_PRIORITY_SPRITE);
+        } else {
+            renderer.drawFrameIndex(frame, currentX, currentY, hFlip, false, paletteOverride);
+        }
+    }
+
+    @Override
+    public PerObjectRewindSnapshot captureRewindState() {
+        return super.captureRewindState().withObjectSubclassExtra(
+                new PerObjectRewindSnapshot.BadnikProjectileRewindExtra(
+                        type.name(),
+                        currentX,
+                        currentY,
+                        motionState.xSub,
+                        motionState.ySub,
+                        xVelocity,
+                        yVelocity,
+                        applyGravity,
+                        gravity,
+                        collisionSizeIndex,
+                        animFrame,
+                        hFlip,
+                        initialDelay,
+                        fixedFrame,
+                        paletteBlink,
+                        cluckerAnimTimer,
+                        cluckerAnimIndex,
+                        aquisBulletAnimTimer,
+                        aquisBulletAnimIndex,
+                        loadSubObjectInitPending));
+    }
+
+    @Override
+    public void restoreRewindState(PerObjectRewindSnapshot snapshot) {
+        super.restoreRewindState(snapshot);
+        if (snapshot.objectSubclassExtra()
+                instanceof PerObjectRewindSnapshot.BadnikProjectileRewindExtra extra) {
+            currentX = extra.currentX();
+            currentY = extra.currentY();
+            xVelocity = extra.xVelocity();
+            yVelocity = extra.yVelocity();
+            applyGravity = extra.applyGravity();
+            gravity = extra.gravity();
+            collisionSizeIndex = extra.collisionSizeIndex();
+            animFrame = extra.animFrame();
+            hFlip = extra.hFlip();
+            initialDelay = extra.initialDelay();
+            fixedFrame = extra.fixedFrame();
+            paletteBlink = extra.paletteBlink();
+            cluckerAnimTimer = extra.cluckerAnimTimer();
+            cluckerAnimIndex = extra.cluckerAnimIndex();
+            aquisBulletAnimTimer = extra.aquisBulletAnimTimer();
+            aquisBulletAnimIndex = extra.aquisBulletAnimIndex();
+            loadSubObjectInitPending = extra.loadSubObjectInitPending();
+            motionState.x = currentX;
+            motionState.y = currentY;
+            motionState.xSub = extra.xSub();
+            motionState.ySub = extra.ySub();
+            motionState.xVel = xVelocity;
+            motionState.yVel = yVelocity;
+        }
     }
 }

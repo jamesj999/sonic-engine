@@ -1,6 +1,6 @@
 package com.openggf.tests;
 
-import com.openggf.tools.SaxmanDecompressor;
+import com.openggf.data.compression.SaxmanDecompressor;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -142,3 +142,5 @@ public final class SaxmanFixtureValidator {
         }
     }
 }
+
+

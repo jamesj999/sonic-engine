@@ -6,7 +6,11 @@ import com.openggf.game.PlayableEntity;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
+import com.openggf.level.objects.ObjectManager;
+import com.openggf.level.objects.ObjectPlayerParticipationPolicy;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
@@ -15,7 +19,11 @@ import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.Direction;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Set;
 
 /**
  * WFZ Speed Launcher (Object 0xC0) - catapult platform from Wing Fortress Zone.
@@ -52,7 +60,7 @@ import java.util.List;
  * </ul>
  */
 public class SpeedLauncherObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
 
     // ========================================================================
     // ROM Constants (s2.asm lines 80259-80373)
@@ -87,6 +95,8 @@ public class SpeedLauncherObjectInstance extends AbstractObjectInstance
     private static final int STATE_IDLE = 0;
     private static final int STATE_ACCELERATING = 2;
     private static final int STATE_RETURNING = 4;
+    private static final ObjectPlayerParticipationPolicy PLAYER_PARTICIPATION =
+            ObjectPlayerParticipationPolicy.MAIN_PLUS_ENGINE_SIDEKICKS_AS_NATIVE_P2_EXTENDED;
 
     // ========================================================================
     // Instance State
@@ -95,19 +105,23 @@ public class SpeedLauncherObjectInstance extends AbstractObjectInstance
     // Current X position (changes during movement)
     private int currentX;
     // Home X position (objoff_34 in ROM)
-    private final int homeX;
+    private int homeX;
     // Destination X position (objoff_32 in ROM)
-    private final int destX;
+    private int destX;
     // Current X velocity (8.8 fixed point)
     private int xVel;
     // Acceleration value (signed, direction-dependent) (objoff_30 in ROM)
-    private final int accel;
+    private int accel;
     // Whether the object has x_flip set
-    private final boolean xFlipped;
+    private boolean xFlipped;
     // Current state machine state (routine_secondary in ROM)
     private int state;
     // Sub-pixel X accumulator for ObjectMove
     private int subPixelX;
+    private final Set<PlayableEntity> standingPlayers =
+            Collections.newSetFromMap(new IdentityHashMap<>());
+    private final Set<PlayableEntity> accelerationRiders =
+            Collections.newSetFromMap(new IdentityHashMap<>());
 
     private final SolidObjectParams solidParams;
 
@@ -140,8 +154,13 @@ public class SpeedLauncherObjectInstance extends AbstractObjectInstance
             this.accel = ACCELERATION;
         }
 
-        this.solidParams = new SolidObjectParams(
+        this.solidParams = SolidObjectParams.of(
                 PLATFORM_HALF_WIDTH, PLATFORM_HALF_HEIGHT_AIR, PLATFORM_HALF_HEIGHT_GROUND);
+    }
+
+    @Override
+    public SpeedLauncherObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new SpeedLauncherObjectInstance(ctx.spawn(), getName());
     }
 
     @Override
@@ -159,7 +178,7 @@ public class SpeedLauncherObjectInstance extends AbstractObjectInstance
     // ========================================================================
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // ROM: ObjC0_Main (s2.asm lines 80242-80251)
         // Process state machine, then PlatformObject + MarkObjGone
@@ -178,7 +197,43 @@ public class SpeedLauncherObjectInstance extends AbstractObjectInstance
      * system. This state just checks if the platform is being stood on via onSolidContact.
      */
     private void updateIdle(AbstractPlayableSprite player) {
-        // Standing detection is handled by onSolidContact callback
+        AbstractPlayableSprite rider = firstStandingPlayer(player);
+        if (rider != null) {
+            onStandingIdle(rider);
+        }
+    }
+
+    private AbstractPlayableSprite firstStandingPlayer(AbstractPlayableSprite player) {
+        for (PlayableEntity participant : playerParticipants(player)) {
+            if (standingPlayers.contains(participant)) {
+                return (AbstractPlayableSprite) participant;
+            }
+        }
+
+        return null;
+    }
+
+    private void forEachStandingPlayer(AbstractPlayableSprite main, java.util.function.Consumer<AbstractPlayableSprite> action) {
+        for (PlayableEntity participant : playerParticipants(main)) {
+            if (standingPlayers.contains(participant) || accelerationRiders.contains(participant)) {
+                action.accept((AbstractPlayableSprite) participant);
+            }
+        }
+    }
+
+    private List<PlayableEntity> playerParticipants(AbstractPlayableSprite updatePlayer) {
+        List<PlayableEntity> participants = services().playerQuery().playersFor(PLAYER_PARTICIPATION);
+        if (updatePlayer != null && !participants.contains(updatePlayer)) {
+            ArrayList<PlayableEntity> withUpdatePlayer = new ArrayList<>(participants.size() + 1);
+            withUpdatePlayer.add(updatePlayer);
+            withUpdatePlayer.addAll(participants);
+            return withUpdatePlayer;
+        }
+        return participants;
+    }
+
+    private boolean wasStandingAtStateEntry(AbstractPlayableSprite player) {
+        return player != null && standingPlayers.contains(player);
     }
 
     /**
@@ -226,19 +281,10 @@ public class SpeedLauncherObjectInstance extends AbstractObjectInstance
         currentX = destX;
         subPixelX = destX << 8;
 
-        if (player == null) {
-            return;
-        }
-
         // ROM: Check standing_mask and launch each standing player
-        // The SolidContacts system tracks who is standing on us, but we need to
-        // launch them here. We check proximity since the solid system has already
-        // moved players to our surface.
-        launchPlayerIfStanding(player);
-
-        for (PlayableEntity sidekick : services().sidekicks()) {
-            launchPlayerIfStanding((AbstractPlayableSprite) sidekick);
-        }
+        forEachStandingPlayer(player, this::launchPlayerIfStanding);
+        standingPlayers.clear();
+        accelerationRiders.clear();
     }
 
     /**
@@ -246,14 +292,7 @@ public class SpeedLauncherObjectInstance extends AbstractObjectInstance
      * ROM: loc_3C020 (s2.asm lines 80329-80333)
      */
     private void launchPlayerIfStanding(AbstractPlayableSprite player) {
-        // Check if this player is riding this object (standing on it)
-        if (!player.isOnObject()) {
-            return;
-        }
-        // Additional proximity check to confirm they're on THIS platform
-        int dx = Math.abs(player.getCentreX() - currentX);
-        int dy = player.getCentreY() - spawn.y();
-        if (dx > PLATFORM_HALF_WIDTH + 4 || dy < -(PLATFORM_HALF_HEIGHT_GROUND + 20) || dy > 4) {
+        if (!wasStandingAtStateEntry(player) && !accelerationRiders.contains(player)) {
             return;
         }
 
@@ -273,12 +312,9 @@ public class SpeedLauncherObjectInstance extends AbstractObjectInstance
      * and sets player facing direction opposite to platform movement.
      */
     private void syncStandingPlayers(AbstractPlayableSprite player) {
-        if (player == null) {
-            return;
-        }
         // The SolidContacts system handles keeping the player on the platform surface.
         // The ROM explicitly syncs player X to platform X and clears their velocity.
-        // We handle this via onSolidContact during the accelerating state.
+        forEachStandingPlayer(player, this::syncPlayer);
     }
 
     /**
@@ -362,9 +398,16 @@ public class SpeedLauncherObjectInstance extends AbstractObjectInstance
         }
 
         switch (state) {
-            case STATE_IDLE -> onStandingIdle(player);
-            case STATE_ACCELERATING -> onStandingAccelerating(player);
+            case STATE_IDLE, STATE_ACCELERATING -> standingPlayers.add(player);
         }
+    }
+
+    @Override
+    public void onSolidContactCleared(PlayableEntity player, int frameCounter) {
+        if (state == STATE_ACCELERATING) {
+            return;
+        }
+        standingPlayers.remove(player);
     }
 
     /**
@@ -376,6 +419,7 @@ public class SpeedLauncherObjectInstance extends AbstractObjectInstance
     private void onStandingIdle(AbstractPlayableSprite player) {
         // ROM: addq.b #2,routine_secondary(a0)
         state = STATE_ACCELERATING;
+        accelerationRiders.clear();
 
         // ROM: move.w #$C00,x_vel(a0)
         xVel = INITIAL_X_VELOCITY;
@@ -392,21 +436,11 @@ public class SpeedLauncherObjectInstance extends AbstractObjectInstance
         // ROM: Sync both standing players (loc_3BFB4)
         syncPlayer(player);
 
-        for (PlayableEntity sidekick : services().sidekicks()) {
-            if (sidekick.isOnObject()) {
-                syncPlayer((AbstractPlayableSprite) sidekick);
+        for (PlayableEntity participant : playerParticipants(player)) {
+            if (participant != player && participant.isOnObject()) {
+                syncPlayer((AbstractPlayableSprite) participant);
             }
         }
-    }
-
-    /**
-     * Player is standing on the platform during acceleration.
-     * ROM: loc_3BFD8 bottom half (s2.asm lines 80311-80326)
-     * <p>
-     * Continues to sync player position with platform.
-     */
-    private void onStandingAccelerating(AbstractPlayableSprite player) {
-        syncPlayer(player);
     }
 
     /**
@@ -419,7 +453,12 @@ public class SpeedLauncherObjectInstance extends AbstractObjectInstance
         player.setXSpeed((short) 0);
 
         // ROM: move.w x_pos(a0),x_pos(a1)
-        player.setCentreX((short) currentX);
+        player.setCentreXPreserveSubpixel((short) currentX);
+        accelerationRiders.add(player);
+        ObjectManager objectManager = services().objectManager();
+        if (objectManager != null) {
+            objectManager.refreshRidingTrackingPosition(this);
+        }
 
         // ROM: Set player facing direction
         // bclr #status.player.x_flip,status(a1) - clear flip

@@ -9,6 +9,7 @@ import com.openggf.game.sonic2.Sonic2PlayerArt;
 import com.openggf.game.sonic2.Sonic2Rng;
 import com.openggf.game.sonic2.constants.Sonic2AudioConstants;
 import com.openggf.game.sonic2.constants.Sonic2Constants;
+import com.openggf.game.resources.DynamicArtLifecycleService;
 import com.openggf.graphics.GraphicsManager;
 import com.openggf.level.Palette;
 import com.openggf.level.Pattern;
@@ -18,7 +19,7 @@ import com.openggf.level.render.SpriteDplcFrame;
 import com.openggf.level.render.SpriteMappingFrame;
 import com.openggf.level.render.SpriteMappingPiece;
 import com.openggf.level.render.SpritePieceRenderer;
-import com.openggf.tools.EnigmaReader;
+import com.openggf.data.compression.EnigmaReader;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -53,6 +54,17 @@ import com.openggf.game.GameServices;
 public class Sonic2EndingCutsceneManager {
 
     private static final Logger LOGGER = Logger.getLogger(Sonic2EndingCutsceneManager.class.getName());
+    private final Sonic2EndingDynamicArtDecisionSink dynamicArtDecisionSink;
+
+    public Sonic2EndingCutsceneManager() {
+        this(Sonic2EndingDynamicArtDecisionSink.NONE);
+    }
+
+    Sonic2EndingCutsceneManager(
+            Sonic2EndingDynamicArtDecisionSink dynamicArtDecisionSink) {
+        this.dynamicArtDecisionSink = java.util.Objects.requireNonNull(
+                dynamicArtDecisionSink, "dynamicArtDecisionSink");
+    }
 
     // ========================================================================
     // Cutscene states — maps 1:1 to ObjCA routines 0/$2/$4/$6/$8/$A/$C/$E
@@ -449,7 +461,10 @@ public class Sonic2EndingCutsceneManager {
             pilotAnimSequence = (routine == Sonic2EndingArt.EndingRoutine.TAILS)
                     ? SONIC_PILOT_FRAMES   // pilot=Sonic
                     : TAILS_PILOT_FRAMES;  // pilot=Tails
-            pilotAnimTimer = PILOT_ANIM_DELAY;
+            // ObjB2's freshly allocated object RAM leaves objoff_37 at zero.
+            // The first main update decrements it to $FF and immediately runs
+            // the Part2 DPLC decision; only later expiries reset it to eight.
+            pilotAnimTimer = 0;
             pilotAnimIndex = 0;
 
             LOGGER.info("Parsed sprite mappings: ObjCF=" + objCfFrames.size()
@@ -529,7 +544,7 @@ public class Sonic2EndingCutsceneManager {
             return;
         }
 
-        GraphicsManager gm = GraphicsManager.getInstance();
+        GraphicsManager gm = GameServices.graphics();
         if (gm == null || gm.isHeadlessMode()) {
             return;
         }
@@ -780,6 +795,7 @@ public class Sonic2EndingCutsceneManager {
         }
         charAnimIndex = 0;
         charAnimTimer = 0;
+        publishNormalPlayerDecision();
 
         // ROM: EndingSequence sets Camera_BG_Y_pos = $C8
         bgYPos = INITIAL_BG_Y_POS;
@@ -805,6 +821,7 @@ public class Sonic2EndingCutsceneManager {
             charAnimTimer = 0;
             charAnimIndex = (charAnimIndex + 1) % charAnimFrames.length;
         }
+        publishNormalPlayerDecision();
 
         // ROM: Camera_BG_Y_pos stays fixed at $C8 during CHARACTER_APPEAR.
         // The "falling" visual comes from Camera_Y_pos_diff=$100 through SwScrl_DEZ parallax,
@@ -845,6 +862,7 @@ public class Sonic2EndingCutsceneManager {
             charAnimTimer = 0;
             charAnimIndex = (charAnimIndex + 1) % charAnimFrames.length;
         }
+        publishNormalPlayerDecision();
 
         // Spawn vertical clouds during camera scroll for falling sensation
         spawnVerticalCloudIfNeeded();
@@ -909,6 +927,7 @@ public class Sonic2EndingCutsceneManager {
                 charAnimTimer = 0;
                 charAnimIndex = (charAnimIndex + 1) % charAnimFrames.length;
             }
+            publishNormalPlayerDecision();
             spawnCloudIfNeeded();
             objCcSpawnTimer--;
             if (objCcSpawnTimer <= 0) {
@@ -1007,11 +1026,14 @@ public class Sonic2EndingCutsceneManager {
             birdSpawnCounter = Sonic2CreditsData.BIRD_SPAWN_COUNT;
             birdSpawnDelay = 0;
 
-            // Force DPLC reload: animation changes from Float2 to Wait
-            lastPlayerDplcFrame = -1;
+            // The real player switches from Float2 to Wait. This direct
+            // runtime decision replaces the renderer-owned reload.
+            publishNormalPlayerDecision(1);
 
             tornadoSubState = TornadoSubState.BIRDS_AND_HOLD;
             LOGGER.fine("Tornado arrived, entering BIRDS_AND_HOLD");
+        } else {
+            publishNormalPlayerDecision();
         }
     }
 
@@ -1231,6 +1253,8 @@ public class Sonic2EndingCutsceneManager {
             if (pilotAnimIndex >= pilotAnimSequence.length) {
                 pilotAnimIndex = 0;
             }
+            publishPilotDecision(
+                    pilotAnimSequence[pilotAnimIndex]);
         }
     }
 
@@ -1551,9 +1575,8 @@ public class Sonic2EndingCutsceneManager {
                 // ObjB2 body during approach.
                 // ROM: make_art_tile(ArtTile_ArtNem_Tornado, 0, 1) — palette 0, priority 1
                 // ROM Ani_objB2_a: anim 0 = frames 0,1,2,3 (Sonic); anim 1 = frames 4,5,6,7 (Tails)
-                // ROM: ObjB2_Animate_Pilot writes character DPLC tiles into the
-                // ArtUnc_Sonic/ArtUnc_Tails VRAM region referenced by cockpit pieces.
-                syncPilotDplcOverlay(gm);
+                // Pilot DPLC decisions and bank updates are owned by update.
+                ensurePilotPatternBankCached(gm);
                 if (tornadoFrames != null && !tornadoFrames.isEmpty()) {
                     int animBase = (routine == Sonic2EndingArt.EndingRoutine.TAILS) ? 4 : 0;
                     int animFrame = animBase + (frameCounter % 4);
@@ -1565,8 +1588,8 @@ public class Sonic2EndingCutsceneManager {
             }
             case BIRDS_AND_HOLD -> {
                 // ObjB2 body during hold. sub_A524 repositions MainCharacter to tornado.
-                // ObjB2_Animate_Pilot still runs and updates cockpit tile region.
-                syncPilotDplcOverlay(gm);
+                // ObjB2_Animate_Pilot state was prepared during update.
+                ensurePilotPatternBankCached(gm);
                 if (tornadoFrames != null && !tornadoFrames.isEmpty()) {
                     int animBase = (routine == Sonic2EndingArt.EndingRoutine.TAILS) ? 4 : 0;
                     int animFrame = animBase + (frameCounter % 4);
@@ -1664,22 +1687,11 @@ public class Sonic2EndingCutsceneManager {
         if (playerMappingFrames == null || frameIndex < 0 || frameIndex >= playerMappingFrames.size()) {
             return;
         }
-        // Apply DPLC: load the correct tile subset for this animation frame.
-        // MapUnc_Sonic/Tails mapping pieces reference tile indices relative to
-        // DPLC-loaded art at the art_tile base, NOT absolute offsets into the
-        // full ArtUnc art. Without DPLC, tile index 0 maps to the wrong source tile.
-        if (frameIndex != lastPlayerDplcFrame && playerPatternBank != null) {
-            if (playerDplcFrames != null && frameIndex < playerDplcFrames.size()) {
-                SpriteDplcFrame dplcFrame = playerDplcFrames.get(frameIndex);
-                if (dplcFrame != null && !dplcFrame.requests().isEmpty()) {
-                    playerPatternBank.applyRequests(dplcFrame.requests(), playerSourceArt);
-                    playerPatternBank.ensureCached(gm);
-                    lastPlayerDplcFrame = frameIndex;
-                }
-            } else if (playerDplcFrames != null) {
-                LOGGER.warning("Player DPLC frame " + frameIndex + " out of range (max "
-                        + playerDplcFrames.size() + ") — DPLC not applied, tiles may be wrong");
-            }
+        // The update state machine already chose and prepared this DPLC bank.
+        // Drawing may cache the prepared presentation state, but never owns a
+        // semantic decision or changes a dynamic-art cursor.
+        if (playerPatternBank != null) {
+            playerPatternBank.ensureCached(gm);
         }
         int basePattern = playerPatternBank != null
                 ? playerPatternBank.getBasePatternIndex()
@@ -1687,28 +1699,85 @@ public class Sonic2EndingCutsceneManager {
         drawMappingFrame(gm, playerMappingFrames, frameIndex, x, y, basePattern, 0);
     }
 
-    /**
-     * Applies ObjB2 pilot DPLC updates into the VRAM-relative character tile region.
-     * The cockpit pilot appears through ObjB2 mapping pieces that reference those tiles.
-     */
-    private void syncPilotDplcOverlay(GraphicsManager gm) {
-        if (pilotAnimSequence == null || pilotPatternBank == null || pilotDplcFrames == null) {
+    private void publishNormalPlayerDecision() {
+        if (charAnimFrames == null || charAnimFrames.length == 0) {
             return;
         }
-        int frameIndex = pilotAnimSequence[pilotAnimIndex % pilotAnimSequence.length];
-        if (frameIndex == lastPilotDplcFrame) {
+        publishNormalPlayerDecision(charAnimFrames[charAnimIndex]);
+    }
+
+    private void publishNormalPlayerDecision(int frameIndex) {
+        SpriteDplcFrame dplcFrame = playerDplcFrame(frameIndex, "Player");
+        if (dplcFrame == null) {
             return;
         }
-        if (frameIndex < 0 || frameIndex >= pilotDplcFrames.size()) {
+        dynamicArtDecisionSink.observe(new Sonic2EndingDynamicArtDecisionSink.Decision(
+                DynamicArtLifecycleService.DecisionKind.NORMAL_OBJECT,
+                normalPlayerOwner(), frameIndex, dplcFrame));
+        preparePlayerPatternBank(frameIndex, dplcFrame);
+    }
+
+    private void publishPilotDecision(int frameIndex) {
+        SpriteDplcFrame dplcFrame = pilotDplcFrame(frameIndex);
+        if (dplcFrame == null) {
             return;
         }
-        SpriteDplcFrame dplcFrame = pilotDplcFrames.get(frameIndex);
-        if (dplcFrame == null || dplcFrame.requests().isEmpty()) {
+        dynamicArtDecisionSink.observe(new Sonic2EndingDynamicArtDecisionSink.Decision(
+                DynamicArtLifecycleService.DecisionKind.DIRECT_PART2,
+                pilotOwner(), frameIndex, dplcFrame));
+        preparePilotPatternBank(frameIndex, dplcFrame);
+    }
+
+    private String normalPlayerOwner() {
+        return routine == Sonic2EndingArt.EndingRoutine.TAILS ? "tails" : "sonic";
+    }
+
+    private String pilotOwner() {
+        return routine == Sonic2EndingArt.EndingRoutine.TAILS ? "sonic" : "tails";
+    }
+
+    private SpriteDplcFrame playerDplcFrame(int frameIndex, String label) {
+        if (playerDplcFrames == null || frameIndex < 0
+                || frameIndex >= playerDplcFrames.size()) {
+            if (playerDplcFrames != null) {
+                LOGGER.warning(label + " DPLC frame " + frameIndex
+                        + " out of range (max " + playerDplcFrames.size() + ")");
+            }
+            return null;
+        }
+        return playerDplcFrames.get(frameIndex);
+    }
+
+    private SpriteDplcFrame pilotDplcFrame(int frameIndex) {
+        if (pilotDplcFrames == null || frameIndex < 0
+                || frameIndex >= pilotDplcFrames.size()) {
+            return null;
+        }
+        return pilotDplcFrames.get(frameIndex);
+    }
+
+    private void preparePlayerPatternBank(int frameIndex, SpriteDplcFrame dplcFrame) {
+        if (frameIndex == lastPlayerDplcFrame || playerPatternBank == null
+                || dplcFrame.requests().isEmpty()) {
             return;
         }
-        pilotPatternBank.applyRequests(dplcFrame.requests(), pilotSourceArt);
-        pilotPatternBank.ensureCached(gm);
+        playerPatternBank.consumeRuntimeArtState(dplcFrame.requests(), playerSourceArt);
+        lastPlayerDplcFrame = frameIndex;
+    }
+
+    private void preparePilotPatternBank(int frameIndex, SpriteDplcFrame dplcFrame) {
+        if (frameIndex == lastPilotDplcFrame || pilotPatternBank == null
+                || dplcFrame.requests().isEmpty()) {
+            return;
+        }
+        pilotPatternBank.consumeRuntimeArtState(dplcFrame.requests(), pilotSourceArt);
         lastPilotDplcFrame = frameIndex;
+    }
+
+    private void ensurePilotPatternBankCached(GraphicsManager graphicsManager) {
+        if (pilotPatternBank != null) {
+            pilotPatternBank.ensureCached(graphicsManager);
+        }
     }
 
     /**
@@ -1801,7 +1870,7 @@ public class Sonic2EndingCutsceneManager {
     }
 
     private static boolean isPalTiming() {
-        String region = SonicConfigurationService.getInstance().getString(SonicConfiguration.REGION);
+        String region = GameServices.configuration().getString(SonicConfiguration.REGION);
         return "PAL".equalsIgnoreCase(region);
     }
 
@@ -2021,7 +2090,7 @@ public class Sonic2EndingCutsceneManager {
     }
 
     private void cacheDisplayPalettes() {
-        GraphicsManager gm = GraphicsManager.getInstance();
+        GraphicsManager gm = GameServices.graphics();
         if (gm == null || gm.isHeadlessMode() || displayPalettes == null) return;
         for (int i = 0; i < displayPalettes.length; i++) {
             if (displayPalettes[i] != null) {

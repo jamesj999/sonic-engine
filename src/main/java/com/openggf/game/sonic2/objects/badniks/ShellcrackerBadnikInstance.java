@@ -12,6 +12,8 @@ import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.level.objects.PatrolMovementHelper;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
 import com.openggf.debug.DebugColor;
@@ -35,7 +37,7 @@ import java.util.List;
  *     Sub 2: Wait for claw to signal completion (objoff_2C flag)
  *     Sub 4: Wait 0x20 frames, then reset to walking
  */
-public class ShellcrackerBadnikInstance extends AbstractBadnikInstance {
+public class ShellcrackerBadnikInstance extends AbstractBadnikInstance implements RewindRecreatable {
     // From Obj9F_SubObjData: collision_flags = $A (enemy, size index 10)
     private static final int COLLISION_SIZE_INDEX = 0x0A;
 
@@ -113,6 +115,11 @@ public class ShellcrackerBadnikInstance extends AbstractBadnikInstance {
         this.clawDone = false;
     }
 
+    @Override
+    public ShellcrackerBadnikInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new ShellcrackerBadnikInstance(ctx.spawn());
+    }
+
     /**
      * Called by the first claw piece (piece index 0) when it finishes retracting.
      * Equivalent to ROM: st.b objoff_2C(a1) where a1 is the parent Shellcracker.
@@ -122,7 +129,7 @@ public class ShellcrackerBadnikInstance extends AbstractBadnikInstance {
     }
 
     @Override
-    protected void updateMovement(int frameCounter, PlayableEntity playerEntity) {
+    protected void updateMovement(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         switch (state) {
             case WALKING -> updateWalking(player);
@@ -300,11 +307,8 @@ public class ShellcrackerBadnikInstance extends AbstractBadnikInstance {
      * All pieces positioned at (x + offset, y - 8).
      */
     private void spawnClawPieces() {
-        var objectManager = services().objectManager();
-        if (objectManager == null) return;
-
         for (int i = 0; i < CLAW_PIECE_COUNT; i++) {
-            int pieceIndex = i * 2; // d1 = 0, 2, 4, 6, 8, 10, 12, 14
+            final int pieceIndex = i * 2; // d1 = 0, 2, 4, 6, 8, 10, 12, 14
 
             // Calculate X offset
             // ROM: move.w #-$14,d2
@@ -319,12 +323,17 @@ public class ShellcrackerBadnikInstance extends AbstractBadnikInstance {
                 xOff += CLAW_SPAWN_X_EXTRA;
             }
 
-            int pieceX = currentX + xOff;
-            int pieceY = currentY + CLAW_SPAWN_Y_OFFSET;
+            // ROM (s2.asm:75284-75296) copies the body's ROM-center x_pos/y_pos to each
+            // claw. Badnik currentX/currentY are already ROM-center coords (the same
+            // values used by the currentX - player.getCentreX() detection checks above),
+            // so they map directly onto the child's spawn position — no center
+            // adjustment needed.
+            final int pieceX = currentX + xOff;
+            final int pieceY = currentY + CLAW_SPAWN_Y_OFFSET;
 
-            ShellcrackerClawInstance claw = new ShellcrackerClawInstance(
-                    spawn, this, pieceX, pieceY, pieceIndex, !facingLeft);
-            objectManager.addDynamicObject(claw);
+            // ROM (s2.asm:75271-75301): 8x ObjA0 spawned as children of the body.
+            spawnChild(() -> new ShellcrackerClawInstance(
+                    spawn, this, pieceX, pieceY, pieceIndex, !facingLeft));
         }
     }
 
@@ -338,7 +347,7 @@ public class ShellcrackerBadnikInstance extends AbstractBadnikInstance {
     }
 
     @Override
-    protected void updateAnimation(int frameCounter) {
+    protected void updateAnimation(int vIntRunCount) {
         // Animation state is set directly in state machine methods
     }
 

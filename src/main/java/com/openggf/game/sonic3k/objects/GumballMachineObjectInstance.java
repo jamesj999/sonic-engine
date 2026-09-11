@@ -10,11 +10,16 @@ import com.openggf.graphics.RenderPriority;
 import com.openggf.graphics.SpriteMaskReplayRole;
 import com.openggf.game.GameRng;
 import com.openggf.level.objects.AbstractObjectInstance;
+import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreateObjectLinks;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -49,7 +54,7 @@ import java.util.logging.Logger;
  *   <li>Priority: $0100</li>
  * </ul>
  */
-public class GumballMachineObjectInstance extends AbstractObjectInstance {
+public class GumballMachineObjectInstance extends AbstractObjectInstance implements SpawnRewindRecreatable {
 
     private static final Logger LOGGER = Logger.getLogger(GumballMachineObjectInstance.class.getName());
 
@@ -64,12 +69,19 @@ public class GumballMachineObjectInstance extends AbstractObjectInstance {
     // ===== ROM constants =====
 
     // ROM word_60D16: dc.w -$24, $48, -8, $10 = (xOffset=-36, width=72, yOffset=-8, height=16)
-    // Check_PlayerInRange uses (xOffset..xOffset+width) x (yOffset..yOffset+height),
-    // giving a 72x16 pixel activation zone centered around the machine.
-    private static final int ACTIVATE_X_MIN = -36;  // xOffset
-    private static final int ACTIVATE_X_MAX = 36;   // xOffset + width
-    private static final int ACTIVATE_Y_MIN = -8;   // yOffset
-    private static final int ACTIVATE_Y_MAX = 8;    // yOffset + height
+    // Check_PlayerInRange / sub_8592C (sonic3k.asm:179994-180031) builds the box as
+    //   left = objX + xOffset, right = left + width, top = objY + yOffset, bottom = top + height
+    // and tests it HALF-OPEN: `cmp right,px / bhs out` and `cmp bottom,py / bhs out`
+    // reject px>=right and py>=bottom, so the inclusive edges are only the low ones
+    // (left/top). The box is therefore [left,right) x [top,bottom). Using `<=` on the
+    // high edges fires one frame early on an approach that lands flush on the bottom
+    // edge (py == objY+8): the S3K gumball trace has the player rising through py=objY+8
+    // one frame before it truly enters the ROM box, which dispenses the ball a frame
+    // early and desyncs its fall position at the eventual player pickup.
+    private static final int ACTIVATE_X_MIN = -36;  // left  = objX + xOffset   (inclusive)
+    private static final int ACTIVATE_X_MAX = 36;   // right = objX + xOffset+width (exclusive)
+    private static final int ACTIVATE_Y_MIN = -8;   // top    = objY + yOffset   (inclusive)
+    private static final int ACTIVATE_Y_MAX = 8;    // bottom = objY + yOffset+height (exclusive)
 
     // ROM: ObjDat_GumballMachine priority $0100 → bucket 2 (same as Sonic).
     // Draw_Sprite uses priority as byte offset into Sprite_table_input ($80/bucket).
@@ -180,13 +192,27 @@ public class GumballMachineObjectInstance extends AbstractObjectInstance {
     // Piles/glass render behind high-priority FG tiles, visible through transparent areas.
     private static final int BODY_PRIORITY_BUCKET = 4;
 
-    // ROM: byte_61450 = [3, 5, 6, 7, $14, 5, $FF]
-    // First byte (3) is the per-frame timer, NOT a mapping frame.
-    // Actual animation frames: 5, 6, 7, $14, 5.
-    // ROM timer stores (value) then decrements via bpl check (runs value+1 frames).
-    private static final int[] SPIN_FRAMES = {5, 6, 7, 0x14, 5};
+    // ROM loc_60D1E runs Animate_RawNoSST(byte_61450), byte_61450 = [3, 5, 6, 7, $14, 5, $F4, ...].
+    // First byte (3) is the per-frame timer; frames are 5, 6, 7, $14, 5, then the $F4
+    // control byte invokes the object's $34 routine (loc_60D32) which sets machine bit 3
+    // and dispenses the ball.
+    // ROM Animate_RawNoSST (sonic3k.asm:177341): `subq.b #1,anim_frame_timer / bpl skip`,
+    // else reload anim_frame_timer from the duration byte (3, i.e. held 4 calls) and
+    // advance to the NEXT table entry. anim_frame_timer is 0 on SPIN entry
+    // (SetUp_ObjAttributes clears it and the IDLE state never animates), so the FIRST
+    // call's `subq.b #1` immediately goes negative and advances past table[0]=5 (never
+    // displayed) straight to table[1]=6 -- table[0]=5 is only ever the frame set by
+    // SetUp_ObjAttributes on entry into SPIN, held for zero Animate calls. Each
+    // subsequent entry (7, $14, 5) is held for a full duration+1=4 calls, so the
+    // displayed sequence is 6x4, 7x4, $14x4, 5x4 = 16 calls, and the 17th call is the
+    // one that finally decodes the $F4 control byte (dispensing the ball) without
+    // changing the displayed frame. Total: 16 held + 1 control-detect = 17.
+    private static final int[] SPIN_FRAMES = {6, 7, 0x14, 5};
     private static final int SPIN_FRAME_DURATION = 4; // ROM timer=3 + 1 for bpl check
-    private static final int SPIN_TOTAL_FRAMES = SPIN_FRAMES.length * SPIN_FRAME_DURATION;
+    // Verified against the recorded ROM trace: IDLE->SPIN at frame 122, ball dispensed at
+    // frame 139 (delta 17); the previous 5x4,6x4,7x4,$14x4,5x1 model got the same total
+    // (17) but the wrong per-value durations/order -- see SPIN_FRAMES citation above.
+    private static final int SPIN_TOTAL_FRAMES = SPIN_FRAMES.length * SPIN_FRAME_DURATION + 1;
 
     // ROM: ObjDat_GumballMachine byte 2 = 5 — default mapping frame (machine body)
     private static final int IDLE_MAPPING_FRAME = 5;
@@ -206,6 +232,17 @@ public class GumballMachineObjectInstance extends AbstractObjectInstance {
     // Ball container display: (0, +0x24)
     private static final int CONTAINER_OFFSET_X = 0;
     private static final int CONTAINER_OFFSET_Y = 0x24;
+
+    // ContainerDisplayChild's own captured spawn (px+CONTAINER_OFFSET_X,
+    // py+CONTAINER_OFFSET_Y where py = spawn.y()+MACHINE_Y_OFFSET) is never refreshed
+    // after construction, and the machine candidate's own getX()/getY() (no override,
+    // so the ObjectInstance default: getSpawn().x()/y()) is likewise always the raw,
+    // undrifted placement spawn -- both sides derive from the SAME spawn.x()/y()
+    // reference, so the difference is the EXACT fixed constant
+    // |MACHINE_Y_OFFSET(-0x100) + CONTAINER_OFFSET_Y(0x24)| = 0xDC (220px) in Y, 0 in X,
+    // regardless of where the ROM actually places this machine. 0x100 (256px) rounds
+    // that up with headroom.
+    private static final int CONTAINER_TO_MACHINE_MAX_DISTANCE = 0x100;
 
     // Exit trigger: (0, +0x2A0)
     private static final int EXIT_TRIGGER_OFFSET_X = 0;
@@ -234,6 +271,16 @@ public class GumballMachineObjectInstance extends AbstractObjectInstance {
     // Y offset from machine-adjusted Y: dispenser_y - machine_y - $18 = 0 - 0x18 = -$18
     private static final int[] SPRING_X_OFFSETS = { -0x30, -0x10, 0x10, 0x30 };
     private static final int SPRING_Y_OFFSET = -0x18;
+
+    // A spring's own captured spawn (sx,sy = DISPENSER_ABSOLUTE_X/Y + the spring's own
+    // fixed offset above) and DispenserChild's own captured spawn
+    // (buildSpawnAt(DISPENSER_ABSOLUTE_X, DISPENSER_ABSOLUTE_Y), likewise never
+    // refreshed after construction) are BOTH hardcoded absolute constants -- neither
+    // side depends on the machine's actual placement spawn -- so the true distance
+    // between any spring and the dispenser is the EXACT, fixed
+    // sqrt(springX^2 + SPRING_Y_OFFSET^2), at most sqrt(0x30^2+0x18^2) =~ 54px (the
+    // outermost spring). 0x40 (64px) rounds that up with headroom.
+    private static final int SPRING_TO_DISPENSER_MAX_DISTANCE = 0x40;
 
     // ===== Machine Y drift / slot tracking =====
     //
@@ -284,23 +331,39 @@ public class GumballMachineObjectInstance extends AbstractObjectInstance {
 
     private boolean childrenSpawned;
 
-    // Single-instance reference for cross-object coordination (REP gumball
-    // needs to call back into the machine to respawn springs). Only one
-    // gumball bonus stage is active at a time.
-    private static GumballMachineObjectInstance currentInstance;
-
     /**
      * @return the current active gumball machine, or null if none
      */
-    public static GumballMachineObjectInstance current() {
-        return currentInstance;
+    public static GumballMachineObjectInstance current(ObjectManager objectManager) {
+        if (objectManager == null) {
+            return null;
+        }
+        List<GumballMachineObjectInstance> machines =
+                objectManager.activeObjectsOfType(GumballMachineObjectInstance.class);
+        return machines.isEmpty() ? null : machines.get(0);
     }
 
     public GumballMachineObjectInstance(ObjectSpawn spawn) {
         super(spawn, "GumballMachine");
+    }
 
-        // Register as the active machine so gumball items can trigger callbacks
-        currentInstance = this;
+    @Override
+    protected void afterRewindRestoreSettled() {
+        ObjectManager objectManager = services().objectManager();
+        if (objectManager == null) {
+            return;
+        }
+        dispenser = objectManager.getActiveObjects().stream()
+                .filter(object -> object instanceof DispenserChild && !object.isDestroyed())
+                .map(DispenserChild.class::cast)
+                .findFirst()
+                .orElse(null);
+        springs.clear();
+        objectManager.getActiveObjects().stream()
+                .filter(object -> object instanceof GumballSpringChild && !object.isDestroyed())
+                .map(GumballSpringChild.class::cast)
+                .filter(spring -> spring.parent == this)
+                .forEach(springs::add);
     }
 
     private void spawnChildren() {
@@ -368,12 +431,30 @@ public class GumballMachineObjectInstance extends AbstractObjectInstance {
     // ===== State machine =====
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         // Initialize drift state on first update (separated from child spawning
         // so tests can exercise drift logic without requiring services()).
         if (!driftInitialized) {
-            // ROM: Obj_GumballMachine seeds RNG_seed from V_int_run_count at init.
-            services().rng().setSeed(frameCounter & 0xFFFFFFFFL);
+            // ROM: Obj_GumballMachine seeds RNG_seed from V_int_run_count at init
+            // (move.l (V_int_run_count).w,(RNG_seed).w, sonic3k.asm:127412). The
+            // intent is to fold run-history entropy (VBlanks since power-on: menu
+            // time, prior acts, etc.) into the bonus-stage RNG so the ball-subtype
+            // roll (sub_612A8, sonic3k.asm:127988-128008) varies run-to-run.
+            //
+            // The engine's shared RNG ALREADY carries that run-history entropy when
+            // the machine spawns: it has been advanced by all prior gameplay in live
+            // play, and in trace replay the bootstrap has already primed it to the
+            // recorded run's exact seed (V_int_run_count for that recording;
+            // TraceReplaySessionBootstrap.applyInitialRngSeedForReplay, uniform for
+            // every trace carrying metadata.rng_seed). So the ROM invariant
+            // "RNG_seed == V_int_run_count" is already satisfied by the RNG's own
+            // established state on this tick, and modeling the reseed here is a
+            // read of that same value -- i.e. a no-op.
+            //
+            // The update parameter is now named vIntRunCount because it represents this
+            // ROM clock. This terminology-only refactor deliberately does not change the
+            // established shared-RNG ownership or add a reseed here; that behavior needs
+            // separate ROM-parity validation before it can change safely.
             initDrift();
         }
 
@@ -509,8 +590,9 @@ public class GumballMachineObjectInstance extends AbstractObjectInstance {
         int dx = playerX - spawn.x();
         int dy = playerY - currentY;
 
-        if (dx >= ACTIVATE_X_MIN && dx <= ACTIVATE_X_MAX
-                && dy >= ACTIVATE_Y_MIN && dy <= ACTIVATE_Y_MAX) {
+        // ROM sub_8592C: half-open box — low edges inclusive, high edges exclusive (bhs).
+        if (dx >= ACTIVATE_X_MIN && dx < ACTIVATE_X_MAX
+                && dy >= ACTIVATE_Y_MIN && dy < ACTIVATE_Y_MAX) {
             // ROM: play sfx_GumballTab, determine flip, transition to SPIN
             try {
                 services().playSfx(Sonic3kSfx.GUMBALL_TAB.id);
@@ -593,11 +675,19 @@ public class GumballMachineObjectInstance extends AbstractObjectInstance {
         return SUBTYPE_LOOKUP[r];
     }
 
-    /** Called by ContainerDisplayChild when it activates (parent bit 3 set). */
-    public void onContainerSpawnBall(int x, int y) {
+    /**
+     * Called by ContainerDisplayChild when it activates (parent bit 3 set).
+     * <p>
+     * {@code parentYSupplier} lets the spawned ball track its spawning container's
+     * LIVE y (ROM: {@code parent3(a0)}, the container/crank child), matching ROM
+     * loc_60EE0's per-frame clamp that keeps the ball from rising above its
+     * spawner while the machine itself may still be drifting downward
+     * (sonic3k.asm:127609-127616).
+     */
+    public void onContainerSpawnBall(int x, int y, java.util.function.IntSupplier parentYSupplier) {
         int subtype = chooseBallSubtype();
         ObjectSpawn gumballSpawn = new ObjectSpawn(x, y, 0xEB, subtype, 0, false, 0);
-        spawnChild(() -> new GumballItemObjectInstance(gumballSpawn, 0, true));
+        spawnChild(() -> new GumballItemObjectInstance(gumballSpawn, 0, true, parentYSupplier));
         LOGGER.fine("GumballMachine: container spawned ball, subtype=" + subtype);
     }
 
@@ -702,7 +792,7 @@ public class GumballMachineObjectInstance extends AbstractObjectInstance {
      * from byte_61342 + sub_61320, and self-destroys.
      */
     static class DispenserChild extends AbstractObjectInstance
-            implements SolidObjectProvider, SolidObjectListener {
+            implements SolidObjectProvider, SolidObjectListener, SpawnRewindRecreatable {
 
         // ROM sub_61314: d1=$4B (halfWidth=75), d2=$10 (airHalfHeight=16), d3=$11 (groundHalfHeight=17)
         private static final SolidObjectParams SOLID_PARAMS = new SolidObjectParams(75, 16, 17);
@@ -732,7 +822,7 @@ public class GumballMachineObjectInstance extends AbstractObjectInstance {
         }
 
         @Override
-        public void update(int frameCounter, PlayableEntity playerEntity) {
+        public void update(int vIntRunCount, PlayableEntity playerEntity) {
             if (springBitSet) {
                 // ROM loc_60D96: spawn 16 ejection effects + delete self.
                 for (int i = 0; i < 16; i++) {
@@ -796,7 +886,7 @@ public class GumballMachineObjectInstance extends AbstractObjectInstance {
      * 16 spawned when dispenser deletes. Each has a different subtype (0-15) giving
      * a unique position offset and timer duration.
      */
-    static class EjectionEffectChild extends AbstractObjectInstance {
+    static class EjectionEffectChild extends AbstractObjectInstance implements RewindRecreatable {
         private static final int MAPPING_FRAME = 0x15;
 
         // ROM byte_61342: 16 signed (dx, dy) offsets
@@ -808,8 +898,8 @@ public class GumballMachineObjectInstance extends AbstractObjectInstance {
         };
 
         private int timer;  // ROM $2E(a0)
-        private final int drawX;
-        private final int drawY;
+        private int drawX;
+        private int drawY;
 
         EjectionEffectChild(ObjectSpawn spawn, int subtype) {
             super(spawn, "GumballEjectionEffect");
@@ -823,6 +913,11 @@ public class GumballMachineObjectInstance extends AbstractObjectInstance {
         }
 
         @Override
+        public EjectionEffectChild recreateForRewind(RewindRecreateContext ctx) {
+            return new EjectionEffectChild(ctx.spawn(), 0);
+        }
+
+        @Override
         public boolean isHighPriority() {
             // ROM: ObjDat3_613D4 make_art_tile(ArtTile_BonusStage, 1, 1) — VDP priority 1
             return true;
@@ -831,7 +926,7 @@ public class GumballMachineObjectInstance extends AbstractObjectInstance {
         @Override public boolean isPersistent() { return false; }
 
         @Override
-        public void update(int frameCounter, PlayableEntity playerEntity) {
+        public void update(int vIntRunCount, PlayableEntity playerEntity) {
             timer--;
             if (timer < 0) {
                 // ROM loc_61032: `subq.b #1,$2E(a0) / bpl draw / move.l #MoveChkDel,(a0)`.
@@ -892,21 +987,32 @@ public class GumballMachineObjectInstance extends AbstractObjectInstance {
      *       (clears parent bits 1+3) and returns to DORMANT.</li>
      * </ul>
      */
-    static class ContainerDisplayChild extends AbstractObjectInstance {
+    static class ContainerDisplayChild extends AbstractObjectInstance implements RewindRecreatable {
 
-        // ROM byte_6145B pairs (frame, timer-value). Timer value+1 runs frames.
-        private static final int[][] ANIM_PAIRS = {
-                {2, 3}, {3, 3}, {4, 0xF}, {3, 3}, {2, 3}
-        };
+        // ROM byte_6145B (sonic3k.asm:128) — flat (mapping_frame, delay) pairs
+        // terminated by the $F4 control byte (which runs the object's $34 routine,
+        // loc_60EA2, clearing machine bits 1+3). Animate_RawNoSSTMultiDelay
+        // (sonic3k.asm Animate_RawNoSSTMultiDelay) decrements anim_frame_timer each
+        // call and, when it goes negative, does `addq.w #2,anim_frame` then loads the
+        // next (frame,delay). The $F4 handler loc_845CC does `clr.b anim_frame`, so
+        // every animation run restarts at offset 0 with a stale-negative timer — the
+        // FIRST animating frame therefore advances immediately past the leading
+        // (2,$3) pair to the (3,$3) pair. The visible run is frames 3,4,3,2 and it
+        // lasts exactly 29 frames from ball spawn to bit-1 clear, verified against the
+        // recorded ROM trace (container ANIM state spans f139-f167, f189-f217,
+        // f627-f656, f675-f704 … = 29 frames every cycle). The prior model iterated
+        // all five pairs (32 frames), making the machine dispense cycle 3 frames too
+        // long; the cadence drifted enough to drop the f675 push-ball so the player
+        // was never launched at f728.
+        private static final int[] ANIM_TABLE = {2, 3, 3, 3, 4, 0xF, 3, 3, 2, 3, 0xF4};
         private static final int IDLE_FRAME = 2;
 
         private enum State { DORMANT, ANIMATING }
-
-        private final GumballMachineObjectInstance parent;
-        private final int offsetFromMachine; // Y offset (ROM: +$24)
+        private GumballMachineObjectInstance parent;
+        private int offsetFromMachine; // Y offset (ROM: +$24)
         private State state = State.DORMANT;
-        private int animStep;
-        private int animTimer;
+        private int animStep;  // ROM anim_frame: byte offset into ANIM_TABLE
+        private int animTimer;  // ROM anim_frame_timer
         private int currentFrame = IDLE_FRAME;
 
         ContainerDisplayChild(ObjectSpawn spawn, GumballMachineObjectInstance parent,
@@ -914,6 +1020,20 @@ public class GumballMachineObjectInstance extends AbstractObjectInstance {
             super(spawn, "GumballContainer");
             this.parent = parent;
             this.offsetFromMachine = offsetFromMachine;
+        }
+
+        @Override
+        public ContainerDisplayChild recreateForRewind(RewindRecreateContext ctx) {
+            // Display child of the gumball machine. If the machine was swept before
+            // capture there is no anchor to read position from, so drop the child
+            // rather than throw. acceptDestroyed relinks to a restored-but-destroyed
+            // machine when that is the captured parent. Bounded (see
+            // CONTAINER_TO_MACHINE_MAX_DISTANCE) since this child's captured spawn is an
+            // exact fixed offset from the machine's own spawn reference.
+            return RewindRecreateObjectLinks.nearestObject(
+                            ctx, GumballMachineObjectInstance.class, true, CONTAINER_TO_MACHINE_MAX_DISTANCE)
+                    .map(machine -> new ContainerDisplayChild(ctx.spawn(), machine, CONTAINER_OFFSET_Y))
+                    .orElse(null);
         }
 
         @Override
@@ -928,30 +1048,37 @@ public class GumballMachineObjectInstance extends AbstractObjectInstance {
         }
 
         @Override
-        public void update(int frameCounter, PlayableEntity playerEntity) {
+        public void update(int vIntRunCount, PlayableEntity playerEntity) {
             if (state == State.DORMANT) {
                 if (parent.isBit3Set()) {
                     state = State.ANIMATING;
+                    // ROM: anim_frame is 0 (cleared by the previous run's $F4 handler)
+                    // and anim_frame_timer is stale-negative, so the first ANIMATING
+                    // frame advances at once. currentFrame stays IDLE this frame:
+                    // loc_60E5C spawns the ball but does not animate the container
+                    // until the following frame's loc_60E8C call.
                     animStep = 0;
-                    animTimer = ANIM_PAIRS[0][1] + 1;
-                    currentFrame = ANIM_PAIRS[0][0];
+                    animTimer = 0;
                     int spawnY = parent.getCurrentY() + offsetFromMachine;
-                    parent.onContainerSpawnBall(spawn.x(), spawnY);
+                    parent.onContainerSpawnBall(spawn.x(), spawnY, this::getY);
                 }
                 return;
             }
-            // ANIMATING
-            animTimer--;
-            if (animTimer <= 0) {
-                animStep++;
-                if (animStep >= ANIM_PAIRS.length) {
+            // ANIMATING — Animate_RawNoSSTMultiDelay emulation.
+            animTimer--;                 // subq.b #1,anim_frame_timer
+            if (animTimer < 0) {         // bpl skips the advance while timer stays >= 0
+                animStep += 2;           // addq.w #2,anim_frame
+                int frame = ANIM_TABLE[animStep];
+                if (frame >= 0x80) {     // bmi: control byte ($F4)
+                    // loc_845CC: run $34 (loc_60EA2 clears machine bits 1+3) + clr.b anim_frame.
                     parent.onContainerAnimComplete();
                     state = State.DORMANT;
                     currentFrame = IDLE_FRAME;
+                    animStep = 0;
                     return;
                 }
-                currentFrame = ANIM_PAIRS[animStep][0];
-                animTimer = ANIM_PAIRS[animStep][1] + 1;
+                currentFrame = frame;
+                animTimer = ANIM_TABLE[animStep + 1];
             }
         }
 
@@ -999,7 +1126,7 @@ public class GumballMachineObjectInstance extends AbstractObjectInstance {
      * <b>CRITICAL:</b> This is how the bonus stage ends. Without it, the player
      * is stuck in the gumball stage permanently.
      */
-    static class ExitTriggerChild extends AbstractObjectInstance {
+    static class ExitTriggerChild extends AbstractObjectInstance implements SpawnRewindRecreatable {
 
         // ROM: Exit trigger detection range
         private static final int EXIT_X_MIN = -0x100;
@@ -1019,7 +1146,7 @@ public class GumballMachineObjectInstance extends AbstractObjectInstance {
         }
 
         @Override
-        public void update(int frameCounter, PlayableEntity playerEntity) {
+        public void update(int vIntRunCount, PlayableEntity playerEntity) {
             if (playerEntity == null || exitFired) {
                 return;
             }
@@ -1063,18 +1190,28 @@ public class GumballMachineObjectInstance extends AbstractObjectInstance {
      * RawAni_61388 [0, 1, 0, $16], set by sub_61362 based on the child's
      * subtype (spawn slot index in ChildObjDat_613F8).
      */
-    static class PlatformChild extends AbstractObjectInstance {
+    static class PlatformChild extends AbstractObjectInstance implements RewindRecreatable {
 
         /** Y offset from the machine's savedY (machine-relative). */
-        private final int offsetFromMachine;
+        private int offsetFromMachine;
 
         /** Per-instance mapping frame from RawAni_61388 (ROM sub_61362). */
-        private final int mappingFrame;
+        private int mappingFrame;
 
         PlatformChild(ObjectSpawn spawn, String name, int offsetFromMachine, int mappingFrame) {
             super(spawn, name);
             this.offsetFromMachine = offsetFromMachine;
             this.mappingFrame = mappingFrame;
+        }
+
+        private PlatformChild() {
+            this(new ObjectSpawn(0, 0, 0, 0, 0, false, 0),
+                    "GumballPlatformRewind", 0, 0);
+        }
+
+        @Override
+        public PlatformChild recreateForRewind(RewindRecreateContext ctx) {
+            return new PlatformChild(ctx.spawn(), "GumballPlatformRewind", 0, 0);
         }
 
         @Override
@@ -1092,7 +1229,7 @@ public class GumballMachineObjectInstance extends AbstractObjectInstance {
         }
 
         @Override
-        public void update(int frameCounter, PlayableEntity playerEntity) {
+        public void update(int vIntRunCount, PlayableEntity playerEntity) {
             // Static platform — no per-frame logic
         }
 
@@ -1111,7 +1248,8 @@ public class GumballMachineObjectInstance extends AbstractObjectInstance {
                 return;
             }
             GraphicsManager graphicsManager = services().graphicsManager();
-            GumballMachineObjectInstance machine = GumballMachineObjectInstance.current();
+            GumballMachineObjectInstance machine =
+                    GumballMachineObjectInstance.current(services().objectManager());
             int renderY = (machine != null)
                     ? machine.getCurrentY() + offsetFromMachine
                     : spawn.y();
@@ -1159,16 +1297,21 @@ public class GumballMachineObjectInstance extends AbstractObjectInstance {
      * ROM priority $0180 → bucket 3 (between apparatus at bucket 2 and piles at
      * bucket 4). VDP priority 0 (LOW) — renders behind high-priority FG tiles.
      */
-    static class BodyOverlayChild extends AbstractObjectInstance {
+    static class BodyOverlayChild extends AbstractObjectInstance implements RewindRecreatable {
 
         private static final int MAPPING_FRAME = 0x17;
 
         /** Y offset from the machine's current Y (matches extra platform offset). */
-        private final int offsetFromMachine;
+        private int offsetFromMachine;
 
         BodyOverlayChild(ObjectSpawn spawn, int offsetFromMachine) {
             super(spawn, "GumballBodyShine");
             this.offsetFromMachine = offsetFromMachine;
+        }
+
+        @Override
+        public BodyOverlayChild recreateForRewind(RewindRecreateContext ctx) {
+            return new BodyOverlayChild(ctx.spawn(), 0);
         }
 
         @Override
@@ -1184,7 +1327,7 @@ public class GumballMachineObjectInstance extends AbstractObjectInstance {
         }
 
         @Override
-        public void update(int frameCounter, PlayableEntity playerEntity) {
+        public void update(int vIntRunCount, PlayableEntity playerEntity) {
             // ROM loc_610C6 just copies parent position; rendering reads the
             // machine's current Y live, so no per-frame state updates needed.
         }
@@ -1203,7 +1346,8 @@ public class GumballMachineObjectInstance extends AbstractObjectInstance {
                 return;
             }
             GraphicsManager graphicsManager = services().graphicsManager();
-            GumballMachineObjectInstance machine = GumballMachineObjectInstance.current();
+            GumballMachineObjectInstance machine =
+                    GumballMachineObjectInstance.current(services().objectManager());
             int renderY = (machine != null)
                     ? machine.getCurrentY() + offsetFromMachine
                     : spawn.y();
@@ -1243,7 +1387,7 @@ public class GumballMachineObjectInstance extends AbstractObjectInstance {
      * groundHalfHeight=$10 (16).
      */
     static class GumballSpringChild extends AbstractObjectInstance
-            implements SolidObjectProvider, SolidObjectListener {
+            implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
 
         // ROM: Obj_Spring params — halfWidth=$1B, airHalfHeight=8, groundHalfHeight=$10
         private static final SolidObjectParams SOLID_PARAMS = new SolidObjectParams(27, 8, 16);
@@ -1258,9 +1402,8 @@ public class GumballMachineObjectInstance extends AbstractObjectInstance {
         // ROM: Map_Spring frames — frame 0 idle, frame 1 compressed (played on bounce)
         private static final int IDLE_FRAME = 0;
         private static final int COMPRESSED_FRAME = 1;
-
-        private final GumballMachineObjectInstance parent;
-        private final DispenserChild dispenser;
+        private GumballMachineObjectInstance parent;
+        private DispenserChild dispenser;
         private boolean triggered;
         private int crumbleTimer;
         private boolean signaledDispenser;
@@ -1276,13 +1419,45 @@ public class GumballMachineObjectInstance extends AbstractObjectInstance {
             this.dispenser = dispenser;
         }
 
+        private GumballSpringChild() {
+            this(new ObjectSpawn(0, 0, 0, 0, 0, false, 0), null, null);
+        }
+
+        @Override
+        public GumballSpringChild recreateForRewind(RewindRecreateContext ctx) {
+            // Spring child of the gumball machine. Drop it if the machine was swept
+            // before capture (no anchor to bind to). The dispenser link is optional —
+            // the spring's update already null-checks it — so a missing dispenser
+            // still yields a coherent spring. acceptDestroyed relinks to restored-but-
+            // destroyed parts when those are the captured targets.
+            //
+            // Machine lookup is UNBOUNDED by design: this spring's own captured spawn
+            // is a ROM-hardcoded absolute position (DISPENSER_ABSOLUTE_X/Y + a fixed
+            // offset) with no relation to the machine's own spawn.x()/y() reference, so
+            // no distance bound between the two is derivable without knowing this
+            // specific ROM's ObjectSpawn placement value for the machine. Safe because
+            // GumballMachineObjectInstance.current() already assumes exactly one live
+            // machine per level (a bonus-stage singleton, like a boss) -- there is no
+            // wrong-instance risk to bound against here.
+            //
+            // Dispenser lookup IS bounded (see SPRING_TO_DISPENSER_MAX_DISTANCE): both
+            // sides are fixed ROM-hardcoded absolute constants, so the true distance is
+            // exact and derivable regardless of the machine's placement.
+            return RewindRecreateObjectLinks.nearestObjectUnbounded(ctx, GumballMachineObjectInstance.class, true)
+                    .map(machine -> new GumballSpringChild(ctx.spawn(), machine,
+                            RewindRecreateObjectLinks.nearestObject(
+                                            ctx, DispenserChild.class, true, SPRING_TO_DISPENSER_MAX_DISTANCE)
+                                    .orElse(null)))
+                    .orElse(null);
+        }
+
         @Override
         public boolean isPersistent() {
             return true;
         }
 
         @Override
-        public void update(int frameCounter, PlayableEntity playerEntity) {
+        public void update(int vIntRunCount, PlayableEntity playerEntity) {
             // Falling state: apply gravity until off-screen, then destroy.
             if (falling) {
                 fallYVel += FALL_GRAVITY;
@@ -1332,6 +1507,21 @@ public class GumballMachineObjectInstance extends AbstractObjectInstance {
         public boolean isTopSolidOnly() {
             // ROM: SolidObjectFull2_1P — solid from above only
             return true;
+        }
+
+        @Override
+        public boolean usesPlatformObjectLandingSnap() {
+            // ROM loc_60DAC calls SolidObjectFull2_1P (sonic3k.asm:127528), whose
+            // "d6 clear" fresh-contact path falls through to the shared
+            // SolidObject_cont -> loc_1E154 top-landing branch (sonic3k.asm:41070-
+            // 41072, 41399, 41611-41637): `subq.w #1,y_pos(a1) / sub.w d3,y_pos(a1)`
+            // -- the same relative playerY-distY placement resolveContactInternal
+            // already produces. It is NOT PlatformObject_ChkYRange's absolute
+            // anchorY-groundHalfHeight-yRadius-1 snap, so that override must be
+            // skipped here or it overwrites the correct landing Y before
+            // sub_22F98's addq.w #8,y_pos(a1) bounce-compression nudge is applied,
+            // landing the player 8px too high (S3K gumball bonus trace f895).
+            return false;
         }
 
         @Override

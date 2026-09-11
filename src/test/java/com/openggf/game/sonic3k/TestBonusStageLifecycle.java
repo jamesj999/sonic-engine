@@ -1,6 +1,8 @@
 package com.openggf.game.sonic3k;
 
 import com.openggf.game.*;
+import com.openggf.game.sonic3k.constants.Sonic3kObjectIds;
+import com.openggf.game.sonic3k.objects.PachinkoEnergyTrapObjectInstance;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -42,6 +44,31 @@ class TestBonusStageLifecycle {
     }
 
     @Test
+    void pachinkoBootstrapObjectIsOwnedByTheS3kBonusStageProvider() {
+        var coordinator = new Sonic3kBonusStageCoordinator();
+
+        BonusStageProvider.BootstrapObject bootstrap =
+                coordinator.bootstrapObject(BonusStageType.GLOWING_SPHERE);
+
+        assertNotNull(bootstrap);
+        assertEquals(0x78, bootstrap.spawn().x());
+        assertEquals(0x0F30, bootstrap.spawn().y());
+        assertEquals(Sonic3kObjectIds.PACHINKO_ENERGY_TRAP, bootstrap.spawn().objectId());
+        assertEquals(PachinkoEnergyTrapObjectInstance.class, bootstrap.objectType());
+        assertInstanceOf(PachinkoEnergyTrapObjectInstance.class, bootstrap.create());
+    }
+
+    @Test
+    void nonPachinkoBonusStagesDoNotDeclareABootstrapObject() {
+        var coordinator = new Sonic3kBonusStageCoordinator();
+
+        assertNull(coordinator.bootstrapObject(BonusStageType.GUMBALL));
+        assertNull(coordinator.bootstrapObject(BonusStageType.SLOT_MACHINE));
+        assertNull(coordinator.bootstrapObject(BonusStageType.NONE));
+        assertNull(NoOpBonusStageProvider.INSTANCE.bootstrapObject(BonusStageType.GLOWING_SPHERE));
+    }
+
+    @Test
     void testEntryExitLifecycle() {
         var coordinator = new Sonic3kBonusStageCoordinator();
         var savedState = new BonusStageState(
@@ -80,3 +107,4 @@ class TestBonusStageLifecycle {
         assertNull(noop.getSavedState());
     }
 }
+

@@ -10,14 +10,14 @@ public final class RomTestUtils {
     }
 
     // Sonic 2 (default / backward-compatible)
-    private static final String ROM_FILENAME = "Sonic The Hedgehog 2 (W) (REV01) [!].gen";
+    private static final String ROM_FILENAME = "s2.gen";
     private static final String ROM_PATH_PROPERTY = "sonic.rom.path";
     private static final String ROM_PATH_ENV = "SONIC_ROM_PATH";
 
     // Per-game ROM filenames
-    private static final String S1_ROM_FILENAME = "Sonic The Hedgehog (W) (REV01) [!].gen";
-    private static final String S2_ROM_FILENAME = "Sonic The Hedgehog 2 (W) (REV01) [!].gen";
-    private static final String S3K_ROM_FILENAME = "Sonic and Knuckles & Sonic 3 (W) [!].gen";
+    private static final String S1_ROM_FILENAME = "s1.gen";
+    private static final String S2_ROM_FILENAME = "s2.gen";
+    private static final String S3K_ROM_FILENAME = "s3k.gen";
 
     // Per-game system properties
     private static final String S1_ROM_PATH_PROPERTY = "sonic1.rom.path";
@@ -104,3 +104,4 @@ public final class RomTestUtils {
     }
 
 }
+

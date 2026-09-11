@@ -5,6 +5,7 @@ import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnCoordinateRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 import com.openggf.game.PlayableEntity;
@@ -23,7 +24,8 @@ import java.util.List;
  * then falls through to MDis_Animate which decrements on the same frame). Subsequent frames
  * show for 10 game frames each. Then deletes itself. No collision.
  */
-public class Sonic1BuzzBomberMissileDissolveInstance extends AbstractObjectInstance {
+public class Sonic1BuzzBomberMissileDissolveInstance extends AbstractObjectInstance
+        implements SpawnCoordinateRewindRecreatable {
 
     // Frame duration: obTimeFrame = 9 -> decrements to 0, then advances = 10 frames per step
     private static final int FRAME_DURATION = 10;
@@ -31,8 +33,8 @@ public class Sonic1BuzzBomberMissileDissolveInstance extends AbstractObjectInsta
     // Total frames in dissolve animation
     private static final int TOTAL_FRAMES = 4;
 
-    private final int currentX;
-    private final int currentY;
+    private int currentX;
+    private int currentY;
     private int animFrame;
     private int frameTimer;
 
@@ -46,8 +48,12 @@ public class Sonic1BuzzBomberMissileDissolveInstance extends AbstractObjectInsta
         this.frameTimer = FRAME_DURATION - 1;
     }
 
+    private Sonic1BuzzBomberMissileDissolveInstance() {
+        this(0, 0);
+    }
+
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         frameTimer--;
         if (frameTimer <= 0) {

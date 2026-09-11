@@ -6,7 +6,10 @@ import com.openggf.game.PlayableEntity;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
+import com.openggf.level.objects.ObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.animation.SpriteAnimationEndAction;
@@ -28,7 +31,7 @@ import java.util.List;
  * Collision flags: $9B = HURT + size index $1B (8x4 pixels)
  */
 public class OOZBurnerFlameObjectInstance extends AbstractObjectInstance
-        implements TouchResponseProvider {
+        implements TouchResponseProvider, RewindRecreatable {
 
     // Collision flags: $9B = hurt (upper 2 bits = $80) + size index $1B
     private static final int COLLISION_FLAGS_ACTIVE = 0x9B;
@@ -50,7 +53,6 @@ public class OOZBurnerFlameObjectInstance extends AbstractObjectInstance
                 0
         ));
     }
-
     private final OOZPoppingPlatformObjectInstance parent;
     private final ObjectAnimationState animationState;
     private boolean flameActive;
@@ -63,7 +65,24 @@ public class OOZBurnerFlameObjectInstance extends AbstractObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        if (ctx.spawn() == null || ctx.objectServices() == null
+                || ctx.objectServices().objectManager() == null) {
+            return null;
+        }
+        for (ObjectInstance inst : ctx.objectServices().objectManager().getActiveObjects()) {
+            if (inst instanceof OOZPoppingPlatformObjectInstance platform
+                    && !platform.isDestroyed()
+                    && platform.getX() == ctx.spawn().x()
+                    && platform.getHomeY() == ctx.spawn().y() + 0x10) {
+                return new OOZBurnerFlameObjectInstance(ctx.spawn(), platform);
+            }
+        }
+        return null;
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (parent == null || parent.isDestroyed()) {
             setDestroyed(true);

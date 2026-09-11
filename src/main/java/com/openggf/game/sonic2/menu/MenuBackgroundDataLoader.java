@@ -6,7 +6,7 @@ import com.openggf.game.GameServices;
 import com.openggf.game.sonic2.constants.Sonic2Constants;
 import com.openggf.graphics.GraphicsManager;
 import com.openggf.level.Pattern;
-import com.openggf.tools.EnigmaReader;
+import com.openggf.data.compression.EnigmaReader;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -108,11 +108,10 @@ public class MenuBackgroundDataLoader {
      */
     private static final int VRAM_TILE_COUNT = 11;
 
-    public void cacheToGpu(int patternBase, int patternOffset) {
+    public void cacheToGpu(GraphicsManager graphicsManager, int patternBase, int patternOffset) {
         if (artCached || !dataLoaded || menuBackPatterns == null) {
             return;
         }
-        GraphicsManager graphicsManager = GraphicsManager.getInstance();
         if (graphicsManager == null || graphicsManager.isHeadlessMode()) {
             return;
         }

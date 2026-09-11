@@ -28,7 +28,8 @@ import java.util.Map;
  * <p>Key differences from Sonic 2 SFX:
  * <ul>
  *   <li>Base note is C (offset 0) per DefDrv.txt</li>
- *   <li>InsMode=DEFAULT: voice byte swap (same as S1)</li>
+ *   <li>InsMode=DEFAULT: raw voice bytes are retained for the S3K Z80
+ *       instrument register table.</li>
  * </ul>
  */
 public class Sonic3kSfxData extends AbstractSmpsData implements SmpsSfxData {
@@ -190,12 +191,6 @@ public class Sonic3kSfxData extends AbstractSmpsData implements SmpsSfxData {
         }
         byte[] voice = new byte[VOICE_STRIDE];
         System.arraycopy(source, offset, voice, 0, VOICE_STRIDE);
-        // S3K InsMode=DEFAULT: swap [g+1] and [g+2] in each 4-byte group
-        for (int g = 1; g < 25; g += 4) {
-            byte tmp = voice[g + 1];
-            voice[g + 1] = voice[g + 2];
-            voice[g + 2] = tmp;
-        }
         return voice;
     }
 

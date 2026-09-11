@@ -72,9 +72,9 @@ class TestPhysicsProfileRegression {
     }
 
     @Test
-    void physicsFeatureSet_isSet() {
-        assertNotNull(sprite.getPhysicsFeatureSet(), "Feature set should be populated");
-        assertTrue(sprite.getPhysicsFeatureSet().spindashEnabled(), "S2 spindash enabled");
+    void gameRules_areSet() {
+        assertNotNull(sprite.getGameRules(), "Feature set should be populated");
+        assertTrue(sprite.getGameRules().playerCapability().spindashEnabled(), "S2 spindash enabled");
     }
 
     @Test
@@ -140,3 +140,5 @@ class TestPhysicsProfileRegression {
         }
     }
 }
+
+

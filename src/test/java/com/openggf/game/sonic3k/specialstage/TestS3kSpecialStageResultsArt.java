@@ -2,51 +2,29 @@ package com.openggf.game.sonic3k.specialstage;
 
 import com.openggf.data.Rom;
 import com.openggf.data.RomByteReader;
-import com.openggf.data.RomManager;
-import com.openggf.game.GameModuleRegistry;
 import com.openggf.game.GameServices;
 import com.openggf.game.PlayerCharacter;
-import com.openggf.game.RuntimeManager;
 import com.openggf.game.sonic3k.Sonic3kObjectArt;
 import com.openggf.game.sonic3k.constants.Sonic3kConstants;
 import com.openggf.level.Pattern;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import com.openggf.tests.rules.RequiresRom;
+import com.openggf.tests.rules.SonicGame;
+import org.junit.jupiter.api.Test;
 
-import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assume.assumeTrue;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@RequiresRom(SonicGame.SONIC_3K)
 public class TestS3kSpecialStageResultsArt {
 
-    @Before
-    public void setUp() {
-        RuntimeManager.createGameplay();
-    }
-
-    @After
-    public void tearDown() {
-        RuntimeManager.destroyCurrent();
-    }
-
     @Test
-    public void specialStageHudInitialTilesMatchHudDrawInitialSequence() throws Exception {
-        String romPath = System.getProperty("s3k.rom.path",
-                "Sonic and Knuckles & Sonic 3 (W) [!].gen");
-        File romFile = new File(romPath);
-        assumeTrue("S3K ROM not available", romFile.exists());
-
-        Rom rom = new Rom();
-        assumeTrue("Failed to open S3K ROM", rom.open(romFile.getAbsolutePath()));
-        GameModuleRegistry.detectAndSetModule(rom);
-        RomManager.getInstance().setRom(rom);
+    void specialStageHudInitialTilesMatchHudDrawInitialSequence() throws Exception {
+        Rom rom = GameServices.rom().getRom();
 
         Sonic3kObjectArt objectArt = new Sonic3kObjectArt(null, RomByteReader.fromRom(rom));
         Pattern[] patterns = objectArt.loadSSResultsArt(PlayerCharacter.SONIC_AND_TAILS);
@@ -61,8 +39,8 @@ public class TestS3kSpecialStageResultsArt {
         for (int i = 0; i < expected.length; i++) {
             int tileIndex = 0x6E2 + (i * 2);
             int patternIndex = tileIndex - base;
-            assertTrue("Pattern index out of range for tile $" + Integer.toHexString(tileIndex),
-                    patternIndex >= 0 && patternIndex + 1 < patterns.length);
+            assertTrue(patternIndex >= 0 && patternIndex + 1 < patterns.length,
+                    "Pattern index out of range for tile $" + Integer.toHexString(tileIndex));
 
             if (expected[i] == ' ') {
                 assertBlank(patterns[patternIndex], tileIndex);
@@ -82,16 +60,8 @@ public class TestS3kSpecialStageResultsArt {
     }
 
     @Test
-    public void scoreRowDigitsUseLiveGameScoreTiles() throws Exception {
-        String romPath = System.getProperty("s3k.rom.path",
-                "Sonic and Knuckles & Sonic 3 (W) [!].gen");
-        File romFile = new File(romPath);
-        assumeTrue("S3K ROM not available", romFile.exists());
-
-        Rom rom = new Rom();
-        assumeTrue("Failed to open S3K ROM", rom.open(romFile.getAbsolutePath()));
-        GameModuleRegistry.detectAndSetModule(rom);
-        RomManager.getInstance().setRom(rom);
+    void scoreRowDigitsUseLiveGameScoreTiles() throws Exception {
+        Rom rom = GameServices.rom().getRom();
         GameServices.gameState().resetSession();
         GameServices.gameState().addScore(2200);
 
@@ -163,3 +133,5 @@ public class TestS3kSpecialStageResultsArt {
         }
     }
 }
+
+

@@ -100,4 +100,31 @@ public class ButtonVineTriggerManager {
     public static void reset() {
         Arrays.fill(triggers, 0);
     }
+
+    /**
+     * Immutable rewind snapshot of {@code ButtonVine_Trigger}. Defensively
+     * copies the backing array so a captured snapshot is safe to retain
+     * across frames.
+     */
+    public record Snapshot(int[] triggers) {
+        public Snapshot {
+            triggers = triggers.clone();
+        }
+
+        @Override
+        public int[] triggers() {
+            return triggers.clone();
+        }
+    }
+
+    /** Captures the current trigger array for rewind snapshots. */
+    public static Snapshot snapshot() {
+        return new Snapshot(triggers);
+    }
+
+    /** Restores the trigger array from a previously captured snapshot. */
+    public static void restore(Snapshot snapshot) {
+        int[] source = snapshot.triggers();
+        System.arraycopy(source, 0, triggers, 0, triggers.length);
+    }
 }

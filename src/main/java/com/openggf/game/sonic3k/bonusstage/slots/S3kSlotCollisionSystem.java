@@ -31,9 +31,19 @@ public final class S3kSlotCollisionSystem {
     }
 
     public Collision checkCollision(int xPixel, int yPixel) {
-        // Collision state is cleared once per frame by the player runtime. Multiple
-        // collision probes can run in a single frame, so later plain-solid hits must
-        // not erase an earlier special tile that still needs dispatch.
+        // ROM sub_4BD5A (sonic3k.asm:99081-99110) unconditionally samples all four
+        // corners (top-left, top-right, bottom-left, bottom-right, in that order --
+        // (a1)+, (a1)+, adda #$7E, (a1)+, (a1)+) via sub_4BDA2 for every call, and
+        // sub_4BDA2 only ever WRITES $30(a0)/$32(a0) when it finds a "special"
+        // (1-6, non-7) tile -- it never clears them for a plain-solid or empty
+        // corner. So the last special corner scanned wins, independent of which
+        // corner (if any) triggers the overall solid/collision result. Returning
+        // on the first solid corner (as this used to) could both stop before ever
+        // reaching the real special tile, and — even when a special tile was seen
+        // first — get silently overridden if this method were called again for a
+        // second probe (X then Y, mirroring sub_4BCB0's two sub_4BD5A calls) whose
+        // last corner is plain-solid: ROM would keep the earlier special tile in
+        // that case, since a plain-solid corner never clears $30(a0)/$32(a0).
         byte[] expandedLayout = renderBuffers.expandedLayout();
         if (expandedLayout == null || expandedLayout.length < renderBuffers.layoutRows() * renderBuffers.layoutStrideBytes()) {
             return Collision.NONE;
@@ -41,6 +51,11 @@ public final class S3kSlotCollisionSystem {
 
         int baseRow = Math.floorDiv(yPixel + COLLISION_Y_OFFSET, CELL_SIZE);
         int baseCol = Math.floorDiv(xPixel + COLLISION_X_OFFSET, CELL_SIZE);
+        boolean anySolid = false;
+        boolean lastSpecial = false;
+        int lastTileId = 0;
+        int lastLayoutIndex = -1;
+        int lastExpandedIndex = -1;
         for (int dr = 0; dr <= 1; dr++) {
             for (int dc = 0; dc <= 1; dc++) {
                 int row = baseRow + dr;
@@ -57,14 +72,21 @@ public final class S3kSlotCollisionSystem {
                     continue;
                 }
 
+                anySolid = true;
                 if (isSpecial(tileId) && compactIndex >= 0) {
                     stageState.setLastCollision(tileId, compactIndex);
+                    lastSpecial = true;
+                    lastTileId = tileId;
+                    lastLayoutIndex = compactIndex;
+                    lastExpandedIndex = expandedIndex;
                 }
-                return new Collision(true, isSpecial(tileId), tileId, compactIndex, expandedIndex);
             }
         }
 
-        return Collision.NONE;
+        if (!anySolid) {
+            return Collision.NONE;
+        }
+        return new Collision(true, lastSpecial, lastTileId, lastLayoutIndex, lastExpandedIndex);
     }
 
     public RingCheck checkRingPickup(int xPixel, int yPixel) {
@@ -123,20 +145,36 @@ public final class S3kSlotCollisionSystem {
         };
     }
 
+    /**
+     * ROM sub_4BE3A's bumper branch (sonic3k.asm:99214-99223) recovers the grid
+     * index from the stored tile pointer: {@code $32(a0)} holds {@code a1} as it
+     * stood right after sub_4BDA2's post-increment read ({@code move.b (a1)+,d4},
+     * sonic3k.asm:99099/99101/99104/99106 -- {@code a1 = TABLE + idx + 1} for the
+     * corner at grid index {@code idx}). {@code subi.l #-$CFFF,d1} (sonic3k.asm:
+     * 99215) adds {@code $CFFF} back: with {@code TABLE = RAM_start+$3000} (RAM_start's
+     * low word is 0), the low word of {@code TABLE + idx + 1 + $CFFF} is
+     * {@code ($3000 + $CFFF + 1 + idx) & $FFFF = ($10000 + idx) & $FFFF = idx} --
+     * the stored "+1" from the post-increment is exactly cancelled by the
+     * {@code $CFFF} (not {@code $D000}) adjustment. So the recovered grid index
+     * equals the ORIGINAL {@code idx} that was hit, not {@code idx+1}; adding 1
+     * here would shift the reconstructed tile one column to the right of the
+     * tile that actually triggered the response, producing a wrong bumper/launch
+     * direction while keeping the correct 0x700 launch magnitude (confirmed
+     * against src/test/resources/traces/s3k/bonus_slots frame 445/446: the +1
+     * variant reproduced the ROM's exact launch magnitude but the wrong angle).
+     */
     static short tileResponseAnchorX(int expandedLayoutIndex) {
         if (expandedLayoutIndex < 0) {
             return 0;
         }
-        int pointerOffset = expandedLayoutIndex + 1;
-        return (short) (((pointerOffset & 0x7F) * CELL_SIZE) - COLLISION_X_OFFSET);
+        return (short) (((expandedLayoutIndex & 0x7F) * CELL_SIZE) - COLLISION_X_OFFSET);
     }
 
     static short tileResponseAnchorY(int expandedLayoutIndex) {
         if (expandedLayoutIndex < 0) {
             return 0;
         }
-        int pointerOffset = expandedLayoutIndex + 1;
-        return (short) ((((pointerOffset >>> 7) & 0x7F) * CELL_SIZE) - COLLISION_Y_OFFSET);
+        return (short) ((((expandedLayoutIndex >>> 7) & 0x7F) * CELL_SIZE) - COLLISION_Y_OFFSET);
     }
 
     private TileResponse bumperResponse(short playerX, short playerY, short tileCenterX, short tileCenterY) {

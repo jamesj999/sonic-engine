@@ -12,6 +12,7 @@ import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 
 import java.util.List;
 
@@ -23,13 +24,13 @@ import java.util.List;
  *   Lower 4 bits: height = ((n & 0xF) + 1) * 16 pixels
  */
 public class InvisibleBlockObjectInstance extends BoxObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, SpawnRewindRecreatable {
 
     private static final boolean DEBUG_VIEW_ENABLED = staticDebugViewEnabled();
     private static final DebugOverlayManager OVERLAY_MANAGER = staticDebugOverlay();
 
-    private final int halfWidth;
-    private final int halfHeight;
+    private int halfWidth;
+    private int halfHeight;
 
     public InvisibleBlockObjectInstance(ObjectSpawn spawn, String name) {
         // Gray color for debug rendering
@@ -42,13 +43,42 @@ public class InvisibleBlockObjectInstance extends BoxObjectInstance
         this.halfHeight = ((subtype & 0xF) + 1) * 8;
     }
 
+    private InvisibleBlockObjectInstance(ObjectSpawn spawn) {
+        this(spawn, "InvisibleBlock");
+    }
+
     @Override
     public SolidObjectParams getSolidParams() {
         // Match disassembly: adds 0x0B (11) to width for collision
         int d1 = halfWidth + 11;
         int d2 = halfHeight;
         int d3 = halfHeight + 1;
-        return new SolidObjectParams(d1, d2, d3);
+        return SolidObjectParams.of(d1, d2, d3);
+    }
+
+    @Override
+    public boolean bypassesOffscreenSolidGate() {
+        // S2 Obj74 calls SolidObject_Always, which checks solidity even when
+        // the object or sidekick is offscreen (docs/s2disasm/s2.asm:34863-34873,
+        // 46152-46161).
+        return true;
+    }
+
+    @Override
+    public boolean airborneStaleStandingBitReturnsNoContact(PlayableEntity player) {
+        // S2 SolidObject_Always_SingleCharacter clears this object's stale
+        // standing bit and returns d4=0 when the player is already airborne,
+        // without falling into SolidObject_cont side resolution
+        // (docs/s2disasm/s2.asm:34874-34893).
+        return true;
+    }
+
+    @Override
+    public boolean fullSolidBottomOverlapUsesCurrentYRadiusOnly(PlayableEntity player) {
+        // Obj74 falls through to S2 SolidObject_cont for new contacts.
+        // That helper adds the live y_radius(a1) to d2, then doubles d2 for
+        // the lower reject bound (docs/s2disasm/s2.asm:35156-35169).
+        return true;
     }
 
     @Override

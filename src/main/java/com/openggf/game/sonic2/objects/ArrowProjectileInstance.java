@@ -3,12 +3,15 @@ package com.openggf.game.sonic2.objects;
 import com.openggf.game.sonic2.audio.Sonic2Sfx;
 import com.openggf.game.PlayableEntity;
 import com.openggf.game.sonic2.Sonic2ObjectArtKeys;
+import com.openggf.game.sonic2.constants.Sonic2ObjectIds;
 import com.openggf.debug.DebugRenderContext;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnAndCoordinateZeroScalarArgsRewindRecreatable;
 import com.openggf.level.objects.TouchResponseProvider;
+import com.openggf.level.objects.TouchResponseProfile;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.ObjectTerrainUtils;
 import com.openggf.physics.TerrainCheckResult;
@@ -20,7 +23,7 @@ import java.util.logging.Logger;
 /**
  * Arrow projectile fired by ArrowShooter (Object 22) in Aquatic Ruin Zone.
  * <p>
- * Behavior from disassembly (s2.asm lines 51094-51130):
+ * Behavior from disassembly (s2.asm lines 51590-51626):
  * <ul>
  *   <li>Travels horizontally at $400 velocity (4 pixels/frame)</li>
  *   <li>Direction based on shooter's x_flip render flag</li>
@@ -30,7 +33,7 @@ import java.util.logging.Logger;
  * </ul>
  */
 public class ArrowProjectileInstance extends AbstractObjectInstance
-        implements TouchResponseProvider {
+        implements TouchResponseProvider, SpawnAndCoordinateZeroScalarArgsRewindRecreatable {
     private static final Logger LOGGER = Logger.getLogger(ArrowProjectileInstance.class.getName());
 
     private static final int ARROW_VELOCITY = 0x400; // Fixed-point 8.8 = 4 pixels/frame
@@ -47,6 +50,10 @@ public class ArrowProjectileInstance extends AbstractObjectInstance
     private int xSubpixel; // Fractional part
     private boolean facingLeft;
     private boolean initialized;
+
+    private ArrowProjectileInstance() {
+        this(new ObjectSpawn(0, 0, Sonic2ObjectIds.ARROW_SHOOTER, 0, 0, false, 0), 0, 0, false);
+    }
 
     public ArrowProjectileInstance(ObjectSpawn parentSpawn, int startX, int startY, boolean facingLeft) {
         super(createArrowSpawn(parentSpawn, startX, startY), "Arrow");
@@ -75,7 +82,7 @@ public class ArrowProjectileInstance extends AbstractObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (!initialized) {
             // Play arrow firing sound on first update
@@ -103,17 +110,14 @@ public class ArrowProjectileInstance extends AbstractObjectInstance
     }
 
     private boolean checkWallCollision() {
-        // Check wall collision in direction of movement
-        // ROM uses d3 offset of 8 pixels in front of arrow
+        // ROM Obj22_Arrow probes the opposite-side wall helper after ObjectMove:
+        // right-moving arrows call ObjCheckLeftWallDist with d3=-8, and left-moving
+        // arrows call ObjCheckRightWallDist with d3=8 (docs/s2disasm/s2.asm:51607-51623).
         if (facingLeft) {
-            // Check left wall (arrow moving left)
-            TerrainCheckResult result = ObjectTerrainUtils.checkLeftWallDist(currentX - 8, currentY);
-            // Collision when distance is negative (wall is past check point)
+            TerrainCheckResult result = ObjectTerrainUtils.checkRightWallDist(currentX + 8, currentY);
             return result.hasCollision() && result.distance() < 0;
         } else {
-            // Check right wall (arrow moving right)
-            TerrainCheckResult result = ObjectTerrainUtils.checkRightWallDist(currentX + 8, currentY);
-            // Collision when distance is negative (wall is past check point)
+            TerrainCheckResult result = ObjectTerrainUtils.checkLeftWallDist(currentX - 8, currentY);
             return result.hasCollision() && result.distance() < 0;
         }
     }
@@ -126,6 +130,11 @@ public class ArrowProjectileInstance extends AbstractObjectInstance
     @Override
     public int getCollisionProperty() {
         return 0;
+    }
+
+    @Override
+    public TouchResponseProfile getTouchResponseProfile() {
+        return TouchResponseProfile.standardEnemy();
     }
 
     @Override

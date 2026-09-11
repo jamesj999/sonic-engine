@@ -9,6 +9,10 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreateObjectLinks;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.RomObjectCodePointerProvider;
 import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
@@ -33,7 +37,11 @@ import java.util.List;
  * <p>
  * ROM references: Obj_HCZWaterRush (sonic3k.asm:64743-64833).
  */
-public class HCZWaterRushObjectInstance extends AbstractObjectInstance {
+@com.openggf.game.rewind.RewindRecreateOnRestore(
+        reason = "Constructor writes global zone state (HCZBreakableBarState.setState(3)) "
+                + "in addition to spawning a child; only the child spawn is observable by "
+                + "the restore-time construction side-effect latch.")
+public class HCZWaterRushObjectInstance extends AbstractObjectInstance implements RewindRecreatable {
 
     // ===== Phase constants =====
     private static final int PHASE_WAITING = 0;
@@ -50,6 +58,10 @@ public class HCZWaterRushObjectInstance extends AbstractObjectInstance {
     private int animFrameTimer;
 
     public HCZWaterRushObjectInstance(ObjectSpawn spawn) {
+        this(spawn, true);
+    }
+
+    private HCZWaterRushObjectInstance(ObjectSpawn spawn, boolean spawnBlock) {
         super(spawn, "HCZWaterRush");
         this.x = spawn.x();
         this.y = spawn.y();
@@ -57,18 +69,25 @@ public class HCZWaterRushObjectInstance extends AbstractObjectInstance {
         this.phase = PHASE_WAITING;
 
         // ROM: AllocateObjectAfterCurrent — spawn solid block child
-        int childX = x - 0x30;
-        int childY = y;
-        spawnChild(() -> new WaterRushBlockChild(
-                new ObjectSpawn(childX, childY, Sonic3kObjectIds.HCZ_WATER_RUSH, 0, 0, false, 0),
-                this));
+        if (spawnBlock) {
+            int childX = x - 0x30;
+            int childY = y;
+            spawnChild(() -> new WaterRushBlockChild(
+                    new ObjectSpawn(childX, childY, Sonic3kObjectIds.HCZ_WATER_RUSH, 0, 0, false, 0),
+                    this));
+        }
 
         // ROM: move.b #3,(_unkF7C7).w
         HCZBreakableBarState.setState(3);
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public HCZWaterRushObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new HCZWaterRushObjectInstance(ctx.spawn(), false);
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         switch (phase) {
             case PHASE_WAITING -> updateWaiting();
             case PHASE_RUSHING -> updateRushing();
@@ -163,7 +182,23 @@ public class HCZWaterRushObjectInstance extends AbstractObjectInstance {
      * ROM references: loc_2FEB2 / loc_2FEBE (sonic3k.asm:64811-64832).
      */
     static class WaterRushBlockChild extends AbstractObjectInstance
-            implements SolidObjectProvider, SolidObjectListener {
+            implements SolidObjectProvider, SolidObjectListener, RewindRecreatable, RomObjectCodePointerProvider {
+
+        /**
+         * Word 0 of this object's S3K SST holds its live ROM code pointer.
+         * ROM {@code Obj_HCZWaterRush} is installed from the S3K object pointer table at
+         * {@code $0002FDA4} (table read from the user-supplied ROM; the
+         * label is defined at docs/skdisasm/sonic3k.asm:64748).
+         * Its whole code block lies in one bank, so the HIGH word that
+         * {@code sub_13EFC} latches into {@code Tails_CPU_interact} and compares
+         * on the next off-screen on-object frame is {@code $0002}
+         * (docs/skdisasm/sonic3k.asm:26816-26843).
+         */
+        @Override
+        public int romObjectCodePointerHighWord() {
+            return 0x0002;
+        }
+
 
         private static final int PHASE_WAITING = 0;
         private static final int PHASE_RISING = 1;
@@ -189,13 +224,20 @@ public class HCZWaterRushObjectInstance extends AbstractObjectInstance {
         }
 
         @Override
+        public WaterRushBlockChild recreateForRewind(RewindRecreateContext ctx) {
+            HCZWaterRushObjectInstance restoredParent =
+                    RewindRecreateObjectLinks.nearestLiveObject(ctx, HCZWaterRushObjectInstance.class);
+            return new WaterRushBlockChild(ctx.spawn(), restoredParent);
+        }
+
+        @Override
         public SolidObjectParams getSolidParams() {
             // ROM: move.b width_pixels(a0),d1 / addi.w #$B,d1
             //      move.b height_pixels(a0),d2 / move.w d2,d3 / addq.w #1,d3
             int d1 = HALF_WIDTH + 0xB;
             int d2 = HALF_HEIGHT;
             int d3 = HALF_HEIGHT + 1;
-            return new SolidObjectParams(d1, d2, d3);
+            return SolidObjectParams.of(d1, d2, d3);
         }
 
         @Override
@@ -204,7 +246,7 @@ public class HCZWaterRushObjectInstance extends AbstractObjectInstance {
         }
 
         @Override
-        public void update(int frameCounter, PlayableEntity playerEntity) {
+        public void update(int vIntRunCount, PlayableEntity playerEntity) {
             switch (phase) {
                 case PHASE_WAITING -> updateWaiting();
                 case PHASE_RISING -> updateRising();
@@ -277,7 +319,21 @@ public class HCZWaterRushObjectInstance extends AbstractObjectInstance {
         public static void clearBit(int bit) { state &= ~(1 << bit); }
         /** ROM: btst d5,(_unkF7C7).w — test individual player bit */
         public static boolean testBit(int bit) { return (state & (1 << bit)) != 0; }
-        public static void reset() { state = 0; }
+        public static void reset() {
+            state = 0;
+        }
+
+        /** Immutable rewind snapshot of the HCZ cross-object latch state. */
+        public record Snapshot(int state) {
+        }
+
+        public static Snapshot snapshot() {
+            return new Snapshot(state);
+        }
+
+        public static void restore(Snapshot snapshot) {
+            state = snapshot.state();
+        }
     }
 
     // ===== Cross-object communication: palette cycle gate =====
@@ -296,5 +352,17 @@ public class HCZWaterRushObjectInstance extends AbstractObjectInstance {
         public static void setActive(boolean value) { active = value; }
         public static boolean isActive() { return active; }
         public static void reset() { active = false; }
+
+        /** Immutable rewind snapshot of the water-rush palette-cycle gate. */
+        public record Snapshot(boolean active) {
+        }
+
+        public static Snapshot snapshot() {
+            return new Snapshot(active);
+        }
+
+        public static void restore(Snapshot snapshot) {
+            active = snapshot.active();
+        }
     }
 }

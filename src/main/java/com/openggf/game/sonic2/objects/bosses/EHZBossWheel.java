@@ -7,6 +7,8 @@ import com.openggf.game.sonic2.constants.Sonic2ObjectIds;
 import com.openggf.level.objects.ObjectAnimationState;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.ObjectRenderManager;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.boss.AbstractBossChild;
 import com.openggf.physics.ObjectTerrainUtils;
 import com.openggf.physics.TerrainCheckResult;
@@ -18,7 +20,7 @@ import java.util.List;
  * EHZ Boss - Wheel component.
  * ROM Reference: s2.asm:63267-63412 (loc_2F664 - Obj56_Wheel)
  */
-public class EHZBossWheel extends AbstractBossChild {
+public class EHZBossWheel extends AbstractBossChild implements RewindRecreatable {
     private static final int CAMERA_GATE_X = 0x28F0;
     private static final int BOUNDARY_LEFT = 0x28A0;
     private static final int BOUNDARY_RIGHT = 0x2B08;
@@ -26,7 +28,7 @@ public class EHZBossWheel extends AbstractBossChild {
     private static final int Y_RADIUS = 0x10;
     private static final int VEHICLE_FRAME_OFFSET = 7;
 
-    private final int subtype;
+    private int subtype;
     private final ObjectAnimationState animationState;
     private int routineSecondary;
     private int timer;
@@ -59,10 +61,20 @@ public class EHZBossWheel extends AbstractBossChild {
         this.yFixed = currentY << 16;
     }
 
+    private EHZBossWheel(Sonic2EHZBossInstance parent) {
+        this(parent, 0, 0, 3);
+    }
+
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public EHZBossWheel recreateForRewind(RewindRecreateContext ctx) {
+        Sonic2EHZBossInstance boss = EhzBossRewindLinks.requireNearestBoss(ctx, "EHZ boss wheel");
+        return new EHZBossWheel(boss);
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        if (isDestroyed() || !shouldUpdate(frameCounter)) {
+        if (isDestroyed() || !shouldUpdate(vIntRunCount)) {
             return;
         }
         if (parent == null) {

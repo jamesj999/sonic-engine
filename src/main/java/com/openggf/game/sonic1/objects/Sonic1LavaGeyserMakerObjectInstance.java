@@ -1,13 +1,14 @@
 package com.openggf.game.sonic1.objects;
 import com.openggf.game.PlayableEntity;
 
-import com.openggf.camera.Camera;
 import com.openggf.debug.DebugRenderContext;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
+import com.openggf.level.objects.ObjectLifetimeOps;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -43,30 +44,36 @@ import java.util.List;
  * <p>
  * Reference: docs/s1disasm/_incObj/4C &amp; 4D Lava Geyser Maker.asm
  */
-public class Sonic1LavaGeyserMakerObjectInstance extends AbstractObjectInstance {
+public class Sonic1LavaGeyserMakerObjectInstance extends AbstractObjectInstance
+        implements SpawnRewindRecreatable {
 
     // ========================================================================
     // Animation Data (from Ani_Geyser)
     // ========================================================================
 
-    /** Anim 0 (.bubble1): speed=2, {0,1,0,1,4,5,4,5}, afRoutine. */
+    // Animation speeds below are the raw ROM script speed BYTES
+    // (docs/s1disasm/_anim/"Lava Geyser.asm"), consumed by the ROM-faithful
+    // countdown in updateAnimation(): each frame is shown for (speedByte + 1)
+    // AnimateSprite calls, matching docs/s1disasm/_incObj/"sub AnimateSprite.asm".
+
+    /** Anim 0 (.bubble1): speed byte 2, {0,1,0,1,4,5,4,5}, afRoutine. */
     private static final int[] ANIM0_FRAMES = {0, 1, 0, 1, 4, 5, 4, 5};
-    private static final int ANIM0_SPEED = 3;
+    private static final int ANIM0_SPEED = 2;
     private static final boolean ANIM0_ADVANCE_ROUTINE = true;
 
-    /** Anim 1 (.bubble2): speed=2, {2,3}, afEnd (loop). */
+    /** Anim 1 (.bubble2): speed byte 2, {2,3}, afEnd (loop). */
     private static final int[] ANIM1_FRAMES = {2, 3};
-    private static final int ANIM1_SPEED = 3;
+    private static final int ANIM1_SPEED = 2;
     private static final boolean ANIM1_ADVANCE_ROUTINE = false;
 
-    /** Anim 3 (.bubble3): speed=2, {2,3,0,1,0,1}, afRoutine. */
+    /** Anim 3 (.bubble3): speed byte 2, {2,3,0,1,0,1}, afRoutine. */
     private static final int[] ANIM3_FRAMES = {2, 3, 0, 1, 0, 1};
-    private static final int ANIM3_SPEED = 3;
+    private static final int ANIM3_SPEED = 2;
     private static final boolean ANIM3_ADVANCE_ROUTINE = true;
 
-    /** Anim 4 (.blank): speed=$F, {19}, afEnd. */
+    /** Anim 4 (.blank): speed byte $F, {19}, afEnd. */
     private static final int[] ANIM4_FRAMES = {19};
-    private static final int ANIM4_SPEED = 16;
+    private static final int ANIM4_SPEED = 15;
     private static final boolean ANIM4_ADVANCE_ROUTINE = false;
 
     /** Wait timer reload value: move.w #120,gmake_time(a0). */
@@ -74,9 +81,6 @@ public class Sonic1LavaGeyserMakerObjectInstance extends AbstractObjectInstance 
 
     /** Sonic Y proximity check range: subi.w #$170,d1. */
     private static final int PROXIMITY_RANGE = 0x170;
-
-    /** out_of_range compare distance: #128+320+192. */
-    private static final int OUT_OF_RANGE_DISTANCE = 128 + 320 + 192;
 
     /** Debug color for geyser maker (dark orange). */
     private static final DebugColor DEBUG_COLOR = new DebugColor(200, 100, 0);
@@ -92,10 +96,10 @@ public class Sonic1LavaGeyserMakerObjectInstance extends AbstractObjectInstance 
     private int timer;
 
     /** Timer reload value (gmake_time / objoff_34). */
-    private final int timerReload;
+    private int timerReload;
 
     /** Object subtype (0 = geyser, != 0 = lavafall). */
-    private final int subtype;
+    private int subtype;
 
     /** Reference to parent push block (gmake_parent / objoff_3C), may be null. */
     private Sonic1PushBlockObjectInstance parentBlock;
@@ -141,6 +145,14 @@ public class Sonic1LavaGeyserMakerObjectInstance extends AbstractObjectInstance 
         super(new ObjectSpawn(x, y, 0x4C, subtype, 0, false, 0), "GeyserMaker");
         this.subtype = subtype;
         this.timerReload = TIMER_RELOAD;
+        // ROM parity: a freshly spawned maker has a cleared SST slot, so
+        // gmake_timer (objoff_32) = 0. GMake_Main (rt0) sets gmake_time = 120 and
+        // falls through to GMake_Wait, whose first subq.w #1,gmake_timer underflows
+        // 0 -> -1 and runs the proximity check on the maker's first executed frame
+        // -- identical to the ObjPosLoad-created maker below. (A previous timer=1
+        // seed here was compensating the old AnimateSprite off-by-one in
+        // updateAnimation(); now that the animation count is ROM-exact the seed
+        // must be 0 too, or the geyser/push-block eruption fires one frame late.)
         this.timer = 0;
         this.routine = 2;
         this.visible = false;
@@ -169,7 +181,7 @@ public class Sonic1LavaGeyserMakerObjectInstance extends AbstractObjectInstance 
     // ========================================================================
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         switch (routine) {
             case 2 -> updateWait(player);
@@ -250,21 +262,18 @@ public class Sonic1LavaGeyserMakerObjectInstance extends AbstractObjectInstance 
 
         // Spawn LavaGeyser (0x4D)
         if (services().objectManager() != null) {
-            ObjectSpawn geyserSpawn = new ObjectSpawn(
-                    spawn.x(), spawn.y(),
-                    0x4D, subtype, 0, false, 0);
-            Sonic1LavaGeyserObjectInstance geyser = new Sonic1LavaGeyserObjectInstance(
-                    geyserSpawn, Sonic1LavaGeyserObjectInstance.Role.HEAD,
-                    null, this, false);
-            // ROM: FindNextFreeObj allocates slot after maker
-            int mySlot = getSlotIndex();
-            if (mySlot >= 0) {
-                int childSlot = services().objectManager().allocateSlotAfter(mySlot);
-                if (childSlot >= 0) {
-                    geyser.setSlotIndex(childSlot);
-                }
-            }
-            services().objectManager().addDynamicObject(geyser);
+            final int mySlot = getSlotIndex();
+            spawnFreeChild(() -> {
+                ObjectSpawn geyserSpawn = new ObjectSpawn(
+                        spawn.x(), spawn.y(),
+                        0x4D, subtype, 0, false, 0);
+                Sonic1LavaGeyserObjectInstance geyser = new Sonic1LavaGeyserObjectInstance(
+                        geyserSpawn, Sonic1LavaGeyserObjectInstance.Role.HEAD,
+                        null, this, false);
+                // ROM: FindNextFreeObj allocates slot after maker
+                ObjectLifetimeOps.assignFindNextFreeChildSlot(services().objectManager(), geyser, mySlot);
+                return geyser;
+            });
         }
 
         // Set maker animation
@@ -288,6 +297,16 @@ public class Sonic1LavaGeyserMakerObjectInstance extends AbstractObjectInstance 
             animRoutineTriggered = false;
             visible = true;
         }
+
+        // ROM: both branches of GMake_MakeLava end with bra.s GMake_Display, which
+        // falls straight into routine 8's own AnimateSprite call in the SAME dispatch
+        // pass the new obAnim was just written (docs/s1disasm/_incObj/"4C, 4D MZ Lava
+        // Geyser and Maker.asm":64-87). Without this, displayFrame keeps whatever the
+        // PREVIOUS cycle's ending animation (.bubble3) last wrote until the next
+        // update() call, so a repeating lavafall/geyser maker renders one frame of the
+        // prior eruption's ending bubble at the instant the new eruption becomes
+        // visible.
+        updateAnimation();
     }
 
     /**
@@ -343,30 +362,32 @@ public class Sonic1LavaGeyserMakerObjectInstance extends AbstractObjectInstance 
     }
 
     private void checkOutOfRange() {
-        if (!isWithinOutOfRangeWindow(spawn.x())) {
+        if (!isInRangeAt(spawn.x())) {
             setDestroyed(true);
         }
-    }
-
-    /**
-     * ROM out_of_range macro (Macros.asm):
-     * round both X positions to $80 and compare against 128+320+192.
-     */
-    private boolean isWithinOutOfRangeWindow(int objectX) {
-        Camera camera = services().camera();
-        if (camera == null) {
-            return true;
-        }
-        int objRounded = objectX & 0xFF80;
-        int camRounded = (camera.getX() - 128) & 0xFF80;
-        int distance = (objRounded - camRounded) & 0xFFFF;
-        return distance <= OUT_OF_RANGE_DISTANCE;
     }
 
     // ========================================================================
     // Animation
     // ========================================================================
 
+    /**
+     * ROM-faithful re-implementation of {@code AnimateSprite}
+     * (docs/s1disasm/_incObj/"sub AnimateSprite.asm").
+     * <p>
+     * {@code animTimer} is {@code obTimeFrame}, {@code animFrameIndex} is
+     * {@code obAniFrame}; {@link #setCurrentAnim(int)} resets both to 0 (the
+     * {@code obAnim != obPrevAni} branch). Each call does
+     * {@code subq.b #1,obTimeFrame; bpl Anim_Wait} — so a frame is held for
+     * {@code (speedByte + 1)} calls, and the terminator ({@code afRoutine} /
+     * {@code afEnd}) is only read on the call <em>after</em> the last frame has
+     * been shown for its full duration. The previous engine version advanced the
+     * index one call early on the first frame (holding frame 0 for only
+     * {@code speedByte} calls), which made every {@code afRoutine} fire one frame
+     * early. For the MZ lavafall maker that under-counted the {@code .bubble3}
+     * routine-advance by one frame per eruption, drifting the eruption schedule
+     * earlier each cycle.
+     */
     private void updateAnimation() {
         int[] frames;
         int speed;
@@ -380,23 +401,25 @@ public class Sonic1LavaGeyserMakerObjectInstance extends AbstractObjectInstance 
             default -> { return; }
         }
 
-        animTimer++;
-        if (animTimer >= speed) {
-            animTimer = 0;
-            animFrameIndex++;
-            if (animFrameIndex >= frames.length) {
-                if (advancesRoutine) {
-                    // afRoutine: signal routine advancement
-                    animRoutineTriggered = true;
-                    animFrameIndex = frames.length - 1; // stay on last frame
-                } else {
-                    // afEnd: loop
-                    animFrameIndex = 0;
-                }
-            }
+        // Anim_Run: subq.b #1,obTimeFrame / bpl.s Anim_Wait
+        if (--animTimer >= 0) {
+            return; // time remains: keep the current frame
         }
 
+        // Anim_LoadNextFrame: reload duration, read next script entry
+        animTimer = speed; // move.b (a1),obTimeFrame
+        if (animFrameIndex >= frames.length) {
+            // Script terminator reached (the byte past the last frame ID).
+            if (advancesRoutine) {
+                // Anim_End_FC (afRoutine): addq.b #2,obRoutine; obFrame/obAniFrame untouched.
+                animRoutineTriggered = true;
+                return;
+            }
+            // Anim_End_FF (afEnd): restart from the first frame and display it.
+            animFrameIndex = 0;
+        }
         displayFrame = frames[animFrameIndex];
+        animFrameIndex++;
     }
 
     // ========================================================================

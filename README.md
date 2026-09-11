@@ -5,21 +5,26 @@
 
 ## Introduction
 
-OpenGGF is an open-source, Java-based game engine for research and preservation of classic Mega
-Drive / Genesis platform games, specifically the mainline Sonic the Hedgehog series. It aims to
-faithfully reimplement the physics and rendering behaviour of the original hardware using data
-loaded from user-supplied ROM images. The project's primary goal
+OpenGGF is a community-made, fan-made, open-source Java game engine for research and preservation
+of classic Mega Drive / Genesis platform games, specifically the mainline Sonic the Hedgehog
+series. It aims to faithfully reimplement the physics and rendering behaviour of the original
+hardware using data loaded from user-supplied ROM images. The project's primary goal
 is accuracy: physics, collision, and audio are all verified against community-maintained
 disassemblies of titles in the Sonic the Hedgehog series. No copyrighted assets are included in
 this repository; a legally obtained ROM is required to run the engine.
 
 The engine also aims to provide modern tooling such as a level editor and an open framework for
-modding and customisation.
+modding and customisation. Neither is delivered yet: the editor is an experimental, config-gated
+prototype and the modding framework is planned but not implemented.
 
-> **Disclaimer:** This project is not affiliated with or endorsed by Sega. Sonic the Hedgehog and
-> all related characters, names, and trademarks are the property of Sega Corporation. No ROM images
-> or other copyrighted game data are included in this repository. Users must supply their own
-> legally obtained ROM files to use this software.
+> **Disclaimer:** OpenGGF is a community-made fan project. It is not affiliated with, sponsored by,
+> approved by, or endorsed by Sega. Sonic the Hedgehog and all related characters, names, and
+> trademarks are the property of Sega Corporation. No ROM images or other copyrighted game data are
+> included in this repository. Users must supply their own legally obtained ROM files to use this
+> software.
+>
+> The disclaimer is also shown in-engine on startup; it can be disabled by setting
+> `startup.legalDisclaimer: false` in `config.yaml`.
 
 ## User Guide
 
@@ -29,23 +34,36 @@ A comprehensive user guide is available in [`docs/guide/`](docs/guide/index.md),
 - **Contributors:** [Dev setup](docs/guide/contributing/dev-setup.md), [architecture overview](docs/guide/contributing/architecture.md), [adding zones](docs/guide/contributing/adding-zones.md), [adding bosses](docs/guide/contributing/adding-bosses.md), [audio system](docs/guide/contributing/audio-system.md), [testing](docs/guide/contributing/testing.md), and [trace replay testing](docs/guide/contributing/trace-replay.md).
 - **Cross-referencers:** [68000 primer](docs/guide/cross-referencing/68000-primer.md), [mapping exercises](docs/guide/cross-referencing/mapping-exercises.md), [per-game notes](docs/guide/cross-referencing/per-game-notes.md), and [tooling](docs/guide/cross-referencing/tooling.md).
 
+Contributor tests are JUnit 5 / Jupiter only. Do not add JUnit 4 tests, rules, runners, or `org.junit.*` imports.
+
 ## Configuration
 
-The engine currently makes limited use of `config.json` to hold some basic configurations. Change
-these at your own risk.
+The engine reads runtime settings from `config.yaml` in the working directory. A legacy
+`config.json` is migrated automatically on first run. Key bindings can be written either as GLFW
+integer codes or as human-readable names such as `SPACE`, `Q`, or `F9`. See
+[`CONFIGURATION.md`](CONFIGURATION.md) and the player guide for the full reference.
 
 ## Controls
 
-> Currently, only keyboard controls are supported.
+Keyboard and standard GLFW gamepads are supported for gameplay and the basic
+startup/title/data-select menus.
 
 ### Player Controls
 
 | Key | Action |
 |-----|--------|
 | Arrow Keys | Movement |
-| Space | Jump |
-| Z | Cycle Acts |
-| X | Cycle Zones |
+| Space | Player 1 action A / jump |
+| Right Shift | Player 2 action A / jump |
+| Enter | Pause / unpause |
+
+The bundled `config.yaml` exposes keyboard bindings under `input.pause`,
+`input.player1`, and `input.player2`. Keyboard B/C are unbound by default;
+gamepads map west/south/east face buttons to Mega Drive A/B/C. On Xbox-style
+pads that is X/A/B; on PlayStation-style pads that is Square/Cross/Circle.
+Additional bindable inputs, including Start and controller assignment, are
+documented in [`CONFIGURATION.md`](CONFIGURATION.md); keys omitted from the
+template still use the engine defaults until added explicitly.
 
 ### Debug Controls
 
@@ -58,10 +76,23 @@ these at your own risk.
 | F5 | Show/Hide Object Labels |
 | F6 | Show/Hide Camera Bounds |
 | F7 | Show/Hide Player Bounds |
+| F8 | Show/Hide Object Points |
 | F9 | Show/Hide Ring Bounds |
 | F10 | Show/Hide Plane Switchers |
 | F11 | Show/Hide Touch Response |
 | F12 | Show/Hide Art Viewer |
+| Page Up | Cycle Acts (`debug.keys.nextAct`) |
+| Page Down | Cycle Zones (`debug.keys.nextZone`) |
+
+`F9` is also the default level-select shortcut (`debug.keys.levelSelect`), so it
+can both open level select and toggle ring bounds while debug overlays are enabled.
+
+### Editor Controls
+
+| Key | Action |
+|-----|--------|
+| Shift+Tab | Toggle between gameplay and the experimental editor overlay (`debug.flags.editor` must be `true`) |
+| F5 | Restart the playtest from editor mode |
 
 ## FAQ
 
@@ -91,38 +122,43 @@ sound driver.
 
 | Game | Status |
 |------|--------|
-| Sonic the Hedgehog (S1) | Broadly playable. All 7 zones, 6 bosses, special stages, title screen, ending/credits. |
-| Sonic the Hedgehog 2 (S2) | Most complete. All zones, 9 bosses (including both DEZ bosses), special stages, Tails AI, credits/ending. |
-| Sonic 3 & Knuckles (S3K) | Progressing. Angel Island Zone playable with intro cutscene, miniboss fight (with defeat flow and signpost), results screen, Blue Ball special stages (WIP), early Glowing Sphere bonus stage work (gumball/pachinko, WIP), palette cycling for all zones, per-character physics, insta-shield, spindash dust, title screen, level select, Knuckles playable with glide/climb, sidekick Knuckles with palette/VRAM isolation, badnik destruction with animals and points, and 10+ gameplay objects. |
+| Sonic the Hedgehog (S1) | Broadest end-to-end coverage: all zones, bosses, special stages, title screen, ending, credits, and demo playback. |
+| Sonic the Hedgehog 2 (S2) | Most complete module by object coverage (122/122 checklist objects) and trace parity. Includes all zones, bosses, special stages, Tails AI, ending, and credits. |
+| Sonic 3 & Knuckles (S3K) | Work in progress. AIZ through LBZ have substantial route coverage, including shipped-ROM collision handling for the AIZ2 end boss, but this is not full parity: route/trace validation remains outstanding for the AIZ miniboss napalm FallingShot and AIZ2 end-boss splash children, while Knuckles' LBZ Big Arm handoff remains inert. |
 
-Work is ongoing across all three games. See CHANGELOG.md for detailed progress.
+Work is ongoing across all three games. See `CHANGELOG.md` for detailed, per-merge history.
 
 ### Where do I get ROMs?
 
 We do not supply ROM images. You must provide your own legally obtained copies. The engine expects
 these specific revisions, placed in the working directory:
 
-| Game | Expected filename | Revision |
-|------|-------------------|----------|
-| Sonic 1 | `Sonic The Hedgehog (W) (REV01) [!].gen` | World, Revision 01 |
-| Sonic 2 | `Sonic The Hedgehog 2 (W) (REV01) [!].gen` | World, Revision 01 |
-| Sonic 3&K | `Sonic and Knuckles & Sonic 3 (W) [!].gen` | World (lock-on combined ROM) |
+| Game | Expected filename | Expected revision and hash |
+|------|-------------------|----------------------------|
+| Sonic 1 | `s1.gen` | World, Revision 01; CRC32 `AFE05EEE`; SHA-1 `69E102855D4389C3FD1A8F3DC7D193F8EEE5FE5B` |
+| Sonic 2 | `s2.gen` | World, Revision 01; CRC32 `7B905383`; SHA-1 `8BCA5DCEF1AF3E00098666FD892DC1C2A76333F9` |
+| Sonic 3&K | `s3k.gen` | World lock-on combined ROM; CRC32 `63522553`; SHA-1 `CFBF98C36C776677290A872547AC47C53D2761D6` |
 
 Other revisions (REV00, etc.) are untested and will likely produce incorrect results, as
 ROM addresses are verified against these specific builds. ROM filenames are configurable via
-`config.json` (see `SONIC_1_ROM`, `SONIC_2_ROM`, `SONIC_3K_ROM` keys).
+`config.yaml` (see `roms.sonic1`, `roms.sonic2`, and `roms.sonic3k`).
 
 ### What is cross-game feature donation?
 
-A feature that lets a donor game (S2 or S3K) provide player sprites, spindash mechanics, and sound
-effects while you play a different base game (e.g. Sonic 1). This means you can play S1 levels
-with S2's Sonic and Tails sprites, spindash, and sidekick AI. Enable it in `config.json`:
+A feature that lets a donor game (S2 or S3K) provide player sprites, spindash mechanics, sound
+effects, and the data select (save/load) screen while you play a different base game (e.g.
+Sonic 1). This means you can play S1 levels with S2's Sonic and Tails sprites, spindash, and
+sidekick AI — and when S3K is the donor, you also get the full S3K data select screen with
+save slots and team selection before gameplay begins.
+When S3K is the donor, that donated data select now also uses host-specific emerald presentation
+and runtime-generated S1/S2 zone preview screenshots. Data select donation is only enabled when
+`crossGame.enabled` is `true` and `crossGame.source` is `"s3k"`. Enable it in
+`config.yaml`:
 
-```json
-{
-  "CROSS_GAME_FEATURES_ENABLED": true,
-  "CROSS_GAME_SOURCE": "s2"
-}
+```yaml
+crossGame:
+  enabled: true
+  source: "s3k"
 ```
 
 Both the base game ROM and the donor game ROM must be present.
@@ -146,7 +182,9 @@ intellectual property.
 
 Anywhere Java 21 and LWJGL run: Windows, macOS, and Linux. The engine uses OpenGL 4.1 core profile
 (chosen for macOS compatibility). A GraalVM native image build is also supported for ahead-of-time compiled
-binaries.
+binaries. Third-party libraries (LWJGL, and Jackson for `config.yaml` and save files) are kept on
+advisory-free versions: a Dependabot advisory against `master` is replicated onto `develop` and
+`next` as an aligned bump rather than merged into the released line.
 
 ### Did you use AI to write this? / This is AI slop!
 
@@ -154,163 +192,275 @@ Various agents (Claude, Codex, and Gemini, in various models, versions and forms
 the commit history doesn't hide it; you'll see `Co-Authored-By` tags throughout. But the project
 has been in development since 2013, long before AI coding assistants existed.
 
-The core engine framework, architecture, rendering pipeline, physics engine, and collision system
-were designed and coded by hand. The multi-game provider architecture, the GPU shader pipeline, the
-SMPS audio driver, and the original physics rewrite are all human-authored. AI was brought in
-for bulk analysis and research, to accelerate bulk object and boss implementation, debugging, validation, and
-unit tests; all under direct architectural oversight, with accuracy verified against the original
-ROM disassemblies. Every commit is reviewed, tested, and corrected where needed.
+The pre-AI core — the engine framework and architecture, the rendering pipeline, the physics
+engine and its subpixel movement model, and the sensor-based collision system — was designed and
+coded by hand over years, long before any agent touched the repo. Other subsystems were built
+with heavy AI assistance under direct human oversight; the SMPS audio engine, in particular, was
+AI-built and steered against reference implementations rather than hand-written. AI was brought in for bulk analysis and research, to accelerate
+object and boss implementation, debugging, validation, and unit tests; all with accuracy verified
+against the original ROM disassemblies. Every commit is reviewed, tested, and corrected where
+needed.
 
-You can't prompt your way to ROM accuracy (yet!). But we certainly prompted our way through object
+[You can't prompt your way to ROM accuracy (yet!)](docs/project/ai-journey.md). But we certainly prompted our way through object
 implementations, research and boilerplate code a lot faster than would have been possible by hand.
+
+For the visual version of that story, the [Development Timeline](docs/project/development-timeline.md) is a
+captioned gallery of real dev builds — bugs and all — from a 2015 white-box prototype through to
+the present, including the audio engine slowly un-mangling itself.
 
 ### How can I contribute?
 
-The project is open source. Check the issue tracker, OBJECT_CHECKLIST.md for unimplemented game
-objects, and CHANGELOG.md for the current state of each game. The codebase uses a provider-based
-architecture that makes it relatively straightforward to add new objects, zones, and game-specific
-behaviour.
+The project is open source. Start with [`CONTRIBUTING.md`](CONTRIBUTING.md), then check the issue
+tracker, OBJECT_CHECKLIST.md for unimplemented game objects, and CHANGELOG.md for the current state
+of each game. The codebase uses a provider-based architecture that makes it relatively
+straightforward to add new objects, zones, and game-specific behaviour.
+## Licensing
+
+OpenGGF is free software under the GNU General Public License, version 3
+([`LICENSE`](LICENSE)). The FM sound core under
+`src/main/java/com/openggf/audio/synth/nuked/` is a Java port of
+[Nuked OPN2](https://github.com/nukeykt/Nuked-OPN2) by Alexey Khokholov
+(Nuke.YKT) and remains under the GNU Lesser General Public License, version
+2.1 or later ([`LICENSES/LGPL-2.1.txt`](LICENSES/LGPL-2.1.txt)); it may be
+extracted and reused under that licence on its own, and the combined program
+is conveyed under GPL-3 through LGPL section 3. [`NOTICE.md`](NOTICE.md)
+records the component, its pinned upstream revision and the modifications
+made; [`CREDITS.md`](CREDITS.md) lists every contributor, reference source and
+library. The executable JAR carries `LICENSE`, `LICENSES/`, `NOTICE.md` and
+`CREDITS.md` under `META-INF/openggf/`, and the release archives ship them
+next to the launcher.
 
 ## Releases
 
-### v0.5.20260411 (Released 2026-04-11)
+### v0.6.prerelease — Current development snapshot
 
-A primarily architectural release. The engine internals have been restructured to prepare for level
-editor support, safe runtime teardown, and multi-instance play-testing, while Sonic 3 & Knuckles
-gameplay coverage has expanded across Angel Island and Hydrocity. AIZ2 now has the Flying Battery
-bombing sequence, end boss, post-boss capsule/cutscene flow, and AIZ-to-HCZ transition represented,
-while HCZ now has a larger object/event pass and HCZ1-to-HCZ2 progression.
+OpenGGF 0.6 is the current development release focused on accurate, playable
+routes through the main Sonic 3 & Knuckles slice and broad Sonic 1 and Sonic 2
+gameplay. The engine loads runtime data from user-supplied ROMs and validates
+behavior against the original games' disassemblies and recorded hardware
+traces.
 
-- **Two-tier service architecture:** all 180+ game object classes migrated from direct singleton
-  access to a two-tier dependency injection pattern (`GameServices` global facade + `ObjectServices`
-  context-scoped injection). NoOp sentinels replace null checks throughout.
-- **GameRuntime:** explicit runtime object owns all mutable gameplay state, with `resetState()`
-  lifecycle on all singletons. Enables safe editor mode enter/exit and level rebuilds.
-- **LevelManager decomposition:** the engine's largest class broken into `LevelTilemapManager`,
-  `LevelTransitionCoordinator`, and `LevelDebugRenderer` with ~73 methods extracted.
-- **MutableLevel:** snapshot, mutation, and dirty-region tracking for level tile data — the
-  foundation for the upcoming level editor's undo/redo and real-time tile editing.
-- **Common code extraction (5 phases):** 15+ abstract base classes, 10+ shared utilities, and
-  systematic deduplication across all three games, including `SubpixelMotion`, `AnimationTimer`,
-  `FboHelper`, `AbstractMonitorObjectInstance`, `AbstractSpikeObjectInstance`,
-  `AbstractZoneScrollHandler`, and more.
-- **Knuckles** is now a playable character with full glide/climb state machine, ROM-accurate
-  jump height, wall grab, ledge climb, and sliding physics. Works in S3K natively and via
-  cross-game donation into S1/S2 with correct palette and HUD from the lock-on ROM.
-- **Sonic 3&K** expands with title screen (SEGA logo, Sonic morph animation, interactive menu),
-  level select screen (SONICMILES background, zone icons, sound test), AIZ miniboss completion
-  (defeat flow, napalm attack, staggered explosions), AIZ2 Flying Battery bombing/end-boss work,
-  signpost and results screen, Blue Ball special stages (WIP) with per-character art/palette,
-  S3K bonus-stage work across Gumball, Glowing Sphere/Pachinko, and Slots, per-character physics
-  profiles, palette cycling for all zones, HCZ water rush / conveyor / fan / block / door /
-  miniboss coverage, and many new badniks/objects including CollapsingBridge, MegaChopper,
-  Poindexter, Blastoid, Buggernaut, Bubbler, TurboSpiker, and InvisibleHurtBlockH.
-- **Insta-shield** fully implemented with ROM parity: activation, hitbox expansion, persistent
-  lifecycle, cross-game donation, and DPLC cache management.
-- **Multi-sidekick system** with configurable sidekick chains, per-character respawn strategies,
-  virtual VRAM bank allocation, and VDP-accurate sprite priority ordering.
-- **Tails AI rework:** ROM-accurate respawn gating, PANIC mode rewrite, flying/despawn
-  improvements, P2 manual override, and per-zone boss/event wiring.
-- **Cross-game donation** now bidirectional: S1 can donate into S2/S3K, with `DonorCapabilities`
-  interface, `CanonicalAnimation` vocabulary, and `AnimationTranslator` for any game pair.
-- **Rendering pipeline:** PatternAtlas slot reclamation, batched DPLC updates, virtual pattern ID
-  validation, SAT sprite-mask replay ordering for mixed-priority S3K bonus-stage art, and
-  fail-fast shader error handling.
-- **Trace replay testing:** automated accuracy verification that records per-frame physics state
-  from the real ROM, then replays the same inputs through the engine and compares every field.
-  First trace (S1 GHZ1, 3,905 frames) passes with 0 errors; a second baseline (S1 MZ1, 7,936
-  frames) is now in-tree with expanded recorder and divergence diagnostics for ROM/engine parity
-  investigation. Supports both BizHawk (Windows, Lua) and **stable-retro** (cross-platform,
-  Python) as recording backends — both produce identical output consumed by the same Java test
-  infrastructure.
-- Comprehensive user guide, 15+ design specs and implementation plans, and broad test coverage
-  improvements including automated singleton lifecycle testing.
+#### 0.6 highlights
 
-See CHANGELOG.md for full details.
+A high-level summary of what 0.6 is about. Every individual change is recorded
+in [the 0.6 changelog](CHANGELOG.0.6.md).
 
-### v0.4.20260304 (Released 2026-03-04)
+- **Three-game engine:** Sonic 1, Sonic 2, and Sonic 3 & Knuckles each run from
+  their own ROM through shared, rule-driven systems — physics, subpixel
+  movement, sensors, collision, solid objects, water, camera, title cards,
+  level events, bosses, badniks, sidekicks, Super Sonic, and cross-game feature
+  donation are implemented from ROM-owned rules and data rather than per-game
+  special cases.
 
-A release-sized update focused on expanding playable coverage, ending sequences, and engine maturity.
+- **Playable routes:** Sonic 1 has broad end-to-end coverage, Sonic 2 covers
+  most zones, and Sonic 3 & Knuckles is playable through the Angel Island to
+  Hydrocity slice with later zones in progress. 0.6 extends zone-specific
+  behaviour across Wing Fortress, Casino Night, Marble Garden, Icecap and
+  Angel Island, including multi-sidekick support and act-transition continuity.
 
-- **Package rename** from `uk.co.jamesj999.sonic` to `com.openggf` across the entire codebase.
-- **Master title screen** implemented: engine-wide PNG-based title screen with animated clouds, game
-  selection, and pixel font renderer. Displayed on startup before entering game-specific title flow.
-- **Sonic 1** has moved from initial support to feature complete: title screen flow, special
-  stages, major per-zone event scripting, extensive object and badnik additions, multiple boss
-  implementations (GHZ, MZ, SYZ, LZ, SLZ, FZ), Labyrinth water/drowning/splash behaviour,
-  ending/credits work, SBZ post-level-end sequence, demo playback, edge balance and push block
-  collision corrections, and slope crest sensor guard. Expect minor bugs, but the game should be playable
-  from beginning to end.
-- **Sonic 2** adds title screen support, major object passes for MTZ/SCZ/WFZ/OOZ, 9 boss fights
-  (MCZ, MTZ, WFZ, and both DEZ bosses — Mecha Sonic and Death Egg Robot, plus Robotnik escape),
-  a complete credits and ending cutscene system with ROM-accurate visuals, expanded per-zone event
-  architecture, demo playback, signpost/badnik palette/stair block art fixes, and a systematic
-  TODO resolution pass with disassembly validation.
-- **Sonic 3&K** sees major AIZ progress including intro cutscene systems, hollow tree and vine
-  traversal parity work, miniboss object set bring-up, initial badnik implementations, shield/PLC
-  integration fixes, a full water system with provider architecture and underwater palettes,
-  seamless AIZ fire transition flow, and related regressions/tests.
-- **Cross-game feature donation** implemented: a donor game (S2 or S3K) can provide player sprites,
-  spindash dust, physics, palettes, and SFX while the base game handles levels, collision, objects,
-  and music. Now includes cross-game Super Sonic delegation.
-- **Per-game physics** and Super Sonic state/control flow (implemented for S2, with cross-game
-  delegation to S1 and S2 game modules).
-- **Profile-driven level loading:** declarative `LevelInitProfile` system with 13 ROM-aligned
-  steps per game, replacing the monolithic `loadLevel()` path.
-- **Testability refactor:** `GameContext`, `SharedLevel`, `HeadlessTestFixture` builder, and
-  profile-driven test teardown. Test grouping by level and 8-JVM parallel execution.
-- **Engine fixes:** solid object edge jitter fix, S1 slope crest sensor guard, jump-while-airborne
-  guard, fade transition flash fix, results screen rendering fix, HTZ earthquake fixes, SFX
-  channel replacement fix.
-- PLC/art-loader refactors, RomOffsetFinder/ObjectDiscoveryTool enhancements, configuration
-  documentation, and broad audio/stability/performance hardening.
+- **Sound driver accuracy:** the largest single area of 0.6. The engine's SMPS
+  driver, YM2612 FM, PSG and DAC/PCM paths were reverse-engineered against the
+  three ROMs' drivers and are now checked by committed driver-parity oracles
+  covering music, sound effects, fades, extra-life restoration and request
+  scheduling. Full parity and listening validation remain open; the measured
+  boundaries are recorded in
+  [`docs/status/audio-frontier-log.md`](docs/status/audio-frontier-log.md) and
+  the [audio handover](docs/architecture/plans/audio/2026-09-04-audio-parity-handover.md).
 
-See CHANGELOG.md for full details.
+- **Faster FM core:** new configurations select a register-level FM core that
+  passes all 178 supported chip scripts; `audio.fmCore=accurate` still selects
+  Java Nuked. Audio playback now allocates about an eighth of what it did per
+  frame on either core, with every oracle sample unchanged. Full-game
+  listening sign-off remains open. See the
+  [fast FM validation record](docs/architecture/validation/audio/2026-09-06-fast-fm-release.md).
 
-### v0.3.20260206
+- **Runtime performance:** capture, rewind, art decoding, animated-art uploads
+  and shader state handling all do less redundant work per frame. See the
+  [initial measurements](docs/architecture/validation/2026-09-05-runtime-performance.md)
+  and [follow-up evidence](docs/architecture/validation/performance/2026-09-05-followup.md).
 
-A massive release covering 366 commits across every major subsystem.
+- **Continue screens:** ROM-backed countdowns and character sequences follow
+  Game Over when continues remain, with per-game restart behaviour.
 
-- **Tails** (Miles Prower) is now a playable character with ROM-accurate CPU AI follower behaviour,
-  input replay, flight, and configurable sidekick toggle.
-- **Multi-game architecture:** The engine has been refactored to support multiple games via a
-  provider-based abstraction layer, with initial Sonic 1 ROM support (level select, title cards, HUD,
-  audio with S1-specific SMPS driver configuration) alongside the existing Sonic 2 support.
-- **Physics:** The physics engine has been completely rewritten to match ROM behaviour.
-- **Bosses and objects:** Boss fights are implemented for 5 zones (EHZ, CPZ, HTZ, CNZ, ARZ), along
-  with 15+ new badniks and 50+ new game objects spanning all implemented zones.
-- **Water:** A full water system with drowning mechanics is in place for CPZ and ARZ.
-- **Graphics:** The graphics backend has been migrated from JOGL to LWJGL with a GPU-accelerated
-  rendering pipeline (pattern atlas, tilemap shader, instanced sprite batching, priority FBOs).
-- **Audio:** Major accuracy improvements to YM2612 FM synthesis (based on Genesis-Plus-GX reference)
-  and the SMPS driver.
-- **Infrastructure:** Per-game ROM configuration, a HeadlessTestRunner for physics integration
-  testing, visual and audio regression test suites, a multi-game test annotation framework, GraalVM
-  native build support, and significant performance optimisations throughout.
+- **Gameplay-scoped rewind:** dynamic objects, child graphs, rider state, level
+  events, audio history, and relevant static state are captured and restored
+  under explicit ownership rules, including across in-frame act reloads.
 
-See CHANGELOG.md for full details.
+- **Recording and capture:** live and offline trace recording share the
+  presentation pipeline and can emit DNxHR SQ video with lossless 24-bit PCM
+  for DaVinci Resolve on Linux.
 
-### v0.2.20260117
+- **Development and validation tools:** level-editor foundations, ROM offset
+  and compression tools, headless gameplay tests, trace replay, visual/audio
+  regression checks, and release/architecture guards. Trace recording, probing
+  and publication live in [`OpenGGF/TraceChaser`](https://github.com/OpenGGF/TraceChaser),
+  pinned as an optional submodule that is not needed to build, test, package or
+  run the engine.
 
-Improvements and fixes across the board. Special stages are now implemented, feature complete with a
-few known issues. Physics have been improved, parallax backgrounds implemented and complete for EHZ,
-CPZ, ARZ and MCZ. Some sound improvements, title cards, level outros, etc.
+- **Agent-friendly workflows:** ROM cross-referencing, object/boss/zone
+  implementation guidance, trace diagnosis and worktree-local Maven procedures,
+  with the three canonical disassemblies pinned as optional submodules outside
+  the build and runtime dependency graph.
 
-### v0.1.20260110
+- **Normal local launchers:** `run.sh`, `run.cmd`, `dev.sh` and `dev.cmd` keep
+  the direct package-and-launch workflow for interactive development.
 
-Now vaguely resembles the actual Sonic 2 game. Real collision and graphics data is loaded from the
-Sonic 2 ROM and rendered on screen. The majority of the physics are in place, although it is far
-from perfect. A system for loading game objects has been created, along with an implementation for
-most of the objects and badniks in Emerald Hill Zone. Rings are implemented, life and score tracking
-is implemented. SFX and music are implemented. Everything has room for improvement, but this now
-resembles a playable game.
+#### Current release status
 
-### v0.05 (2015-04-09)
+0.6 is not a final release yet. Human end-to-end gameplay and audio QA are
+still required before release sign-off.
 
-Little more than a tech demo. Sonic is able to run and jump and collide with terrain in a reasonably
-correct way. No graphics have yet been implemented so it's a moving white box on a black background.
+Level loads no longer intermittently fail or detect the wrong game. The ROM is
+read from two threads during a load, and the header readers and the Sonic 3 &
+Knuckles art loaders were seeking the shared file handle without the lock every
+other reader holds, so a background read could move the position out from under
+them.
 
-### v0.01 (Pre-Alpha, first documented 2013-05-22)
+Angel Island Act 1 no longer fails to load when its intro tilemap pre-build
+cannot read the ROM; the pre-build is a cache warm the terrain-swap frame
+already knows how to do without.
 
-A moving black box. This version will be complete when we have an unskinned box that can traverse
-terrain in the same way Sonic would in the original game.
+Continuous integration has been cut back to a fast per-push check. A push runs
+only the `smoke` profile -- the ordinary suite minus ten exhaustive oracle
+sweeps that were most of its runtime -- so it finishes in minutes instead of
+half an hour. The full suite, the structural guards and the trace replay
+fixtures now run on pull requests and on demand, with no scheduled run, so a
+regression in the guards or the excluded sweeps is caught by a contributor
+running them locally rather than by CI. Release validation is unchanged and
+still runs everything. Known-red Sonic 2 CPZ2 and
+Sonic 3 & Knuckles trace/run-chain frontiers are documented 0.6 limitations;
+finishing those parity campaigns is deferred to the next release. A frontier
+still returns to the 0.6 fix queue when it exposes a confirmed release-impacting
+gameplay defect.
+
+Fast FM is now integrated for 0.6. New configurations select `fast`, while
+explicit `accurate` choices and physical-reference captures retain the accurate
+core. All 178 supported chip scripts pass. Post-merge verification passes
+16,970 ordinary tests and 610 guards, with unchanged pinned trace evidence
+and successful universal-JAR smoke checks. Candidate benchmarks retain matching
+gameplay digests; native-platform execution and full-game listening sign-off
+remain release tasks. See the
+[FM delivery record](docs/architecture/validation/audio/2026-09-06-fast-fm-release.md).
+A follow-up performance pass makes the fast core about 12 % cheaper on real
+music (S1 GHZ1 0.173 to 0.151 ms per frame, S3K AIZ 0.164 to 0.147) with every
+oracle output sample and gameplay digest unchanged; the
+[performance review](docs/architecture/validation/performance/2026-09-06-fast-fm-perf-review.md)
+and the
+[listening-test plan](docs/architecture/validation/audio/2026-09-06-fast-fm-listening-test.md)
+record it.
+
+Rewind checkpoints no longer re-clone every spent hardware-timing job. In S3K
+AIZ1 after the intro, a checkpoint capture falls from about 287 KB to 33 KB and
+a restore from 315 KB to 30 KB, so the steady rewind allocation and the burst on
+engaging rewind both shrink by roughly an order of magnitude with no timing
+decision changed. Only claimed jobs are memoized, so a coordinator that still
+holds an unclaimed preparation is always re-captured. Focused rewind, timing
+and S3K suites pass (2,860 tests post-merge); a further verification follows
+the claimed-only correction.
+
+S3K AIZ1 no longer stutters at its two runtime hand-offs. The intro terrain
+swap at camera X $1400 swaps in tilemaps pre-built during level load instead of
+rebuilding both full-level tilemaps on the frame (about 25 ms headless to under
+1 ms), and pattern-only art writes such as the $2E00 fire overlay now refresh
+the pattern atlas lookup rather than rebuilding tilemaps. The fire curtain's
+act 2 reload installs a level built on a preparer thread across the fire
+event's own wait; the reload always joins that build, and a regression test
+confirms the reload frame, positions, tilemap bytes and registered art match a
+synchronous reload (reload frame about 43 ms to 9 ms at 60 fps pacing). Related
+S3K, Kos, level and transition suites pass except two AIZ trace replays that
+fail identically on the pre-merge develop; guards pass (610). Measured through
+the real renderer at 60 fps pacing, that reload frame is now about 11 ms:
+in-game progression saves encode their snapshot on the frame but write the file
+on a save-writer thread (flushed before slot reads and at shutdown), the fire
+hand-off decodes its act 2 collision tables off the frame, and GPU sprite sheets
+whose pixels are unchanged across the act reload are kept rather than re-uploaded.
+
+Special-stage entry now plays the ROM's transition in normal play: in Sonic 2
+the level freezes and fades to white over 22 frames while the entry sound and
+the music fade run, the screen stays white through the stage's startup waits,
+and the stage music starts with the fade from white; Sonic 1 and Sonic 3 &
+Knuckles keep the level on screen through their own fade-to-white the same way,
+and every stage now loads its palette after that fade rather than during it.
+`gameplay.loadTimeSimulation: FAST` is a real mode and the default, resolving
+to a hand-tunable copy of the measured S3K load-time profile that also paces
+the title screen's Sonic frames 8 to A from the original hardware capture.
+Special-stage unit, headless and replay suites pass across the three games,
+the ordinary suite and guards pass, and every run-chain failure is identical
+to the pre-merge develop.
+
+`config.yaml` now holds only the settings you changed. Defaults live in the
+program and are documented by `config.yaml.example`, so a default that changes
+in a later build reaches every install that never set the key, with no
+migration or version bump; changing one is three edits and a guard test keeps
+the example honest. Files written by older builds are converted once on load,
+keeping your changes and dropping materialised defaults, including the former
+`loadTimeSimulation: NONE`. The ordinary suite (16994) and guards (610) pass.
+
+The [September 6 release assessment](docs/architecture/audits/2026-09-06-release-blockers.md)
+identified release skip-classification and trace-policy mismatches. The
+[remediation record](docs/architecture/validation/2026-09-06-release-gates.md)
+tracks their replacement with explicit capability checks and a fresh, pinned
+trace comparison. A frozen candidate still needs complete platform evidence and
+human gameplay/listening sign-off. Post-integration verification passed 16,687 ordinary
+tests and 610 guards, with its known trace failures and reports unchanged against
+a fresh baseline. Its universal JAR passed packaging smoke checks. Hosted validation also requires a configured `release-fixtures` runner.
+
+Known limitations: some Game Over timing details remain documented in
+`docs/status/known-bugs.md`; there is no modding framework, the level editor
+is a dormant prototype, and complete SMPS audio parity remains unfinished.
+The September 4 audio handover supersedes the August 28 withdrawal statement:
+audio corrections and comparison tooling have landed, not complete parity or
+release listening approval. The release summary carries commit-stamped
+validation numbers, the guard and trace policy statements match
+`docs/status/trace-scope-release-6.md`, and
+`RELEASE_NOTES_v0.6.prerelease.md` is a pointer to the summary.
+Contributor and player guides were corrected on August 28 (hook installation,
+config defaults, player-2 bindings, dead links), and the skill mirrors were
+resynchronised.
+Repository hygiene followed: IDE/scratch files and two native libraries were
+untracked, root plans and launcher scripts moved to `docs/architecture/` and
+`scripts/`, saved third-party web pages replaced with provenance stubs, and
+`CREDITS.md` now attributes every runtime library, test tool, and chip core.
+The object checklists were regenerated from the registries (S2 122/122, S3K
+173/303), S3K object `$4F` is now gated by zone set so DEZ no longer spawns
+MGZ sinking mud, and the stale S2/S3K bug lists were folded into
+`docs/status/known-bugs.md`.
+Runtime decompressors moved from `tools/` to `com.openggf.data.compression`,
+power-up visuals now come from per-game `GameModule` factories instead of a
+shared spawner naming S3K classes, and four unreferenced classes were removed.
+The GAME OVER / TIME OVER card now runs in all three games from ROM art and
+mappings: a time over restarts the act, a game over fades to the title screen;
+continue screens are still absent (`docs/status/known-bugs.md`).
+The SN76489 PSG core was rewritten clean-room from public hardware documentation
+(`docs/architecture/research/audio/2026-08-29-sn76489-clean-room-spec.md`), removing
+the Genesis Plus GX-derived `psg.c` code; behaviour was verified against a pinned GPGX
+harness (`docs/architecture/validation/2026-08-29-psg-clean-room-capture-comparison.md`).
+The FM:PSG mix balance was restored to its pre-rewrite ratio (PSG preamp 38 % in the mixer),
+recorded as uncalibrated against hardware in `docs/status/known-discrepancies.md`
+(`docs/architecture/validation/2026-08-29-audio-mix-calibration.md`).
+
+The current S3K release priority is the AIZ → HCZ playable route. Knuckles
+routes, later-zone completeness, and some bonus/special-stage paths remain
+outside the primary release slice or are still under active development.
+
+#### Release documentation
+
+- [0.6 changelog](CHANGELOG.0.6.md)
+- [Release Summary for website and GitHub](docs/changelog/v0.6-release-summary.md)
+- [Detailed development ledger](docs/changelog/v0.6-prerelease-detailed.md)
+- [Archived entry-by-entry 0.6 ledger](docs/changelog/v0.6-development-ledger.md)
+- [Trace scope and release evidence](docs/status/trace-scope-release-6.md)
+- [Known discrepancies](docs/status/known-discrepancies.md)
+- [Release-readiness roadmap](docs/project/release-readiness-roadmap.md)
+
+### Previous releases
+
+| Release | Notes |
+| --- | --- |
+| [0.5.20260411](CHANGELOG.0.5.md) | Architectural overhaul, S3K expansion, editor foundations, rendering/audio improvements, and stronger testing infrastructure. |
+| [0.4.20260304](CHANGELOG.0.4.md) | S1 expansion, S2 additions, S3K AIZ bring-up, level-loading and tooling improvements. |
+| [0.3.20260206](CHANGELOG.0.3.md) | Multi-game architecture, playable Tails, physics rewrite, major object/boss coverage, rendering and audio foundations. |
+| [Earlier releases](CHANGELOG.md) | Historical 0.2, 0.1, 0.05, and 0.01 notes. |
+
+See [CHANGELOG.md](CHANGELOG.md) for the release index and [CONTRIBUTING.md](CONTRIBUTING.md)
+for contribution guidance.

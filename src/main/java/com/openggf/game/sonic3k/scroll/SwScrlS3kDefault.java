@@ -1,7 +1,11 @@
 package com.openggf.game.sonic3k.scroll;
 
 import com.openggf.level.scroll.AbstractZoneScrollHandler;
-import static com.openggf.level.scroll.M68KMath.*;
+import com.openggf.level.scroll.compose.ScrollEffectComposer;
+
+import static com.openggf.level.scroll.M68KMath.VISIBLE_LINES;
+import static com.openggf.level.scroll.M68KMath.asrWord;
+import static com.openggf.level.scroll.M68KMath.negWord;
 
 /**
  * Default fallback scroll handler for Sonic 3&K zones that don't have
@@ -10,6 +14,8 @@ import static com.openggf.level.scroll.M68KMath.*;
  */
 public class SwScrlS3kDefault extends AbstractZoneScrollHandler {
 
+    private final ScrollEffectComposer composer = new ScrollEffectComposer();
+
     @Override
     public void update(int[] horizScrollBuf,
                        int cameraX,
@@ -17,18 +23,18 @@ public class SwScrlS3kDefault extends AbstractZoneScrollHandler {
                        int frameCounter,
                        int actId) {
         resetScrollTracking();
+        composer.reset();
 
         short fgScroll = negWord(cameraX);
         short bgScroll = asrWord(fgScroll, 2); // BG at 1/4 FG speed
 
-        vscrollFactorBG = asrWord(cameraY, 2); // BG Y at 1/4 FG speed
+        composer.setVscrollFactorBG(asrWord(cameraY, 2)); // BG Y at 1/4 FG speed
+        composer.fillPackedScrollWords(0, VISIBLE_LINES, fgScroll, bgScroll);
 
-        int packed = packScrollWords(fgScroll, bgScroll);
-        trackOffset(fgScroll, bgScroll);
-
-        for (int line = 0; line < VISIBLE_LINES; line++) {
-            horizScrollBuf[line] = packed;
-        }
+        composer.copyPackedScrollWordsTo(horizScrollBuf);
+        vscrollFactorBG = composer.getVscrollFactorBG();
+        minScrollOffset = composer.getMinScrollOffset();
+        maxScrollOffset = composer.getMaxScrollOffset();
     }
 
 }

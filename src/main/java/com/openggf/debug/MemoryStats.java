@@ -1,15 +1,12 @@
 package com.openggf.debug;
 
-import com.sun.management.ThreadMXBean;
 import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
 import java.lang.management.MemoryUsage;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Tracks JVM memory statistics for the debug overlay.
@@ -22,7 +19,15 @@ public class MemoryStats {
 
     private final MemoryMXBean memoryBean;
     private final List<GarbageCollectorMXBean> gcBeans;
-    private final ThreadMXBean threadBean;
+    /**
+     * HotSpot's allocation-counting extension, or null on a JVM that does not
+     * implement {@code com.sun.management.ThreadMXBean}. Per-thread allocation
+     * counters are a HotSpot extension, not part of {@code java.lang.management},
+     * so an unconditional cast turns a foreign JVM into a hard startup failure —
+     * which is exactly the JVM a cross-runtime benchmark wants to run on.
+     * Allocation figures simply read zero there.
+     */
+    private final com.sun.management.ThreadMXBean threadBean;
     private final long mainThreadId;
 
     private long lastHeapUsed;
@@ -34,18 +39,18 @@ public class MemoryStats {
     private double allocationRateBytesPerSec;
 
     private static final int AVERAGING_FRAMES = 300; // ~5 seconds at 60fps
-    private final Map<String, long[]> sectionAllocHistories = new LinkedHashMap<>();
-    private final Map<String, Long> sectionAllocSums = new LinkedHashMap<>();
-    private final Map<String, Long> currentFrameAllocations = new LinkedHashMap<>();
+    private final SectionMeasurements sections = new SectionMeasurements(AVERAGING_FRAMES);
     private int frameCount = 0;
 
     private String activeSection = null;
     private long sectionStartAllocBytes = 0;
+    private boolean enabled = true;
 
-    private MemoryStats() {
+    public MemoryStats() {
         memoryBean = ManagementFactory.getMemoryMXBean();
         gcBeans = ManagementFactory.getGarbageCollectorMXBeans();
-        threadBean = (ThreadMXBean) ManagementFactory.getThreadMXBean();
+        threadBean = ManagementFactory.getThreadMXBean()
+                instanceof com.sun.management.ThreadMXBean hotspotBean ? hotspotBean : null;
         mainThreadId = Thread.currentThread().getId();
 
         lastHeapUsed = getHeapUsed();
@@ -55,6 +60,9 @@ public class MemoryStats {
     }
 
     private long getThreadAllocatedBytes() {
+        if (threadBean == null) {
+            return 0;
+        }
         try {
             return threadBean.getThreadAllocatedBytes(mainThreadId);
         } catch (Exception e) {
@@ -93,28 +101,8 @@ public class MemoryStats {
         // Update per-section rolling averages
         int historySlot = frameCount % AVERAGING_FRAMES;
 
-        for (Map.Entry<String, Long> entry : currentFrameAllocations.entrySet()) {
-            String name = entry.getKey();
-            long bytes = entry.getValue();
-
-            long[] history = sectionAllocHistories.computeIfAbsent(name, k -> new long[AVERAGING_FRAMES]);
-            long oldValue = history[historySlot];
-            sectionAllocSums.merge(name, bytes - oldValue, Long::sum);
-            history[historySlot] = bytes;
-        }
-
-        // Zero out sections not recorded this frame
-        for (Map.Entry<String, long[]> entry : sectionAllocHistories.entrySet()) {
-            String name = entry.getKey();
-            if (!currentFrameAllocations.containsKey(name)) {
-                long[] history = entry.getValue();
-                long oldValue = history[historySlot];
-                sectionAllocSums.merge(name, -oldValue, Long::sum);
-                history[historySlot] = 0;
-            }
-        }
-
-        currentFrameAllocations.clear();
+        sections.finishFrame(historySlot);
+        sections.clearFrame();
         frameCount++;
     }
 
@@ -123,6 +111,10 @@ public class MemoryStats {
      * Call this at the start of a profiled section.
      */
     public void beginSection(String name) {
+        if (!enabled) {
+            return;
+        }
+
         if (activeSection != null) {
             endSection(activeSection);
         }
@@ -135,15 +127,42 @@ public class MemoryStats {
      * Uses cumulative thread allocation bytes - immune to GC.
      */
     public void endSection(String name) {
+        if (!enabled) {
+            return;
+        }
+
         if (activeSection == null || !activeSection.equals(name)) {
             return;
         }
         long currentAllocBytes = getThreadAllocatedBytes();
         long delta = currentAllocBytes - sectionStartAllocBytes;
         if (delta > 0) {
-            currentFrameAllocations.merge(name, delta, Long::sum);
+            sections.add(name, delta);
         }
         activeSection = null;
+    }
+
+    void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+        if (!enabled) {
+            activeSection = null;
+            sectionStartAllocBytes = 0;
+            sections.clearFrame();
+        }
+    }
+
+    void reset() {
+        activeSection = null;
+        sectionStartAllocBytes = 0;
+        sections.clearFrame();
+        sections.reset();
+        frameCount = 0;
+        topAllocatorsCache.clear();
+        allocationRateBytesPerSec = 0;
+        lastHeapUsed = getHeapUsed();
+        lastAllocatedBytes = getThreadAllocatedBytes();
+        allocationWindowStartTime = System.nanoTime();
+        allocationWindowStartBytes = lastAllocatedBytes;
     }
 
     // Reusable list for top allocators to avoid per-call allocation
@@ -160,10 +179,11 @@ public class MemoryStats {
             return topAllocatorsCache;
         }
 
-        for (Map.Entry<String, Long> entry : sectionAllocSums.entrySet()) {
-            long avgBytes = entry.getValue() / effectiveFrames;
+        for (int i = 0; i < sections.size(); i++) {
+            SectionMeasurements.Section section = sections.get(i);
+            long avgBytes = section.sum / effectiveFrames;
             if (avgBytes > 0) {
-                topAllocatorsCache.add(new SectionAllocation(entry.getKey(), avgBytes));
+                topAllocatorsCache.add(new SectionAllocation(section.name, avgBytes));
             }
         }
 

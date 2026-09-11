@@ -33,12 +33,25 @@ public class LevelLoadContext {
     private boolean hasWaterState;
     private int checkpointWaterLevel;
     private int checkpointWaterRoutine;
+    private boolean hasCheckpointS3kRuntimeState;
+    private int checkpointCameraMaxY;
+    private int checkpointDynamicResizeRoutine;
+    private boolean hasCheckpointSolidBits;
+    private byte checkpointTopSolidBit;
+    private byte checkpointLrbSolidBit;
+    private boolean hasCheckpointTimer;
+    private long checkpointTimerFrames;
 
     // Post-load assembly fields
     private boolean includePostLoadAssembly;
     private boolean showTitleCard = true;
+    private boolean titleCardRequiredInHeadlessMode;
+    private boolean queueFreshLevelRuntimeArt;
     private LevelData levelData;
     private int spawnY = -1;
+    private LevelAssemblyKind assemblyKind = LevelAssemblyKind.DECODE_ONLY;
+    private InitialProcessSpritesLifecycle requestedInitialProcessSpritesLifecycle =
+            InitialProcessSpritesLifecycle.NONE;
 
     public Rom getRom() { return rom; }
     public void setRom(Rom rom) { this.rom = rom; }
@@ -74,6 +87,15 @@ public class LevelLoadContext {
     public boolean hasWaterState() { return hasWaterState; }
     public int getCheckpointWaterLevel() { return checkpointWaterLevel; }
     public int getCheckpointWaterRoutine() { return checkpointWaterRoutine; }
+    public boolean hasCheckpointS3kRuntimeState() { return hasCheckpointS3kRuntimeState; }
+    public int getCheckpointCameraMaxY() { return checkpointCameraMaxY; }
+    public int getCheckpointDynamicResizeRoutine() { return checkpointDynamicResizeRoutine; }
+    public boolean hasCheckpointSolidBits() { return hasCheckpointSolidBits; }
+    public byte getCheckpointTopSolidBit() { return checkpointTopSolidBit; }
+    public byte getCheckpointLrbSolidBit() { return checkpointLrbSolidBit; }
+    /** ROM Saved_Timer / v_lamp_time / Saved_timer -- see CheckpointState. */
+    public boolean hasCheckpointTimer() { return hasCheckpointTimer; }
+    public long getCheckpointTimerFrames() { return checkpointTimerFrames; }
 
     // Post-load assembly accessors
 
@@ -83,11 +105,74 @@ public class LevelLoadContext {
     public boolean isShowTitleCard() { return showTitleCard; }
     public void setShowTitleCard(boolean showTitleCard) { this.showTitleCard = showTitleCard; }
 
+    /**
+     * Returns whether this load must retain its title-card request even when
+     * rendering is headless. Whole-run playback reaches the same production
+     * level-load boundary as live play and therefore needs the title-card
+     * owner to execute its hardware-timed lifecycle.
+     */
+    public boolean isTitleCardRequiredInHeadlessMode() {
+        return titleCardRequiredInHeadlessMode;
+    }
+
+    public void setTitleCardRequiredInHeadlessMode(boolean required) {
+        this.titleCardRequiredInHeadlessMode = required;
+    }
+
+    /**
+     * Returns whether this fresh load owns the runtime hardware-art handoff.
+     * Standalone fixture/bootstrap loads leave this false so their initial
+     * synchronous level assembly cannot consume a later run's ordinals.
+     */
+    public boolean isQueueFreshLevelRuntimeArt() {
+        return queueFreshLevelRuntimeArt;
+    }
+
+    public void setQueueFreshLevelRuntimeArt(boolean queue) {
+        this.queueFreshLevelRuntimeArt = queue;
+    }
+
     public LevelData getLevelData() { return levelData; }
     public void setLevelData(LevelData levelData) { this.levelData = levelData; }
 
     public int getSpawnY() { return spawnY; }
     public void setSpawnY(int spawnY) { this.spawnY = spawnY; }
+
+    public LevelAssemblyKind getAssemblyKind() { return assemblyKind; }
+    public void setAssemblyKind(LevelAssemblyKind assemblyKind) {
+        this.assemblyKind = assemblyKind == null ? LevelAssemblyKind.DECODE_ONLY : assemblyKind;
+    }
+
+    public boolean permitsInitialProcessSpritesRequest() {
+        return loadMode == LevelLoadMode.FULL
+                && includePostLoadAssembly
+                && assemblyKind == LevelAssemblyKind.FRESH_LEVEL_ASSEMBLY;
+    }
+
+    /**
+     * Clears load-attempt-owned output before profile steps run. This is a
+     * lifecycle boundary used by {@code LevelManager.loadLevel}; it prevents a
+     * reused mutable context from carrying fresh-load authority into a later
+     * decode, preview, or restoration attempt.
+     */
+    public void resetInitialProcessSpritesRequestForLoadAttempt() {
+        requestedInitialProcessSpritesLifecycle = InitialProcessSpritesLifecycle.NONE;
+    }
+
+    /**
+     * Records a profile-owned setup request in this load's private context.
+     * Publication to live state remains the responsibility of a successful
+     * {@code LevelManager.loadLevel} boundary.
+     */
+    public void requestInitialProcessSpritesFromProfile(InitialProcessSpritesLifecycle lifecycle) {
+        if (permitsInitialProcessSpritesRequest() && lifecycle != null) {
+            requestedInitialProcessSpritesLifecycle = lifecycle;
+        }
+    }
+
+    public InitialProcessSpritesLifecycle requestedInitialProcessSpritesLifecycle() {
+        return requestedInitialProcessSpritesLifecycle;
+    }
 
     /**
      * Snapshot checkpoint state from a {@link RespawnState} before level reload.
@@ -109,6 +194,14 @@ public class LevelLoadContext {
             hasWaterState = false;
             checkpointWaterLevel = 0;
             checkpointWaterRoutine = 0;
+            hasCheckpointS3kRuntimeState = false;
+            checkpointCameraMaxY = 0;
+            checkpointDynamicResizeRoutine = 0;
+            hasCheckpointSolidBits = false;
+            checkpointTopSolidBit = 0;
+            checkpointLrbSolidBit = 0;
+            hasCheckpointTimer = false;
+            checkpointTimerFrames = 0;
             return;
         }
         hasCheckpoint = true;
@@ -126,6 +219,34 @@ public class LevelLoadContext {
             hasWaterState = false;
             checkpointWaterLevel = 0;
             checkpointWaterRoutine = 0;
+        }
+
+        if (state instanceof CheckpointState cs && cs.hasS3kRuntimeState()) {
+            hasCheckpointS3kRuntimeState = true;
+            checkpointCameraMaxY = cs.getSavedCameraMaxY();
+            checkpointDynamicResizeRoutine = cs.getSavedDynamicResizeRoutine();
+        } else {
+            hasCheckpointS3kRuntimeState = false;
+            checkpointCameraMaxY = 0;
+            checkpointDynamicResizeRoutine = 0;
+        }
+
+        if (state instanceof CheckpointState cs && cs.hasSolidBits()) {
+            hasCheckpointSolidBits = true;
+            checkpointTopSolidBit = cs.getSavedTopSolidBit();
+            checkpointLrbSolidBit = cs.getSavedLrbSolidBit();
+        } else {
+            hasCheckpointSolidBits = false;
+            checkpointTopSolidBit = 0;
+            checkpointLrbSolidBit = 0;
+        }
+
+        if (state instanceof CheckpointState cs && cs.hasSavedTimer()) {
+            hasCheckpointTimer = true;
+            checkpointTimerFrames = cs.getSavedTimerFrames();
+        } else {
+            hasCheckpointTimer = false;
+            checkpointTimerFrames = 0;
         }
     }
 }

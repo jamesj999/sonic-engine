@@ -6,6 +6,14 @@ public interface TouchResponseProvider {
     int getCollisionFlags();
     int getCollisionProperty();
 
+    default TouchResponseProfile getTouchResponseProfile() {
+        return getTouchResponseProfile(getMultiTouchRegions() != null);
+    }
+
+    default TouchResponseProfile getTouchResponseProfile(boolean multiRegionSource) {
+        return TouchResponseProfile.fromProvider(this, multiRegionSource);
+    }
+
     /**
      * Returns whether touch callbacks should fire every frame while overlapping.
      * <p>
@@ -15,6 +23,55 @@ public interface TouchResponseProvider {
      */
     default boolean requiresContinuousTouchCallbacks() {
         return false;
+    }
+
+    /**
+     * Returns whether S3K {@code Touch_Special} property-style {@code 0xC0}
+     * collision flags should dispatch as listener-only special callbacks instead
+     * of boss touch handling.
+     */
+    default boolean usesS3kTouchSpecialPropertyResponse() {
+        return false;
+    }
+
+    /**
+     * Returns whether the object's collision byte should dispatch through enemy
+     * attack/hurt handling regardless of the high category bits.
+     */
+    default boolean usesEnemyTouchCategoryOverride() {
+        return false;
+    }
+
+    /**
+     * Returns whether Sonic 1 {@code React_Special} property-style {@code 0xC0}
+     * collision flags should dispatch as listener-only special callbacks.
+     */
+    default boolean usesSonic1TouchSpecialPropertyResponse() {
+        return false;
+    }
+
+    /**
+     * Returns whether Sonic 2 {@code Touch_Special} property-style {@code 0xC0}
+     * collision flags should dispatch as listener-only special callbacks.
+     */
+    default boolean usesSonic2TouchSpecialPropertyResponse() {
+        return false;
+    }
+
+    /**
+     * Returns whether a SPECIAL touch from this object should enable same-frame
+     * airborne side-velocity preservation on a following solid object.
+     */
+    default boolean enablesPostSpecialTouchAirborneSideVelocityPreservation() {
+        return false;
+    }
+
+    /**
+     * Returns whether touch response should be gated by the engine's render-flag
+     * equivalent before testing this object.
+     */
+    default boolean requiresRenderFlagForTouch() {
+        return true;
     }
 
     /**
@@ -51,5 +108,9 @@ public interface TouchResponseProvider {
     /**
      * A single touch collision region with its own position and collision type.
      */
-    record TouchRegion(int x, int y, int collisionFlags) {}
+    record TouchRegion(int x, int y, int collisionFlags, int shieldReactionFlags) {
+        public TouchRegion(int x, int y, int collisionFlags) {
+            this(x, y, collisionFlags, 0);
+        }
+    }
 }

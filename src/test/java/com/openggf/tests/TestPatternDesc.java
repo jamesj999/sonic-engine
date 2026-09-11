@@ -1,9 +1,9 @@
 package com.openggf.tests;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import com.openggf.level.PatternDesc;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class TestPatternDesc {
     @Test
@@ -22,3 +22,5 @@ public class TestPatternDesc {
         assertEquals(0, desc.getPaletteIndex());
     }
 }
+
+

@@ -1,15 +1,20 @@
 package com.openggf.game.sonic1.objects;
 
 import com.openggf.game.PlayableEntity;
-import com.openggf.game.sonic1.audio.Sonic1Music;
+import com.openggf.game.sonic1.constants.Sonic1AnimationIds;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
+import com.openggf.level.objects.ObjectInstance;
 import com.openggf.level.objects.ObjectManager;
+import com.openggf.level.objects.ObjectServices;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
+import com.openggf.sprites.playable.ObjectControlState;
 
 import java.util.List;
 import java.util.logging.Logger;
@@ -30,7 +35,7 @@ import java.util.logging.Logger;
  * <p>
  * Art: Nem_BigFlash at ArtTile_Giant_Ring_Flash ($462), palette line 1.
  */
-public class Sonic1RingFlashObjectInstance extends AbstractObjectInstance {
+public class Sonic1RingFlashObjectInstance extends AbstractObjectInstance implements RewindRecreatable {
 
     private static final Logger LOGGER = Logger.getLogger(Sonic1RingFlashObjectInstance.class.getName());
 
@@ -42,11 +47,13 @@ public class Sonic1RingFlashObjectInstance extends AbstractObjectInstance {
 
     // Flash_Collect: cmpi.b #3,obFrame(a0) - trigger frame for parent deletion
     private static final int TRIGGER_FRAME = 3;
-
-    private final Sonic1GiantRingObjectInstance parent;
-    private final int posX;
-    private final int posY;
-    private final boolean hFlip;
+    private final transient Sonic1GiantRingObjectInstance parent;
+    private final transient int posX;
+    private final transient int posY;
+    // Un-finaled for rewind: hFlip is NOT spawn-derivable (it encodes the player's
+    // approach direction, not packed in ObjectSpawn), so the generic field capturer
+    // reapplies the captured value after generic recreate uses placeholder false.
+    private boolean hFlip;
 
     // ROM: obFrame starts at $FF, obTimeFrame starts at 0
     // First tick: timer=0 -> subq makes it $FF (negative) -> advances frame from $FF to $00
@@ -54,6 +61,10 @@ public class Sonic1RingFlashObjectInstance extends AbstractObjectInstance {
     private int animFrame = -1; // Will advance to 0 on first tick
     private boolean triggerFired = false;
     private boolean finished = false;
+
+    private Sonic1RingFlashObjectInstance(ObjectSpawn spawn) {
+        this(null, spawn.x(), spawn.y(), false);
+    }
 
     /**
      * Creates a Ring Flash at the given position.
@@ -73,11 +84,31 @@ public class Sonic1RingFlashObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public Sonic1RingFlashObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        if (ctx == null || ctx.spawn() == null) {
+            return null;
+        }
+        ObjectSpawn spawn = ctx.spawn();
+        Sonic1GiantRingObjectInstance liveParent = findLiveGiantRingParent(ctx);
+        return new Sonic1RingFlashObjectInstance(liveParent, spawn.x(), spawn.y(), false);
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (finished) {
             setDestroyed(true);
             return;
+        }
+
+        // Flash_Collect's id_Null write remains in the player SST until the
+        // later word clear deletes that slot. The engine keeps a structural
+        // player instance alive, so republish the retained native byte while
+        // the flash owns this interval instead of allowing normal animation
+        // selection to rewrite it between flash ticks.
+        if (triggerFired && player != null) {
+            player.setAnimationId(Sonic1AnimationIds.NULL.id());
+            player.setForcedAnimationId(Sonic1AnimationIds.NULL.id());
         }
 
         // Flash_Collect subroutine
@@ -117,7 +148,8 @@ public class Sonic1RingFlashObjectInstance extends AbstractObjectInstance {
             // ROM: clr.b (v_shield).w - remove shield
             if (player != null) {
                 player.setHidden(true);
-                player.setObjectControlled(true);
+                player.setAnimationId(Sonic1AnimationIds.NULL.id());
+                player.setForcedAnimationId(Sonic1AnimationIds.NULL.id());
                 player.clearPowerUps();
             }
 
@@ -135,28 +167,37 @@ public class Sonic1RingFlashObjectInstance extends AbstractObjectInstance {
      */
     private void triggerLevelEnd(AbstractPlayableSprite player) {
 
-        // Play "Got Through" music
-        try {
-            services().playMusic(Sonic1Music.GOT_THROUGH.id);
-        } catch (Exception e) {
-            LOGGER.warning("Failed to play stage clear music: " + e.getMessage());
+        // ROM Flash_Collect deletes the player SST entry here with
+        // `move.w #0,(v_player).w`. The engine retains its structural player
+        // instance across the results transition, so represent the absent SST
+        // slot by suppressing movement and touch processing from this point.
+        if (player != null) {
+            player.setNativeSlotPresent(false);
+            ObjectControlState.nativeBit7FullControl().applyTo(player);
         }
 
-        // Gather results data
-        var levelGamestate = services().levelGamestate();
-        int elapsedSeconds = levelGamestate != null ? levelGamestate.getElapsedSeconds() : 0;
-        int ringCount = player != null ? player.getRingCount() : 0;
-        int actNumber = services().currentAct() + 1;
+        // v_endcard is a fixed singleton slot in the ROM. A glitched/fast route
+        // can cross the signpost walk-off threshold and start the card before
+        // entering the giant ring; Got_NextLevel reads f_bigring dynamically
+        // when that existing card exits. Reuse it instead of restarting the
+        // sequence with a second card.
+        Sonic1ResultsScreenObjectInstance existingResults = findExistingResultsScreen();
+        if (existingResults != null) {
+            existingResults.setSpecialStageAfter(true);
+        }
+    }
 
-        // Spawn results screen with special stage transition
-        Sonic1ResultsScreenObjectInstance resultsScreen = new Sonic1ResultsScreenObjectInstance(
-                elapsedSeconds, ringCount, actNumber);
-        resultsScreen.setSpecialStageAfter(true);
-
+    private Sonic1ResultsScreenObjectInstance findExistingResultsScreen() {
         ObjectManager objectManager = services().objectManager();
-        if (objectManager != null) {
-            objectManager.addDynamicObject(resultsScreen);
+        if (objectManager == null) {
+            return null;
         }
+        for (ObjectInstance instance : objectManager.getActiveObjects()) {
+            if (instance instanceof Sonic1ResultsScreenObjectInstance results && !results.isDestroyed()) {
+                return results;
+            }
+        }
+        return null;
     }
 
     @Override
@@ -184,5 +225,22 @@ public class Sonic1RingFlashObjectInstance extends AbstractObjectInstance {
     @Override
     public boolean shouldStayActiveWhenRemembered() {
         return true;
+    }
+
+    private static Sonic1GiantRingObjectInstance findLiveGiantRingParent(RewindRecreateContext ctx) {
+        ObjectServices services = ctx.objectServices();
+        if (services == null) {
+            return null;
+        }
+        ObjectManager objectManager = services.objectManager();
+        if (objectManager == null) {
+            return null;
+        }
+        for (ObjectInstance inst : objectManager.getActiveObjects()) {
+            if (inst instanceof Sonic1GiantRingObjectInstance ring && !ring.isDestroyed()) {
+                return ring;
+            }
+        }
+        return null;
     }
 }

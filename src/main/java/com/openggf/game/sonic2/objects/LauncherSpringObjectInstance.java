@@ -11,7 +11,10 @@ import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.*;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.Direction;
+import com.openggf.physics.FrameCollisionPlan;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
+import com.openggf.sprites.playable.ObjectControlState;
+import com.openggf.sprites.playable.Tails;
 
 import java.util.HashMap;
 import java.util.List;
@@ -40,7 +43,7 @@ import java.util.Map;
  * <b>Disassembly Reference:</b> s2.asm obj85 (loc_2AD26 - loc_2AE76)
  */
 public class LauncherSpringObjectInstance extends BoxObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
 
     // Subtype constants
     // Note: Bit 7 (0x80) indicates "slope running" mode for diagonal springs,
@@ -109,6 +112,11 @@ public class LauncherSpringObjectInstance extends BoxObjectInstance
         this.currentSpriteY = spawn.y();
     }
 
+    @Override
+    public LauncherSpringObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new LauncherSpringObjectInstance(ctx.spawn(), "LauncherSpring");
+    }
+
     /**
      * Checks if this is a diagonal spring.
      * ROM behavior (s2.asm:57411-57421): ANY non-zero subtype is treated as diagonal.
@@ -139,6 +147,14 @@ public class LauncherSpringObjectInstance extends BoxObjectInstance
         return isDiagonal() ? DIAGONAL_BASE_VELOCITY : VERTICAL_BASE_VELOCITY;
     }
 
+    private int getVerticalPlayerYOffset(AbstractPlayableSprite player) {
+        return VERTICAL_PLAYER_Y_OFFSET;
+    }
+
+    private boolean isTails(AbstractPlayableSprite player) {
+        return player instanceof Tails;
+    }
+
     @Override
     public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
@@ -152,6 +168,8 @@ public class LauncherSpringObjectInstance extends BoxObjectInstance
         if (ps.launchCooldown > 0) {
             return;
         }
+
+        applyVerticalExactEdgeRollHandoff(player, contact);
 
         // ROM: cmpi.b #4,routine(a1) - skip if hurt/dead (routine >= 4)
         if (player.isHurt() || player.getDead()) {
@@ -179,6 +197,33 @@ public class LauncherSpringObjectInstance extends BoxObjectInstance
         }
     }
 
+    private void applyVerticalExactEdgeRollHandoff(AbstractPlayableSprite player, SolidContact contact) {
+        if (isDiagonal()
+                || !contact.pushing()
+                || contact.sideDistX() != 0
+                || !player.shouldPreserveRollingOnNextRollStop()
+                || !player.getRolling()
+                || player.getAir()
+                || player.getDirection() != Direction.LEFT
+                || player.getXSpeed() != 0
+                || player.getGSpeed() != 0) {
+            return;
+        }
+
+        // S2 Obj85's vertical stopper can leave Tails curled exactly on the
+        // inclusive right edge. ROM then runs the same Tails_KeepRolling /
+        // CalcRoomInFront handoff that turns facing-left -$400 inertia into
+        // the rightward chamber push (s2.asm:39716-39745, 39481-39507,
+        // 57531-57540).
+        player.setGSpeed((short) -0x400);
+        player.setXSpeed((short) -0x400);
+        player.setYSpeed((short) 0);
+        services().collisionSystem().resolveGroundWallCollision(FrameCollisionPlan.terrainOnly(), player);
+        player.move(player.getXSpeed(), player.getYSpeed());
+        player.markObjectPreservedRollBoostFollowup();
+        player.markObjectPreservedRollVelocityCarry();
+    }
+
     /**
      * Called when player first lands on the spring.
      * Locks controls and sets rolling state (ROM: loc_2AD26).
@@ -189,23 +234,27 @@ public class LauncherSpringObjectInstance extends BoxObjectInstance
         // - Bit 0 (0x01): Blocks input (controlLocked)
         // - Bit 7 (0x80): Skips ALL movement/physics (objectControlled)
         player.setControlLocked(true);
-        player.setObjectControlled(true);
+        ObjectControlState.nativeBit7FullControl().applyTo(player);
         ps.pinballBeforeCapture = player.getPinballMode();
         player.setPinballMode(true);
 
         // Snap player to center of spring (use setCentreX/Y for ROM-compatible center coords)
-        short targetX, targetY;
         if (isDiagonal()) {
             // ROM: ALWAYS adds 0x13 to X (player positioned to the RIGHT of head)
             // H-flip only affects visual rendering, not player positioning
-            targetX = (short) (currentSpriteX + DIAGONAL_PLAYER_X_OFFSET);
-            targetY = (short) (currentSpriteY - DIAGONAL_PLAYER_Y_OFFSET);
+            short targetX = (short) (currentSpriteX + DIAGONAL_PLAYER_X_OFFSET);
+            short targetY = (short) (currentSpriteY - DIAGONAL_PLAYER_Y_OFFSET);
+            // ROM writes only x_pos/y_pos here; the low-word subpixel fractions
+            // are left intact (s2.asm:57711-57714).
+            player.setCentreXPreserveSubpixel(targetX);
+            player.setCentreYPreserveSubpixel(targetY);
         } else {
-            targetX = (short) currentSpriteX;
-            targetY = (short) (currentSpriteY - VERTICAL_PLAYER_Y_OFFSET);
+            // Vertical Obj85 capture only writes x_pos immediately. The y_pos
+            // snap is in loc_2ADFE and does not run until the next object call
+            // after objoff_36 has already become non-zero (s2.asm:57531,
+            // 57579-57583).
+            player.setCentreXPreserveSubpixel((short) currentSpriteX);
         }
-        player.setCentreX(targetX);
-        player.setCentreY(targetY);
 
         // Clear velocities
         player.setXSpeed((short) 0);
@@ -218,19 +267,79 @@ public class LauncherSpringObjectInstance extends BoxObjectInstance
         //      move.b #7,x_radius(a1)
         //      move.b #AniIDSonAni_Roll,anim(a1)
         boolean wasRolling = player.getRolling();
+        boolean wasRollingLastFrame =
+                (player.getStatusHistory(1) & AbstractPlayableSprite.STATUS_ROLLING) != 0;
+        if (!isDiagonal() && isTails(player)
+                && ((!wasRolling && !wasRollingLastFrame) || (wasRolling && player.wasPrePhysicsAir()))) {
+            // Tails' default y_radius is $0F, one pixel taller than Obj85's
+            // capture radius write ($0E). ROM runs SolidObject_Landed before
+            // Obj85 writes y_radius=$0E (s2.asm:58004-58023). Preserve the
+            // established first-capture lift, and also apply it to the
+            // airborne rolling re-capture case where Tails entered the physics
+            // tick as InAir|Roll before Obj85 re-established Status_OnObj.
+            player.setCentreYPreserveSubpixel((short) (player.getCentreY() - 1));
+        }
+        int heightBeforeRolling = player.getHeight();
         player.setRolling(true);
         if (!wasRolling) {
-            player.setY((short) (player.getY() + player.getRollHeightAdjustment()));
+            if (isDiagonal()) {
+                // Diagonal Obj85 writes y_pos(a1)=y_pos(a0)-$13 before setting
+                // y_radius=$E (s2.asm:58179-58191). Preserve that centre write
+                // by compensating only for the actual engine height delta; some
+                // trace states already have roll-sized dimensions while the
+                // rolling bit is clear.
+                int centrePreserveDelta = (heightBeforeRolling - player.getHeight()) / 2;
+                if (centrePreserveDelta != 0) {
+                    player.setY((short) (player.getY() + centrePreserveDelta));
+                }
+            } else {
+                // Vertical Obj85 relies on the generic SolidObject_Landed seat
+                // before its radius write (s2.asm:57949-57968). Preserve the
+                // historical radius-delta lift used by the vertical recapture
+                // path.
+                player.setY((short) (player.getY() + (player.getRollHeightAdjustment() / 2)));
+            }
         }
         // Explicitly set roll animation (ROM: move.b #AniIDSonAni_Roll,anim(a1))
         player.setAnimationId(Sonic2AnimationIds.ROLL);
 
         ps.state = STATE_STANDING;
+        // ROM loc_2AD2A (vertical Obj85_Up) only sets objoff_36 nonzero at its
+        // tail (s2.asm:57968 addq.b #1,(a2)). The compression timer loc_2ADB0 is
+        // reached only when objoff_36 was already nonzero at the START of the
+        // object update ("move.b (a2),d0 / bne loc_2AD7A", s2.asm:57948-57949),
+        // so the EMPTY->STANDING capture frame runs loc_2AD2A and never advances
+        // objoff_38 that frame -- the capture frame is "free" (no objoff_32
+        // decrement). The engine reproduces that free frame structurally rather
+        // than with an explicit per-player skip flag: capture happens in
+        // onSolidContact (collision resolution, which runs AFTER the object
+        // update() for the frame), so on the capture frame handleCompression has
+        // already run while state==EMPTY and did nothing; the first objoff_32
+        // decrement happens on the NEXT frame's update(). An additional
+        // "captured this frame" skip on top of that ordering double-counted the
+        // free frame and made the first compression increment land one held-jump
+        // frame too late once objoff_32 is carried as a residual (s2 cnz2 frame
+        // 4296), so no extra skip is applied.
 
-        // Reset compression only if no other player is on the spring
+        // ROM Obj85 capture (loc_2AD2A, s2.asm:57951-57968) sets obj_control,
+        // rolling, radii and objoff_36, but NEVER writes objoff_32 (the
+        // compression countdown) or objoff_38 (the compression accumulator).
+        // objoff_32 is therefore carried as a residual from the previous
+        // compression cycle (it is only spawn-cleared to 0, or reset to 3 on a
+        // loc_2ADB0 underflow, s2.asm:58000). That residual is what makes the
+        // FIRST compression increment after a re-capture land a partial interval
+        // later than a fresh-spawn spring would, instead of underflowing 0->-1 on
+        // the first held-jump frame. Do NOT reset compressionFrameCounter here.
+        //
+        // compression (objoff_38) is left as a defensive 0 only when the spring
+        // currently has no players AND has already decompressed: ROM loc_2AD14
+        // decays objoff_38 to 0 over time while empty (s2.asm:57937-57941), so a
+        // truly fresh capture sees objoff_38 == 0. (In practice ps.state was just
+        // set to STANDING above, so hasAnyPlayerOnSpring() is normally true here
+        // and this branch is a no-op; it is retained for the all-players-left
+        // edge case only.)
         if (!hasAnyPlayerOnSpring()) {
             compression = 0;
-            compressionFrameCounter = 0;
         }
         animationTimer = getMaxCompression() / 2;  // Initialize timer for animation
     }
@@ -286,6 +395,12 @@ public class LauncherSpringObjectInstance extends BoxObjectInstance
      */
     private boolean handleCompression(AbstractPlayableSprite player, PlayerState ps) {
         boolean jumpPressed = player.isJumpPressed();
+
+        // The capture frame's "free" frame (ROM loc_2AD2A runs instead of
+        // loc_2ADB0, so objoff_32 is not decremented that frame, s2.asm:57948-
+        // 57968) is reproduced structurally by the capture-in-onSolidContact /
+        // update() ordering -- see enterSpring. No explicit per-player skip is
+        // applied here.
 
         if (jumpPressed) {
             // ROM: tst.b objoff_3A(a0) / bne.s loc_2ADFE - skip if already processed this frame
@@ -460,9 +575,17 @@ public class LauncherSpringObjectInstance extends BoxObjectInstance
     private void releasePlayer(AbstractPlayableSprite player, PlayerState ps, boolean preservePinball) {
         // ROM: move.b #0,obj_control(a1) clears all control bits
         player.setControlLocked(false);
-        player.setObjectControlled(false);
+        ObjectControlState.none().applyTo(player);
         boolean keepPinball = preservePinball || ps.pinballBeforeCapture;
         player.setPinballMode(keepPinball);
+        if (!isDiagonal() && isTails(player)) {
+            // Vertical Obj85 leaves the player curled after loc_2AE0C launch
+            // without making the airborne CPU path behave like Obj84 pinball
+            // mode. Preserve only the zero-speed roll-stop handoff; the next
+            // ordinary Tails_ResetOnFloor landing still clears rolling normally
+            // (s2.asm:41020-41033).
+            player.preserveRollingOnNextRollStop();
+        }
         resetPlayerState(ps);
     }
 
@@ -491,7 +614,15 @@ public class LauncherSpringObjectInstance extends BoxObjectInstance
      * Called when all players have left the spring.
      */
     private void resetAnimationState() {
-        compressionFrameCounter = 0;
+        // ROM loc_2AD14 (s2.asm:57937-57941) handles spring decompression by only
+        // resetting mainspr_mapframe (move.b #1,mainspr_mapframe) and decaying
+        // objoff_38 by 4 per frame. It does NOT touch objoff_32 (the compression
+        // countdown). objoff_32 is only written by Obj85_Init's spawn-clear (0) and
+        // by loc_2ADB0's underflow reset to 3 (s2.asm:58000). So a spring that has
+        // compressed at least once retains objoff_32's residual countdown across
+        // decompression and re-capture, which is what makes the FIRST compression
+        // increment after a re-capture land a partial interval later than a
+        // fresh-spawn spring would. Do NOT zero compressionFrameCounter here.
         mainSpriteFrame = 1;
         animationTimer = getMaxCompression() / 2;
         // Note: currentSpriteX/Y are NOT reset here - they update based on compression in update()
@@ -522,6 +653,96 @@ public class LauncherSpringObjectInstance extends BoxObjectInstance
     }
 
     @Override
+    public boolean preservesObjectManagedRideWhileNotSolidFor(PlayableEntity playerEntity) {
+        if (!(playerEntity instanceof AbstractPlayableSprite player)) {
+            return false;
+        }
+        PlayerState ps = playerStates.get(player);
+        // ROM Obj85 capture keeps Status_OnObj / standing-bit set while its
+        // routine owns x_pos/y_pos writes under obj_control=$81
+        // (s2.asm:57520-57545, 57684-57711). Generic solid contacts must stay
+        // suppressed so they do not fight the object-managed positioning.
+        return ps != null && ps.state != STATE_EMPTY;
+    }
+
+    @Override
+    public Integer getObjectManagedRideCentreY(PlayableEntity playerEntity, int objectY, SolidObjectParams params) {
+        if (isDiagonal() || !(playerEntity instanceof AbstractPlayableSprite player)) {
+            return null;
+        }
+        return objectY + params.offsetY() - getVerticalPlayerYOffset(player);
+    }
+
+    @Override
+    public int getTopLandingSnapAdjustment(PlayableEntity playerEntity, int solidTopYRadius) {
+        if (isDiagonal()
+                || spawn.subtype() != 0
+                || !(playerEntity instanceof AbstractPlayableSprite player)
+                || player.getYSpeed() < 0) {
+            return 0;
+        }
+        // S2 Obj85 vertical launcher calls SolidObject_Always_SingleCharacter
+        // BEFORE its capture code writes rolling/y_radius=$E/x_radius=7
+        // (s2.asm:57947-57968 loc_2AD26/loc_2AD2A: the snap happens first,
+        // then obj_control=$81, the rolling status bit and the reduced radii
+        // are set with no further y_pos write).  So the whole-pixel landing
+        // placement is determined entirely by the generic SolidObject_Landed
+        // snap on the player's CURRENT radius:
+        //   d3 = (y_pos(a1)-y_pos(a0)) + 4 + ($20 + y_radius)   (s2.asm:35338-35367)
+        //   subq.w #4,d3 ; sub.w d3,y_pos ; subq.w #1,y_pos     (s2.asm:35614-35621)
+        //   net y_pos(a1) = objY - $20 - y_radius - 1
+        // The engine's ObjectSolidContactController already encodes that
+        // generic snap in its `playerCenterY - distY + 3` term (the +3 = ROM's
+        // +4 from SolidObject_cont minus the -1 from SolidObject_Landed), so a
+        // plain standing-radius landing must add NO extra lift here.
+        //
+        // The only Obj85-specific lift this helper still owes is the radius
+        // delta when the player is captured while rolling (y_radius=$E) and the
+        // contact must re-seat onto the standing/object radius:
+        // - radiusDelta > 1: rolling->standing recapture needs the full delta.
+        // - Tails / radiusDelta == 0: ROM applies no further y_pos write after
+        //   SolidObject_Landed, so the generic +3 snap already matches the ROM
+        //   exactly (objY - $20 - y_radius - 1).  Returning 0 here keeps the
+        //   standing falling-Sonic landing on ROM (frame 4060 s2 cnz2: y=0x03F4
+        //   = 0x0428 - $20 - $13 - 1).
+        int radiusDelta = solidTopYRadius - player.getYRadius();
+        if (radiusDelta > 1) {
+            return radiusDelta;
+        }
+        return 0;
+    }
+
+    @Override
+    public boolean landingPreservesRolling(PlayableEntity playerEntity) {
+        // S2 Obj85's vertical launcher captures the player with
+        // SolidObject_Always_SingleCharacter / RideObject_SetRide and then sets
+        // the rolling status bit, y_radius=$E and x_radius=7 itself
+        // (s2.asm:57947-57968) — it never calls Sonic_ResetOnFloor, so the
+        // player stays curled and the snap y_pos is left untouched. The diagonal
+        // (subtype) variant positions the player through its own object-managed
+        // ride path instead of the generic landing snap, so this only applies to
+        // the vertical capture. Skipping the generic roll-clear here keeps a
+        // rolling re-landing at objY-$20-y_radius-1 instead of losing the
+        // asymmetric roll-exit/roll-enter half-pixel (s2 cnz2 frame 4292).
+        return !isDiagonal() && spawn.subtype() == 0;
+    }
+
+    @Override
+    public boolean bypassesOffscreenSolidGate() {
+        // Obj85 captures both players through SolidObject_Always_SingleCharacter
+        // (s2.asm:57531-57540, 57688-57700), not the gated SolidObject path.
+        return true;
+    }
+
+    @Override
+    public boolean usesInclusiveRightEdge() {
+        // SolidObject_Always_SingleCharacter keeps the right edge in range:
+        // S2 Obj85 can recapture Tails with relX == halfWidth*2 at the
+        // vertical stopper chamber edge (s2.asm:57531-57540).
+        return true;
+    }
+
+    @Override
     public SolidObjectParams getSolidParams() {
         // ROM values from disassembly:
         // Vertical: halfWidth=0x23(35), halfHeightTop=0x20(32), halfHeightBottom=0x1D(29)
@@ -530,13 +751,39 @@ public class LauncherSpringObjectInstance extends BoxObjectInstance
         int offsetX = currentSpriteX - baseX;
         int offsetY = currentSpriteY - baseY;
         if (isDiagonal()) {
-            return new SolidObjectParams(35, 8, 5, offsetX, offsetY);
+            return SolidObjectParams.of(35, 8, 5, offsetX, offsetY);
         }
-        return new SolidObjectParams(35, 32, 29, offsetX, offsetY);
+        return SolidObjectParams.of(35, 32, 29, offsetX, offsetY);
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public String traceDebugDetails() {
+        AbstractPlayableSprite sidekick = null;
+        ObjectServices currentServices = tryServices();
+        if (currentServices != null
+                && currentServices.playerQuery().nativeP2OrNull() instanceof AbstractPlayableSprite sprite) {
+            sidekick = sprite;
+        }
+        PlayerState sidekickState = sidekick != null ? playerStates.get(sidekick) : null;
+        int sidekickDx = sidekick != null ? sidekick.getCentreX() - currentSpriteX : 0;
+        int sidekickDy = sidekick != null ? sidekick.getCentreY() - currentSpriteY : 0;
+        boolean sidekickSolid = sidekick != null && isSolidFor(sidekick);
+        return String.format("sub=%02X comp=%02X head=%04X,%04X base=%04X,%04X p2state=%d p2cd=%d p2solid=%s p2d=(%d,%d)",
+                spawn.subtype() & 0xFF,
+                compression & 0xFFFF,
+                currentSpriteX & 0xFFFF,
+                currentSpriteY & 0xFFFF,
+                baseX & 0xFFFF,
+                baseY & 0xFFFF,
+                sidekickState != null ? sidekickState.state : -1,
+                sidekickState != null ? sidekickState.launchCooldown : -1,
+                sidekickSolid,
+                sidekickDx,
+                sidekickDy);
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         Camera camera = services().camera();
 
@@ -544,14 +791,20 @@ public class LauncherSpringObjectInstance extends BoxObjectInstance
         // This allows ONE compression increment per frame across all players
         compressionProcessedThisFrame = false;
 
-        // Process all tracked players (supports two-player mode)
-        // ROM uses objoff_36 for P1 and objoff_37 for P2
+        // ROM Obj85 computes x_pos/y_pos from the previous objoff_38 value at
+        // the start of the routine, then processes compression. loc_2AFFE /
+        // loc_2ADFE writes the player position from that already-computed head
+        // position, so a compression increment affects position on the next
+        // frame, not the current frame (s2.asm:57490-57530, 57630-57686).
+        updateSpringPosition();
+
+        // Process all tracked native players (ROM objoff_36 for P1, objoff_37 for P2).
         processPlayer(player, camera);
 
-        // Also process sidekick(s) if present (two-player support)
-        for (PlayableEntity sidekick : services().sidekicks()) {
-            if (sidekick != player) {
-                processPlayer((AbstractPlayableSprite) sidekick, camera);
+        for (PlayableEntity candidate : services().playerQuery()
+                .playersFor(ObjectPlayerParticipationPolicy.NATIVE_P1_P2)) {
+            if (candidate != player && candidate instanceof AbstractPlayableSprite sprite) {
+                processPlayer(sprite, camera);
             }
         }
 
@@ -577,25 +830,19 @@ public class LauncherSpringObjectInstance extends BoxObjectInstance
             }
         }
 
-        // Update spring position based on current compression
-        // This must happen after handleCompression/decay so player position matches spring
-        updateSpringPosition();
-
         // Update position of all players on the spring
         for (Map.Entry<AbstractPlayableSprite, PlayerState> entry : playerStates.entrySet()) {
             AbstractPlayableSprite p = entry.getKey();
             PlayerState ps = entry.getValue();
             if (ps.state != STATE_EMPTY) {
-                short oldX = p.getX();
-                short oldY = p.getY();
                 if (isDiagonal()) {
                     // ROM: ALWAYS adds 0x13 to X (player positioned to the RIGHT of head)
                     // H-flip only affects visual rendering, not player positioning
-                    p.setCentreX((short) (currentSpriteX + DIAGONAL_PLAYER_X_OFFSET));
-                    p.setCentreY((short) (currentSpriteY - DIAGONAL_PLAYER_Y_OFFSET));
+                    p.setCentreXPreserveSubpixel((short) (currentSpriteX + DIAGONAL_PLAYER_X_OFFSET));
+                    p.setCentreYPreserveSubpixel((short) (currentSpriteY - DIAGONAL_PLAYER_Y_OFFSET));
                 } else {
                     // ROM: vertical spring only updates Y while standing (loc_2ADFE)
-                    p.setCentreY((short) (currentSpriteY - VERTICAL_PLAYER_Y_OFFSET));
+                    p.setCentreYPreserveSubpixel((short) (currentSpriteY - getVerticalPlayerYOffset(p)));
                 }
             }
         }

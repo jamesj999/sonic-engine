@@ -2,16 +2,16 @@ package com.openggf.level;
 
 import com.openggf.data.Rom;
 import com.openggf.game.DynamicWaterHandler;
-import com.openggf.game.GameId;
-import com.openggf.game.GameModuleRegistry;
-import com.openggf.game.OscillationManager;
+import com.openggf.game.GameServices;
 import com.openggf.game.PlayerCharacter;
-import com.openggf.game.RuntimeManager;
 import com.openggf.game.WaterDataProvider;
-import com.openggf.game.sonic1.constants.Sonic1Constants;
+import com.openggf.game.rewind.RewindSnapshottable;
+import com.openggf.game.rewind.snapshot.WaterSystemSnapshot;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.ScreenShakeTimerSlotObjectInstance;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Logger;
@@ -25,11 +25,10 @@ import java.util.logging.Logger;
  * which delegates to a game-specific {@link WaterDataProvider} implementation. Each game module
  * supplies its own provider via {@code GameModule.getWaterDataProvider()}.
  *
- * <p>Legacy methods {@link #loadForLevel(Rom, int, int, List)} (S2) and
- * {@link #loadForLevelS1(Rom, int, int)} (S1) are deprecated and retained only for
- * backward compatibility with existing tests.
+ * <p>The legacy method {@link #loadForLevel(Rom, int, int, List)} (S2) is deprecated and
+ * retained only for backward compatibility with existing tests.
  */
-public class WaterSystem {
+public class WaterSystem implements RewindSnapshottable<WaterSystemSnapshot> {
     private static final Logger LOGGER = Logger.getLogger(WaterSystem.class.getName());
     private static final int WATER_SURFACE_OBJECT_ID = 0x04;
 
@@ -55,13 +54,6 @@ public class WaterSystem {
     // ROM zone IDs - Sonic 2 (from SPGSonic2Overlay.Lua ZONE_NAMES table)
     private static final int ZONE_ID_CPZ = 0x0D; // Chemical Plant Zone
     private static final int ZONE_ID_ARZ = 0x0F; // Aquatic Ruin Zone
-
-    // ROM zone IDs - Sonic 1 (from Constants.asm: id_LZ = 1, id_SBZ = 5)
-    private static final int S1_ZONE_ID_LZ  = Sonic1Constants.ZONE_LZ;  // 0x01 - Labyrinth Zone
-    private static final int S1_ZONE_ID_SBZ = Sonic1Constants.ZONE_SBZ; // 0x05 - Scrap Brain Zone
-
-    // Singleton instance
-    private static WaterSystem bootstrapInstance;
 
     // Water configuration data
     private final Map<String, WaterConfig> waterConfigs = new HashMap<>();
@@ -120,6 +112,7 @@ public class WaterSystem {
         private boolean rising;    // True if water is actively moving
         private int speed;         // Pixels per frame toward target (ROM: Water_speed, default 1)
         private DynamicWaterHandler handler; // Per-frame update logic, nullable
+        private boolean enabled; // ROM Water_flag: level can disable water at runtime
         private boolean locked;    // ROM _unkFAA2: when true, dynamic handler is skipped (boss/cutscene)
         private int shakeTimer;    // Screen shake countdown frames (0 = inactive)
 
@@ -130,6 +123,7 @@ public class WaterSystem {
             this.rising = false;
             this.speed = 1;
             this.handler = null;
+            this.enabled = true;
             this.locked = false;
             this.shakeTimer = 0;
         }
@@ -154,6 +148,9 @@ public class WaterSystem {
         public int getCurrentLevel() { return currentLevel; }
         public int getTargetLevel() { return targetLevel; }
         public int getMeanLevel() { return meanLevel; }
+
+        public boolean isEnabled() { return enabled; }
+        public void setEnabled(boolean enabled) { this.enabled = enabled; }
 
         /** ROM _unkFAA2: when true, the dynamic handler is skipped (boss/cutscene lock). */
         public boolean isLocked() { return locked; }
@@ -186,17 +183,6 @@ public class WaterSystem {
     }
 
     public WaterSystem() {
-    }
-
-    public static synchronized WaterSystem getInstance() {
-        var runtime = RuntimeManager.getCurrent();
-        if (runtime != null) {
-            return runtime.getWaterSystem();
-        }
-        if (bootstrapInstance == null) {
-            bootstrapInstance = new WaterSystem();
-        }
-        return bootstrapInstance;
     }
 
     /**
@@ -239,36 +225,6 @@ public class WaterSystem {
         LOGGER.info(String.format("Zone %d Act %d: Water detected at Y=%d, palette=%s",
                 zoneId, actId, waterHeight,
                 (underwaterPalette != null ? "loaded" : "none")));
-    }
-
-    /**
-     * Load water configuration for Sonic 1 levels using hardcoded heights.
-     * S1 water heights are defined in LZWaterFeatures.asm (lines 49-52) rather
-     * than a ROM table like S2. Only LZ acts 1-3 and SBZ3 have water.
-     *
-     * @param rom    ROM data (used for loading underwater palettes)
-     * @param zoneId S1 ROM zone ID (e.g., Sonic1Constants.ZONE_LZ)
-     * @param actId  Act index (0-based)
-     * @deprecated Use {@link #loadForLevelFromProvider(WaterDataProvider, Rom, int, int, PlayerCharacter)} instead.
-     *             Retained for backward compatibility with tests.
-     */
-    @Deprecated
-    public void loadForLevelS1(Rom rom, int zoneId, int actId) {
-        String key = makeKey(zoneId, actId);
-
-        Integer waterHeight = getS1WaterHeight(zoneId, actId);
-        if (waterHeight == null) {
-            waterConfigs.put(key, new WaterConfig(false, 0, null));
-            return;
-        }
-
-        Palette[] underwaterPalette = loadS1UnderwaterPalette(rom, zoneId);
-        waterConfigs.put(key, new WaterConfig(true, waterHeight, underwaterPalette));
-        dynamicWaterStates.put(key, new DynamicWaterState(waterHeight));
-
-        LOGGER.info(String.format("S1 Zone %d Act %d: Water at Y=%d (0x%X), palette=%s",
-                zoneId, actId, waterHeight, waterHeight,
-                underwaterPalette != null ? "loaded" : "none"));
     }
 
     /**
@@ -338,8 +294,20 @@ public class WaterSystem {
         }
         // ROM _unkFAA2: skip handler when locked (boss/cutscene)
         DynamicWaterHandler handler = state.getHandler();
+        int shakeTimerBeforeHandler = state.shakeTimer;
         if (handler != null && !state.isLocked()) {
             handler.update(state, cameraX, cameraY);
+        }
+        if (handler != null
+                && handler.shakeTimerOccupiesObjectSlot()
+                && shakeTimerBeforeHandler <= 0
+                && state.shakeTimer > 0) {
+            LevelManager levelManager = GameServices.levelOrNull();
+            if (levelManager != null && levelManager.getObjectManager() != null) {
+                int duration = state.shakeTimer;
+                levelManager.getObjectManager().createDynamicObject(
+                        () -> new ScreenShakeTimerSlotObjectInstance(duration));
+            }
         }
         // Note: state.update() (mean->target movement) is called by WaterSystem.update(),
         // not here, to avoid double-movement per frame.
@@ -347,92 +315,6 @@ public class WaterSystem {
         // Tick screen shake countdown (ROM: Obj_6E6E 180-frame timer)
         if (state.shakeTimer > 0) {
             state.shakeTimer--;
-        }
-    }
-
-    /**
-     * Get the hardcoded initial water height for a Sonic 1 level.
-     * Values from LZWaterFeatures.asm WaterHeight table (lines 49-52).
-     * <p>
-     * The table has 4 entries indexed by act (0-2 for LZ acts 1-3, 3 for SBZ3).
-     * SBZ act 3 reuses the LZ water system with its own height.
-     *
-     * @param zoneId S1 ROM zone ID
-     * @param actId  Act index (0-based)
-     * @return Water height in pixels, or null if no water in this level
-     */
-    private Integer getS1WaterHeight(int zoneId, int actId) {
-        if (zoneId == S1_ZONE_ID_LZ) {
-            return switch (actId) {
-                case 0 -> Sonic1Constants.WATER_HEIGHT_LZ1;  // 0x00B8
-                case 1 -> Sonic1Constants.WATER_HEIGHT_LZ2;  // 0x0328
-                case 2 -> Sonic1Constants.WATER_HEIGHT_LZ3;  // 0x0900
-                default -> null;
-            };
-        }
-        // SBZ Act 3 (actId == 2) reuses LZ water mechanics
-        if (zoneId == S1_ZONE_ID_SBZ && actId == 2) {
-            return Sonic1Constants.WATER_HEIGHT_SBZ3; // 0x0228
-        }
-        return null;
-    }
-
-    /**
-     * Load the underwater palette for a Sonic 1 water zone from ROM.
-     * <p>
-     * S1 has two separate underwater palette sets:
-     * <ul>
-     *   <li>Pal_LZWater (128 bytes at 0x2460): zone palette lines 0-3 for LZ</li>
-     *   <li>Pal_SBZ3Water (128 bytes at 0x27A0): zone palette lines 0-3 for SBZ3</li>
-     * </ul>
-     * Additionally, S1 has separate Sonic underwater palettes (Pal_LZSonWater,
-     * Pal_SBZ3SonWat) which replace palette line 0. These are loaded into the
-     * main underwater palette array at index 0.
-     *
-     * @param rom    ROM data
-     * @param zoneId S1 ROM zone ID
-     * @return 4-line underwater palette, or null if no underwater palette
-     */
-    private Palette[] loadS1UnderwaterPalette(Rom rom, int zoneId) {
-        int zoneUnderwaterAddr;
-        int sonicUnderwaterAddr;
-
-        if (zoneId == S1_ZONE_ID_LZ) {
-            zoneUnderwaterAddr = Sonic1Constants.PAL_LZ_UNDERWATER_ADDR;    // 0x2460
-            sonicUnderwaterAddr = Sonic1Constants.PAL_LZ_SONIC_UNDERWATER_ADDR; // 0x2820
-        } else if (zoneId == S1_ZONE_ID_SBZ) {
-            zoneUnderwaterAddr = Sonic1Constants.PAL_SBZ3_UNDERWATER_ADDR;  // 0x27A0
-            sonicUnderwaterAddr = Sonic1Constants.PAL_SBZ3_SONIC_UNDERWATER_ADDR; // 0x2840
-        } else {
-            return null;
-        }
-
-        try {
-            // Load the 4-line zone underwater palette (128 bytes)
-            byte[] paletteData = rom.readBytes(zoneUnderwaterAddr, PALETTE_SIZE_BYTES);
-            Palette[] palettes = new Palette[4];
-            for (int i = 0; i < 4; i++) {
-                byte[] lineData = new byte[32];
-                System.arraycopy(paletteData, i * 32, lineData, 0, 32);
-                palettes[i] = new Palette();
-                palettes[i].fromSegaFormat(lineData);
-            }
-
-            // Load Sonic's underwater palette (32 bytes = 1 palette line) into line 0.
-            // In S1, the Sonic underwater palette replaces palette line 0 (the sprite
-            // palette line containing Sonic's colors). The zone underwater palette at
-            // destinationPaletteLine=0 covers all 4 lines, then the Sonic-specific
-            // palette overwrites line 0 with Sonic's underwater colors.
-            byte[] sonicPalData = rom.readBytes(sonicUnderwaterAddr, 32);
-            palettes[0] = new Palette();
-            palettes[0].fromSegaFormat(sonicPalData);
-
-            return palettes;
-        } catch (Exception e) {
-            LOGGER.warning(String.format(
-                    "Failed to load S1 underwater palette for zone %d at 0x%X: %s",
-                    zoneId, zoneUnderwaterAddr, e.getMessage()));
-            return null;
         }
     }
 
@@ -592,14 +474,30 @@ public class WaterSystem {
      * Check if a level has water.
      */
     public boolean hasWater(int zoneId, int actId) {
-        WaterConfig config = waterConfigs.get(makeKey(zoneId, actId));
-        return config != null && config.hasWater();
+        String key = makeKey(zoneId, actId);
+        WaterConfig config = waterConfigs.get(key);
+        DynamicWaterState state = dynamicWaterStates.get(key);
+        return config != null && config.hasWater()
+                && (state == null || state.isEnabled());
     }
 
     /**
-     * Get water surface Y position in world coordinates.
-     * This is the fixed/gameplay water level used for detecting if Sonic is
-     * underwater.
+     * Reads only the loaded mutable {@code Water_flag} state.
+     *
+     * <p>Unlike {@link #hasWater(int, int)}, this does not fall back to a
+     * level's static water capability when no live state exists. Callers that
+     * model a branch on the previous level's RAM flag need that distinction.
+     */
+    public boolean isLiveWaterFlagSet(int zoneId, int actId) {
+        DynamicWaterState state = dynamicWaterStates.get(makeKey(zoneId, actId));
+        return state != null && state.isEnabled();
+    }
+
+    /**
+     * Get the current/base water surface Y position in world coordinates.
+     * This corresponds to the non-oscillated runtime water register such as
+     * S1/S2 {@code v_waterpos2}/{@code Water_Level_2} or S3K
+     * {@code Mean_water_level}.
      * 
      * @return Water level Y in pixels, or 0 if no water
      */
@@ -613,6 +511,25 @@ public class WaterSystem {
         // Fallback to static config
         WaterConfig config = waterConfigs.get(key);
         return config != null ? config.getWaterLevelY() : 0;
+    }
+
+    /**
+     * Get the gameplay waterline used by player/object water-state checks.
+     * <p>
+     * Some games derive this from the current/base level each frame. In S1,
+     * {@code LZWaterFeatures} writes {@code v_waterpos1 = v_waterpos2 +
+     * (v_oscillate+2)/2}, and {@code Sonic_Water} compares Sonic against
+     * {@code v_waterpos1} (docs/s1disasm/_inc/LZWaterFeatures.asm:19-25;
+     * docs/s1disasm/_incObj/01 Sonic.asm:222-247).
+     */
+    public int getGameplayWaterLevelY(int zoneId, int actId) {
+        int baseLevel = getWaterLevelY(zoneId, actId);
+        if (baseLevel == 0) {
+            return 0;
+        }
+        WaterDataProvider provider = GameServices.module().getWaterDataProvider();
+        int offset = provider != null ? provider.getGameplayWaterLevelOffset(zoneId, actId) : 0;
+        return baseLevel + offset;
     }
 
     /**
@@ -630,8 +547,7 @@ public class WaterSystem {
      *   add.w  (v_waterpos2).w,d0      ; add to base water position
      * </pre>
      * <p>
-     * Note: This does NOT affect gameplay - Sonic's underwater detection uses
-     * the fixed water level from {@link #getWaterLevelY(int, int)}.
+     * Gameplay water-state checks use {@link #getGameplayWaterLevelY(int, int)}.
      *
      * @return Visual water level Y in pixels with oscillation offset applied
      */
@@ -640,28 +556,12 @@ public class WaterSystem {
         if (baseLevel == 0) {
             return 0; // No water
         }
-        GameId gameId = GameModuleRegistry.getCurrent().getGameId();
-        // S2 CPZ: water oscillation using oscillator 0
-        if (gameId == GameId.S2 && zoneId == ZONE_ID_CPZ) {
-            // Apply oscillation offset from oscillator index 0 (limit=0x10, 0-16 range)
-            // Center around 0 by subtracting half the limit (8)
-            // Result is +/-8 pixels (~16 pixels total bobbing, ring height)
-            int oscillation = OscillationManager.getByte(0);
-            return baseLevel + (oscillation - 8);
-        }
-        // S1 LZ and SBZ3: water surface bobs using oscillator data (v_oscillate+2).
-        // The ROM reads byte at v_oscillate+2, shifts right by 1 (divides by 2),
-        // and adds to v_waterpos2. This produces a gentle vertical bob.
-        // SBZ3 reuses the LZ water system entirely (LZWaterFeatures.asm .setheight).
-        // Guard with gameId check: S3K HCZ shares zone ID 0x01 with S1 LZ but
-        // does NOT oscillate its water surface.
-        if (gameId == GameId.S1
-                && (zoneId == S1_ZONE_ID_LZ || (zoneId == S1_ZONE_ID_SBZ && actId == 2))) {
-            int oscillation = OscillationManager.getByte(0);
-            return baseLevel + (oscillation >> 1);
-        }
-        // S3K and S2 ARZ: no oscillation
-        return baseLevel;
+        // Per-game oscillation logic lives on the WaterDataProvider so this
+        // shared infrastructure stays game-agnostic. S2 CPZ and S1 LZ/SBZ3
+        // override; S3K and S2 ARZ return 0 (no oscillation).
+        WaterDataProvider provider = GameServices.module().getWaterDataProvider();
+        int offset = provider != null ? provider.getVisualWaterLevelOffset(zoneId, actId) : 0;
+        return baseLevel + offset;
     }
 
     /**
@@ -748,6 +648,63 @@ public class WaterSystem {
     }
 
     /**
+     * Set the movement speed for a dynamic water level.
+     *
+     * <p>Mirrors ROM writes to {@code Water_speed}. Object/event code should use
+     * this when a concrete ROM routine changes water movement speed as part of a
+     * state transition, rather than reaching into {@link DynamicWaterState}.
+     */
+    public void setWaterSpeed(int zoneId, int actId, int speed) {
+        DynamicWaterState state = dynamicWaterStates.get(makeKey(zoneId, actId));
+        if (state != null) {
+            state.setSpeed(speed);
+        }
+    }
+
+    /**
+     * Enables or disables the level's runtime water flag without discarding its
+     * loaded height, target, palette, or dynamic handler state.
+     *
+     * <p>Mirrors writes to a game's mutable {@code Water_flag}. This is distinct
+     * from the immutable provider decision that the level supports water.
+     */
+    public void setWaterEnabled(int zoneId, int actId, boolean enabled) {
+        DynamicWaterState state = dynamicWaterStates.get(makeKey(zoneId, actId));
+        if (state != null) {
+            state.setEnabled(enabled);
+        }
+    }
+
+    /**
+     * Sets the ROM {@code _unkFAA2} dynamic-water lock for a loaded zone/act.
+     * While locked, the per-zone handler cannot replace the retained target;
+     * callers may still install an explicit current/target level as the ROM's
+     * transition routines do.
+     */
+    public void setDynamicWaterLocked(int zoneId, int actId, boolean locked) {
+        DynamicWaterState state = dynamicWaterStates.get(makeKey(zoneId, actId));
+        if (state != null) {
+            state.setLocked(locked);
+        }
+    }
+
+    public boolean isDynamicWaterLocked(int zoneId, int actId) {
+        DynamicWaterState state = dynamicWaterStates.get(makeKey(zoneId, actId));
+        return state != null && state.isLocked();
+    }
+
+    /**
+     * Returns the dynamic water handler for a level, if one is active.
+     *
+     * <p>This is used by object/event bridges that need to set handler-owned ROM
+     * state, such as LBZ2 Knuckles' pipe-plug flag.
+     */
+    public DynamicWaterHandler getDynamicWaterHandler(int zoneId, int actId) {
+        DynamicWaterState state = dynamicWaterStates.get(makeKey(zoneId, actId));
+        return state != null ? state.getHandler() : null;
+    }
+
+    /**
      * Set the current water level directly (instant, no gradual movement).
      * ROM equivalent: writing directly to v_waterpos2.
      * Used by Sonic 1 LZ water events where the ROM sets both v_waterpos2
@@ -810,5 +767,52 @@ public class WaterSystem {
     public int getShakeTimer(int zoneId, int actId) {
         DynamicWaterState state = dynamicWaterStates.get(makeKey(zoneId, actId));
         return state != null ? state.getShakeTimer() : 0;
+    }
+
+    // ── RewindSnapshottable ───────────────────────────────────────────────
+
+    @Override
+    public String key() {
+        return "water";
+    }
+
+    @Override
+    public WaterSystemSnapshot capture() {
+        Map<String, WaterSystemSnapshot.DynamicWaterEntry> entries = new LinkedHashMap<>();
+        for (Map.Entry<String, DynamicWaterState> e : dynamicWaterStates.entrySet()) {
+            DynamicWaterState s = e.getValue();
+            entries.put(e.getKey(), new WaterSystemSnapshot.DynamicWaterEntry(
+                    s.getCurrentLevel(),
+                    s.getTargetLevel(),
+                    s.getMeanLevel(),
+                    s.rising,
+                    s.speed,
+                    s.isEnabled(),
+                    s.isLocked(),
+                    s.getShakeTimer()
+            ));
+        }
+        return new WaterSystemSnapshot(waterEnteredCounter, entries);
+    }
+
+    @Override
+    public void restore(WaterSystemSnapshot snap) {
+        waterEnteredCounter = snap.waterEnteredCounter();
+        for (Map.Entry<String, WaterSystemSnapshot.DynamicWaterEntry> e
+                : snap.dynamicStates().entrySet()) {
+            DynamicWaterState state = dynamicWaterStates.get(e.getKey());
+            if (state == null) {
+                continue;
+            }
+            WaterSystemSnapshot.DynamicWaterEntry entry = e.getValue();
+            state.currentLevel = entry.currentLevel();
+            state.targetLevel = entry.targetLevel();
+            state.meanLevel = entry.meanLevel();
+            state.rising = entry.rising();
+            state.speed = entry.speed();
+            state.setEnabled(entry.enabled());
+            state.setLocked(entry.locked());
+            state.setShakeTimer(entry.shakeTimer());
+        }
     }
 }

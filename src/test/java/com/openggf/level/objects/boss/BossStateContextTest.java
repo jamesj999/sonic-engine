@@ -1,9 +1,9 @@
 package com.openggf.level.objects.boss;
 
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Unit tests for BossStateContext fixed-point math.
@@ -17,7 +17,7 @@ public class BossStateContextTest {
 
     private BossStateContext context;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         context = new BossStateContext(0, 0, 8);
     }
@@ -36,7 +36,7 @@ public class BossStateContextTest {
         context.updatePositionFromFixed();
 
         // Expected: 10 frames * 2 px/frame = 20 pixels
-        assertEquals("Position should advance 20 pixels", 20, context.x);
+        assertEquals(20, context.x, "Position should advance 20 pixels");
     }
 
     @Test
@@ -53,7 +53,7 @@ public class BossStateContextTest {
         context.updatePositionFromFixed();
 
         // Expected: 2 frames * 1.5 px/frame = 3 pixels
-        assertEquals("Position should advance 3 pixels from fractional velocity", 3, context.x);
+        assertEquals(3, context.x, "Position should advance 3 pixels from fractional velocity");
     }
 
     @Test
@@ -65,18 +65,18 @@ public class BossStateContextTest {
         // First frame: accumulate but don't overflow to integer part yet
         context.xFixed += (context.xVel << 8);
         context.updatePositionFromFixed();
-        assertEquals("First frame should move 1 pixel", 1, context.x);
+        assertEquals(1, context.x, "First frame should move 1 pixel");
 
         // Add sub-pixel velocity 0x80 = 0.5 px/frame
         context.xVel = 0x80;
         context.xFixed += (context.xVel << 8);
         context.updatePositionFromFixed();
-        assertEquals("Sub-pixel should not advance integer position yet", 1, context.x);
+        assertEquals(1, context.x, "Sub-pixel should not advance integer position yet");
 
         // Second frame with 0x80
         context.xFixed += (context.xVel << 8);
         context.updatePositionFromFixed();
-        assertEquals("Two 0.5 px movements should accumulate to 1 pixel", 2, context.x);
+        assertEquals(2, context.x, "Two 0.5 px movements should accumulate to 1 pixel");
     }
 
     @Test
@@ -94,7 +94,7 @@ public class BossStateContextTest {
         context.updatePositionFromFixed();
 
         // Expected: 100 - (10 * 2) = 80 pixels
-        assertEquals("Negative velocity should move left", 80, context.x);
+        assertEquals(80, context.x, "Negative velocity should move left");
     }
 
     @Test
@@ -110,7 +110,7 @@ public class BossStateContextTest {
         context.updatePositionFromFixed();
 
         // Expected: 4 * 1.5 = 6 pixels
-        assertEquals("Y-axis fixed-point should work identically", 6, context.y);
+        assertEquals(6, context.y, "Y-axis fixed-point should work identically");
     }
 
     @Test
@@ -123,7 +123,7 @@ public class BossStateContextTest {
 
         // Position extraction: x = xFixed >> 16
         int expected = 0x00012A80 >> 16;
-        assertEquals("Position should extract upper bits only", expected, context.x);
+        assertEquals(expected, context.x, "Position should extract upper bits only");
     }
 
     @Test
@@ -137,20 +137,20 @@ public class BossStateContextTest {
         context.xFixed += velocityShifted;
 
         // Verify shifted value
-        assertEquals("Velocity shift should multiply by 256", 0x20000, velocityShifted);
-        assertEquals("Fixed position should match shifted velocity", 0x20000, context.xFixed);
+        assertEquals(0x20000, velocityShifted, "Velocity shift should multiply by 256");
+        assertEquals(0x20000, context.xFixed, "Fixed position should match shifted velocity");
     }
 
     @Test
     public void testRoundingBehavior() {
         // Test that integer extraction truncates (doesn't round)
-        context.xFixed = 0x0001FF00; // 1.996... pixels (0xFF00 / 0x10000 ≈ 0.996)
+        context.xFixed = 0x0001FF00; // 1.996... pixels (0xFF00 / 0x10000 â‰ˆ 0.996)
         context.updatePositionFromFixed();
-        assertEquals("Should truncate, not round", 1, context.x);
+        assertEquals(1, context.x, "Should truncate, not round");
 
         context.xFixed = 0x00020100; // 2.003... pixels
         context.updatePositionFromFixed();
-        assertEquals("Should truncate fraction", 2, context.x);
+        assertEquals(2, context.x, "Should truncate fraction");
     }
 
     @Test
@@ -170,8 +170,8 @@ public class BossStateContextTest {
 
         context.updatePositionFromFixed();
 
-        assertEquals("Zero velocity should not move X", 100, context.x);
-        assertEquals("Zero velocity should not move Y", 200, context.y);
+        assertEquals(100, context.x, "Zero velocity should not move X");
+        assertEquals(200, context.y, "Zero velocity should not move Y");
     }
 
     @Test
@@ -187,7 +187,7 @@ public class BossStateContextTest {
         context.updatePositionFromFixed();
 
         // Expected: 5 * 6 = 30 pixels
-        assertEquals("Large velocity should work correctly", 30, context.x);
+        assertEquals(30, context.x, "Large velocity should work correctly");
     }
 
     @Test
@@ -203,8 +203,8 @@ public class BossStateContextTest {
             context.applyVelocity();
         }
 
-        assertEquals("applyVelocity should apply X correctly", 10, context.x);
-        assertEquals("applyVelocity should apply Y correctly", 5, context.y);
+        assertEquals(10, context.x, "applyVelocity should apply X correctly");
+        assertEquals(5, context.y, "applyVelocity should apply Y correctly");
     }
 
     @Test
@@ -212,9 +212,11 @@ public class BossStateContextTest {
         // Constructor should initialize fixed-point values from pixel positions
         BossStateContext ctx = new BossStateContext(100, 200, 8);
 
-        assertEquals("X should match constructor", 100, ctx.x);
-        assertEquals("Y should match constructor", 200, ctx.y);
-        assertEquals("xFixed should be X << 16", 100 << 16, ctx.xFixed);
-        assertEquals("yFixed should be Y << 16", 200 << 16, ctx.yFixed);
+        assertEquals(100, ctx.x, "X should match constructor");
+        assertEquals(200, ctx.y, "Y should match constructor");
+        assertEquals(100 << 16, ctx.xFixed, "xFixed should be X << 16");
+        assertEquals(200 << 16, ctx.yFixed, "yFixed should be Y << 16");
     }
 }
+
+

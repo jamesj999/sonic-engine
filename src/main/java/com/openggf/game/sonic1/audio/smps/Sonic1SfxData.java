@@ -2,8 +2,10 @@ package com.openggf.game.sonic1.audio.smps;
 
 import com.openggf.audio.smps.AbstractSmpsData;
 import com.openggf.audio.smps.SmpsSfxData;
+import com.openggf.audio.smps.ZeroAddressFmVoiceProvider;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -27,7 +29,8 @@ import java.util.List;
  * big-endian instead of little-endian, and they are relative to the SFX start
  * rather than absolute Z80 addresses.
  */
-public class Sonic1SfxData extends AbstractSmpsData implements SmpsSfxData {
+public class Sonic1SfxData extends AbstractSmpsData
+        implements SmpsSfxData, ZeroAddressFmVoiceProvider {
 
     public static class TrackEntry implements SmpsSfxTrack {
         public final int playbackFlags;
@@ -68,6 +71,7 @@ public class Sonic1SfxData extends AbstractSmpsData implements SmpsSfxData {
     private List<TrackEntry> tracks = new ArrayList<>();
     private int tickMultiplier = 1;
     private byte[][] psgEnvelopes;
+    private byte[] zeroAddressVoiceBank;
 
     public Sonic1SfxData(byte[] data, int z80StartAddress) {
         super(data, z80StartAddress);
@@ -75,6 +79,28 @@ public class Sonic1SfxData extends AbstractSmpsData implements SmpsSfxData {
 
     public void setPsgEnvelopes(byte[][] psgEnvelopes) {
         this.psgEnvelopes = psgEnvelopes;
+    }
+
+    public void setZeroAddressVoiceBank(byte[] zeroAddressVoiceBank) {
+        this.zeroAddressVoiceBank = Arrays.copyOf(
+                zeroAddressVoiceBank, zeroAddressVoiceBank.length);
+    }
+
+    @Override
+    public byte[] getZeroAddressFmVoice(int voiceId) {
+        int offset = voiceId * 25;
+        if (zeroAddressVoiceBank == null || offset < 0
+                || offset + 25 > zeroAddressVoiceBank.length) {
+            return null;
+        }
+        byte[] voice = Arrays.copyOfRange(
+                zeroAddressVoiceBank, offset, offset + 25);
+        for (int group = 1; group < 25; group += 4) {
+            byte middle = voice[group + 1];
+            voice[group + 1] = voice[group + 2];
+            voice[group + 2] = middle;
+        }
+        return voice;
     }
 
     @Override
@@ -164,7 +190,7 @@ public class Sonic1SfxData extends AbstractSmpsData implements SmpsSfxData {
         }
 
         // S1 voice bytes per 4-byte group are in order Op4,Op3,Op2,Op1 (InsMode=DEFAULT).
-        // The engine expects S2 order: Op4,Op2,Op3,Op1.
+        // The S1 sequencer profile consumes normalized order: Op4,Op2,Op3,Op1.
         // Convert by swapping the middle two bytes in each group.
         byte[] voice = new byte[stride];
         System.arraycopy(data, offset, voice, 0, stride);

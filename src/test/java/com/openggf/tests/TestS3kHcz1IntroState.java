@@ -1,129 +1,124 @@
 package com.openggf.tests;
 
-import com.openggf.camera.Camera;
 import com.openggf.game.GameServices;
-import com.openggf.game.sonic3k.Sonic3kLevelEventManager;
 import com.openggf.game.sonic3k.constants.Sonic3kAnimationIds;
 import com.openggf.game.sonic3k.constants.Sonic3kZoneIds;
-import com.openggf.graphics.GraphicsManager;
-import com.openggf.configuration.SonicConfiguration;
-import com.openggf.configuration.SonicConfigurationService;
-import com.openggf.level.LevelManager;
-import com.openggf.physics.GroundSensor;
-import com.openggf.sprites.playable.AbstractPlayableSprite;
 import com.openggf.sprites.playable.Sonic;
-import com.openggf.sprites.Sprite;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Verifies that HCZ Act 1 starts with the correct falling intro state
- * using the full production level-load path (no test fixture interference).
+ * Verifies that HCZ Act 1 starts with the correct falling intro state.
  * ROM: sonic3k.asm SpawnLevelMainSprites loc_6834.
  */
 @RequiresRom(SonicGame.SONIC_3K)
 public class TestS3kHcz1IntroState {
+    private static SharedLevel sharedLevel;
 
-    @ClassRule public static RequiresRomRule romRule = new RequiresRomRule();
+    private HeadlessTestFixture fixture;
+    private Sonic player;
+    private HeadlessTestRunner runner;
 
-    private static AbstractPlayableSprite player;
-    private static HeadlessTestRunner runner;
-
-    @BeforeClass
+    @BeforeAll
     public static void loadHcz1ViaProductionPath() throws Exception {
-        GraphicsManager.getInstance().initHeadless();
-
-        SonicConfigurationService cs = SonicConfigurationService.getInstance();
-        String charCode = cs.getString(SonicConfiguration.MAIN_CHARACTER_CODE);
-
-        // Create and register player sprite BEFORE level load, just like the real game.
-        Sonic sonic = new Sonic(charCode, (short) 0, (short) 0);
-        GameServices.sprites().addSprite(sonic);
-        GameServices.camera().setFocusedSprite(sonic);
-        GameServices.camera().setFrozen(false);
-
-        // Full production level load path — includes ALL profile steps
-        LevelManager lm = GameServices.level();
-        lm.loadZoneAndAct(Sonic3kZoneIds.ZONE_HCZ, 0);
-        GroundSensor.setLevelManager(lm);
-
-        Sprite s = GameServices.sprites().getSprite(charCode);
-        assertTrue("Player sprite should be AbstractPlayableSprite",
-                s instanceof AbstractPlayableSprite);
-        player = (AbstractPlayableSprite) s;
-        runner = new HeadlessTestRunner(player);
+        sharedLevel = SharedLevel.load(SonicGame.SONIC_3K, Sonic3kZoneIds.ZONE_HCZ, 0);
     }
 
-    @AfterClass
+    @BeforeEach
+    public void setUp() {
+        fixture = HeadlessTestFixture.builder()
+                .withSharedLevel(sharedLevel)
+                .build();
+        assertTrue(fixture.sprite() instanceof Sonic, "Player sprite should be Sonic");
+        player = (Sonic) fixture.sprite();
+        runner = fixture.runner();
+    }
+
+    @AfterAll
     public static void cleanup() {
-        TestEnvironment.resetAll();
+        if (sharedLevel != null) {
+            sharedLevel.dispose();
+            sharedLevel = null;
+        } else {
+            TestEnvironment.resetAll();
+        }
     }
 
     @Test
     public void playerStartsAirborne() {
-        assertTrue("HCZ1 player should start airborne (Status_InAir set)",
-                player.getAir());
+        assertTrue(player.getAir(), "HCZ1 player should start airborne (Status_InAir set)");
     }
 
     @Test
     public void playerHasFallingAnimation() {
-        assertEquals("HCZ1 player should have HURT_FALL forced animation (0x1B)",
-                Sonic3kAnimationIds.HURT_FALL.id(), player.getForcedAnimationId());
+        assertEquals(Sonic3kAnimationIds.HURT_FALL.id(), player.getForcedAnimationId(),
+                "HCZ1 player should have HURT_FALL forced animation (0x1B)");
     }
 
     @Test
     public void cameraFastScrollCapIs24ForS3k() {
-        assertEquals("S3K camera fast scroll cap should be 24 (0x18)",
-                24, GameServices.camera().getFastScrollCap());
+        assertEquals(24, GameServices.camera().getFastScrollCap(),
+                "S3K camera fast scroll cap should be 24 (0x18)");
     }
 
     @Test
     public void fallingStatePersistsAfterFirstFrames() {
-        // Run 5 idle frames and verify the falling state persists
         for (int frame = 0; frame < 5; frame++) {
             runner.stepFrame(false, false, false, false, false);
 
-            assertTrue("Player should still be airborne at frame " + frame
-                            + " (y=" + player.getCentreY() + ")",
-                    player.getAir());
-            assertEquals("Forced animation should still be HURT_FALL at frame " + frame,
-                    Sonic3kAnimationIds.HURT_FALL.id(), player.getForcedAnimationId());
+            assertTrue(player.getAir(), "Player should still be airborne at frame " + frame
+                    + " (y=" + player.getCentreY() + ")");
+            assertEquals(Sonic3kAnimationIds.HURT_FALL.id(), player.getForcedAnimationId(),
+                    "Forced animation should still be HURT_FALL at frame " + frame);
         }
     }
 
     @Test
     public void animationIdMatchesHurtFallAfterFrames() {
-        // Run a frame to trigger animation update
         runner.stepFrame(false, false, false, false, false);
-        assertEquals("Animation ID should be HURT_FALL (0x1B) after first frame",
-                Sonic3kAnimationIds.HURT_FALL.id(), player.getAnimationId());
+        assertEquals(Sonic3kAnimationIds.HURT_FALL.id(), player.getAnimationId(),
+                "Animation ID should be HURT_FALL (0x1B) after first frame");
     }
 
     @Test
     public void hurtFallProducesTumbleMappingFrames() {
-        // ROM: AniSonic1B: dc.b $09, $8C, $8D, $FF — frames 0x8C and 0x8D
         runner.stepFrame(false, false, false, false, false);
         int mappingFrame = player.getMappingFrame();
-        assertTrue("HURT_FALL mapping frame should be 0x8C or 0x8D (tumble frames), got 0x"
-                        + Integer.toHexString(mappingFrame),
-                mappingFrame == 0x8C || mappingFrame == 0x8D);
+        assertTrue(mappingFrame == 0x8C || mappingFrame == 0x8D,
+                "HURT_FALL mapping frame should be 0x8C or 0x8D (tumble frames), got 0x"
+                        + Integer.toHexString(mappingFrame));
+    }
+
+    @Test
+    public void firstTerrainLandingReleasesIntroAnimationImmediately() {
+        int frames = 0;
+        while (player.getAir() && frames++ < 180) {
+            runner.stepFrame(false, false, false, false, false);
+        }
+
+        assertFalse(player.getAir(), "HCZ1 player should reach the intro floor");
+        assertEquals(-1, player.getForcedAnimationId(),
+                "Player_TouchFloor_Check_Spindash releases the intro animation on the landing tick");
+        assertEquals(Sonic3kAnimationIds.WALK.id(), player.getAnimationId(),
+                "the landing routine publishes anim=Walk before the same-frame animator");
     }
 
     @Test
     public void animationSetContainsHurtFallScript() {
         var animSet = player.getAnimationSet();
-        assertNotNull("Player should have an animation set", animSet);
+        assertNotNull(animSet, "Player should have an animation set");
         var script = animSet.getScript(Sonic3kAnimationIds.HURT_FALL.id());
-        assertNotNull("Animation set should have script for HURT_FALL (0x1B)", script);
-        assertFalse("HURT_FALL script should have frames", script.frames().isEmpty());
-        assertEquals("HURT_FALL first frame should be 0x8C",
-                0x8C, (int) script.frames().get(0));
+        assertNotNull(script, "Animation set should have script for HURT_FALL (0x1B)");
+        assertFalse(script.frames().isEmpty(), "HURT_FALL script should have frames");
+        assertEquals(0x8C, (int) script.frames().get(0), "HURT_FALL first frame should be 0x8C");
     }
 }

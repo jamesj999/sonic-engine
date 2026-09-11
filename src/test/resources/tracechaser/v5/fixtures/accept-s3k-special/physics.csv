@@ -1,0 +1,2 @@
+frame,input,input_p2,lag,anim_frame,x_pos,y_pos,angle,velocity,turning,jumping,fade_timer,spheres_left,ring_count,rings_left,rate,rate_timer,clear_timer,clear_routine,started
+10,10,11,0,12,13,14,15,16,17,18,19,1a,1b,1c,1d,1e,1f,20,2

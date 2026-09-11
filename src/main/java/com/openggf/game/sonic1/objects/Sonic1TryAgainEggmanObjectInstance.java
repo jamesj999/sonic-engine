@@ -7,6 +7,9 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectRenderManager;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreateObjectLinks;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -35,7 +38,7 @@ import java.util.logging.Logger;
  * <p>
  * Reference: docs/s1disasm/_incObj/8B Try Again & End Eggman.asm
  */
-public class Sonic1TryAgainEggmanObjectInstance extends AbstractObjectInstance {
+public class Sonic1TryAgainEggmanObjectInstance extends AbstractObjectInstance implements RewindRecreatable {
     private static final Logger LOGGER = Logger.getLogger(Sonic1TryAgainEggmanObjectInstance.class.getName());
 
     private static final int PRIORITY = 2;
@@ -74,6 +77,11 @@ public class Sonic1TryAgainEggmanObjectInstance extends AbstractObjectInstance {
     private int juggleTimer;
     private boolean initialized;
 
+    @SuppressWarnings("unused")
+    private Sonic1TryAgainEggmanObjectInstance() {
+        this(null, null, null);
+    }
+
     /**
      * @param renderManager object render manager for art lookup
      * @param emeralds      the emeralds object (may be null if all 6 collected)
@@ -87,6 +95,16 @@ public class Sonic1TryAgainEggmanObjectInstance extends AbstractObjectInstance {
         this.renderer = renderManager != null ? renderManager.getRenderer(ObjectArtKeys.END_EGGMAN) : null;
         this.emeralds = emeralds;
         this.textRenderer = textRenderer;
+    }
+
+    @Override
+    public Sonic1TryAgainEggmanObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        ObjectRenderManager renderManager = ctx.objectServices() != null
+                ? ctx.objectServices().renderManager()
+                : null;
+        Sonic1TryAgainEmeraldsObjectInstance liveEmeralds =
+                RewindRecreateObjectLinks.nearestLiveObject(ctx, Sonic1TryAgainEmeraldsObjectInstance.class);
+        return new Sonic1TryAgainEggmanObjectInstance(renderManager, liveEmeralds, null);
     }
 
     /**
@@ -118,7 +136,7 @@ public class Sonic1TryAgainEggmanObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         ensureInitialized();
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) {

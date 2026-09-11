@@ -1,6 +1,7 @@
 package com.openggf.game.sonic1.objects;
 
 import com.openggf.game.PlayableEntity;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.Level;
@@ -18,7 +19,7 @@ import java.util.List;
  * <p>
  * ROM reference: docs/s1disasm/_incObj/65 Waterfalls.asm
  */
-public class Sonic1WaterfallObjectInstance extends AbstractObjectInstance {
+public class Sonic1WaterfallObjectInstance extends AbstractObjectInstance implements SpawnRewindRecreatable {
 
     private static final int ROUTINE_ANIMATE = 2;
     private static final int ROUTINE_CHECK_DELETE = 4;
@@ -98,7 +99,7 @@ public class Sonic1WaterfallObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         switch (routine) {
             case ROUTINE_ON_WATER -> {
@@ -170,7 +171,13 @@ public class Sonic1WaterfallObjectInstance extends AbstractObjectInstance {
 
     @Override
     public boolean isPersistent() {
-        return !isDestroyed() && isOnScreenX(192);
+        // ROM: every WFall routine ends at RememberState, whose out_of_range macro
+        // (Macros.asm) deletes the object once its chunk-aligned X leaves the
+        // [camera-128, camera-128 + 0x280] window (docs/s1disasm/_incObj/65 LZ
+        // Waterfalls.asm:52 -> sub RememberState.asm:9). isInRangeAt(getX()) is that
+        // exact macro; the prior symmetric isOnScreenX(192) kept the object alive
+        // ~64px too far to the left.
+        return !isDestroyed() && isInRangeAt(getX());
     }
 
     /**

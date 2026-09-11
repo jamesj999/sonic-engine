@@ -1,19 +1,23 @@
 package com.openggf.tests;
 
-import org.junit.Before;
-import org.junit.Test;
+import com.openggf.game.PhysicsProfile;
+import com.openggf.game.rules.GameRules;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Tests for water physics state transitions and velocity changes.
  * These tests verify the water entry/exit behavior matches original game logic.
  */
+@ExtendWith(SingletonResetExtension.class)
 public class WaterPhysicsTest {
 
     private TestablePlayableSprite sprite;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         sprite = new TestablePlayableSprite("test", (short) 100, (short) 100);
     }
@@ -29,9 +33,9 @@ public class WaterPhysicsTest {
         sprite.setTestY((short) 500); // Player at Y=500
         sprite.updateWaterState(400); // Water at Y=400, player is below
 
-        assertTrue("Player should be in water", sprite.isInWater());
-        assertEquals("XSpeed should be halved", 500, sprite.getXSpeed());
-        assertEquals("GSpeed should be halved", 500, sprite.getGSpeed());
+        assertTrue(sprite.isInWater(), "Player should be in water");
+        assertEquals(500, sprite.getXSpeed(), "XSpeed should be halved");
+        assertEquals(1000, sprite.getGSpeed(), "GSpeed should be unchanged on water entry");
     }
 
     @Test
@@ -44,9 +48,9 @@ public class WaterPhysicsTest {
         sprite.setTestY((short) 500);
         sprite.updateWaterState(400);
 
-        assertTrue("Player should be in water", sprite.isInWater());
+        assertTrue(sprite.isInWater(), "Player should be in water");
         // Downward velocity should be quartered (400 / 4 = 100)
-        assertEquals("YSpeed should be quartered when positive", 100, sprite.getYSpeed());
+        assertEquals(100, sprite.getYSpeed(), "YSpeed should be quartered when positive");
     }
 
     @Test
@@ -59,9 +63,9 @@ public class WaterPhysicsTest {
         sprite.setTestY((short) 500);
         sprite.updateWaterState(400);
 
-        assertTrue("Player should be in water", sprite.isInWater());
+        assertTrue(sprite.isInWater(), "Player should be in water");
         // ROM: asr.w y_vel(a0) twice - divides by 4 unconditionally (both up and down)
-        assertEquals("YSpeed should be quartered (ROM-accurate)", -100, sprite.getYSpeed());
+        assertEquals(-100, sprite.getYSpeed(), "YSpeed should be quartered (ROM-accurate)");
     }
 
     @Test
@@ -76,10 +80,10 @@ public class WaterPhysicsTest {
         sprite.setTestY((short) 300); // Player at Y=300
         sprite.updateWaterState(400); // Water at Y=400, player is above
 
-        assertFalse("Player should be out of water", sprite.isInWater());
+        assertFalse(sprite.isInWater(), "Player should be out of water");
         // ROM does NOT modify x_vel on water exit - only top_speed/accel/decel change
-        assertEquals("XSpeed should be unchanged (ROM-accurate)", 500, sprite.getXSpeed());
-        assertEquals("GSpeed should be unchanged (ROM-accurate)", 500, sprite.getGSpeed());
+        assertEquals(500, sprite.getXSpeed(), "XSpeed should be unchanged (ROM-accurate)");
+        assertEquals(500, sprite.getGSpeed(), "GSpeed should be unchanged (ROM-accurate)");
     }
 
     @Test
@@ -93,9 +97,37 @@ public class WaterPhysicsTest {
         sprite.setTestY((short) 300);
         sprite.updateWaterState(400);
 
-        assertFalse("Player should be out of water", sprite.isInWater());
+        assertFalse(sprite.isInWater(), "Player should be out of water");
         // Upward velocity should be doubled (-300 * 2 = -600)
-        assertEquals("YSpeed should be doubled when exiting upward", -600, sprite.getYSpeed());
+        assertEquals(-600, sprite.getYSpeed(), "YSpeed should be doubled when exiting upward");
+    }
+
+    @Test
+    public void s2WaterExitBoostsFastUpwardVelocityAndCaps() {
+        sprite.setGameRulesForTest(GameRules.SONIC_2);
+        sprite.setInWater(true);
+        sprite.setYSpeed((short) -0x990);
+
+        sprite.setTestY((short) 300);
+        sprite.updateWaterState(400);
+
+        assertFalse(sprite.isInWater(), "Player should be out of water");
+        assertEquals(-0x1000, sprite.getYSpeed(),
+                "S2 Sonic_Water doubles fast upward exits before applying the -$1000 cap");
+    }
+
+    @Test
+    public void s3kWaterExitSkipsFastUpwardBoost() {
+        sprite.setGameRulesForTest(GameRules.SONIC_3K);
+        sprite.setInWater(true);
+        sprite.setYSpeed((short) -0x990);
+
+        sprite.setTestY((short) 300);
+        sprite.updateWaterState(400);
+
+        assertFalse(sprite.isInWater(), "Player should be out of water");
+        assertEquals(-0x990, sprite.getYSpeed(),
+                "S3K Sonic_Water skips the exit boost when upward speed is already below -$400");
     }
 
     @Test
@@ -111,9 +143,9 @@ public class WaterPhysicsTest {
         sprite.setTestY((short) 300);
         sprite.updateWaterState(400);
 
-        assertFalse("Player should be out of water", sprite.isInWater());
+        assertFalse(sprite.isInWater(), "Player should be out of water");
         // When hurt, y velocity should NOT be doubled (ROM-accurate)
-        assertEquals("YSpeed should be unchanged when hurt (ROM-accurate)", -300, sprite.getYSpeed());
+        assertEquals(-300, sprite.getYSpeed(), "YSpeed should be unchanged when hurt (ROM-accurate)");
     }
 
     @Test
@@ -136,10 +168,92 @@ public class WaterPhysicsTest {
         short waterGravity = sprite.getEffectiveGravity();
 
         // Verify underwater constants are reduced
-        assertEquals("Underwater accel should be half", normalAccel / 2, waterAccel);
-        assertEquals("Underwater max should be half", normalMax / 2, waterMax);
-        assertTrue("Underwater jump should be reduced", waterJump < normalJump);
-        assertTrue("Underwater gravity should be reduced", waterGravity < normalGravity);
+        assertEquals(normalAccel / 2, waterAccel, "Underwater accel should be half");
+        assertEquals(normalMax / 2, waterMax, "Underwater max should be half");
+        assertTrue(waterJump < normalJump, "Underwater jump should be reduced");
+        assertTrue(waterGravity < normalGravity, "Underwater gravity should be reduced");
+    }
+
+    @Test
+    public void directStatusClearPreservesWaterSpeedConstantsUntilRealExit() {
+        sprite.setInWater(true);
+        short waterAccel = sprite.getRunAccel();
+        short waterMax = sprite.getMax();
+
+        sprite.clearUnderwaterStatusPreserveWaterPhysics();
+
+        assertFalse(sprite.isInWater(), "Direct status write should clear Status_Underwater");
+        assertEquals(waterAccel, sprite.getRunAccel(),
+                "S3K sub_13ECA clears status without restoring Acceleration_P2");
+        assertEquals(waterMax, sprite.getMax(),
+                "S3K sub_13ECA clears status without restoring Max_speed_P2");
+    }
+
+    @Test
+    public void directStatusClearDoesNotTriggerSyntheticWaterExit() {
+        sprite.setInWater(true);
+        sprite.setYSpeed((short) -300);
+
+        sprite.clearUnderwaterStatusPreserveWaterPhysics();
+        sprite.setTestY((short) 300);
+        sprite.updateWaterState(400);
+
+        assertFalse(sprite.isInWater(), "Player remains above water");
+        assertEquals(-300, sprite.getYSpeed(),
+                "Status-only clear must not run the water-exit y_vel doubling path");
+        assertEquals(6, sprite.getRunAccel(),
+                "Underwater Acceleration_P2 stays active until a later real water transition");
+    }
+
+    @Test
+    public void waterEntryUsesCanonicalConstantsNotCurrentBoostedValues() {
+        sprite.applyExternalPhysicsProfile(PhysicsProfile.SONIC_2_SONIC);
+        sprite.setSpeedConstantsForTest((short) 24, (short) 128, (short) 0x0C00);
+        sprite.setTestY((short) 500);
+
+        sprite.updateWaterState(400);
+
+        assertTrue(sprite.isInWater(), "Player should enter water");
+        assertEquals(6, sprite.getRunAccel(),
+                "S3K Sonic_Water/Tails_Water writes Acceleration=$6, not half of boosted $18");
+        assertEquals(0x0300, sprite.getMax(),
+                "S3K Sonic_Water/Tails_Water writes Max_speed=$300, not half of boosted $C00");
+    }
+
+    @Test
+    public void objectControlledWaterEntrySetsStatusWithoutQuarteringVelocity() {
+        sprite.setObjectControlled(true);
+        sprite.setYSpeed((short) 0x38);
+        sprite.setXSpeed((short) 0x200);
+        sprite.setTestY((short) 500);
+
+        sprite.updateWaterStateObjectControlled(400);
+
+        assertTrue(sprite.isInWater(),
+                "S3K Tails_Water still sets Status_Underwater while object_control bit 0 is set");
+        assertEquals(0x38, sprite.getYSpeed(),
+                "object_control path returns before Tails_Water quarters y_vel");
+        assertEquals(0x200, sprite.getXSpeed(),
+                "object_control path returns before Tails_Water halves x_vel");
+        assertEquals(6, sprite.getRunAccel(),
+                "Tails_Water writes underwater speed constants before the object_control return");
+    }
+
+    @Test
+    public void objectControlledWaterExitClearsStatusWithoutDoublingVelocity() {
+        sprite.setInWater(true);
+        sprite.setObjectControlled(true);
+        sprite.setYSpeed((short) -0x200);
+        sprite.setTestY((short) 300);
+
+        sprite.updateWaterStateObjectControlled(400);
+
+        assertFalse(sprite.isInWater(),
+                "S3K Tails_Water still clears Status_Underwater while object_control bit 0 is set");
+        assertEquals(-0x200, sprite.getYSpeed(),
+                "object_control path returns before Tails_Water doubles y_vel on exit");
+        assertEquals(12, sprite.getRunAccel(),
+                "Tails_Water restores normal speed constants before the object_control return");
     }
 
     @Test
@@ -152,8 +266,8 @@ public class WaterPhysicsTest {
         sprite.updateWaterState(400);
         sprite.updateWaterState(400); // Second update should not change anything
 
-        assertFalse("Player should not be in water", sprite.isInWater());
-        assertEquals("Velocity should be unchanged", 1000, sprite.getXSpeed());
+        assertFalse(sprite.isInWater(), "Player should not be in water");
+        assertEquals(1000, sprite.getXSpeed(), "Velocity should be unchanged");
     }
 
     @Test
@@ -166,8 +280,8 @@ public class WaterPhysicsTest {
         // Simulate frame update while staying underwater
         sprite.updateWaterState(400);
 
-        assertTrue("Player should still be in water", sprite.isInWater());
-        assertEquals("Velocity should be unchanged", 500, sprite.getXSpeed());
+        assertTrue(sprite.isInWater(), "Player should still be in water");
+        assertEquals(500, sprite.getXSpeed(), "Velocity should be unchanged");
     }
 
     @Test
@@ -179,10 +293,25 @@ public class WaterPhysicsTest {
         // Apply hurt from the left (sourceX < player center)
         sprite.applyHurt(0);
 
-        assertTrue("Player should be hurt", sprite.isHurt());
+        assertTrue(sprite.isHurt(), "Player should be hurt");
         // Normal knockback: xSpeed = 0x200 (512), ySpeed = -0x400 (-1024)
-        assertEquals("Normal hurt xSpeed should be 0x200", 0x200, sprite.getXSpeed());
-        assertEquals("Normal hurt ySpeed should be -0x400", -0x400, sprite.getYSpeed());
+        assertEquals(0x200, sprite.getXSpeed(), "Normal hurt xSpeed should be 0x200");
+        assertEquals(-0x400, sprite.getYSpeed(), "Normal hurt ySpeed should be -0x400");
+    }
+
+    @Test
+    public void hurtResetClearsRollJumpAndJumpingBeforeAirborneRecoil() {
+        sprite.setAir(true);
+        sprite.setRollingJump(true);
+        sprite.setJumping(true);
+        sprite.setPushing(true);
+
+        sprite.applyHurt(0);
+
+        assertTrue(sprite.getAir(), "HurtCharacter sets Status_InAir after reset-on-floor cleanup");
+        assertFalse(sprite.getRollingJump(), "Reset-on-floor tail clears Status_RollJump before hurt recoil");
+        assertFalse(sprite.isJumping(), "Reset-on-floor tail clears the jumping latch before hurt recoil");
+        assertFalse(sprite.getPushing(), "Reset-on-floor tail clears Status_Push before hurt recoil");
     }
 
     @Test
@@ -194,10 +323,10 @@ public class WaterPhysicsTest {
         // Apply hurt from the left (sourceX < player center)
         sprite.applyHurt(0);
 
-        assertTrue("Player should be hurt", sprite.isHurt());
+        assertTrue(sprite.isHurt(), "Player should be hurt");
         // Underwater knockback is halved: xSpeed = 0x100 (256), ySpeed = -0x200 (-512)
-        assertEquals("Underwater hurt xSpeed should be 0x100 (halved)", 0x100, sprite.getXSpeed());
-        assertEquals("Underwater hurt ySpeed should be -0x200 (halved)", -0x200, sprite.getYSpeed());
+        assertEquals(0x100, sprite.getXSpeed(), "Underwater hurt xSpeed should be 0x100 (halved)");
+        assertEquals(-0x200, sprite.getYSpeed(), "Underwater hurt ySpeed should be -0x200 (halved)");
     }
 
     @Test
@@ -210,7 +339,7 @@ public class WaterPhysicsTest {
         sprite.setHurt(true);
 
         short gravity = sprite.getEffectiveGravity();
-        assertEquals("Underwater hurt gravity should be 0x10", 0x10, gravity);
+        assertEquals(0x10, gravity, "Underwater hurt gravity should be 0x10");
     }
 
 }

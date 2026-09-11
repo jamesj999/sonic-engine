@@ -2,6 +2,7 @@ package com.openggf.game.sonic2.specialstage;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.IntSupplier;
 import java.util.logging.Logger;
 
 /**
@@ -122,6 +123,10 @@ public class Sonic2SpecialStageCheckpoint {
     // Original uses objoff_2A = $46 (70 decimal) for most timers
     private static final int MESSAGE_DISPLAY_FRAMES = 120; // Message visible (longer for readability)
     private static final int FADE_OUT_FRAMES = 48;       // $30 = 48 frames for music fade (from Obj5A_RingCheckTrigger)
+    // Obj5A_CreateCheckpointWingedHand starts both independent peer objects at
+    // y_pos = $48; only the frame-$15 hand object changes y_pos in
+    // Obj5A_Handshake. The target is also $1C in the ROM's VS path.
+    private static final int CHECKPOINT_HANDSHAKE_Y = 0x48;
 
     // Checkpoint rainbow animation data (Obj5A_Rainbow_Frames / Obj5A_Rainbow_Positions)
     private static final int[] RAINBOW_FRAMES = {
@@ -154,8 +159,8 @@ public class Sonic2SpecialStageCheckpoint {
     private final List<MessageLetter> messageLetters = new ArrayList<>();
     private boolean showCheckpointHand = false;
     private int handX = 128;
-    private int handY = 72;
-    private int handTargetY = 72;
+    private int handY = CHECKPOINT_HANDSHAKE_Y;
+    private int handTargetY = CHECKPOINT_HANDSHAKE_Y;
     private boolean handThumbsUp = true;
     private boolean handMovingDown = false;
 
@@ -173,6 +178,20 @@ public class Sonic2SpecialStageCheckpoint {
 
     // Music fade callback
     private Runnable onMusicFadeRequested;
+
+    // Live combined ring count, read at the moment the result is resolved.
+    private IntSupplier liveRingCount;
+
+    /**
+     * Supplies the combined ring count ({@code Ring_count + Ring_count_2P}) as it
+     * stands when the checkpoint result is resolved. The ROM reads those words at
+     * {@code loc_35978} (s2.asm:71843-71853), i.e. after the checkpoint rainbow has
+     * finished and the object deletes itself — not when the checkpoint marker was
+     * passed — so rings collected while the rainbow plays still count.
+     */
+    public void setLiveRingCount(IntSupplier liveRingCount) {
+        this.liveRingCount = liveRingCount;
+    }
 
     /**
      * Sets a callback for when music fade is requested.
@@ -391,8 +410,8 @@ public class Sonic2SpecialStageCheckpoint {
         showCheckpointHand = true;
         handThumbsUp = (lastResult != Result.FAILED);
         handMovingDown = false;
-        handY = 72;  // $48 in original
-        handTargetY = 72;
+        handY = CHECKPOINT_HANDSHAKE_Y;
+        handTargetY = CHECKPOINT_HANDSHAKE_Y;
 
         // Create the appropriate message
         createCheckpointMessage();
@@ -405,7 +424,13 @@ public class Sonic2SpecialStageCheckpoint {
 
     private void resolveCheckpointResult() {
         ringRequirement = pendingRingRequirement;
-        ringsCollected = pendingRingsCollected;
+        // ROM loc_35978 (s2.asm:71843-71853) reads (Ring_count) + (Ring_count_2P)
+        // here, at the end of the rainbow, and compares against
+        // (SS_Ring_Requirement); the count captured when the marker was passed is
+        // already stale by then. Fall back to that capture only when no live
+        // source is bound (standalone construction in unit tests).
+        ringsCollected = liveRingCount != null
+                ? liveRingCount.getAsInt() : pendingRingsCollected;
 
         if (ringsCollected >= ringRequirement) {
             if (pendingFinalCheckpoint) {
@@ -549,6 +574,93 @@ public class Sonic2SpecialStageCheckpoint {
         return true;
     }
 
+    Sonic2SpecialStageSnapshot.CheckpointSnapshot captureRewindSnapshot() {
+        ArrayList<Sonic2SpecialStageSnapshot.CheckpointMessageLetterSnapshot> letters =
+                new ArrayList<>();
+        for (MessageLetter letter : messageLetters) {
+            letters.add(new Sonic2SpecialStageSnapshot.CheckpointMessageLetterSnapshot(
+                    letter.x,
+                    letter.y,
+                    letter.tileOffset,
+                    letter.flyoutAngle,
+                    letter.flyoutSpeed,
+                    letter.visible));
+        }
+
+        ArrayList<Sonic2SpecialStageSnapshot.CheckpointRainbowRingSnapshot> rings =
+                new ArrayList<>();
+        for (RainbowRing ring : rainbowRings) {
+            rings.add(new Sonic2SpecialStageSnapshot.CheckpointRainbowRingSnapshot(
+                    ring.baseIndex,
+                    ring.frameIndex,
+                    ring.positionOffset,
+                    ring.mappingFrame,
+                    ring.x,
+                    ring.y,
+                    ring.active));
+        }
+
+        return new Sonic2SpecialStageSnapshot.CheckpointSnapshot(
+                phase,
+                phaseTimer,
+                lastResult,
+                currentCheckpoint,
+                ringRequirement,
+                ringsCollected,
+                letters,
+                showCheckpointHand,
+                handX,
+                handY,
+                handTargetY,
+                handThumbsUp,
+                handMovingDown,
+                rings,
+                pendingRingRequirement,
+                pendingRingsCollected,
+                pendingFinalCheckpoint,
+                rainbowOnly);
+    }
+
+    void restoreRewindSnapshot(Sonic2SpecialStageSnapshot.CheckpointSnapshot snapshot) {
+        phase = snapshot.phase();
+        phaseTimer = snapshot.phaseTimer();
+        lastResult = snapshot.lastResult();
+        currentCheckpoint = snapshot.currentCheckpoint();
+        ringRequirement = snapshot.ringRequirement();
+        ringsCollected = snapshot.ringsCollected();
+        showCheckpointHand = snapshot.showCheckpointHand();
+        handX = snapshot.handX();
+        handY = snapshot.handY();
+        handTargetY = snapshot.handTargetY();
+        handThumbsUp = snapshot.handThumbsUp();
+        handMovingDown = snapshot.handMovingDown();
+        pendingRingRequirement = snapshot.pendingRingRequirement();
+        pendingRingsCollected = snapshot.pendingRingsCollected();
+        pendingFinalCheckpoint = snapshot.pendingFinalCheckpoint();
+        rainbowOnly = snapshot.rainbowOnly();
+
+        messageLetters.clear();
+        for (Sonic2SpecialStageSnapshot.CheckpointMessageLetterSnapshot letter : snapshot.messageLetters()) {
+            MessageLetter restored = new MessageLetter(letter.x(), letter.y(), letter.tileOffset());
+            restored.flyoutAngle = letter.flyoutAngle();
+            restored.flyoutSpeed = letter.flyoutSpeed();
+            restored.visible = letter.visible();
+            messageLetters.add(restored);
+        }
+
+        rainbowRings.clear();
+        for (Sonic2SpecialStageSnapshot.CheckpointRainbowRingSnapshot ring : snapshot.rainbowRings()) {
+            RainbowRing restored = new RainbowRing(ring.baseIndex());
+            restored.frameIndex = ring.frameIndex();
+            restored.positionOffset = ring.positionOffset();
+            restored.mappingFrame = ring.mappingFrame();
+            restored.x = ring.x();
+            restored.y = ring.y();
+            restored.active = ring.active();
+            rainbowRings.add(restored);
+        }
+    }
+
     /**
      * Resets the checkpoint state.
      */
@@ -558,6 +670,9 @@ public class Sonic2SpecialStageCheckpoint {
         messageLetters.clear();
         rainbowRings.clear();
         showCheckpointHand = false;
+        handY = CHECKPOINT_HANDSHAKE_Y;
+        handTargetY = CHECKPOINT_HANDSHAKE_Y;
+        handMovingDown = false;
         currentCheckpoint = 0;
         ringRequirement = 0;
         ringsCollected = 0;
@@ -603,6 +718,10 @@ public class Sonic2SpecialStageCheckpoint {
 
     public int getHandX() {
         return handX;
+    }
+
+    public int getWingsY() {
+        return handTargetY;
     }
 
     public int getHandY() {

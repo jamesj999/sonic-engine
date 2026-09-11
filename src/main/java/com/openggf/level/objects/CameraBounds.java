@@ -3,7 +3,7 @@ package com.openggf.level.objects;
 /**
  * Pre-computed camera visibility bounds, updated once per frame.
  * ROM equivalent: Objects check against Camera_X_pos/Camera_Y_pos in MarkObjGone.
- * By caching these values, we avoid repeated Camera.getInstance() calls
+ * By caching these values, we avoid repeated camera service lookups
  * and field reads when checking visibility for many objects.
  *
  * Mutable to avoid per-frame allocation - use update() to change values.
@@ -82,6 +82,34 @@ public final class CameraBounds {
     }
 
     /**
+     * Checks if a point is within these bounds with independent horizontal and
+     * vertical margins. ROM sprite visibility uses width_pixels and height_pixels
+     * separately when setting render_flags bit 7.
+     */
+    public boolean contains(int x, int y, int xMargin, int yMargin) {
+        if (x < left - xMargin || x > right + xMargin) return false;
+        return containsY(y, yMargin);
+    }
+
+    /**
+     * Checks the bounds used by the ROM sprite renderer when setting
+     * {@code render_flags} bit 7.
+     * <p>
+     * S1 {@code BuildSprites}, S2 {@code BuildSprites}, and S3K
+     * {@code Render_Sprites} reject the right/bottom edges with
+     * {@code bge}/{@code bhs} after subtracting/adding object half-extents
+     * (S1 BuildSprites.asm:44-60; S2 s2.asm:30372-30395; S3K
+     * sonic3k.asm:36347-36365), so those upper edges are exclusive.
+     * SolidObjectFull's on-screen gate reads that bit on the next object update;
+     * using an inclusive upper bound keeps exact edge objects solid one frame
+     * longer than the ROM.
+     */
+    public boolean containsRenderSpriteBounds(int x, int y, int xMargin, int yMargin) {
+        if (x < left - xMargin || x >= right + xMargin) return false;
+        return containsRenderSpriteY(y, yMargin);
+    }
+
+    /**
      * Checks if a Y coordinate is within the vertical bounds, optionally with margin.
      * When vertical wrapping is active, uses modular arithmetic: computes the shortest
      * distance in the wrapped space and checks if it falls within the screen height.
@@ -95,5 +123,16 @@ public final class CameraBounds {
             return diff <= height;
         }
         return y >= top - margin && y <= bottom + margin;
+    }
+
+    private boolean containsRenderSpriteY(int y, int margin) {
+        if (verticalWrapRange > 0) {
+            int adjustedTop = top - margin;
+            int height = (bottom - top) + 2 * margin;
+            int diff = y - adjustedTop;
+            diff = ((diff % verticalWrapRange) + verticalWrapRange) % verticalWrapRange;
+            return diff < height;
+        }
+        return y >= top - margin && y < bottom + margin;
     }
 }

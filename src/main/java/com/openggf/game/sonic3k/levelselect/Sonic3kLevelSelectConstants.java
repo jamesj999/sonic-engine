@@ -1,6 +1,7 @@
 package com.openggf.game.sonic3k.levelselect;
 
 import com.openggf.game.sonic3k.constants.Sonic3kZoneIds;
+import com.openggf.graphics.PatternAtlasRange;
 
 /**
  * Constants and data tables for the Sonic 3&amp;K Level Select screen.
@@ -13,7 +14,7 @@ import com.openggf.game.sonic3k.constants.Sonic3kZoneIds;
 public final class Sonic3kLevelSelectConstants {
 
     /** Pattern base ID for level select art (high ID to avoid conflicts) */
-    public static final int PATTERN_BASE = 0x50000;
+    public static final int PATTERN_BASE = PatternAtlasRange.MENU_AND_DATA_SELECT.base();
 
     /** Pattern offset for font art (ArtTile $010 = ArtNem_S22POptions) */
     public static final int FONT_OFFSET = 0x10;

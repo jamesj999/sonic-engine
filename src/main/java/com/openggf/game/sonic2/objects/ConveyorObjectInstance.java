@@ -1,16 +1,19 @@
 package com.openggf.game.sonic2.objects;
 
 import com.openggf.game.PlayableEntity;
-import com.openggf.camera.Camera;
 import com.openggf.game.sonic2.Sonic2ObjectArtKeys;
 import com.openggf.game.sonic2.constants.Sonic2ObjectIds;
 import com.openggf.debug.DebugRenderContext;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
+import com.openggf.level.objects.ObjectConstructionContext;
 import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.PerObjectRewindSnapshot;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
@@ -49,7 +52,7 @@ import java.util.logging.Logger;
  * <b>Art:</b> ArtNem_LavaCup, palette line 3, single 32x16 frame.
  */
 public class ConveyorObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
 
     private static final Logger LOGGER = Logger.getLogger(ConveyorObjectInstance.class.getName());
 
@@ -69,6 +72,8 @@ public class ConveyorObjectInstance extends AbstractObjectInstance
     // Movement step size for waypoint advancement
     // From disassembly: move.b #4,objoff_3A(a0)
     private static final int WAYPOINT_STEP = 4;
+
+    private static final int STALE_LOGICAL_HORIZONTAL_FRAMES = 3;
 
     /**
      * Path waypoint tables from off_28252.
@@ -132,8 +137,8 @@ public class ConveyorObjectInstance extends AbstractObjectInstance
     private int y;
 
     /** Base position (objoff_30, objoff_32) - original spawn position. */
-    private final int baseX;
-    private final int baseY;
+    private int baseX;
+    private int baseY;
 
     /** Target waypoint position (objoff_34, objoff_36). */
     private int targetX;
@@ -143,13 +148,19 @@ public class ConveyorObjectInstance extends AbstractObjectInstance
     private int waypointOffset;
 
     /** Total path byte length (objoff_39). High byte of objoff_38 word. */
-    private final int pathLength;
+    private int pathLength;
 
     /** Waypoint advance direction (objoff_3A): +4 or -4. */
     private int waypointDelta;
 
     /** Path waypoint data (objoff_3C pointer). */
-    private final int[][] pathData;
+    private int[][] pathData;
+
+    /** Current subtype byte after parent spawners rewrite themselves into child 0. */
+    private int activeSubtype;
+
+    /** True while a bit-7 parent spawner is waiting for its first ExecuteObjects pass. */
+    private boolean pendingParentExpansion;
 
     /** X/Y velocity in 8.8 fixed point. */
     private int xVel;
@@ -163,23 +174,60 @@ public class ConveyorObjectInstance extends AbstractObjectInstance
     private final SubpixelMotion.State motion = new SubpixelMotion.State(0, 0, 0, 0, 0, 0);
 
     /** X-flip from status byte. */
-    private final boolean xFlip;
+    private boolean xFlip;
 
     /** Collision params: half-width = width_pixels, d3 = 8. */
     private static final SolidObjectParams SOLID_PARAMS =
-            new SolidObjectParams(WIDTH_PIXELS, Y_RADIUS, Y_RADIUS + 1);
+            SolidObjectParams.of(WIDTH_PIXELS, Y_RADIUS, Y_RADIUS);
 
     public ConveyorObjectInstance(ObjectSpawn spawn, String name) {
+        this(spawn, name, spawn.x(), spawn.y());
+    }
+
+    /**
+     * Constructor with explicit base position for the waypoint path origin.
+     * <p>
+     * Children spawned by a parent subtype (bit 7 set) inherit the PARENT's
+     * x_pos/y_pos as their objoff_30/objoff_32 (path base), not their own spawn
+     * position. ROM Obj6C_LoadSubObject (s2.asm:54137-54151) writes the parent's
+     * d2/d3 (parent x/y, captured before the loop) into the child's objoff_30/_32
+     * even though the child's x_pos/y_pos is set to {@code parent + layoutOffset}.
+     * Without this distinction every child orbits around its own offset position
+     * instead of the shared parent center, scattering the platforms.
+     */
+    public ConveyorObjectInstance(ObjectSpawn spawn, String name, int baseX, int baseY) {
         super(spawn, name);
-        this.baseX = spawn.x();
-        this.baseY = spawn.y();
+        this.baseX = baseX;
+        this.baseY = baseY;
         this.xFlip = (spawn.renderFlags() & 0x01) != 0;
+        this.activeSubtype = spawn.subtype() & 0xFF;
 
-        int subtype = spawn.subtype();
+        int subtype = activeSubtype;
+        if ((subtype & 0x80) != 0) {
+            pendingParentExpansion = true;
+            pathData = PATH_WAYPOINTS[0];
+            pathLength = 0;
+            x = spawn.x();
+            y = spawn.y();
+            targetX = x;
+            targetY = y;
+            waypointOffset = 0;
+            waypointDelta = WAYPOINT_STEP;
+            xSub = 0;
+            ySub = 0;
+            updateDynamicSpawn(x, y);
+            return;
+        }
 
-        // Determine path table from upper nibble: (subtype >> 3) & 0x1E gives word offset
-        // into off_28252, then load path from that table
-        int pathIndex = (subtype >> 4) & 0x07;
+        initializePlatformState(subtype, spawn.x(), spawn.y());
+    }
+
+    private void initializePlatformState(int subtype, int startX, int startY) {
+        // Determine path table from upper bits. ROM (s2.asm:54227-54233):
+        //   lsr.w #3,d0 / andi.w #$1E,d0  => word offset into off_28252.
+        // As a table index (word entries) that is ((subtype>>3)&0x1E)/2
+        //   = (subtype>>4)&0x0F  (full nibble, not masked to 0x07).
+        int pathIndex = (subtype >> 4) & 0x0F;
         if (pathIndex >= PATH_WAYPOINTS.length) {
             pathIndex = 0;
         }
@@ -209,8 +257,8 @@ public class ConveyorObjectInstance extends AbstractObjectInstance
         this.targetY = baseY + signExtend16(pathData[wpIndex][1]);
 
         // Set current position and calculate initial velocity
-        this.x = spawn.x();
-        this.y = spawn.y();
+        this.x = startX;
+        this.y = startY;
         this.xSub = 0;
         this.ySub = 0;
         calculateVelocity();
@@ -220,59 +268,85 @@ public class ConveyorObjectInstance extends AbstractObjectInstance
 
     /**
      * Static factory method to spawn children for parent subtypes (bit 7 set).
-     * The parent spawner reads child layout data and creates individual conveyor
-     * platform instances, then the parent itself is not added to the object list.
+     * <p>
+     * <b>ROM parity:</b> {@code Obj6C_Init} at s2.asm:54269 ({@code loc_28112})
+     * reuses the parent slot itself as the FIRST child:
+     * {@code movea.l a0,a1} sets {@code a1 = a0} so the first
+     * {@code Obj6C_LoadSubObject} pass overwrites the parent's
+     * {@code x_pos/y_pos/subtype/objoff_30/objoff_32} with the first child layout
+     * entry. The parent's subtype loses bit 7 (it becomes the child's subtype),
+     * so subsequent frames run {@code Obj6C_Main} (the parent never re-spawns).
+     * <p>
+     * The engine mirrors this by returning the first child as the factory's
+     * instance (occupying the parent spawn's slot in {@code activeObjects} so
+     * placement does not re-trigger the spawn every frame) and spawning the
+     * remaining children via {@link ObjectManager#createDynamicObject}.
      *
      * @param spawn The parent spawner's ObjectSpawn
-     * @return null (children are added via ObjectManager.addDynamicObject)
+     * @return The first child instance (or an individual platform when bit 7 is clear)
      */
     public static ConveyorObjectInstance createOrSpawnChildren(ObjectSpawn spawn) {
-        int subtype = spawn.subtype();
+        return new ConveyorObjectInstance(spawn, "Conveyor");
+    }
 
-        if ((subtype & 0x80) == 0) {
-            // Individual platform (bit 7 clear) - create normally
-            return new ConveyorObjectInstance(spawn, "Conveyor");
+    static ConveyorObjectInstance recreateForRewind(ObjectSpawn spawn, PerObjectRewindSnapshot snapshot) {
+        if (snapshot != null && snapshot.objectSubclassExtra() instanceof ConveyorRewindExtra extra) {
+            return new ConveyorObjectInstance(spawn, "Conveyor", extra.baseX(), extra.baseY());
         }
+        return new ConveyorObjectInstance(spawn, "Conveyor");
+    }
 
-        // Parent spawner (bit 7 set) - spawn children and return null
-        int layoutIndex = subtype & 0x7F;
-        if (layoutIndex >= CHILD_LAYOUTS.length) {
-            LOGGER.warning("Conveyor parent subtype 0x" + Integer.toHexString(subtype)
-                    + " has invalid layout index " + layoutIndex);
-            return null;
+    @Override
+    public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return recreateForRewind(ctx.spawn(), ctx.state());
+    }
+
+    @Override
+    public PerObjectRewindSnapshot captureRewindState() {
+        return super.captureRewindState().withObjectSubclassExtra(
+                new ConveyorRewindExtra(
+                        x,
+                        y,
+                        baseX,
+                        baseY,
+                        targetX,
+                        targetY,
+                        waypointOffset,
+                        waypointDelta,
+                        xVel,
+                        yVel,
+                        xSub,
+                        ySub,
+                        activeSubtype,
+                        pendingParentExpansion));
+    }
+
+    @Override
+    public void restoreRewindState(PerObjectRewindSnapshot snapshot) {
+        super.restoreRewindState(snapshot);
+        if (snapshot.objectSubclassExtra() instanceof ConveyorRewindExtra extra) {
+            x = extra.x();
+            y = extra.y();
+            targetX = extra.targetX();
+            targetY = extra.targetY();
+            waypointOffset = extra.waypointOffset();
+            waypointDelta = extra.waypointDelta();
+            xVel = extra.xVel();
+            yVel = extra.yVel();
+            xSub = extra.xSub();
+            ySub = extra.ySub();
+            activeSubtype = extra.activeSubtype();
+            pendingParentExpansion = extra.pendingParentExpansion();
+            if (!pendingParentExpansion) {
+                int pathIndex = (activeSubtype >> 4) & 0x0F;
+                if (pathIndex >= PATH_WAYPOINTS.length) {
+                    pathIndex = 0;
+                }
+                pathData = PATH_WAYPOINTS[pathIndex];
+                pathLength = pathData.length * 4;
+            }
+            rebuildDynamicSpawn(x, y);
         }
-
-        // Use construction context since this factory runs during object creation
-        var ctx = constructionContext();
-        ObjectManager manager = ctx != null ? ctx.objectManager() : null;
-        if (manager == null) {
-            return null;
-        }
-
-        int[][] layout = CHILD_LAYOUTS[layoutIndex];
-        int parentX = spawn.x();
-        int parentY = spawn.y();
-        int parentStatus = spawn.renderFlags();
-
-        for (int[] child : layout) {
-            int childX = parentX + signExtend16(child[0]);
-            int childY = parentY + signExtend16(child[1]);
-            int childSubtype = child[2] & 0xFF;
-
-            ObjectSpawn childSpawn = new ObjectSpawn(
-                    childX, childY,
-                    Sonic2ObjectIds.CONVEYOR,
-                    childSubtype,
-                    parentStatus,
-                    false,
-                    spawn.rawYWord());
-
-            ConveyorObjectInstance childInstance = new ConveyorObjectInstance(childSpawn, "Conveyor");
-            manager.addDynamicObject(childInstance);
-        }
-
-        // Parent removes itself: addq.l #4,sp; rts (skips back to caller)
-        return null;
     }
 
     @Override
@@ -296,6 +370,19 @@ public class ConveyorObjectInstance extends AbstractObjectInstance
     }
 
     @Override
+    public int staleHorizontalLogicalInputFramesWhileRiding(
+            PlayableEntity player, int rideFrames, boolean left, boolean right) {
+        /*
+         * Obj6C_Main moves the platform, restores the saved pre-move x_pos as d4, then
+         * jumps through PlatformObject. When Obj6C has horizontal displacement, that
+         * PlatformObject ride step can carry Sonic before Sonic_Move consumes
+         * Ctrl_1_Held_Logical for rider acceleration.
+         */
+        boolean inputOpposesHorizontalCarry = (xVel > 0 && left && !right) || (xVel < 0 && right && !left);
+        return inputOpposesHorizontalCarry ? STALE_LOGICAL_HORIZONTAL_FRAMES : 0;
+    }
+
+    @Override
     public boolean isSolidFor(PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         return !isDestroyed();
@@ -308,18 +395,43 @@ public class ConveyorObjectInstance extends AbstractObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) {
             return;
         }
+        if (pendingParentExpansion) {
+            expandParentSpawner();
+            return;
+        }
 
-        // Obj6C_Main (line 54300): save old x, move, then PlatformObject
+        // Obj6C_Main (s2.asm:54304-54311): save old x_pos to the stack, run the
+        // waypoint check + ObjectMove, then pass the PRE-MOVE x_pos as d4 to
+        // JmpTo5_PlatformObject. The shared PlatformObject ride code uses that
+        // pre-move x to carry a standing player by the platform's per-frame x
+        // displacement (these pulley platforms move diagonally, so the rider
+        // must follow horizontally as well as vertically).
+        //
+        // The engine's top-solid ride carry is owned centrally by the solid
+        // system (ObjectManager.SolidContacts / continued-riding carry), which
+        // tracks the riding object's frame-to-frame position delta. The capture
+        // here mirrors the ROM's stack save so the pre-move x is available if a
+        // future change needs to route an explicit horizontal carry through this
+        // object; the central solid carry already follows the moving platform.
+        int prevX = x;
+
         // loc_2817E: check if arrived at target, advance waypoint if so
         checkAndAdvanceWaypoint();
 
         // ObjectMove: apply velocity to position
         applyVelocity();
+
+        // Per-frame horizontal displacement (pre-move x -> post-move x). Mirrors
+        // the ROM d4 = pre-move x_pos handed to PlatformObject. Kept as a local
+        // so the intent is explicit; rider X is carried by the central solid
+        // system, not written directly here (avoids double-applying the delta).
+        @SuppressWarnings("unused")
+        int frameXDelta = x - prevX;
 
         // Off-screen despawn check using base position (objoff_30)
         // From disassembly: (objoff_30 & $FF80) - Camera_X_pos_coarse > $280
@@ -332,19 +444,66 @@ public class ConveyorObjectInstance extends AbstractObjectInstance
     }
 
     /**
+     * ROM Obj6C parent spawners do not expand during ObjPosLoad. They first sit
+     * in the loaded SST slot, then their routine-0 execution rewrites that same
+     * slot into child 0 and allocates the remaining children
+     * (docs/s2disasm/s2.asm:54632-54716).
+     */
+    private void expandParentSpawner() {
+        int layoutIndex = activeSubtype & 0x7F;
+        if (layoutIndex >= CHILD_LAYOUTS.length) {
+            LOGGER.warning("Conveyor parent subtype 0x" + Integer.toHexString(activeSubtype)
+                    + " has invalid layout index " + layoutIndex);
+            setDestroyed(true);
+            return;
+        }
+
+        int[][] layout = CHILD_LAYOUTS[layoutIndex];
+        int parentX = spawn.x();
+        int parentY = spawn.y();
+        int parentStatus = spawn.renderFlags();
+
+        int[] firstChild = layout[0];
+        int firstX = parentX + signExtend16(firstChild[0]);
+        int firstY = parentY + signExtend16(firstChild[1]);
+        activeSubtype = firstChild[2] & 0xFF;
+        pendingParentExpansion = false;
+        initializePlatformState(activeSubtype, firstX, firstY);
+
+        ObjectManager manager = services().objectManager();
+        if (manager != null && !ObjectConstructionContext.isRewindActiveRestore()) {
+            for (int i = 1; i < layout.length; i++) {
+                int[] child = layout[i];
+                int childX = parentX + signExtend16(child[0]);
+                int childY = parentY + signExtend16(child[1]);
+                int childSubtype = child[2] & 0xFF;
+                ObjectSpawn childSpawn = new ObjectSpawn(
+                        childX, childY,
+                        Sonic2ObjectIds.CONVEYOR,
+                        childSubtype,
+                        parentStatus,
+                        false,
+                        spawn.rawYWord());
+                manager.createDynamicObject(() ->
+                        new ConveyorObjectInstance(childSpawn, "Conveyor", parentX, parentY));
+            }
+        }
+    }
+
+    @Override
+    protected ObjectSpawn buildSpawnAt(int x, int y) {
+        return new ObjectSpawn(x, y, spawn.objectId(), activeSubtype,
+                spawn.renderFlags(), spawn.respawnTracked(), spawn.rawYWord(),
+                spawn.layoutIndex());
+    }
+
+    /**
      * Check if the base position (objoff_30) is within the despawn range of the camera.
-     * Mirrors the ROM's MarkObjGone check: ((baseX & 0xFF80) - cameraCoarse) <= 0x280.
+     * Mirrors the ROM's MarkObjGone check with Camera_X_pos_coarse_back:
+     * ((baseX & 0xFF80) - ((cameraX - 0x80) & 0xFF80)) <= 0x280.
      */
     private boolean isBasePositionOnScreen() {
-        Camera camera =
-                services().camera();
-        if (camera == null) {
-            return true;
-        }
-        int camXCoarse = camera.getX() & 0xFF80;
-        int diff = (baseX & 0xFF80) - camXCoarse;
-        // Unsigned comparison: diff treated as unsigned 16-bit must be <= 0x280
-        return (diff & 0xFFFF) <= 0x280;
+        return isInRangeAt(baseX);
     }
 
     @Override
@@ -468,5 +627,23 @@ public class ConveyorObjectInstance extends AbstractObjectInstance
      */
     private static int signExtend16(int value) {
         return (short) value;
+    }
+
+    private record ConveyorRewindExtra(
+            int x,
+            int y,
+            int baseX,
+            int baseY,
+            int targetX,
+            int targetY,
+            int waypointOffset,
+            int waypointDelta,
+            int xVel,
+            int yVel,
+            int xSub,
+            int ySub,
+            int activeSubtype,
+            boolean pendingParentExpansion
+    ) implements PerObjectRewindSnapshot.ObjectSubclassRewindExtra {
     }
 }

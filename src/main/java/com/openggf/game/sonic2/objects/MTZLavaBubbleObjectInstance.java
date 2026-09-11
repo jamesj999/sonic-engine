@@ -8,6 +8,8 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.animation.SpriteAnimationEndAction;
 import com.openggf.sprites.animation.SpriteAnimationScript;
@@ -39,11 +41,15 @@ import java.util.List;
  * <ul>
  *   <li>0: delay=8,  frames=[3,3,4,5,5,4], LOOP</li>
  *   <li>1: delay=5,  frames=[0,0,0,1,2,3,3,2,1,2,3,3,1], LOOP</li>
- *   <li>2: delay=$B, frames=[0,1,2,3,4,5], LOOP_BACK(3) - loops to index 3</li>
- *   <li>3: delay=$7F, frames=[6], LOOP_BACK(2) - single empty frame hold</li>
+ *   <li>2: delay=$B, frames=[0,1,2,3,4,5], SWITCH(3) - $FD ends by running anim 3</li>
+ *   <li>3: delay=$7F, frames=[6], SWITCH(2) - $FD ends by running anim 2</li>
  * </ul>
+ * Scripts 2 and 3 ping-pong: the $FD end flag (s2.asm:30278-30282, Anim_End_FD)
+ * does {@code move.b 2(a1,d1.w),anim(a0)} — it sets the animation index to the
+ * operand byte, NOT a frame loop-back. So script 2 ($FD,3) runs anim 3 and
+ * script 3 ($FD,2) runs anim 2, alternating between the two.
  */
-public class MTZLavaBubbleObjectInstance extends AbstractObjectInstance {
+public class MTZLavaBubbleObjectInstance extends AbstractObjectInstance implements RewindRecreatable {
 
     // Animation scripts from Ani_obj71 (s2.asm lines 24028-24040)
     private static final SpriteAnimationSet ANIMATIONS;
@@ -64,18 +70,19 @@ public class MTZLavaBubbleObjectInstance extends AbstractObjectInstance {
         ));
 
         // Script 2 (byte_11389): dc.b $B, 0, 1, 2, 3, 4, 5, $FD, 3
-        // $FD = LOOP_BACK, param 3 = loop back 3 frames from end (index 3)
+        // $FD (Anim_End_FD, s2.asm:30278-30282) = SWITCH: run animation given by
+        // the operand byte. Operand 3 => switch to anim 3 (ping-pong partner).
         ANIMATIONS.addScript(2, new SpriteAnimationScript(
                 0x0B, List.of(0, 1, 2, 3, 4, 5),
-                SpriteAnimationEndAction.LOOP_BACK, 3
+                SpriteAnimationEndAction.SWITCH, 3
         ));
 
         // Script 3 (byte_11392): dc.b $7F, 6, $FD, 2
-        // $FD = LOOP_BACK, param 2 = loop back 2 frames from end
-        // Only 1 frame (empty frame 6), so effectively holds on empty frame
+        // $FD (Anim_End_FD) = SWITCH. Operand 2 => switch to anim 2, completing
+        // the ping-pong between scripts 2 and 3.
         ANIMATIONS.addScript(3, new SpriteAnimationScript(
                 0x7F, List.of(6),
-                SpriteAnimationEndAction.LOOP_BACK, 2
+                SpriteAnimationEndAction.SWITCH, 2
         ));
     }
 
@@ -91,7 +98,12 @@ public class MTZLavaBubbleObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public MTZLavaBubbleObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new MTZLavaBubbleObjectInstance(ctx.spawn());
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // ROM: Obj71_Main just calls AnimateSprite then MarkObjGone
         animationState.update();

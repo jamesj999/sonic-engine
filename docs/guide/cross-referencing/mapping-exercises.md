@@ -422,7 +422,7 @@ See [Testing](../contributing/testing.md) for details on the test framework.
 
 Once you have confirmed a difference:
 
-- **Known issues:** Check `docs/BUGLIST.md` or `docs/S3K_KNOWN_DISCREPANCIES.md` to
+- **Known issues:** Check `docs/status/known-bugs.md` or `docs/S3K_KNOWN_DISCREPANCIES.md` to
   see if it is already documented.
 - **New issue:** Open a GitHub issue describing the discrepancy, which game and zone
   it affects, the expected behavior (from the disassembly), and the observed behavior

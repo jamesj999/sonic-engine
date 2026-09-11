@@ -1,0 +1,90 @@
+{
+  "dynamic_art_gap_transitions": [],
+  "expected_movie_end_mode": "title_screen",
+  "game": "s2",
+  "recorder": "native-bizhawk-headless",
+  "recorder_version": "3.0",
+  "rom_checksum": "synthetic-no-rom",
+  "run_id": "synthetic-three-segment-run",
+  "segments": [
+    {
+      "act": 1,
+      "bk2_frame_offset": 10,
+      "bonus_stage_type": null,
+      "dir": "seg0",
+      "dynamic_art_initial_ledger_descriptors": [],
+      "dynamic_art_initial_ledger_fingerprint": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "kind": "level",
+      "special_stage_index": null,
+      "trace_frame_count": 1,
+      "trace_profile": "complete_run",
+      "zone_id": 3
+    },
+    {
+      "act": 2,
+      "bk2_frame_offset": 20,
+      "bonus_stage_type": null,
+      "dir": "seg1",
+      "dynamic_art_initial_ledger_descriptors": [],
+      "dynamic_art_initial_ledger_fingerprint": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "kind": "level",
+      "special_stage_index": null,
+      "trace_frame_count": 1,
+      "trace_profile": "complete_run",
+      "zone_id": 3
+    },
+    {
+      "act": 3,
+      "bk2_frame_offset": 30,
+      "bonus_stage_type": null,
+      "dir": "seg2",
+      "dynamic_art_initial_ledger_descriptors": [],
+      "dynamic_art_initial_ledger_fingerprint": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "kind": "level",
+      "special_stage_index": null,
+      "trace_frame_count": 1,
+      "trace_profile": "complete_run",
+      "zone_id": 3
+    }
+  ],
+  "source_bk2": "synthetic-input.bk2",
+  "trace_schema": 5,
+  "transitions": [
+    {
+      "emeralds_after": 2,
+      "emeralds_before": 1,
+      "entry_kind": "level_advance",
+      "from_segment": 0,
+      "gap_admission_runs": [
+        3,
+        1
+      ],
+      "last_star_post_hit": 2,
+      "mode_change_bk2_frame": 19,
+      "rings_after": 4,
+      "rings_before": 30,
+      "saved_x_pos": 256,
+      "saved_y_pos": 512,
+      "special_bonus_entry_flag": 1,
+      "to_segment": 1
+    },
+    {
+      "emeralds_after": 2,
+      "emeralds_before": 2,
+      "entry_kind": "death_restart",
+      "from_segment": 1,
+      "gap_admission_runs": [
+        2,
+        2
+      ],
+      "last_star_post_hit": 3,
+      "mode_change_bk2_frame": 29,
+      "rings_after": 0,
+      "rings_before": 4,
+      "saved_x_pos": 768,
+      "saved_y_pos": 1024,
+      "special_bonus_entry_flag": 0,
+      "to_segment": 2
+    }
+  ]
+}

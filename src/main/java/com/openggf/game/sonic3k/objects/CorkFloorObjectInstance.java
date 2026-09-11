@@ -1,6 +1,9 @@
 package com.openggf.game.sonic3k.objects;
 
 import com.openggf.game.PlayableEntity;
+import com.openggf.game.solid.ContactKind;
+import com.openggf.game.solid.PlayerSolidContactResult;
+import com.openggf.game.solid.SolidCheckpointBatch;
 import com.openggf.game.sonic3k.Sonic3kObjectArtKeys;
 import com.openggf.game.sonic3k.audio.Sonic3kSfx;
 import com.openggf.game.sonic3k.constants.Sonic3kObjectIds;
@@ -8,88 +11,66 @@ import com.openggf.game.sonic3k.constants.Sonic3kZoneIds;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
+import com.openggf.level.objects.ObjectConstructionContext;
+import com.openggf.level.objects.ObjectLifetimeOps;
 import com.openggf.level.objects.ObjectManager;
+import com.openggf.level.objects.ObjectPlayerParticipationPolicy;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.RomObjectCodePointerProvider;
+import com.openggf.level.objects.SlopedSolidProvider;
 import com.openggf.level.objects.SolidContact;
+import com.openggf.level.objects.SolidExecutionMode;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.level.render.SpriteMappingFrame;
+import com.openggf.sprites.NativePositionOps;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Logger;
 
 /**
- * Object 0x2A - Cork Floor (Sonic 3 &amp; Knuckles).
- * <p>
- * A breakable floor platform used in AIZ, CNZ, FBZ, ICZ, and LBZ.
- * When broken, it shatters into fragment pieces that fly off with velocity
- * determined by zone-specific tables.
- * <p>
- * Three behavioral modes selected by subtype and zone:
- * <ul>
- *   <li><b>Mode A (Break-from-below, subtype 0):</b> Saves player's y_vel before
- *       solid check. On bottom hit (player rising into floor from below), restores
- *       the saved y_vel so upward momentum carries player through, then breaks.
- *       Solid from above (player can stand on it). ROM: loc_2A618.
- *       The swapped d6 check (#4|8) catches bottom-hit bits, not top-landing.</li>
- *   <li><b>Mode B (Roll-to-break, subtype != 0):</b> Checks if standing player
- *       is rolling. If so, sets player rolling, y_vel = -0x300, airborne, breaks.
- *       Used in AIZ, LBZ, etc. ROM: loc_2A502.</li>
- *   <li><b>Mode C (ICZ plane-switch, subtype bit 4 clear):</b> Same as Mode B
- *       but also applies plane-switching collision bits to the player.
- *       ROM: loc_2A6D4, uses sub_1DDC6.</li>
- * </ul>
- * <p>
- * Break behavior (shared across modes):
- * <ol>
- *   <li>Increments mapping_frame from intact to broken frame</li>
- *   <li>Plays sfx_Collapse</li>
- *   <li>Spawns fragment children (one per piece of the broken mapping frame)</li>
- *   <li>Each fragment gets x_vel/y_vel from the zone's velocity table</li>
- *   <li>Fragments fall with gravity 0x18/frame, delete when offscreen</li>
- * </ol>
- * <p>
- * Uses SolidObjectFull (full 4-sided collision) with d1=halfWidth+0x0B,
- * d2=halfHeight, d3=halfHeight+1.
- * <p>
- * ROM references: Obj_CorkFloor (sonic3k.asm:58420), loc_2A502, loc_2A618,
- * loc_2A6D4, word_2A884, word_2A8B0, word_2A8E0.
+ * Object 0x2A - Cork Floor (Sonic 3 & Knuckles).
  */
 public class CorkFloorObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SlopedSolidProvider, SolidObjectListener,
+        RomObjectCodePointerProvider, RewindRecreatable {
 
     private static final Logger LOG = Logger.getLogger(CorkFloorObjectInstance.class.getName());
 
-    // Fragment gravity: addi.w #$18,y_vel(a0) (ROM: MoveSprite in fragment routine)
     private static final int FRAGMENT_GRAVITY = 0x18;
-
-    // Priority: $280 = bucket 5 (ROM: move.w #$280,priority(a0))
     private static final int PRIORITY = 5;
-
-    // Roll-to-break launch velocity: ROM move.w #-$300,y_vel(a1) (loc_2A578)
     private static final int ROLL_BREAK_LAUNCH_YVEL = -0x300;
+    /** {@code byte_2A894}, sampled by ICZ's {@code sub_1DDC6} path. */
+    private static final byte[] ICZ_SLOPE_DATA = {
+            0x23, 0x23, 0x22, 0x22, 0x21, 0x21, 0x20, 0x1F,
+            0x1F, 0x1E, 0x1E, 0x1D, 0x1D, 0x1C, 0x1B, 0x1B,
+            0x1A, 0x1A, 0x19, 0x19, 0x17, 0x16, 0x15, 0x15,
+            0x14, 0x14, 0x13, 0x13
+    };
+    private static final ObjectPlayerParticipationPolicy PLAYER_PARTICIPATION =
+            ObjectPlayerParticipationPolicy.ALL_ENGINE_PLAYERS;
 
-    // ===== Fragment velocity tables from ROM =====
+    @Override
+    public int romObjectCodePointerHighWord() {
+        // Obj_CorkFloor is installed at 0x0002A618 in the S&K-side ROM.
+        // Tails_CPU_interact stores word 0 of the stood-on object SST
+        // (docs/skdisasm/sonic3k.asm:26816-26843).
+        return 0x0002;
+    }
 
-    /**
-     * word_2A884 (FBZ, ICZ small - 4 pairs = 8 entries).
-     * Each pair: {x_vel, y_vel} in subpixels.
-     * Used for FBZ all subtypes and ICZ when subtype bit 4 is set.
-     */
     private static final int[][] VEL_TABLE_SMALL = {
             {-0x200, -0x200}, {0x200, -0x200},
             {-0x100, -0x100}, {0x100, -0x100},
     };
 
-    /**
-     * word_2A8B0 (AIZ - 6 pairs = 12 entries).
-     * Used for AIZ1, AIZ2, and ICZ default (subtype bit 4 clear).
-     */
     private static final int[][] VEL_TABLE_MEDIUM = {
             {-0x100, -0x200}, {0x100, -0x200},
             {-0x0E0, -0x1C0}, {0x0E0, -0x1C0},
@@ -99,9 +80,6 @@ public class CorkFloorObjectInstance extends AbstractObjectInstance
             {-0x060, -0x0C0}, {0x060, -0x0C0},
     };
 
-    /**
-     * word_2A8E0 (CNZ, LBZ - 16 pairs = 32 entries).
-     */
     private static final int[][] VEL_TABLE_LARGE = {
             {-0x400, -0x400}, {-0x200, -0x400}, {0x200, -0x400}, {0x400, -0x400},
             {-0x3C0, -0x3C0}, {-0x1C0, -0x3C0}, {0x1C0, -0x3C0}, {0x3C0, -0x3C0},
@@ -109,17 +87,6 @@ public class CorkFloorObjectInstance extends AbstractObjectInstance
             {-0x340, -0x340}, {-0x140, -0x340}, {0x140, -0x340}, {0x340, -0x340},
     };
 
-    // ===== Zone-specific configuration =====
-
-    /**
-     * Per-zone configuration record.
-     *
-     * @param artKey       art sheet key from {@link Sonic3kObjectArtKeys}
-     * @param halfWidth    half-width for solid collision (d1 base, before +0x0B)
-     * @param halfHeight   half-height for solid collision (d2)
-     * @param velTable     fragment velocity table (pairs of {xVel, yVel})
-     * @param iczPlaneMode true if ICZ plane-switching behavior is active
-     */
     private record ZoneConfig(
             String artKey,
             int halfWidth,
@@ -128,80 +95,41 @@ public class CorkFloorObjectInstance extends AbstractObjectInstance
             boolean iczPlaneMode
     ) {}
 
-    // ROM: sonic3k.asm:58420-58487 (Obj_CorkFloor zone table)
-    // art_tile values: 1 = level art, or specific VRAM tile offsets for CNZ/FBZ
-    // Collision dimensions from ROM: move.w #halfWidth,d1 / move.w #halfHeight,d2
-
     private static final ZoneConfig AIZ1_CONFIG = new ZoneConfig(
-            Sonic3kObjectArtKeys.CORK_FLOOR_AIZ1,
-            0x10, 0x28, VEL_TABLE_MEDIUM, false);
-
+            Sonic3kObjectArtKeys.CORK_FLOOR_AIZ1, 0x10, 0x28, VEL_TABLE_MEDIUM, false);
     private static final ZoneConfig AIZ2_CONFIG = new ZoneConfig(
-            Sonic3kObjectArtKeys.CORK_FLOOR_AIZ2,
-            0x10, 0x2C, VEL_TABLE_MEDIUM, false);
-
+            Sonic3kObjectArtKeys.CORK_FLOOR_AIZ2, 0x10, 0x2C, VEL_TABLE_MEDIUM, false);
     private static final ZoneConfig CNZ_CONFIG = new ZoneConfig(
-            Sonic3kObjectArtKeys.CORK_FLOOR_CNZ,
-            0x20, 0x20, VEL_TABLE_LARGE, false);
-
+            Sonic3kObjectArtKeys.CORK_FLOOR_CNZ, 0x20, 0x20, VEL_TABLE_LARGE, false);
     private static final ZoneConfig FBZ_CONFIG = new ZoneConfig(
-            Sonic3kObjectArtKeys.CORK_FLOOR_FBZ,
-            0x10, 0x10, VEL_TABLE_SMALL, false);
-
-    // ICZ default (subtype bit 4 clear): Mode C plane-switch, halfHeight=0x24
+            Sonic3kObjectArtKeys.CORK_FLOOR_FBZ, 0x10, 0x10, VEL_TABLE_SMALL, false);
     private static final ZoneConfig ICZ_CONFIG = new ZoneConfig(
-            Sonic3kObjectArtKeys.CORK_FLOOR_ICZ,
-            0x10, 0x24, VEL_TABLE_MEDIUM, true);
-
-    // ICZ small variant (subtype bit 4 set): Mode B roll-to-break, halfHeight=0x10
-    // ROM: loc_2A4AE sets height_pixels=$10, art_tile=ArtTile_ICZMisc1, uses word_2A884
+            Sonic3kObjectArtKeys.CORK_FLOOR_ICZ, 0x10, 0x24, VEL_TABLE_MEDIUM, true);
     private static final ZoneConfig ICZ_SMALL_CONFIG = new ZoneConfig(
-            Sonic3kObjectArtKeys.CORK_FLOOR_ICZ,
-            0x10, 0x10, VEL_TABLE_SMALL, false);
-
+            Sonic3kObjectArtKeys.CORK_FLOOR_ICZ, 0x10, 0x10, VEL_TABLE_SMALL, false);
     private static final ZoneConfig LBZ_CONFIG = new ZoneConfig(
-            Sonic3kObjectArtKeys.CORK_FLOOR_LBZ,
-            0x20, 0x20, VEL_TABLE_LARGE, false);
-
-    // ===== Behavioral modes =====
+            Sonic3kObjectArtKeys.CORK_FLOOR_LBZ, 0x20, 0x20, VEL_TABLE_LARGE, false);
 
     private enum Mode {
-        /** Mode A: break-from-below (subtype 0). ROM: loc_2A618.
-         *  Saves y_vel before solid check, restores on bottom hit, breaks floor.
-         *  Solid from above (standing), breakable from below (spring). */
         BREAK_FROM_BELOW,
-        /** Mode B: roll-to-break (subtype != 0, non-ICZ or ICZ with bit 4 set). ROM: loc_2A502 */
         ROLL_TO_BREAK,
-        /** Mode C: ICZ plane-switch (ICZ with subtype bit 4 clear). ROM: loc_2A6D4 */
         ICZ_PLANE_SWITCH
     }
 
-    // ===== Instance state =====
-
     private final ZoneConfig config;
-    private final Mode mode;
-    private final int subtype;
-    private final boolean hFlip;
-
-    /** Current mapping frame. 0 = intact, 1 = broken (for most zones).
-     *  ICZ: even = intact, odd = broken (per subtype variant). */
+    private Mode mode;
+    private int subtype;
+    private boolean hFlip;
     private int mappingFrame;
-
-    private final int x;
-    private final int y;
-
-    /** ICZ velocity table override: when subtype bit 4 is set, use VEL_TABLE_SMALL instead. */
+    private int x;
+    private int y;
     private final int[][] effectiveVelTable;
 
     private boolean broken;
-
-    // Solid contact tracking
     private boolean playerStanding;
-
-    // Pre-contact velocity snapshot for Mode A (bounce)
-    // Captured from ObjectManager's pre-contact snapshot, same pattern as AizLrzRockObjectInstance
     private int savedPreContactYSpeed;
     private boolean savedPreContactRolling;
+    private AbstractPlayableSprite rollingBreakPlayer;
 
     public CorkFloorObjectInstance(ObjectSpawn spawn) {
         super(spawn, "CorkFloor");
@@ -211,207 +139,311 @@ public class CorkFloorObjectInstance extends AbstractObjectInstance
         this.hFlip = (spawn.renderFlags() & 0x01) != 0;
         this.config = resolveConfig(subtype);
 
-        // Determine behavioral mode
-        if (subtype == 0) {
-            this.mode = Mode.BREAK_FROM_BELOW;
-        } else if (config.iczPlaneMode && (subtype & 0x10) == 0) {
+        if (config.iczPlaneMode && (subtype & 0x10) == 0) {
             this.mode = Mode.ICZ_PLANE_SWITCH;
+        } else if (subtype == 0) {
+            this.mode = Mode.BREAK_FROM_BELOW;
         } else {
             this.mode = Mode.ROLL_TO_BREAK;
         }
 
-        // ICZ: subtype bits 0-3 select the initial mapping frame
-        // ROM: move.b subtype(a0),d0 / andi.w #$F,d0 / move.b d0,mapping_frame(a0)
-        if (config.iczPlaneMode) {
-            this.mappingFrame = (subtype & 0x0F) * 2; // Even frames are intact
-        } else {
-            this.mappingFrame = 0;
-        }
-
-        // ICZ with subtype bit 4 set uses small velocity table
-        // ROM: btst #4,subtype(a0) / bne.s [use word_2A884]
-        if (config.iczPlaneMode && (subtype & 0x10) != 0) {
-            this.effectiveVelTable = VEL_TABLE_SMALL;
-        } else {
-            this.effectiveVelTable = config.velTable;
-        }
+        this.mappingFrame = config.iczPlaneMode ? (subtype & 0x0F) * 2 : 0;
+        this.effectiveVelTable = config.iczPlaneMode && (subtype & 0x10) != 0
+                ? VEL_TABLE_SMALL
+                : config.velTable;
     }
 
-    // ===== SolidObjectProvider (full 4-sided collision) =====
+    @Override
+    public CorkFloorObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return ObjectConstructionContext.construct(
+                ctx.objectServices(),
+                () -> new CorkFloorObjectInstance(ctx.spawn()));
+    }
+
+    public boolean isBroken() {
+        return broken;
+    }
+
+    public void forceBreakForTest() {
+        broken = true;
+    }
 
     @Override
     public SolidObjectParams getSolidParams() {
-        // ROM: addi.w #$B,d1 before SolidObjectFull
-        // d1 = halfWidth + 0x0B, d2 = halfHeight, d3 = halfHeight + 1
-        return new SolidObjectParams(config.halfWidth + 0x0B, config.halfHeight, config.halfHeight + 1);
+        if (mode == Mode.ICZ_PLANE_SWITCH) {
+            // loc_2A6D4 passes only d2=height_pixels ($24) to sub_1DDC6;
+            // unlike SolidObjectFull, there is no grounded d3=d2+1 surface.
+            return SolidObjectParams.of(config.halfWidth + 0x0B, config.halfHeight, config.halfHeight);
+        }
+        return SolidObjectParams.of(config.halfWidth + 0x0B, config.halfHeight, config.halfHeight + 1);
+    }
+
+    @Override
+    public byte[] getSlopeData() {
+        // Only ICZ subtype bit 4 clear installs loc_2A6D4, which calls the
+        // sloped full-solid helper. Every other variant calls SolidObjectFull.
+        return mode == Mode.ICZ_PLANE_SWITCH ? ICZ_SLOPE_DATA : null;
+    }
+
+    @Override
+    public boolean isSlopeFlipped() {
+        return hFlip;
+    }
+
+    @Override
+    public int getSlopeBaseline() {
+        // sub_1DDC6 loc_1DECE subtracts byte_2A894[0] on fresh contact.
+        return ICZ_SLOPE_DATA[0];
+    }
+
+    @Override
+    public boolean addsSlopeCatchRangeToVerticalOverlap() {
+        // sub_1DDC6 enters loc_1DECE with d2=height_pixels, then adds the
+        // player's y_radius before classifying the sampled surface.
+        return mode == Mode.ICZ_PLANE_SWITCH;
+    }
+
+    @Override
+    public boolean forceAirOnRideExit() {
+        // ICZ's sloped helper has a deliberately different continued-ride
+        // exit from SolidObjectFull: sub_1DDC6/loc_1DE00 clears Status_OnObj
+        // and the object's standing bit but does not set Status_InAir
+        // (sonic3k.asm:41221-41264). This lets the next Player_AnglePos hand
+        // the rider directly to terrain beneath the cork floor. Other cork
+        // variants use SolidObjectFull and retain its ordinary airborne exit.
+        return mode != Mode.ICZ_PLANE_SWITCH;
+    }
+
+    @Override
+    public int getBalanceWidthPixels() {
+        // Sonic_Move reads the object's width_pixels byte, not the default
+        // 16-pixel render width nor SolidObjectFull's +$B side extension.
+        return config.halfWidth;
     }
 
     @Override
     public boolean isTopSolidOnly() {
-        return false; // SolidObjectFull: full 4-sided collision
+        return false;
     }
 
     @Override
     public boolean isSolidFor(PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        return !broken; // Only solid while intact
+        return !broken;
     }
-
-    // ===== SolidObjectListener =====
 
     @Override
     public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
+        // Manual checkpoints drive the current-frame contact state from update().
+    }
+
+    @Override
+    public SolidExecutionMode solidExecutionMode() {
+        return SolidExecutionMode.MANUAL_CHECKPOINT;
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        if (player == null || broken) {
+        if (broken) {
             return;
         }
 
-        // Read pre-contact snapshot from ObjectManager (same pattern as AizLrzRockObjectInstance).
-        // The ROM saves player velocity BEFORE the solid object call; our engine captures
-        // this in SolidContacts.update() before resolving contacts.
-        ObjectManager om = getObjectManager();
-        if (om != null) {
-            savedPreContactYSpeed = om.getPreContactYSpeed();
-            savedPreContactRolling = om.getPreContactRolling();
+        playerStanding = false;
+        savedPreContactRolling = false;
+        rollingBreakPlayer = null;
+        // Per-frame scratch: the riders SolidObjectFull reports standing on
+        // this floor during THIS update, in participation order. It is a local
+        // so it carries no state across frames and needs no rewind capture.
+        List<AbstractPlayableSprite> standingRiders = new ArrayList<>(2);
+
+        resolveLaterSlotLeftSiblingBeforeRollingLanding(player);
+        SolidCheckpointBatch batch = checkpointAll();
+        for (PlayableEntity participant : participatingPlayers(player)) {
+            if (broken) {
+                break;
+            }
+            if (participant instanceof AbstractPlayableSprite playable) {
+                applyCheckpointContact(playable, batch.perPlayer().get(participant),
+                        standingRiders);
+            }
         }
-
-        if (contact.standing()) {
-            playerStanding = true;
-        }
-
-        // Mode A (Break-from-below): ROM checks swapped d6 bits 2/3 (bottom hit flags).
-        // SolidObjectFull sets bit (d6+$F) on bottom collision, which after swap gives
-        // bits 2/3 — matching the #4|8 check. Top landing sets bit (d6+$11) = bits 4/5,
-        // which does NOT match. So this mode only breaks on impact from below.
-        // ROM (loc_2A618): saves y_vel before solid check, restores on bottom hit,
-        // so the player's upward momentum carries them through the broken floor.
-        if (contact.touchBottom() && mode == Mode.BREAK_FROM_BELOW) {
-            player.setYSpeed((short) savedPreContactYSpeed);
-            player.setAir(true);
-            player.setOnObject(false);
-            performBreak(player);
-        }
-    }
-
-    // ===== Update =====
-
-    @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (broken) {
-            return; // Already broken, nothing to do
+            return;
         }
 
-        // Mode A (Break-from-below) handled entirely in onSolidContact above.
-        // Mode B (Roll-to-break) and Mode C (ICZ plane-switch) check rolling here.
         if (mode == Mode.BREAK_FROM_BELOW) {
-            // Reset per-frame contact flag
             playerStanding = false;
             return;
         }
 
-        // Mode B / Mode C: check if standing player is rolling
-        if (playerStanding && player != null) {
-            // ROM (loc_2A502/loc_2A6D4): checks anim == 2 (rolling animation).
-            // Use pre-contact rolling state since landing clears rolling via
-            // clearRollingOnLanding in the engine's contact resolution.
-            if (savedPreContactRolling) {
-                // Mode C (ICZ plane-switch): apply plane-switching collision bits
-                // ROM (loc_2A6D4): uses sub_1DDC6 which sets top_solid_bit and lrb_solid_bit
-                // based on subtype bits. Bit 4 of subtype selects secondary path (0x0E/0x0F).
-                if (mode == Mode.ICZ_PLANE_SWITCH) {
-                    applyPlaneSwitch(player);
-                }
-
-                // ROM (loc_2A578 / sub_1FBAE equivalent):
-                // Set player rolling, y_vel = -0x300, set airborne, detach from object
-                player.setRolling(true);
-                player.setYSpeed((short) ROLL_BREAK_LAUNCH_YVEL);
-                player.setAir(true);
-                player.setOnObject(false);
-
-                performBreak(player);
-                playerStanding = false;
-                return;
+        if (rollingBreakPlayer != null) {
+            int launchY = rollingBreakPlayer.getCentreY();
+            rollingBreakPlayer.setRolling(true);
+            // ROM sub_2A58E writes y_radius/x_radius/status directly and does
+            // not alter y_pos (sonic3k.asm:58542-58554). SolidObjectFull may
+            // have just restored standing dimensions, so the engine's visual
+            // height swap can otherwise move centre Y by five pixels.
+            NativePositionOps.writeYPosPreserveSubpixel(rollingBreakPlayer, launchY);
+            if (mode != Mode.ICZ_PLANE_SWITCH) {
+                rollingBreakPlayer.setYSpeed((short) ROLL_BREAK_LAUNCH_YVEL);
             }
+            rollingBreakPlayer.setAir(true);
+            rollingBreakPlayer.setOnObject(false);
+            dropOtherStandingRiders(standingRiders);
+
+            performBreak(rollingBreakPlayer);
+            playerStanding = false;
+            return;
         }
 
-        // Reset per-frame contact flag
         playerStanding = false;
     }
 
+    private void resolveLaterSlotLeftSiblingBeforeRollingLanding(AbstractPlayableSprite player) {
+        if (mode == Mode.BREAK_FROM_BELOW || player == null
+                || player.getAnimationId() != 2 || player.getYSpeed() < 0) {
+            return;
+        }
+        int playerBottom = player.getCentreY() + player.getYRadius();
+        int floorTop = y - config.halfHeight;
+        if (playerBottom < floorTop || playerBottom > y
+                || Math.abs(player.getCentreX() - x) > config.halfWidth + player.getXRadius()) {
+            return;
+        }
+        ObjectManager objectManager = getObjectManager();
+        if (objectManager == null) {
+            return;
+        }
+        for (CorkFloorObjectInstance sibling :
+                objectManager.activeObjectsOfType(CorkFloorObjectInstance.class)) {
+            if (sibling == this || sibling.broken || sibling.getSlotIndex() <= getSlotIndex()) {
+                continue;
+            }
+            // Adjacent CorkFloor placements are loaded left-to-right by the
+            // native object-position cursor. A helper-created right floor can
+            // occupy an earlier engine slot, reversing the two SolidObjectFull
+            // calls. Replay only the still-unexecuted adjacent left sibling so
+            // the seam-side push occurs before this floor launches the rider.
+            if (sibling.y == y && sibling.x + (config.halfWidth * 2) == x) {
+                objectManager.processImmediateInlineSolidCheckpoint(sibling, player, List.of());
+                return;
+            }
+        }
+    }
+
+    private List<PlayableEntity> participatingPlayers(PlayableEntity updatePlayer) {
+        List<PlayableEntity> participants = services().playerQuery().playersFor(PLAYER_PARTICIPATION);
+        if (updatePlayer == null || participants.contains(updatePlayer)) {
+            return participants;
+        }
+        ArrayList<PlayableEntity> withUpdatePlayer = new ArrayList<>(participants.size() + 1);
+        withUpdatePlayer.add(updatePlayer);
+        withUpdatePlayer.addAll(participants);
+        return withUpdatePlayer;
+    }
+
+    private void applyCheckpointContact(AbstractPlayableSprite player, PlayerSolidContactResult result,
+            List<AbstractPlayableSprite> standingRiders) {
+        if (player == null || result == null || broken || result.kind() == ContactKind.NONE) {
+            return;
+        }
+
+        savedPreContactYSpeed = result.preContact().ySpeed();
+        // ROM Obj_CorkFloor caches Player_1+anim / Player_2+anim before
+        // SolidObjectFull (sonic3k.asm:58493-58505) and breaks only when that
+        // cached byte is anim=$02 (sonic3k.asm:58515-58528, 58532-58540).
+        // Keep the per-frame decision per rider: the ROM stores P1/P2 cached
+        // animation bytes separately, so a later non-rolling sidekick contact
+        // must not erase the main player's roll-break checkpoint.
+        boolean preContactRollAnimation = result.preContact().animationId() == 2;
+        savedPreContactRolling |= preContactRollAnimation;
+
+        if (result.standingNow()) {
+            playerStanding = true;
+            if (!standingRiders.contains(player)) {
+                standingRiders.add(player);
+            }
+            if (preContactRollAnimation && canRollBreak(player) && rollingBreakPlayer == null) {
+                rollingBreakPlayer = player;
+            } else if (mode == Mode.ICZ_PLANE_SWITCH) {
+                applyPlaneSwitch(player);
+            }
+        }
+
+        if (mode == Mode.BREAK_FROM_BELOW && result.kind() == ContactKind.BOTTOM) {
+            player.setYSpeed((short) savedPreContactYSpeed);
+            performBreak(player);
+        }
+    }
+
     /**
-     * Applies ICZ plane-switching collision bits to the player.
-     * ROM (loc_2A6D4): sub_1DDC6 uses render_flags bit 0 (x_flip) to determine
-     * which collision path to assign. For ICZ cork floors, this switches the
-     * player between primary and secondary collision paths.
-     * <p>
-     * Primary path: top_solid_bit = 0x0C, lrb_solid_bit = 0x0D
-     * Secondary path: top_solid_bit = 0x0E, lrb_solid_bit = 0x0F
+     * ROM loc_2A542/loc_2A716: when BOTH riders are standing on the cork floor
+     * and either cached animation byte is $02, the break path runs sub_2A588
+     * (sub_2A7B0 for the ICZ sloped variant) once for Player_1 and once for
+     * Player_2 (sonic3k.asm:58527-58534, 58762-58769). The rider whose cached
+     * anim is not $02 falls straight through to loc_2A5AC / loc_2A7CE, which
+     * still sets Status_InAir, clears Status_OnObj and writes routine 2
+     * (sonic3k.asm:58566-58571, 58764-58768) — it just skips the roll, radii,
+     * anim and the -$300 y_vel launch. The engine previously only ever
+     * released the rolling breaker, so a standing non-rolling partner stayed
+     * grounded on a floor that no longer exists.
      */
+    private void dropOtherStandingRiders(List<AbstractPlayableSprite> standingRiders) {
+        for (AbstractPlayableSprite rider : standingRiders) {
+            if (rider == null || rider == rollingBreakPlayer) {
+                continue;
+            }
+            rider.setAir(true);
+            rider.setOnObject(false);
+        }
+    }
+
     private void applyPlaneSwitch(AbstractPlayableSprite player) {
-        // ROM: tst.b subtype(a0) / bmi.s loc_2A762 — check subtype bit 7 (MSB)
-        // If subtype MSB is set or player's top_solid_bit is already 0x0E,
-        // skip the path assignment. Otherwise assign primary path (0x0C/0x0D).
         if ((subtype & 0x80) != 0) {
-            // Subtype MSB set: use secondary path
             player.setTopSolidBit((byte) 0x0E);
             player.setLrbSolidBit((byte) 0x0F);
         } else {
-            // Default: assign primary path
             player.setTopSolidBit((byte) 0x0C);
             player.setLrbSolidBit((byte) 0x0D);
         }
     }
 
-    /**
-     * Breaks the cork floor: advances mapping frame, plays SFX, spawns fragments.
-     * ROM: loc_2A59C (shared break routine for all modes).
-     */
+    private boolean canRollBreak(AbstractPlayableSprite player) {
+        if (mode != Mode.ICZ_PLANE_SWITCH) {
+            return true;
+        }
+        return (subtype & 0x80) != 0 || (player.getTopSolidBit() & 0xFF) == 0x0E;
+    }
+
     private void performBreak(AbstractPlayableSprite player) {
         if (broken) {
             return;
         }
         broken = true;
 
-        // Advance mapping frame from intact to broken
-        // ROM: addq.b #1,mapping_frame(a0)
         int brokenFrame = mappingFrame + 1;
 
-        // Play collapse SFX
-        // ROM: move.w #sfx_Collapse,d0 / jsr (PlaySfx).l
         if (isOnScreen()) {
             try {
                 services().playSfx(Sonic3kSfx.COLLAPSE.id);
             } catch (Exception e) {
-                // Prevent audio failure from breaking game logic
+                // Ignore audio failures.
             }
         }
 
-        // Spawn fragment children from the broken mapping frame pieces
         spawnFragments(brokenFrame);
-
-        // Mark remembered so the cork floor doesn't respawn when player returns
         markRemembered();
 
-        // Release player from this object
         try {
             ObjectManager om = getObjectManager();
-            if (om != null) {
-                om.clearRidingObject(null);
+            if (om != null && player != null) {
+                om.clearRidingObject(player);
             }
         } catch (Exception e) {
-            // Safe fallback
+            // Safe fallback.
         }
     }
 
-    /**
-     * Spawns fragment children for each piece in the broken mapping frame.
-     * Each fragment gets velocity from the zone's velocity table.
-     * ROM: BreakObjectToPieces (sonic3k.asm:45772), uses per-zone velocity tables.
-     *
-     * @param brokenFrameIndex the broken mapping frame index to use for fragment rendering
-     */
     private void spawnFragments(int brokenFrameIndex) {
         ObjectRenderManager renderManager = getRenderManager();
         if (renderManager == null) {
@@ -432,7 +464,6 @@ public class CorkFloorObjectInstance extends AbstractObjectInstance
         for (int i = 0; i < maxFragments; i++) {
             int xVel = effectiveVelTable[i][0];
             int yVel = effectiveVelTable[i][1];
-
             CorkFloorFragment fragment = new CorkFloorFragment(
                     x, y, brokenFrameIndex, i, xVel, yVel, config.artKey, hFlip);
             spawnDynamicObject(fragment);
@@ -442,20 +473,16 @@ public class CorkFloorObjectInstance extends AbstractObjectInstance
     private void markRemembered() {
         try {
             ObjectManager om = getObjectManager();
-            if (om != null) {
-                om.markRemembered(spawn);
-            }
+            ObjectLifetimeOps.markSpawnRemembered(om, spawn);
         } catch (Exception e) {
-            // Safe fallback for test environments
+            // Safe fallback for tests.
         }
     }
-
-    // ===== Rendering =====
 
     @Override
     public void appendRenderCommands(List<GLCommand> commands) {
         if (broken) {
-            return; // Fragments handle their own rendering
+            return;
         }
 
         ObjectRenderManager renderManager = getRenderManager();
@@ -484,10 +511,6 @@ public class CorkFloorObjectInstance extends AbstractObjectInstance
         return RenderPriority.clamp(PRIORITY);
     }
 
-    // ===== Helpers =====
-
-    // Uses inherited getRenderManager() from AbstractObjectInstance
-
     private ObjectManager getObjectManager() {
         try {
             return services().objectManager();
@@ -496,10 +519,10 @@ public class CorkFloorObjectInstance extends AbstractObjectInstance
         }
     }
 
-    /**
-     * Resolves zone configuration based on current level.
-     * ROM: Obj_CorkFloor uses a zone-indexed jump table (sonic3k.asm:58420).
-     */
+    protected SolidCheckpointBatch checkpointAll() {
+        return services().solidExecution().resolveSolidNowAll();
+    }
+
     private ZoneConfig resolveConfig(int subtype) {
         try {
             int zone = services().romZoneId();
@@ -509,8 +532,7 @@ public class CorkFloorObjectInstance extends AbstractObjectInstance
                 case Sonic3kZoneIds.ZONE_CNZ -> CNZ_CONFIG;
                 case Sonic3kZoneIds.ZONE_FBZ -> FBZ_CONFIG;
                 case Sonic3kZoneIds.ZONE_ICZ ->
-                    // ROM: btst #4,subtype(a0) selects between two ICZ variants
-                    (subtype & 0x10) != 0 ? ICZ_SMALL_CONFIG : ICZ_CONFIG;
+                        (subtype & 0x10) != 0 ? ICZ_SMALL_CONFIG : ICZ_CONFIG;
                 case Sonic3kZoneIds.ZONE_LBZ -> LBZ_CONFIG;
                 default -> {
                     LOG.warning("CorkFloor: unknown zone 0x" + Integer.toHexString(zone)
@@ -521,30 +543,17 @@ public class CorkFloorObjectInstance extends AbstractObjectInstance
         } catch (Exception e) {
             LOG.fine("Could not resolve zone config: " + e.getMessage());
         }
-        return AIZ1_CONFIG; // fallback
+        return AIZ1_CONFIG;
     }
 
-    // ===================================================================
-    // Fragment inner class
-    // ===================================================================
-
-    /**
-     * Fragment object spawned when the cork floor breaks apart.
-     * Each fragment renders a single piece from the broken mapping frame and
-     * flies off with an initial velocity, then falls with gravity until offscreen.
-     * <p>
-     * ROM: BreakObjectToPieces creates these fragments. Gravity = 0x18 subpixels/frame
-     * (standard S3K fragment gravity from MoveSprite).
-     */
-    public static class CorkFloorFragment extends AbstractObjectInstance {
+    public static class CorkFloorFragment extends AbstractObjectInstance implements RewindRecreatable {
 
         private int currentX;
         private int currentY;
-        private final int fragmentFrameIndex;
-        private final int pieceIndex;
-        private final String artKey;
-        private final boolean hFlip;
-
+        private int fragmentFrameIndex;
+        private int pieceIndex;
+        private String artKey;
+        private boolean hFlip;
         private final SubpixelMotion.State motionState;
 
         public CorkFloorFragment(int parentX, int parentY,
@@ -563,6 +572,27 @@ public class CorkFloorObjectInstance extends AbstractObjectInstance
                     currentX, currentY, 0, 0, xVel, yVel);
         }
 
+        private CorkFloorFragment() {
+            this(0, 0, 0, 0, 0, 0, Sonic3kObjectArtKeys.CORK_FLOOR_AIZ1, false);
+        }
+
+        @Override
+        public CorkFloorFragment recreateForRewind(RewindRecreateContext ctx) {
+            ObjectSpawn capturedSpawn = ctx.spawn();
+            int x = capturedSpawn != null ? capturedSpawn.x() : 0;
+            int y = capturedSpawn != null ? capturedSpawn.y() : 0;
+            boolean capturedHFlip = capturedSpawn != null && (capturedSpawn.renderFlags() & 1) != 0;
+            return new CorkFloorFragment(
+                    x,
+                    y,
+                    0,
+                    0,
+                    0,
+                    0,
+                    Sonic3kObjectArtKeys.CORK_FLOOR_AIZ1,
+                    capturedHFlip);
+        }
+
         @Override
         public int getX() {
             return currentX;
@@ -574,16 +604,13 @@ public class CorkFloorObjectInstance extends AbstractObjectInstance
         }
 
         @Override
-        public void update(int frameCounter, PlayableEntity playerEntity) {
-            AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-            // Apply velocity with gravity using SubpixelMotion
+        public void update(int vIntRunCount, PlayableEntity playerEntity) {
             motionState.x = currentX;
             motionState.y = currentY;
             SubpixelMotion.moveSprite(motionState, FRAGMENT_GRAVITY);
             currentX = motionState.x;
             currentY = motionState.y;
 
-            // Destroy when offscreen
             if (!isOnScreen(128)) {
                 setDestroyed(true);
             }

@@ -1,18 +1,15 @@
 package com.openggf.tests;
-
-import org.junit.Rule;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import com.openggf.data.Rom;
 import com.openggf.game.sonic2.constants.Sonic2Constants;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
 
 import java.io.IOException;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * TODO #2 coverage: Sonic2Level.loadChunks() comment "TODO both collision addresses".
@@ -28,9 +25,6 @@ import static org.junit.Assert.assertTrue;
  */
 @RequiresRom(SonicGame.SONIC_2)
 public class TestTodo2_DualCollisionAddresses {
-    @Rule
-    public RequiresRomRule romRule = new RequiresRomRule();
-
     // ROM zone IDs from s2.constants.asm
     private static final int ROM_ZONE_EHZ = 0x00;
     private static final int ROM_ZONE_HTZ = 0x07;
@@ -60,12 +54,12 @@ public class TestTodo2_DualCollisionAddresses {
      */
     @Test
     public void testEhzHasDualCollisionPaths() throws IOException {
-        Rom rom = romRule.rom();
+        Rom rom = com.openggf.tests.TestEnvironment.currentRom();
         int primary = readPrimaryCollisionAddr(rom, ROM_ZONE_EHZ);
         int secondary = readSecondaryCollisionAddr(rom, ROM_ZONE_EHZ);
-        assertTrue("EHZ primary collision addr should be valid", primary > 0);
-        assertTrue("EHZ secondary collision addr should be valid", secondary > 0);
-        assertNotEquals("EHZ should have different primary and secondary collision", primary, secondary);
+        assertTrue(primary > 0, "EHZ primary collision addr should be valid");
+        assertTrue(secondary > 0, "EHZ secondary collision addr should be valid");
+        assertNotEquals(primary, secondary, "EHZ should have different primary and secondary collision");
     }
 
     /**
@@ -74,13 +68,9 @@ public class TestTodo2_DualCollisionAddresses {
      */
     @Test
     public void testHtzSharesCollisionWithEhz() throws IOException {
-        Rom rom = romRule.rom();
-        assertEquals("HTZ primary should match EHZ primary",
-                readPrimaryCollisionAddr(rom, ROM_ZONE_EHZ),
-                readPrimaryCollisionAddr(rom, ROM_ZONE_HTZ));
-        assertEquals("HTZ secondary should match EHZ secondary",
-                readSecondaryCollisionAddr(rom, ROM_ZONE_EHZ),
-                readSecondaryCollisionAddr(rom, ROM_ZONE_HTZ));
+        Rom rom = com.openggf.tests.TestEnvironment.currentRom();
+        assertEquals(readPrimaryCollisionAddr(rom, ROM_ZONE_EHZ), readPrimaryCollisionAddr(rom, ROM_ZONE_HTZ), "HTZ primary should match EHZ primary");
+        assertEquals(readSecondaryCollisionAddr(rom, ROM_ZONE_EHZ), readSecondaryCollisionAddr(rom, ROM_ZONE_HTZ), "HTZ secondary should match EHZ secondary");
     }
 
     /**
@@ -89,10 +79,10 @@ public class TestTodo2_DualCollisionAddresses {
      */
     @Test
     public void testCnzHasDualCollisionPaths() throws IOException {
-        Rom rom = romRule.rom();
+        Rom rom = com.openggf.tests.TestEnvironment.currentRom();
         int primary = readPrimaryCollisionAddr(rom, ROM_ZONE_CNZ);
         int secondary = readSecondaryCollisionAddr(rom, ROM_ZONE_CNZ);
-        assertNotEquals("CNZ should have different primary and secondary collision", primary, secondary);
+        assertNotEquals(primary, secondary, "CNZ should have different primary and secondary collision");
     }
 
     /**
@@ -101,10 +91,10 @@ public class TestTodo2_DualCollisionAddresses {
      */
     @Test
     public void testCpzHasDualCollisionPaths() throws IOException {
-        Rom rom = romRule.rom();
+        Rom rom = com.openggf.tests.TestEnvironment.currentRom();
         int primary = readPrimaryCollisionAddr(rom, ROM_ZONE_CPZ);
         int secondary = readSecondaryCollisionAddr(rom, ROM_ZONE_CPZ);
-        assertNotEquals("CPZ should have different primary and secondary collision", primary, secondary);
+        assertNotEquals(primary, secondary, "CPZ should have different primary and secondary collision");
     }
 
     /**
@@ -113,10 +103,10 @@ public class TestTodo2_DualCollisionAddresses {
      */
     @Test
     public void testArzHasDualCollisionPaths() throws IOException {
-        Rom rom = romRule.rom();
+        Rom rom = com.openggf.tests.TestEnvironment.currentRom();
         int primary = readPrimaryCollisionAddr(rom, ROM_ZONE_ARZ);
         int secondary = readSecondaryCollisionAddr(rom, ROM_ZONE_ARZ);
-        assertNotEquals("ARZ should have different primary and secondary collision", primary, secondary);
+        assertNotEquals(primary, secondary, "ARZ should have different primary and secondary collision");
     }
 
     /**
@@ -125,13 +115,9 @@ public class TestTodo2_DualCollisionAddresses {
      */
     @Test
     public void testWfzSharesCollisionWithScz() throws IOException {
-        Rom rom = romRule.rom();
-        assertEquals("WFZ primary should match SCZ primary",
-                readPrimaryCollisionAddr(rom, ROM_ZONE_WFZ),
-                readPrimaryCollisionAddr(rom, ROM_ZONE_SCZ));
-        assertEquals("WFZ secondary should match SCZ secondary",
-                readSecondaryCollisionAddr(rom, ROM_ZONE_WFZ),
-                readSecondaryCollisionAddr(rom, ROM_ZONE_SCZ));
+        Rom rom = com.openggf.tests.TestEnvironment.currentRom();
+        assertEquals(readPrimaryCollisionAddr(rom, ROM_ZONE_WFZ), readPrimaryCollisionAddr(rom, ROM_ZONE_SCZ), "WFZ primary should match SCZ primary");
+        assertEquals(readSecondaryCollisionAddr(rom, ROM_ZONE_WFZ), readSecondaryCollisionAddr(rom, ROM_ZONE_SCZ), "WFZ secondary should match SCZ secondary");
     }
 
     /**
@@ -140,12 +126,10 @@ public class TestTodo2_DualCollisionAddresses {
      */
     @Test
     public void testHtzCollisionMatchesConstants() throws IOException {
-        Rom rom = romRule.rom();
-        assertEquals("HTZ primary collision should match constant",
-                Sonic2Constants.HTZ_COLLISION_PRIMARY_ADDR,
-                readPrimaryCollisionAddr(rom, ROM_ZONE_HTZ));
-        assertEquals("HTZ secondary collision should match constant",
-                Sonic2Constants.HTZ_COLLISION_SECONDARY_ADDR,
-                readSecondaryCollisionAddr(rom, ROM_ZONE_HTZ));
+        Rom rom = com.openggf.tests.TestEnvironment.currentRom();
+        assertEquals(Sonic2Constants.HTZ_COLLISION_PRIMARY_ADDR, readPrimaryCollisionAddr(rom, ROM_ZONE_HTZ), "HTZ primary collision should match constant");
+        assertEquals(Sonic2Constants.HTZ_COLLISION_SECONDARY_ADDR, readSecondaryCollisionAddr(rom, ROM_ZONE_HTZ), "HTZ secondary collision should match constant");
     }
 }
+
+

@@ -1,6 +1,8 @@
 package com.openggf.game.sonic3k;
 
 import com.openggf.data.RomByteReader;
+import com.openggf.game.palette.PaletteOwnershipRegistry;
+import com.openggf.game.palette.PaletteSurface;
 import com.openggf.level.Level;
 import com.openggf.level.Palette;
 import com.openggf.level.Pattern;
@@ -12,22 +14,22 @@ import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.rings.RingSpawn;
 import com.openggf.level.rings.RingSpriteSheet;
 import com.openggf.graphics.GraphicsManager;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.List;
 
 import static com.openggf.game.sonic3k.constants.Sonic3kZoneIds.ZONE_BPZ;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Tests for BPZ (Balloon Park Zone) palette cycling.
  *
  * <p>Verifies that the two independent palette channels cycle correctly:
  * <ul>
- *   <li>Channel 1 (Balloons): timer period 8, step +6, wraps at 0x12 → palette[2] colors 13-15</li>
- *   <li>Channel 2 (Background): timer period 18, step +6, wraps at 0x7E → palette[3] colors 2-4</li>
+ *   <li>Channel 1 (Balloons): timer period 8, step +6, wraps at 0x12 â†’ palette[2] colors 13-15</li>
+ *   <li>Channel 2 (Background): timer period 18, step +6, wraps at 0x7E â†’ palette[3] colors 2-4</li>
  * </ul>
  *
  * <p>Uses hardcoded data matching AnPal_PalBPZ_1/2 from ROM (verified at 0x0034CC / 0x0034DE).
@@ -35,7 +37,7 @@ import static org.junit.Assert.*;
  */
 public class TestS3kBpzPaletteCycling {
 
-    // AnPal_PalBPZ_1: 18 bytes (3 frames x 6 bytes) — verified at ROM 0x0034CC
+    // AnPal_PalBPZ_1: 18 bytes (3 frames x 6 bytes) â€” verified at ROM 0x0034CC
     // dc.w $EE, $AE, $6C / dc.w $AE, $6E, $EE / dc.w $6E, $EE, $AE
     private static final byte[] BPZ_1_DATA = {
         0x00, (byte)0xEE, 0x00, (byte)0xAE, 0x00, 0x6C,
@@ -43,7 +45,7 @@ public class TestS3kBpzPaletteCycling {
         0x00, 0x6E, 0x00, (byte)0xEE, 0x00, (byte)0xAE
     };
 
-    // AnPal_PalBPZ_2: 126 bytes (21 frames x 6 bytes) — verified at ROM 0x0034DE
+    // AnPal_PalBPZ_2: 126 bytes (21 frames x 6 bytes) â€” verified at ROM 0x0034DE
     // dc.w $EE0, $E0E, $EE  (first frame)
     // dc.w $EA0, $A0E, $EA  (second frame)
     // ... 19 more frames
@@ -74,7 +76,7 @@ public class TestS3kBpzPaletteCycling {
     private StubLevel level;
     private Sonic3kPaletteCycler cycler;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         GraphicsManager.getInstance().resetState();
         level = new StubLevel(4);
@@ -89,7 +91,7 @@ public class TestS3kBpzPaletteCycling {
         cycler = new Sonic3kPaletteCycler(reader, level, ZONE_BPZ, 0);
     }
 
-    // ========== Channel 1 (Balloons → palette[2], colors 13-15) ==========
+    // ========== Channel 1 (Balloons â†’ palette[2], colors 13-15) ==========
 
     @Test
     public void balloonsChannel1FiresOnFirstFrame() {
@@ -100,13 +102,12 @@ public class TestS3kBpzPaletteCycling {
 
         Palette.Color color13After = level.getPalette(2).getColor(13);
         // After first tick, color should be set from BPZ_1_DATA[0..1] = {0x00, 0xEE}
-        assertFalse("Color 13 in palette[2] should change after first tick",
-                colorsEqual(color13Before, color13After));
+        assertFalse(colorsEqual(color13Before, color13After), "Color 13 in palette[2] should change after first tick");
     }
 
     @Test
     public void balloonsChannel1AdvancesThreeFrames() {
-        // Tick once — fires at frame 0, counter0 = 0 → 6
+        // Tick once â€” fires at frame 0, counter0 = 0 â†’ 6
         cycler.update();
         Palette.Color frame0Color = copyColor(level.getPalette(2).getColor(13));
 
@@ -116,34 +117,33 @@ public class TestS3kBpzPaletteCycling {
         }
         Palette.Color frame1Color = copyColor(level.getPalette(2).getColor(13));
 
-        // counter0 should now be 6 → 12, colors should be from frame 1
-        assertFalse("Color 13 should change between frames", colorsEqual(frame0Color, frame1Color));
+        // counter0 should now be 6 â†’ 12, colors should be from frame 1
+        assertFalse(colorsEqual(frame0Color, frame1Color), "Color 13 should change between frames");
     }
 
     @Test
     public void balloonsChannel1WrapsAfterThreeFrames() {
         // The BPZ_1 table has 3 frames (counter0 steps 0, 6, 12, then wraps to 0)
-        // Fire frame 0: counter0 = 0 → 6
+        // Fire frame 0: counter0 = 0 â†’ 6
         cycler.update();
         Palette.Color frameAColor = copyColor(level.getPalette(2).getColor(13));
 
-        // Fire frame 1: counter0 = 6 → 12 (8 ticks later)
+        // Fire frame 1: counter0 = 6 â†’ 12 (8 ticks later)
         for (int i = 0; i < 8; i++) {
             cycler.update();
         }
-        // Fire frame 2: counter0 = 12 → 0 (wrap) (8 ticks later)
+        // Fire frame 2: counter0 = 12 â†’ 0 (wrap) (8 ticks later)
         for (int i = 0; i < 8; i++) {
             cycler.update();
         }
-        // Fire frame 0 again: counter0 = 0 → 6 (8 ticks later)
+        // Fire frame 0 again: counter0 = 0 â†’ 6 (8 ticks later)
         for (int i = 0; i < 8; i++) {
             cycler.update();
         }
         Palette.Color frameAColorAgain = copyColor(level.getPalette(2).getColor(13));
 
         // After 3 full cycles, should be back to frame 0 colors
-        assertTrue("Color 13 should wrap back to frame 0 after 3 cycles",
-                colorsEqual(frameAColor, frameAColorAgain));
+        assertTrue(colorsEqual(frameAColor, frameAColorAgain), "Color 13 should wrap back to frame 0 after 3 cycles");
     }
 
     @Test
@@ -159,7 +159,7 @@ public class TestS3kBpzPaletteCycling {
         assertNonZeroColor("palette[2] color 15", pal2.getColor(15));
     }
 
-    // ========== Channel 2 (Background → palette[3], colors 2-4) ==========
+    // ========== Channel 2 (Background â†’ palette[3], colors 2-4) ==========
 
     @Test
     public void backgroundChannel2FiresOnFirstFrame() {
@@ -169,8 +169,7 @@ public class TestS3kBpzPaletteCycling {
         cycler.update();
 
         Palette.Color color2After = level.getPalette(3).getColor(2);
-        assertFalse("Color 2 in palette[3] should change after first tick",
-                colorsEqual(color2Before, color2After));
+        assertFalse(colorsEqual(color2Before, color2After), "Color 2 in palette[3] should change after first tick");
     }
 
     @Test
@@ -193,7 +192,7 @@ public class TestS3kBpzPaletteCycling {
 
         Palette.Color ch2ColorAfterFrame0 = copyColor(level.getPalette(3).getColor(2));
 
-        // Tick 8 more frames — channel 1 (timer 7) fires, channel 2 (timer 0x11=17) does not
+        // Tick 8 more frames â€” channel 1 (timer 7) fires, channel 2 (timer 0x11=17) does not
         for (int i = 0; i < 8; i++) {
             cycler.update();
         }
@@ -201,14 +200,13 @@ public class TestS3kBpzPaletteCycling {
         Palette.Color ch2ColorAfter8More = copyColor(level.getPalette(3).getColor(2));
 
         // Channel 2 should not have changed during these 8 frames (timer=17, only decremented 8 times)
-        assertTrue("Channel 2 should not advance during channel 1's 8-frame timer",
-                colorsEqual(ch2ColorAfterFrame0, ch2ColorAfter8More));
+        assertTrue(colorsEqual(ch2ColorAfterFrame0, ch2ColorAfter8More), "Channel 2 should not advance during channel 1's 8-frame timer");
     }
 
     @Test
     public void backgroundChannel2AdvancesAfter18Frames() {
         // Channel 2 timer = 0x11 = 17; fires on frame 0, then 18 frames later
-        cycler.update(); // Frame 0: fires (timer → 17)
+        cycler.update(); // Frame 0: fires (timer â†’ 17)
         Palette.Color ch2Frame0 = copyColor(level.getPalette(3).getColor(2));
 
         for (int i = 0; i < 18; i++) {
@@ -216,7 +214,7 @@ public class TestS3kBpzPaletteCycling {
         }
         Palette.Color ch2Frame1 = copyColor(level.getPalette(3).getColor(2));
 
-        assertFalse("Channel 2 color should advance after 18 frames", colorsEqual(ch2Frame0, ch2Frame1));
+        assertFalse(colorsEqual(ch2Frame0, ch2Frame1), "Channel 2 color should advance after 18 frames");
     }
 
     @Test
@@ -228,10 +226,8 @@ public class TestS3kBpzPaletteCycling {
 
         // Colors 0, 1 of palette[3] should remain zero (cycler never writes them)
         Palette pal3 = level.getPalette(3);
-        assertTrue("palette[3] color 0 should remain zero",
-                colorsEqual(new Palette.Color(), pal3.getColor(0)));
-        assertTrue("palette[3] color 1 should remain zero",
-                colorsEqual(new Palette.Color(), pal3.getColor(1)));
+        assertTrue(colorsEqual(new Palette.Color(), pal3.getColor(0)), "palette[3] color 0 should remain zero");
+        assertTrue(colorsEqual(new Palette.Color(), pal3.getColor(1)), "palette[3] color 1 should remain zero");
     }
 
     @Test
@@ -241,8 +237,7 @@ public class TestS3kBpzPaletteCycling {
 
         Palette pal2 = level.getPalette(2);
         for (int c = 0; c <= 12; c++) {
-            assertTrue("palette[2] color " + c + " should remain zero (not written by any channel)",
-                    colorsEqual(new Palette.Color(), pal2.getColor(c)));
+            assertTrue(colorsEqual(new Palette.Color(), pal2.getColor(c)), "palette[2] color " + c + " should remain zero (not written by any channel)");
         }
     }
 
@@ -255,7 +250,36 @@ public class TestS3kBpzPaletteCycling {
         assertNonZeroColor("palette[2] color 13 after 60 frames", level.getPalette(2).getColor(13));
     }
 
+    @Test
+    public void bpzCycleSubmitsPaletteOwnershipClaims() {
+        PaletteOwnershipRegistry registry = new PaletteOwnershipRegistry();
+        StubLevel ownedLevel = new StubLevel(4);
+        Sonic3kPaletteCycler ownedCycler = new Sonic3kPaletteCycler(
+                readerWithBpzData(), ownedLevel, ZONE_BPZ, 0, registry, null);
+
+        registry.beginFrame();
+        ownedCycler.update();
+        registry.resolveInto(ownedLevel.palettes(), null, null, null);
+
+        for (int c = 13; c <= 15; c++) {
+            assertEquals(S3kPaletteOwners.BPZ_ZONE_CYCLE, registry.ownerAt(PaletteSurface.NORMAL, 2, c));
+        }
+        for (int c = 2; c <= 4; c++) {
+            assertEquals(S3kPaletteOwners.BPZ_ZONE_CYCLE, registry.ownerAt(PaletteSurface.NORMAL, 3, c));
+        }
+        assertNonZeroColor("owned BPZ palette[2] color 13", ownedLevel.getPalette(2).getColor(13));
+        assertNonZeroColor("owned BPZ palette[3] color 2", ownedLevel.getPalette(3).getColor(2));
+    }
+
     // ========== Helpers ==========
+
+    private static RomByteReader readerWithBpzData() {
+        int romSize = 0x0034DE + BPZ_2_DATA.length + 16;
+        byte[] romBytes = new byte[romSize];
+        System.arraycopy(BPZ_1_DATA, 0, romBytes, 0x0034CC, BPZ_1_DATA.length);
+        System.arraycopy(BPZ_2_DATA, 0, romBytes, 0x0034DE, BPZ_2_DATA.length);
+        return new RomByteReader(romBytes);
+    }
 
     private static Palette.Color copyColor(Palette.Color src) {
         return new Palette.Color(src.r, src.g, src.b);
@@ -266,8 +290,7 @@ public class TestS3kBpzPaletteCycling {
     }
 
     private static void assertNonZeroColor(String desc, Palette.Color color) {
-        assertFalse(desc + " should not be zero (0,0,0)",
-                (color.r == 0 && color.g == 0 && color.b == 0));
+        assertFalse((color.r == 0 && color.g == 0 && color.b == 0), desc + " should not be zero (0,0,0)");
     }
 
     // ========== Stub Level ==========
@@ -280,6 +303,10 @@ public class TestS3kBpzPaletteCycling {
             for (int i = 0; i < paletteCount; i++) {
                 palettes[i] = new Palette();
             }
+        }
+
+        Palette[] palettes() {
+            return palettes;
         }
 
         @Override
@@ -377,3 +404,5 @@ public class TestS3kBpzPaletteCycling {
         }
     }
 }
+
+

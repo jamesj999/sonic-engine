@@ -1,0 +1,19 @@
+{
+  "game": "s2",
+  "trace_profile": "s2_special_stage",
+  "special_stage_index": 2,
+  "aux_schema_extras": ["dynamic_art_transfer_state_per_frame"],
+  "characters": ["sonic", "tails"],
+  "main_character": "sonic",
+  "sidekicks": ["tails"],
+  "bk2_frame_offset": 24207,
+  "trace_frame_count": 7092,
+  "source_bk2": "sonic-2-sonic-tails-complete-emeralds.bk2",
+  "recorder": "native-bizhawk-headless",
+  "recorder_version": "3.0",
+  "trace_schema": 5,
+  "recording_date": "2026-08-19",
+  "run_id": "s2-sonic-tails-complete-emeralds",
+  "fresh_load": false,
+  "segment_index": 5
+}

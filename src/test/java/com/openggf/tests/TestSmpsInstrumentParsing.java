@@ -1,7 +1,7 @@
 package com.openggf.tests;
 import com.openggf.game.sonic2.audio.Sonic2SmpsSequencerConfig;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import com.openggf.audio.smps.DacData;
 import com.openggf.audio.smps.SmpsSequencer;
 import com.openggf.game.sonic2.audio.smps.Sonic2SmpsData;
@@ -11,28 +11,13 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TestSmpsInstrumentParsing {
 
     static class MockSynthesizer extends VirtualSynthesizer {
-        boolean setInstrumentCalled = false;
-        int lastChannelId = -1;
-        byte[] lastVoice = null;
-
-        List<String> writeLog = new ArrayList<>();
-
-        @Override
-        public void setInstrument(Object source, int channelId, byte[] voice) {
-            this.setInstrumentCalled = true;
-            this.lastChannelId = channelId;
-            // Copy voice to avoid mutation issues if any
-            this.lastVoice = new byte[voice.length];
-            System.arraycopy(voice, 0, this.lastVoice, 0, voice.length);
-            super.setInstrument(source, channelId, voice);
-        }
+        final List<String> writeLog = new ArrayList<>();
 
         @Override
         public void writeFm(Object source, int port, int reg, int val) {
@@ -96,17 +81,18 @@ public class TestSmpsInstrumentParsing {
         SmpsSequencer seq = new SmpsSequencer(smps, dac, synth, Sonic2SmpsSequencerConfig.CONFIG);
 
         short[] buf = new short[2000];
-        seq.read(buf);
+        seq.advanceSamples(buf.length);
 
-        // 1. Verify setInstrument received raw data in Slot Order (1,3,2,4)
-        assertTrue("setInstrument should be called", synth.setInstrumentCalled);
-        assertEquals("Channel ID should be 0 (FM1)", 0, synth.lastChannelId);
-
+        // 1. Verify the data source preserves the raw S2 register-order voice.
         byte[] expectedVoice = new byte[25];
         System.arraycopy(data, v, expectedVoice, 0, 25);
+        assertArrayEquals(expectedVoice, smps.getVoice(0), "S2 voice data should remain in driver register order");
 
-        assertArrayEquals("Voice data should be passed exactly as read (Slot Order)",
-                expectedVoice, synth.lastVoice);
+        // The sequencer must issue the shipped zSetVoice register mapping itself.
+        assertTrue(synth.writeLog.contains("P0_R30_V0B"), "voice[1] should reach register 30");
+        assertTrue(synth.writeLog.contains("P0_R34_V0C"), "voice[2] should reach register 34");
+        assertTrue(synth.writeLog.contains("P0_R38_V0D"), "voice[3] should reach register 38");
+        assertTrue(synth.writeLog.contains("P0_R3C_V0E"), "voice[4] should reach register 3C");
 
         // 2. Verify SND_OFF (F9) writes
         // Should write 0x0F to 0x88 (Op2) and 0x8C (Op4) on Port 0 (FM1 is ch 0, port 0)
@@ -121,7 +107,7 @@ public class TestSmpsInstrumentParsing {
             if (log.equals("P0_R8C_V0F")) found8C = true;
         }
 
-        assertTrue("Should write 0x0F to 0x88 (Op2)", found88);
-        assertTrue("Should write 0x0F to 0x8C (Op4)", found8C);
+        assertTrue(found88, "Should write 0x0F to 0x88 (Op2)");
+        assertTrue(found8C, "Should write 0x0F to 0x8C (Op4)");
     }
 }

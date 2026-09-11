@@ -10,6 +10,10 @@ import com.openggf.game.sonic2.constants.Sonic2ObjectIds;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.ObjectInstance;
+import com.openggf.level.objects.ObjectConstructionContext;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.boss.AbstractBossChild;
 import com.openggf.level.objects.boss.AbstractBossInstance;
 import com.openggf.level.render.PatternSpriteRenderer;
@@ -18,6 +22,7 @@ import com.openggf.physics.TerrainCheckResult;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
 import java.util.List;
+import java.util.function.Supplier;
 
 /**
  * DEZ Silver Sonic / Mecha Sonic (Object 0xAF).
@@ -39,7 +44,7 @@ import java.util.List;
  * it only in specific routines/phases: idle (routine 8 at loc_3986A) and
  * specific attack sub-phases. Descent (routine 6) does not animate at all.
  */
-public class Sonic2MechaSonicInstance extends AbstractBossInstance {
+public class Sonic2MechaSonicInstance extends AbstractBossInstance implements RewindRecreatable {
 
     // State machine routine constants
     private static final int ROUTINE_INIT = 0x00;
@@ -124,7 +129,20 @@ public class Sonic2MechaSonicInstance extends AbstractBossInstance {
     private static final int[] ANIM_1_CROUCH = {3};
     // Anim 2: dash start (speed 3, stall) — used in Dash Across second half
     private static final int[] ANIM_2_DASH = {4, 5, 4, 3};
-    // Anim 3: speed-up ball form (speed 3, stall) — aim phase wind-up
+    // Anim 3: speed-up ball form (speed 3, stall) — aim phase wind-up.
+    // ROM byte_39DFE (s2.asm:78141-78142):
+    //   dc.b 3, 3,3, 6,6,6, 7,7,7, 8,8,8, 6,6, 7,7, 8,8, 6,7,8, $FC
+    // byte[0]=$3 is the animation SPEED (held separately in ANIM_SPEEDS[3]), NOT a
+    // displayed frame. The displayed-frame list is the 20 bytes after it (two leading
+    // standing "3" frames, then the ball/spin frames). A prior change mis-counted the
+    // speed byte as a third leading "3" (21 displayed frames). AnimateSprite_Checked
+    // holds each frame for speed+1 (=4) game frames, so the spurious frame stretched
+    // the Aim&Dash wind-up (loc_39A1C) by 4 frames every attack cycle; by the second
+    // DEZ Mecha Sonic attack the boss body lagged ROM by ~0x1F px and the rolling
+    // player's boss-hit overlap registered ~4 frames late, so the ROM deflection
+    // (neg.w x_vel / neg.w y_vel, Touch_Enemy multi_sprite branch s2.asm:85261-85276)
+    // never fired at trace frame 1023. loc_39D24 gates ball vs standing collision on
+    // mapping_frame (s2.asm:78017-78039).
     private static final int[] ANIM_3_SPEEDUP = {3, 3, 6, 6, 6, 7, 7, 7, 8, 8, 8, 6, 6, 7, 7, 8, 8, 6, 7, 8};
     // Anim 4: spin loop (speed 2, loop) — continuous ball spin during dash
     private static final int[] ANIM_4_SPIN = {6, 7, 8};
@@ -152,7 +170,6 @@ public class Sonic2MechaSonicInstance extends AbstractBossInstance {
             {0x18, 0x00, 0x300, 0x000, 0x15},
             {0x10, -0x10, 0x200, -0x200, 0x16}
     };
-
     // Internal state
     private int actionTimer;
     private int attackIndex;
@@ -161,6 +178,16 @@ public class Sonic2MechaSonicInstance extends AbstractBossInstance {
     private int dashRepeatCount;
     private int defeatTimer;
     private int currentFrame;
+    /**
+     * ROM loc_398C0 (s2.asm:77570-77584) calls loc_39D1C to refresh collision_flags
+     * from mapping_frame BEFORE the routine handler runs AnimateSprite_Checked (which
+     * mutates mapping_frame). collision_flags therefore reflects the PREVIOUS frame's
+     * mapping_frame -- a 1-frame lag between the displayed frame and the touch
+     * response category (loc_39D24, s2.asm:78017-78039: $1A standing vs $9A ball).
+     * We mirror that lag by latching the collision-relevant frame at the start of each
+     * boss update from the prior frame's currentFrame.
+     */
+    private int collisionFrame = FRAME_STAND;
     private boolean facingLeft;
     private boolean ballForm;
     private boolean spikeballsFired;
@@ -185,6 +212,13 @@ public class Sonic2MechaSonicInstance extends AbstractBossInstance {
     }
 
     @Override
+    public Sonic2MechaSonicInstance recreateForRewind(RewindRecreateContext ctx) {
+        return ObjectConstructionContext.construct(
+                ctx.objectServices(),
+                () -> new Sonic2MechaSonicInstance(ctx.spawn()));
+    }
+
+    @Override
     protected void initializeBossState() {
         state.routine = ROUTINE_INIT;
         state.routineSecondary = 0;
@@ -204,39 +238,40 @@ public class Sonic2MechaSonicInstance extends AbstractBossInstance {
         animTerminatorReached = false;
 
         state.routine = ROUTINE_WAIT_CAMERA;
-        spawnChildObjects();
+        if (getSpawn().objectId() == Sonic2ObjectIds.MECHA_SONIC) {
+            spawnChildObjects();
+        }
     }
 
     private void spawnChildObjects() {
-        var objectManager = services().objectManager();
-        if (objectManager == null) {
-            return;
-        }
-        ledWindow = new MechaSonicLEDWindow(this);
-        childComponents.add(ledWindow);
-        objectManager.addDynamicObject(ledWindow);
+        ledWindow = spawnTrackedFreeChild(() -> new MechaSonicLEDWindow(this));
+        targetingSensor = spawnTrackedFreeChild(() -> new MechaSonicTargetingSensor(this));
+        dezWindow = spawnTrackedFreeChild(() -> new MechaSonicDEZWindow(this));
+    }
 
-        targetingSensor = new MechaSonicTargetingSensor(this);
-        childComponents.add(targetingSensor);
-        objectManager.addDynamicObject(targetingSensor);
-
-        dezWindow = new MechaSonicDEZWindow(this);
-        childComponents.add(dezWindow);
-        objectManager.addDynamicObject(dezWindow);
+    private <T extends AbstractBossChild> T spawnTrackedFreeChild(Supplier<T> factory) {
+        T child = spawnFreeChild(factory);
+        childComponents.add(child);
+        return child;
     }
 
     @Override
-    protected void updateBossLogic(int frameCounter, PlayableEntity playerEntity) {
+    protected void updateBossLogic(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
+        // ROM loc_39D1C (s2.asm:78013-78039) runs at the top of the main routine,
+        // BEFORE the per-routine handler animates the sprite. Latch the collision
+        // frame from the value mapping_frame held going into this update so the touch
+        // response category lags the displayed frame by one frame, exactly as ROM.
+        collisionFrame = currentFrame;
         // ROM: AnimateSprite_Checked is NOT called globally. Each routine/phase
         // calls it explicitly only when needed.
         switch (state.routine) {
             case ROUTINE_WAIT_CAMERA -> updateWaitCamera();
             case ROUTINE_COUNTDOWN -> updateCountdown();
-            case ROUTINE_DESCEND -> updateDescend(frameCounter);
+            case ROUTINE_DESCEND -> updateDescend(vIntRunCount);
             case ROUTINE_IDLE -> updateIdle();
             case ROUTINE_ATTACK -> updateAttack(player);
-            case ROUTINE_DEFEAT -> updateDefeat(frameCounter);
+            case ROUTINE_DEFEAT -> updateDefeat(vIntRunCount);
         }
     }
 
@@ -332,8 +367,8 @@ public class Sonic2MechaSonicInstance extends AbstractBossInstance {
     // ROM: loc_397FE — ObjectMove + positioning only
     // ========================================================================
 
-    private void updateDescend(int frameCounter) {
-        if ((frameCounter & 0x1F) == 0) {
+    private void updateDescend(int vIntRunCount) {
+        if ((vIntRunCount & 0x1F) == 0) {
             services().playSfx(Sonic2Sfx.FIRE.id);
         }
 
@@ -396,6 +431,10 @@ public class Sonic2MechaSonicInstance extends AbstractBossInstance {
 
         // ROM: loc_3986A — AnimateSprite_Checked during idle
         animateSpriteChecked();
+        // ROM: loc_39D4A aligns the targeting sensor after idle animation.
+        if (targetingSensor != null) {
+            targetingSensor.syncPositionWithParent();
+        }
     }
 
     private void transitionToIdle() {
@@ -425,16 +464,24 @@ public class Sonic2MechaSonicInstance extends AbstractBossInstance {
     // ========================================================================
 
     private void updateAttack(AbstractPlayableSprite player) {
-        // TODO: ROM calls ObjectMove ONCE at the end of the outer attack loop (loc_398F4),
-        // AFTER child alignment via loc_39D44. The current code calls applyVelocity() inside
-        // individual subroutine handlers. Moving it here would require removing all per-phase
-        // applyVelocity() calls and ensuring child sync happens between logic and movement.
-        // This structural difference is minor but noted for future ROM-accuracy improvement.
+        // ROM loc_398C0 dispatches the phase handler first, aligns the LED and targeting
+        // sensor (loc_39D4A), then executes exactly one ObjectMove before display.
         switch (attackSubRoutine) {
             case ATTACK_DASH_ACROSS -> updateDashAcross(player);
             case ATTACK_AIM_AND_DASH -> updateAimAndDash(player);
             case ATTACK_AIM_DASH_WALK -> updateAimDashWalk(player);
             case ATTACK_AIM_JUMP_SPIKEBALLS -> updateAimJumpSpikeballs(player);
+        }
+        syncAttackChildrenBeforeObjectMove();
+        state.applyVelocity();
+    }
+
+    private void syncAttackChildrenBeforeObjectMove() {
+        if (ledWindow != null) {
+            ledWindow.syncPositionWithParent();
+        }
+        if (targetingSensor != null) {
+            targetingSensor.syncPositionWithParent();
         }
     }
 
@@ -619,34 +666,31 @@ public class Sonic2MechaSonicInstance extends AbstractBossInstance {
                 }
                 // ROM: AnimateSprite_Checked every frame in this phase
                 animateSpriteChecked();
-                state.applyVelocity(); // ROM: ObjectMove in outer loop at loc_398C0
             }
             case 4 -> {
                 // ROM: loc_39AF4 — airborne after jump
                 actionTimer--;
                 if (actionTimer < 0) {
-                    // Timer expired before landing — transition to ground slide
-                    attackPhase = 5;
-                    state.yVel = 0;
+                    // ROM: loc_39AF4 -> loc_39A7C when the airborne timer expires.
+                    transitionToGroundRun();
                     return;
                 }
                 TerrainCheckResult floorADW = ObjectTerrainUtils.checkFloorDist(state.x, state.y, Y_RADIUS);
                 if (floorADW.distance() < 0) {
                     // ROM: loc_39B1A — landed, snap Y to floor then fall through
-                    // to loc_39B0A which re-applies gravity and calls ObjectMove.
-                    // On the landing frame: yVel = GRAVITY ($38), ObjectMove pushes
-                    // slightly below floor; next frame's ground-run snap corrects.
+                    // to loc_39B0A which re-applies gravity; the outer attack loop
+                    // performs ObjectMove after child alignment. On the landing frame,
+                    // yVel = GRAVITY ($38) pushes slightly below floor; next frame's
+                    // ground-run snap corrects.
                     state.y += floorADW.distance();
                     state.yFixed = state.y << 16;
                     state.yVel = 0;
                     state.yVel += GRAVITY;
                     animateSpriteChecked();
-                    state.applyVelocity();
                     attackPhase = 5;
                     return;
                 }
                 state.yVel += GRAVITY;
-                state.applyVelocity();
                 // ROM: loc_39B0A — AnimateSprite_Checked
                 animateSpriteChecked();
             }
@@ -664,7 +708,6 @@ public class Sonic2MechaSonicInstance extends AbstractBossInstance {
                     state.yVel = 0;
                     facingLeft = !facingLeft;
                 } else {
-                    state.applyVelocity();
                     // ROM: loc_39B28 — ObjCheckFloorDist + add.w d1,y_pos(a0)
                     TerrainCheckResult floor = ObjectTerrainUtils.checkFloorDist(state.x, state.y, Y_RADIUS);
                     if (floor != null) {
@@ -725,15 +768,13 @@ public class Sonic2MechaSonicInstance extends AbstractBossInstance {
                     spikeballsFired = false;
                 }
                 animateSpriteChecked();
-                state.applyVelocity(); // ROM: ObjectMove in outer loop at loc_398C0
             }
             case 4 -> {
                 // ROM: loc_39B44 — airborne, fire spikeballs at apex
                 actionTimer--;
                 if (actionTimer < 0) {
-                    // Timer expired before landing — transition to ground slide
-                    attackPhase = 5;
-                    state.yVel = 0;
+                    // ROM: loc_39B44 -> loc_39A7C when the airborne timer expires.
+                    transitionToGroundRun();
                     return;
                 }
                 if (!spikeballsFired && state.yVel >= 0) {
@@ -744,20 +785,19 @@ public class Sonic2MechaSonicInstance extends AbstractBossInstance {
                 TerrainCheckResult floorAJS = ObjectTerrainUtils.checkFloorDist(state.x, state.y, Y_RADIUS);
                 if (floorAJS.distance() < 0) {
                     // ROM: landed, snap Y to floor then fall through
-                    // to loc_39B0A which re-applies gravity and calls ObjectMove.
-                    // On the landing frame: yVel = GRAVITY ($38), ObjectMove pushes
-                    // slightly below floor; next frame's ground-run snap corrects.
+                    // to loc_39B0A which re-applies gravity; the outer attack loop
+                    // performs ObjectMove after child alignment. On the landing frame,
+                    // yVel = GRAVITY ($38) pushes slightly below floor; next frame's
+                    // ground-run snap corrects.
                     state.y += floorAJS.distance();
                     state.yFixed = state.y << 16;
                     state.yVel = 0;
                     state.yVel += GRAVITY;
                     animateSpriteChecked();
-                    state.applyVelocity();
                     attackPhase = 5;
                     return;
                 }
                 state.yVel += GRAVITY;
-                state.applyVelocity();
                 animateSpriteChecked();
             }
             case 5 -> {
@@ -774,7 +814,6 @@ public class Sonic2MechaSonicInstance extends AbstractBossInstance {
                     state.yVel = 0;
                     facingLeft = !facingLeft;
                 } else {
-                    state.applyVelocity();
                     // ROM: loc_39B28 — ObjCheckFloorDist + add.w d1,y_pos(a0)
                     TerrainCheckResult floor = ObjectTerrainUtils.checkFloorDist(state.x, state.y, Y_RADIUS);
                     if (floor != null) {
@@ -796,6 +835,18 @@ public class Sonic2MechaSonicInstance extends AbstractBossInstance {
     // ========================================================================
     // Attack helpers
     // ========================================================================
+
+    /**
+     * ROM loc_39A7C: stop the airborne attack, flip, and enter ground-run before
+     * the outer attack loop performs its single ObjectMove.
+     */
+    private void transitionToGroundRun() {
+        attackPhase = 5;
+        anim = 5;
+        facingLeft = !facingLeft;
+        state.xVel = 0;
+        state.yVel = 0;
+    }
 
     /**
      * Start a dash using the ROM's direction toggle system.
@@ -821,21 +872,19 @@ public class Sonic2MechaSonicInstance extends AbstractBossInstance {
         } else {
             state.xVel += DECEL_RATE;
         }
-        state.applyVelocity();
     }
 
     private void fireSpikeballs() {
-        if (services().objectManager() == null) return;
         for (int i = 0; i < 8; i++) {
             int xOffset = SPIKEBALL_DATA[i][0];
             int yOffset = SPIKEBALL_DATA[i][1];
             int xVelData = SPIKEBALL_DATA[i][2];
             int yVelData = SPIKEBALL_DATA[i][3];
             int mappingFrame = SPIKEBALL_DATA[i][4];
-            MechaSonicSpikeball spikeball = new MechaSonicSpikeball(
-                    this, state.x + xOffset, state.y + yOffset,
-                    xVelData, yVelData, mappingFrame);
-            services().objectManager().addDynamicObject(spikeball);
+            int startX = state.x + xOffset;
+            int startY = state.y + yOffset;
+            spawnFreeChild(() -> new MechaSonicSpikeball(
+                    this, startX, startY, xVelData, yVelData, mappingFrame));
         }
     }
 
@@ -843,17 +892,27 @@ public class Sonic2MechaSonicInstance extends AbstractBossInstance {
     // Routine C: Defeat sequence
     // ========================================================================
 
-    private void updateDefeat(int frameCounter) {
+    private void updateDefeat(int vIntRunCount) {
         defeatTimer--;
         if (defeatTimer < 0) {
             Camera camera = services().camera();
             camera.setMaxX((short) 0x1000);
             Sonic2LevelEventManager eventManager = (Sonic2LevelEventManager) services().levelEventProvider();
             eventManager.setEventRoutine(eventManager.getEventRoutine() + 2);
-            services().gameState().setCurrentBossId(0);
+            // ROM Silver Sonic (ObjAF) sets Current_Boss_ID=9 (s2.asm:77528) and
+            // NEVER clears it — no S2 boss writes move.b #0,(Current_Boss_ID).w.
+            // It stays 9 through the Death Egg Robot fight that follows in the
+            // SAME act, so Sonic_LevelBound keeps the boss-strict right boundary
+            // (Camera_Max_X + $128, no +$40 extension; s2.asm:37246-37248) for the
+            // DEZ arena. Clearing it here reverted the player's right boundary to
+            // the lenient +$40 (0x8A8 vs ROM 0x868), so the player ran past the
+            // DEZ arena edge during the Death Egg Robot fight (DEZ1 f4933:
+            // ROM clamps x at 0x868, engine kept x_speed). Leave it set; the
+            // ending walk (Camera_Max_X=0x1000) is well within 0x1000+$128.
             services().playMusic(Sonic2Music.DEATH_EGG.id);
-            // Spawn Eggman transition object (ObjC6 State2) before self-destructing
-            spawnEggmanTransition();
+            // ROM loc_39BA4 only unlocks the camera, advances the dynamic-resize
+            // event, resumes music, and deletes ObjAF; the ObjC6 transition
+            // object is already present from the DEZ layout.
             setDestroyed(true);
             return;
         }
@@ -871,8 +930,12 @@ public class Sonic2MechaSonicInstance extends AbstractBossInstance {
     public int getCollisionFlags() {
         if (state.invulnerable || state.defeated) return 0;
         if (state.routine < ROUTINE_IDLE) return 0;
-        if (currentFrame == FRAME_BALL_A || currentFrame == FRAME_BALL_B
-                || currentFrame == FRAME_BALL_C) {
+        // ROM loc_39D24 (s2.asm:78017-78039): collision_flags is $9A only when the
+        // mapping_frame latched at the top of the update (collisionFrame) is a ball
+        // frame (6/7/8); otherwise $1A. Using the latched frame, not the live one,
+        // preserves the loc_39D1C one-frame lag.
+        if (collisionFrame == FRAME_BALL_A || collisionFrame == FRAME_BALL_B
+                || collisionFrame == FRAME_BALL_C) {
             return COLLISION_BALL;
         }
         return COLLISION_STANDING;
@@ -895,6 +958,21 @@ public class Sonic2MechaSonicInstance extends AbstractBossInstance {
 
     @Override
     protected boolean usesDefeatSequencer() { return false; }
+
+    /**
+     * ObjAF selects defeat by overwriting the <strong>primary {@code routine}</strong>
+     * ({@code loc_39CF0}: {@code move.b #$C,routine(a0)}, docs/s2disasm/s2.asm:78003-78004)
+     * and dispatches on {@code routine(a0)} read once at the top of {@code ObjAF}
+     * (docs/s2disasm/s2.asm:77412-77415). Routine $C's defeat countdown
+     * ({@code loc_39B92}: {@code subq.w #1,objoff_32}, docs/s2disasm/s2.asm:77848-77853)
+     * therefore first runs the frame after the hit. Because the engine runs touch
+     * responses before this object's own update, this boss needs the one-frame defeat
+     * dispatch deferral to match the ROM Camera_Max_X release timing
+     * ({@code loc_39BA4}, docs/s2disasm/s2.asm:77856-77857). WFZ (ObjC5) uses
+     * {@code routine_secondary} instead and is correctly left undeferred.
+     */
+    @Override
+    protected boolean defeatDeferralAppliesToThisBoss() { return true; }
 
     @Override
     protected void onDefeatStarted() {
@@ -927,30 +1005,6 @@ public class Sonic2MechaSonicInstance extends AbstractBossInstance {
     }
 
     // ========================================================================
-    // Eggman Transition Spawning
-    // ========================================================================
-
-    /**
-     * Spawn the ObjC6 State2 Eggman transition object.
-     * ROM: ObjC6 is placed in the DEZ object layout at ($440, $168) with subtype $A6.
-     * We spawn it dynamically after Silver Sonic's defeat to match the gameplay flow.
-     * Position ($440, $168) from DEZ_1.bin object layout.
-     * Note: ($3F8, $160) is the solid wall child position, NOT Eggman's own position.
-     */
-    private void spawnEggmanTransition() {
-        if (services().objectManager() == null) return;
-        Sonic2DEZEggmanInstance eggman = new Sonic2DEZEggmanInstance(0x440, 0x168);
-        // Wire direct reference to Death Egg Robot for boarding signal
-        for (var obj : services().objectManager().getActiveObjects()) {
-            if (obj instanceof Sonic2DeathEggRobotInstance der) {
-                eggman.setDeathEggRobot(der);
-                break;
-            }
-        }
-        services().objectManager().addDynamicObject(eggman);
-    }
-
-    // ========================================================================
     // Accessors for tests
     // ========================================================================
 
@@ -972,11 +1026,38 @@ public class Sonic2MechaSonicInstance extends AbstractBossInstance {
         return Sonic2Sfx.BOSS_EXPLOSION.id;
     }
 
+    @Override
+    protected int getBossExplosionObjectId() {
+        return com.openggf.game.sonic2.constants.Sonic2ObjectIds.BOSS_EXPLOSION;
+    }
+
+    private static Sonic2MechaSonicInstance nearestLiveBossForRewind(RewindRecreateContext ctx) {
+        if (ctx == null || ctx.spawn() == null || ctx.objectServices() == null
+                || ctx.objectServices().objectManager() == null) {
+            return null;
+        }
+        Sonic2MechaSonicInstance nearest = null;
+        long bestDistance = Long.MAX_VALUE;
+        ObjectSpawn spawn = ctx.spawn();
+        for (ObjectInstance instance : ctx.objectServices().objectManager().getActiveObjects()) {
+            if (instance instanceof Sonic2MechaSonicInstance boss && !boss.isDestroyed()) {
+                long dx = boss.getX() - (long) spawn.x();
+                long dy = boss.getY() - (long) spawn.y();
+                long distance = dx * dx + dy * dy;
+                if (distance < bestDistance) {
+                    nearest = boss;
+                    bestDistance = distance;
+                }
+            }
+        }
+        return nearest;
+    }
+
     // ========================================================================
     // Child Objects
     // ========================================================================
 
-    static class MechaSonicDEZWindow extends AbstractBossChild {
+    static class MechaSonicDEZWindow extends AbstractBossChild implements RewindRecreatable {
         private static final int WINDOW_X = 0x2C0;
         private static final int WINDOW_Y = 0x139;
         private static final int[][] WINDOW_ANIMS = {
@@ -1020,6 +1101,20 @@ public class Sonic2MechaSonicInstance extends AbstractBossInstance {
             this.mappingFrame = 4;
         }
 
+        @Override
+        public MechaSonicDEZWindow recreateForRewind(RewindRecreateContext ctx) {
+            Sonic2MechaSonicInstance boss = nearestLiveBossForRewind(ctx);
+            if (boss == null) {
+                return null;
+            }
+            MechaSonicDEZWindow window = new MechaSonicDEZWindow(boss);
+            boss.dezWindow = window;
+            if (!boss.childComponents.contains(window)) {
+                boss.childComponents.add(window);
+            }
+            return window;
+        }
+
         /**
          * ROM: bclr #status.npc.y_flip — test-and-clear semantics.
          * Called when Silver Sonic lands; advances window from routine $1C
@@ -1048,9 +1143,9 @@ public class Sonic2MechaSonicInstance extends AbstractBossInstance {
         }
 
         @Override
-        public void update(int frameCounter, PlayableEntity playerEntity) {
+        public void update(int vIntRunCount, PlayableEntity playerEntity) {
             AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-            if (!beginUpdate(frameCounter)) return;
+            if (!beginUpdate(vIntRunCount)) return;
             // ROM: routine $1C — wait for parent's y_flip flag before animating
             if (waitingForLanding) {
                 updateDynamicSpawn();
@@ -1148,7 +1243,7 @@ public class Sonic2MechaSonicInstance extends AbstractBossInstance {
         }
     }
 
-    static class MechaSonicTargetingSensor extends AbstractBossChild {
+    static class MechaSonicTargetingSensor extends AbstractBossChild implements RewindRecreatable {
         private static final int X_OFFSET_RIGHT = 0x0C;
         private static final int X_OFFSET_LEFT = -0x0C;
         private static final int Y_OFFSET = -0x0C;
@@ -1159,14 +1254,27 @@ public class Sonic2MechaSonicInstance extends AbstractBossInstance {
             this.collisionEnabled = false;
         }
 
+        @Override
+        public MechaSonicTargetingSensor recreateForRewind(RewindRecreateContext ctx) {
+            Sonic2MechaSonicInstance boss = nearestLiveBossForRewind(ctx);
+            if (boss == null) {
+                return null;
+            }
+            MechaSonicTargetingSensor sensor = new MechaSonicTargetingSensor(boss);
+            boss.targetingSensor = sensor;
+            if (!boss.childComponents.contains(sensor)) {
+                boss.childComponents.add(sensor);
+            }
+            return sensor;
+        }
+
         void setCollisionEnabled(boolean enabled) { this.collisionEnabled = enabled; }
         public int getCollisionFlags() { return collisionEnabled ? 0x98 : 0x00; }
 
         @Override
-        public void update(int frameCounter, PlayableEntity playerEntity) {
+        public void update(int vIntRunCount, PlayableEntity playerEntity) {
             AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-            if (!beginUpdate(frameCounter)) return;
-            syncPositionWithParent();
+            if (!beginUpdate(vIntRunCount)) return;
             updateDynamicSpawn();
         }
 
@@ -1184,7 +1292,7 @@ public class Sonic2MechaSonicInstance extends AbstractBossInstance {
         public void appendRenderCommands(List<GLCommand> commands) {}
     }
 
-    static class MechaSonicLEDWindow extends AbstractBossChild {
+    static class MechaSonicLEDWindow extends AbstractBossChild implements RewindRecreatable {
         private static final int[][] LED_ANIMS = {
                 {1, 0x0B, 0x0C},
                 {1, 0x0D, 0x0E},
@@ -1213,6 +1321,20 @@ public class Sonic2MechaSonicInstance extends AbstractBossInstance {
             this.visible = true;
         }
 
+        @Override
+        public MechaSonicLEDWindow recreateForRewind(RewindRecreateContext ctx) {
+            Sonic2MechaSonicInstance boss = nearestLiveBossForRewind(ctx);
+            if (boss == null) {
+                return null;
+            }
+            MechaSonicLEDWindow window = new MechaSonicLEDWindow(boss);
+            boss.ledWindow = window;
+            if (!boss.childComponents.contains(window)) {
+                boss.childComponents.add(window);
+            }
+            return window;
+        }
+
         void setVisible(boolean v) { this.visible = v; }
 
         void setAnimId(int newAnimId) {
@@ -1225,10 +1347,9 @@ public class Sonic2MechaSonicInstance extends AbstractBossInstance {
         }
 
         @Override
-        public void update(int frameCounter, PlayableEntity playerEntity) {
+        public void update(int vIntRunCount, PlayableEntity playerEntity) {
             AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-            if (!beginUpdate(frameCounter)) return;
-            syncPositionWithParent();
+            if (!beginUpdate(vIntRunCount)) return;
             // ROM: AnimateSprite_Checked — animate with whatever anim was set by parent.
             // Anim selection is event-driven from parent (updateDashAcross, transitionToIdle),
             // not heuristic-based.
@@ -1268,11 +1389,11 @@ public class Sonic2MechaSonicInstance extends AbstractBossInstance {
         }
     }
 
-    static class MechaSonicSpikeball extends AbstractBossChild {
+    static class MechaSonicSpikeball extends AbstractBossChild implements RewindRecreatable {
         private static final int SCREEN_BOUNDS_HALF_WIDTH = 0x180;
-        private final int xVel;
-        private final int yVel;
-        private final int mappingFrame;
+        private int xVel;
+        private int yVel;
+        private int mappingFrame;
         private int xFixed;
         private int yFixed;
 
@@ -1289,10 +1410,28 @@ public class Sonic2MechaSonicInstance extends AbstractBossInstance {
             this.mappingFrame = mappingFrame;
         }
 
+        MechaSonicSpikeball(Sonic2MechaSonicInstance parent,
+                            int startX, int startY,
+                            int xVel, int yVel) {
+            this(parent, startX, startY, xVel, yVel, 0);
+        }
+
         @Override
-        public void update(int frameCounter, PlayableEntity playerEntity) {
+        public MechaSonicSpikeball recreateForRewind(RewindRecreateContext ctx) {
+            Sonic2MechaSonicInstance boss = nearestLiveBossForRewind(ctx);
+            if (boss == null) {
+                return null;
+            }
+            ObjectSpawn spawn = ctx.spawn();
+            int x = spawn == null ? boss.getX() : spawn.x();
+            int y = spawn == null ? boss.getY() : spawn.y();
+            return new MechaSonicSpikeball(boss, x, y, 0, 0, 0);
+        }
+
+        @Override
+        public void update(int vIntRunCount, PlayableEntity playerEntity) {
             AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-            if (!beginUpdate(frameCounter)) return;
+            if (!beginUpdate(vIntRunCount)) return;
             xFixed += (xVel << 8);
             yFixed += (yVel << 8);
             currentX = xFixed >> 16;

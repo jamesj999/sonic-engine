@@ -1,7 +1,7 @@
 package com.openggf.tests;
 
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import com.openggf.game.sonic2.constants.Sonic2ObjectIds;
 import com.openggf.game.sonic2.objects.bosses.Sonic2WFZBossInstance;
 import com.openggf.level.LevelManager;
@@ -16,9 +16,9 @@ import com.openggf.sprites.playable.AbstractPlayableSprite;
 import java.lang.reflect.Field;
 import java.util.List;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -36,7 +36,7 @@ public class TestWFZBoss {
     private Sonic2WFZBossInstance boss;
     private AbstractPlayableSprite player;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         ObjectServices services = new TestObjectServices();
         setConstructionContext(services);
@@ -57,41 +57,37 @@ public class TestWFZBoss {
     @Test
     public void initialStateMatchesRom() {
         // Boss should start in wait-for-player routine (0x02)
-        assertEquals("Initial routine should be WAIT_PLAYER (0x02)",
-                0x02, boss.getCurrentRoutine());
+        assertEquals(0x02, boss.getCurrentRoutine(), "Initial routine should be WAIT_PLAYER (0x02)");
         // HP should be 8
-        assertEquals("Initial HP should be 8", 8, boss.getState().hitCount);
+        assertEquals(8, boss.getState().hitCount, "Initial HP should be 8");
         // Not defeated
-        assertFalse("Should not be defeated initially", boss.getState().defeated);
+        assertFalse(boss.getState().defeated, "Should not be defeated initially");
         // Not invulnerable
-        assertFalse("Should not be invulnerable initially", boss.getState().invulnerable);
+        assertFalse(boss.getState().invulnerable, "Should not be invulnerable initially");
     }
 
     @Test
     public void initialPositionMatchesSpawn() {
-        assertEquals("Initial X should match spawn", BOSS_X, boss.getX());
-        assertEquals("Initial Y should match spawn", BOSS_Y, boss.getY());
+        assertEquals(BOSS_X, boss.getX(), "Initial X should match spawn");
+        assertEquals(BOSS_Y, boss.getY(), "Initial Y should match spawn");
     }
 
     @Test
     public void boundsCalculatedFromSpawnX() {
         // ROM: left bound = spawn_x - $60, right bound = spawn_x + $60
-        assertEquals("Left bound should be spawn_x - 0x60",
-                BOSS_X - 0x60, boss.getLeftBound());
-        assertEquals("Right bound should be spawn_x + 0x60",
-                BOSS_X + 0x60, boss.getRightBound());
+        assertEquals(BOSS_X - 0x60, boss.getLeftBound(), "Left bound should be spawn_x - 0x60");
+        assertEquals(BOSS_X + 0x60, boss.getRightBound(), "Right bound should be spawn_x + 0x60");
     }
 
     @Test
     public void spawnXPreserved() {
-        assertEquals("Spawn X should be preserved", BOSS_X, boss.getSpawnX());
+        assertEquals(BOSS_X, boss.getSpawnX(), "Spawn X should be preserved");
     }
 
     @Test
     public void collisionDisabledInitially() {
         // Collision should be 0 before collision-active phase
-        assertEquals("Collision should be 0 initially",
-                0, boss.getCollisionFlags());
+        assertEquals(0, boss.getCollisionFlags(), "Collision should be 0 initially");
     }
 
     @Test
@@ -102,42 +98,39 @@ public class TestWFZBoss {
         boss.getState().invulnerable = false;
         boss.getState().defeated = false;
         // Since collisionActive is private, test indirectly through accessor
-        assertFalse("Collision not active until phase enables it",
-                boss.isCollisionActive());
+        assertFalse(boss.isCollisionActive(), "Collision not active until phase enables it");
     }
 
     @Test
     public void hitCountDecrementsOnDamage() {
         assertEquals(8, boss.getState().hitCount);
         boss.getState().hitCount--;
-        assertEquals("Hit count should decrement", 7, boss.getState().hitCount);
+        assertEquals(7, boss.getState().hitCount, "Hit count should decrement");
     }
 
     @Test
     public void defeatTriggersAtZeroHits() {
         boss.getState().hitCount = 0;
         boss.getState().defeated = true;
-        assertTrue("Boss should be marked defeated", boss.getState().defeated);
+        assertTrue(boss.getState().defeated, "Boss should be marked defeated");
     }
 
     @Test
     public void objectIdIsCorrect() {
-        assertEquals("Object ID should be 0xC5",
-                0xC5, Sonic2ObjectIds.WFZ_BOSS);
+        assertEquals(0xC5, Sonic2ObjectIds.WFZ_BOSS, "Object ID should be 0xC5");
     }
 
     @Test
     public void priorityBucketIsFour() {
-        assertEquals("Priority bucket should be 4", 4, boss.getPriorityBucket());
+        assertEquals(4, boss.getPriorityBucket(), "Priority bucket should be 4");
     }
 
     @Test
     public void invulnerabilityDurationIsHex20() {
         boss.getState().invulnerable = true;
         boss.getState().invulnerabilityTimer = 0x20;
-        assertEquals("Invulnerability timer should be 0x20",
-                0x20, boss.getState().invulnerabilityTimer);
-        assertTrue("Should be invulnerable", boss.getState().invulnerable);
+        assertEquals(0x20, boss.getState().invulnerabilityTimer, "Invulnerability timer should be 0x20");
+        assertTrue(boss.getState().invulnerable, "Should be invulnerable");
     }
 
     @Test
@@ -150,8 +143,7 @@ public class TestWFZBoss {
     @Test
     public void defeatTimerInitializesTo239() {
         // ROM: defeat timer = $EF = 239
-        assertEquals("Defeat timer initial should be 0 before defeat",
-                0, boss.getDefeatTimer());
+        assertEquals(0, boss.getDefeatTimer(), "Defeat timer initial should be 0 before defeat");
     }
 
     @Test
@@ -164,8 +156,7 @@ public class TestWFZBoss {
             timer--;
             iterations++;
         }
-        assertEquals("Defeat timer should run 240 iterations (0xEF down to -1)",
-                240, iterations);
+        assertEquals(240, iterations, "Defeat timer should run 240 iterations (0xEF down to -1)");
     }
 
     @Test
@@ -182,8 +173,7 @@ public class TestWFZBoss {
             }
             moveCount++; // move down 1px
         }
-        assertEquals("Robotnik defeat should move for 192 frames",
-                192, moveCount);
+        assertEquals(192, moveCount, "Robotnik defeat should move for 192 frames");
     }
 
     @Test
@@ -191,20 +181,19 @@ public class TestWFZBoss {
         assertEquals(8, boss.getState().hitCount);
         for (int i = 7; i >= 0; i--) {
             boss.getState().hitCount--;
-            assertEquals("HP should be " + i + " after " + (8 - i) + " hits",
-                    i, boss.getState().hitCount);
+            assertEquals(i, boss.getState().hitCount, "HP should be " + i + " after " + (8 - i) + " hits");
         }
-        assertEquals("HP should reach 0 after 8 hits", 0, boss.getState().hitCount);
+        assertEquals(0, boss.getState().hitCount, "HP should reach 0 after 8 hits");
     }
 
     @Test
     public void currentFrameStartsAsClosed() {
-        assertEquals("Initial frame should be CASE_CLOSED (0)", 0, boss.getCurrentFrame());
+        assertEquals(0, boss.getCurrentFrame(), "Initial frame should be CASE_CLOSED (0)");
     }
 
     @Test
     public void actionTimerStartsAtZero() {
-        assertEquals("Action timer should start at 0", 0, boss.getActionTimer());
+        assertEquals(0, boss.getActionTimer(), "Action timer should start at 0");
     }
 
     @Test
@@ -214,31 +203,29 @@ public class TestWFZBoss {
         int[] attackCycle = {0x08, 0x0A, 0x0C, 0x0E, 0x10, 0x12, 0x14, 0x16, 0x18, 0x1A, 0x1C};
         // Verify all attack cycle routines are even numbers
         for (int routine : attackCycle) {
-            assertEquals("Attack cycle routines should be even", 0, routine & 1);
-            assertTrue("Attack cycle routines should be >= $08", routine >= 0x08);
-            assertTrue("Attack cycle routines should be <= $1C", routine <= 0x1C);
+            assertEquals(0, routine & 1, "Attack cycle routines should be even");
+            assertTrue(routine >= 0x08, "Attack cycle routines should be >= $08");
+            assertTrue(routine <= 0x1C, "Attack cycle routines should be <= $1C");
         }
     }
 
     @Test
     public void collisionHittableConstantIsSix() {
         // ROM: collision_flags=$06 when hittable (only during phases $12-$16)
-        assertFalse("Collision should not be active initially", boss.isCollisionActive());
-        assertEquals("Collision flags should be 0 when not active", 0, boss.getCollisionFlags());
+        assertFalse(boss.isCollisionActive(), "Collision should not be active initially");
+        assertEquals(0, boss.getCollisionFlags(), "Collision flags should be 0 when not active");
     }
 
     @Test
     public void collisionNotActiveWhenInvulnerable() {
         boss.getState().invulnerable = true;
-        assertEquals("Collision should be 0 when invulnerable",
-                0, boss.getCollisionFlags());
+        assertEquals(0, boss.getCollisionFlags(), "Collision should be 0 when invulnerable");
     }
 
     @Test
     public void collisionNotActiveWhenDefeated() {
         boss.getState().defeated = true;
-        assertEquals("Collision should be 0 when defeated",
-                0, boss.getCollisionFlags());
+        assertEquals(0, boss.getCollisionFlags(), "Collision should be 0 when defeated");
     }
 
     // ========================================================================
@@ -257,8 +244,7 @@ public class TestWFZBoss {
             waitTimer--;
             waitFrames++;
         }
-        assertEquals("Wait phase should last $5B frames (0x5A down to -1)",
-                0x5B, waitFrames);
+        assertEquals(0x5B, waitFrames, "Wait phase should last $5B frames (0x5A down to -1)");
 
         // Phase 2: timer=$60, subq+beq = $60 frames of movement
         int moveTimer = 0x60;
@@ -268,8 +254,7 @@ public class TestWFZBoss {
             moveFrames++;
             if (moveTimer == 0) break; // beq triggers stop
         }
-        assertEquals("Descent movement phase should last $60 frames",
-                0x60, moveFrames);
+        assertEquals(0x60, moveFrames, "Descent movement phase should last $60 frames");
     }
 
     // ========================================================================
@@ -283,8 +268,7 @@ public class TestWFZBoss {
         int speed = 5;
         int entries = 7;
         int totalGameFrames = entries * (speed + 1); // speed+1 because counter starts at speed
-        assertEquals("Open animation should take 42 game frames",
-                42, totalGameFrames);
+        assertEquals(42, totalGameFrames, "Open animation should take 42 game frames");
     }
 
     @Test
@@ -294,8 +278,7 @@ public class TestWFZBoss {
         int speed = 3;
         int entries = 5;
         int totalGameFrames = entries * (speed + 1);
-        assertEquals("Close animation should take 20 game frames",
-                20, totalGameFrames);
+        assertEquals(20, totalGameFrames, "Close animation should take 20 game frames");
     }
 
     @Test
@@ -303,9 +286,9 @@ public class TestWFZBoss {
         // Issue 3: ROM close sequence is {3,2,1,0,0} starting from fully open.
         // Verify frame 3 is first in sequence, frame 0 is held an extra count.
         int[] closeFrames = {3, 2, 1, 0, 0};
-        assertEquals("Close should start from frame 3", 3, closeFrames[0]);
-        assertEquals("Close should end with frame 0 held twice", 0, closeFrames[3]);
-        assertEquals("Close should have 5 entries", 5, closeFrames.length);
+        assertEquals(3, closeFrames[0], "Close should start from frame 3");
+        assertEquals(0, closeFrames[3], "Close should end with frame 0 held twice");
+        assertEquals(5, closeFrames.length, "Close should have 5 entries");
     }
 
     // ========================================================================
@@ -323,8 +306,7 @@ public class TestWFZBoss {
             if (timer == 0) break; // beq triggers advance, no move this frame
             moveCount++;
         }
-        assertEquals("Laser shooter should move exactly 13 pixels (13 frames)",
-                13, moveCount);
+        assertEquals(13, moveCount, "Laser shooter should move exactly 13 pixels (13 frames)");
     }
 
     // ========================================================================
@@ -338,10 +320,9 @@ public class TestWFZBoss {
         // Verify these are distinct values.
         int firstTimer = 0x60;
         int reverseInterval = 0xC0;
-        assertEquals("First horizontal timer should be $60", 0x60, firstTimer);
-        assertEquals("Reverse interval should be $C0", 0xC0, reverseInterval);
-        assertTrue("First timer should be shorter than reverse interval",
-                firstTimer < reverseInterval);
+        assertEquals(0x60, firstTimer, "First horizontal timer should be $60");
+        assertEquals(0xC0, reverseInterval, "Reverse interval should be $C0");
+        assertTrue(firstTimer < reverseInterval, "First timer should be shorter than reverse interval");
     }
 
     // ========================================================================
@@ -354,9 +335,8 @@ public class TestWFZBoss {
         // This means first platform appears much sooner than subsequent ones.
         int firstSpawnTimer = 0x10;
         int subsequentInterval = 0x80;
-        assertEquals("First spawn timer should be $10", 0x10, firstSpawnTimer);
-        assertTrue("First timer should be much shorter than subsequent interval",
-                firstSpawnTimer < subsequentInterval);
+        assertEquals(0x10, firstSpawnTimer, "First spawn timer should be $10");
+        assertTrue(firstSpawnTimer < subsequentInterval, "First timer should be much shorter than subsequent interval");
     }
 
     // ========================================================================
@@ -371,10 +351,10 @@ public class TestWFZBoss {
         int velocity = 0x80;
         // Stop behavior:
         int stoppedVel = 0; // clr.w x_vel
-        assertEquals("Stopped velocity should be 0", 0, stoppedVel);
+        assertEquals(0, stoppedVel, "Stopped velocity should be 0");
         // Bounce behavior (for comparison):
         int bouncedVel = -velocity; // neg.w x_vel
-        assertEquals("Bounced velocity should negate", -0x80, bouncedVel);
+        assertEquals(-0x80, bouncedVel, "Bounced velocity should negate");
     }
 
     @SuppressWarnings("unchecked")
@@ -399,3 +379,5 @@ public class TestWFZBoss {
         }
     }
 }
+
+

@@ -1,194 +1,194 @@
 package com.openggf.game.sonic3k.specialstage;
 
+import com.openggf.game.GameModuleRegistry;
+import com.openggf.game.GameServices;
+import com.openggf.game.GameStateManager;
+import com.openggf.game.PlayerCharacter;
+import com.openggf.game.session.EngineContext;
+import com.openggf.game.session.EngineServices;
+import com.openggf.game.session.SessionManager;
+import com.openggf.game.sonic3k.Sonic3kGameModule;
+import com.openggf.tests.SingletonResetExtension;
+import com.openggf.tests.TestEnvironment;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.extension.ExtendWith;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 /**
- * Tests for S3K special stage results screen tally mechanics.
- * Validates ring bonus, time bonus, continue threshold, and element visibility.
- * No ROM or OpenGL required.
+ * Tests for the real {@link S3kSpecialStageResultsScreen} tally mechanics.
+ * Validates ring bonus, time bonus, continue threshold, and element visibility
+ * by constructing the production object and reading its computed outputs.
+ * No ROM or OpenGL required: the screen's art load swallows a missing ROM, and
+ * the tally/visibility outputs are derived from constructor inputs.
  *
- * ROM reference: sonic3k.asm lines 63320-63327 (bonus calculation),
- * lines 54000/63400 (continue threshold), lines 54019-54025/63441-63444 (emerald check).
+ * ROM reference: sonic3k.asm Obj_SpecialStage_Results (lines 63296-64164),
+ * bonus calculation (63320-63327), continue threshold (54000/63400),
+ * emerald check (54019-54025/63441-63444).
  */
+@ExtendWith(SingletonResetExtension.class)
 class TestS3kSpecialStageResultsTally {
 
-    // ---- Ring bonus: rings × 10 (ROM line 63321) ----
+    @Test
+    void mappingTilesReuseOneMutableDescriptor() {
+        S3kSpecialStageResultsScreen screen = new S3kSpecialStageResultsScreen(
+                0, false, 0, 0, PlayerCharacter.SONIC_AND_TAILS);
+
+        var first = screen.configureReusablePatternDesc(0xA123);
+        var second = screen.configureReusablePatternDesc(0x4ABC);
+
+        assertSame(first, second);
+        assertEquals(0x4ABC & 0x7FF, second.getPatternIndex());
+        assertEquals((0x4ABC >>> 13) & 3, second.getPaletteIndex());
+    }
+
+    @BeforeEach
+    void setUp() {
+        EngineServices.configure(EngineContext.fromLegacySingletonsForBootstrap());
+        GameModuleRegistry.setCurrent(new Sonic3kGameModule());
+        SessionManager.clear();
+        TestEnvironment.activeGameplayMode();
+        GameStateManager gs = GameServices.gameState();
+        gs.resetSession();
+        gs.configureSpecialStageProgress(7, 7);
+    }
+
+    @AfterEach
+    void tearDown() {
+        SessionManager.clear();
+        GameModuleRegistry.reset();
+    }
+
+    private static S3kSpecialStageResultsScreen screen(int rings, boolean gotEmerald,
+                                                       int totalEmeraldCount) {
+        return new S3kSpecialStageResultsScreen(
+                rings, gotEmerald, 0, totalEmeraldCount, PlayerCharacter.SONIC_AND_TAILS);
+    }
+
+    // ---- Ring bonus: rings x 10 (ROM line 63321) ----
 
     @Test
     void ringBonus_0rings_returns0() {
-        assertEquals(0, calculateRingBonus(0));
+        assertEquals(0, screen(0, false, 0).ringBonusForTest());
     }
 
     @Test
     void ringBonus_50rings_returns500() {
-        assertEquals(500, calculateRingBonus(50));
+        assertEquals(500, screen(50, true, 1).ringBonusForTest());
     }
 
     @Test
     void ringBonus_100rings_returns1000() {
-        assertEquals(1000, calculateRingBonus(100));
+        assertEquals(1000, screen(100, true, 1).ringBonusForTest());
     }
 
     @Test
     void ringBonus_255rings_returns2550() {
-        assertEquals(2550, calculateRingBonus(255));
+        assertEquals(2550, screen(255, true, 1).ringBonusForTest());
     }
 
-    // ---- Time bonus: 5000 if perfect (all spheres), else 0 ----
-    // ROM lines 63323-63326: clr.w (Time_bonus_countdown) / tst.w (Special_stage_rings_left)
-    // bne.s (skip) / move.w #5000,(Time_bonus_countdown)
+    // ---- Time bonus: 5000 if perfect (emerald earned), else 0 (ROM 63323-63326) ----
 
     @Test
     void timeBonus_perfect_returns5000() {
-        assertEquals(5000, calculateTimeBonus(true));
+        assertEquals(5000, screen(50, true, 1).timeBonusForTest());
     }
 
     @Test
     void timeBonus_notPerfect_returns0() {
-        assertEquals(0, calculateTimeBonus(false));
+        assertEquals(0, screen(50, false, 0).timeBonusForTest());
     }
 
-    // ---- Continue icon threshold: >= 50 rings (ROM line 54000/63400) ----
+    // ---- Continue label threshold: >= 50 rings (ROM line 54000/63400, element 5) ----
 
     @Test
-    void continueIcon_49rings_notShown() {
-        assertFalse(shouldShowContinue(49));
-    }
-
-    @Test
-    void continueIcon_50rings_shown() {
-        assertTrue(shouldShowContinue(50));
+    void continueLabel_49rings_notShown() {
+        assertFalse(screen(49, false, 0).continueLabelVisibleForTest());
     }
 
     @Test
-    void continueIcon_100rings_shown() {
-        assertTrue(shouldShowContinue(100));
+    void continueLabel_50rings_shown() {
+        assertTrue(screen(50, false, 0).continueLabelVisibleForTest());
+    }
+
+    @Test
+    void continueLabel_100rings_shown() {
+        assertTrue(screen(100, true, 1).continueLabelVisibleForTest());
     }
 
     // ---- Element visibility: failure vs success ----
-    // ROM: Special_stage_spheres_left > 0 → failure message visible, character name hidden
 
     @Test
     void failMessage_visible_whenNotGotEmerald() {
-        assertTrue(isFailMessageVisible(false));
+        assertTrue(screen(30, false, 0).failMessageVisibleForTest());
     }
 
     @Test
     void failMessage_hidden_whenGotEmerald() {
-        assertFalse(isFailMessageVisible(true));
+        assertFalse(screen(30, true, 1).failMessageVisibleForTest());
     }
 
     @Test
     void charName_hidden_whenNotGotEmerald() {
-        assertFalse(isCharNameVisible(false));
+        assertFalse(screen(30, false, 0).charNameVisibleForTest());
     }
 
     @Test
     void charName_visible_whenGotEmerald() {
-        assertTrue(isCharNameVisible(true));
+        assertTrue(screen(30, true, 1).charNameVisibleForTest());
     }
 
-    // ---- "NOW SUPER SONIC" visibility: only if succeeded + all 7 ----
-    // ROM lines 64016-64021/54255-54260: spheres_left == 0 AND emerald_count >= 7
+    // ---- "SUPER SONIC" visibility: only if succeeded + all 7 (ROM 64016-64021/54255-54260) ----
 
     @Test
     void superText_hidden_whenNotAllEmeralds() {
-        assertFalse(isSuperTextVisible(true, 6));
+        assertFalse(screen(50, true, 6).superTextVisibleForTest());
     }
 
     @Test
     void superText_visible_whenAllEmeralds() {
-        assertTrue(isSuperTextVisible(true, 7));
+        assertTrue(screen(50, true, 7).superTextVisibleForTest());
     }
 
     @Test
     void superText_hidden_whenFailed() {
-        assertFalse(isSuperTextVisible(false, 7));
+        assertFalse(screen(50, false, 7).superTextVisibleForTest());
     }
 
-    // ---- Tally decrement: counts down by 10 per frame ----
+    // ---- Tally decrement: ring + time bonuses count down by 10/frame together ----
+    // ROM routine 2 (updatePreTally): after the 360-frame wait, each frame
+    // subtracts up to 10 from time bonus then up to 10 from ring bonus.
 
     @Test
-    void tallyDecrement_bothBonuses_countDownTogether() {
-        int ringBonus = 200;
-        int timeBonus = 100;
-        int totalScore = 0;
-        int frames = 0;
+    void tallyDecrement_perfectStage_drainsBothBonusesToZero() {
+        S3kSpecialStageResultsScreen screen = screen(50, true, 1);
+        assertEquals(500, screen.ringBonusForTest());
+        assertEquals(5000, screen.timeBonusForTest());
 
-        while (ringBonus > 0 || timeBonus > 0) {
-            int increment = 0;
-            if (timeBonus > 0) { timeBonus -= 10; increment += 10; }
-            if (ringBonus > 0) { ringBonus -= 10; increment += 10; }
-            totalScore += increment;
-            frames++;
+        // 360-frame pre-tally wait + 500 frames to drain the larger (time) bonus.
+        for (int frame = 0; frame < 360 + 600; frame++) {
+            screen.update(frame, null);
         }
 
-        assertEquals(0, ringBonus);
-        assertEquals(0, timeBonus);
-        assertEquals(300, totalScore); // 200 + 100
-        assertEquals(20, frames); // 200/10 = 20 (ring bonus takes longer)
+        assertEquals(0, screen.ringBonusForTest(),
+                "Ring bonus must drain to 0 during the tally countdown");
+        assertEquals(0, screen.timeBonusForTest(),
+                "Time bonus must drain to 0 during the tally countdown");
     }
 
     @Test
-    void tallyDecrement_perfectStage_totalIs5500() {
-        // 50 rings collected (500 ring bonus) + perfect (5000 time bonus)
-        int total = calculateRingBonus(50) + calculateTimeBonus(true);
-        assertEquals(5500, total);
-    }
-
-    // ---- Emerald flicker: 3-state counter, visible when != 0 ----
-
-    @Test
-    void emeraldFlicker_3statePattern() {
-        // ROM: counter cycles 0, 1, 2, 0, 1, 2, ...
-        // Draw when counter != 0 (visible 2/3 of frames)
-        int visibleCount = 0;
-        int counter = 0;
-        for (int i = 0; i < 30; i++) {
-            if (counter != 0) visibleCount++;
-            counter++;
-            if (counter >= 3) counter = 0;
+    void tallyDecrement_ringBonusDecreasesByTenPerTallyFrame() {
+        S3kSpecialStageResultsScreen screen = screen(50, false, 0);
+        // Step exactly through the pre-tally wait, then one tally frame.
+        for (int frame = 0; frame <= 360; frame++) {
+            screen.update(frame, null);
         }
-        assertEquals(20, visibleCount); // 2/3 of 30 = 20
-    }
-
-    // ---- Continue icon blink: bit 3 of frame counter ----
-
-    @Test
-    void continueBlink_pattern() {
-        // ROM: btst #3,(Level_frame_counter+1) → visible when bit 3 set
-        // Pattern: 8 frames hidden, 8 frames visible, repeat
-        int visibleCount = 0;
-        for (int frame = 0; frame < 32; frame++) {
-            if (((frame >> 3) & 1) != 0) visibleCount++;
-        }
-        assertEquals(16, visibleCount); // Half visible
-    }
-
-    // ---- Helper methods matching ROM logic ----
-
-    private int calculateRingBonus(int rings) {
-        return rings * 10;
-    }
-
-    private int calculateTimeBonus(boolean gotEmerald) {
-        return gotEmerald ? 5000 : 0;
-    }
-
-    private boolean shouldShowContinue(int rings) {
-        return rings >= 50;
-    }
-
-    private boolean isFailMessageVisible(boolean gotEmerald) {
-        return !gotEmerald;
-    }
-
-    private boolean isCharNameVisible(boolean gotEmerald) {
-        return gotEmerald;
-    }
-
-    private boolean isSuperTextVisible(boolean gotEmerald, int totalEmeraldCount) {
-        return gotEmerald && totalEmeraldCount >= 7;
+        assertEquals(490, screen.ringBonusForTest(),
+                "First tally frame removes 10 from the 500 ring bonus");
     }
 }

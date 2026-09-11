@@ -1,33 +1,33 @@
 package com.openggf.tests;
 
 import com.openggf.version.AppVersion;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.io.InputStream;
 import java.io.ByteArrayInputStream;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class TestAppVersion {
 
     @Test
     public void testVersionResourceExistsOnClasspath() throws Exception {
         try (InputStream input = AppVersion.class.getResourceAsStream("/version.properties")) {
-            assertNotNull("version.properties should be present on the classpath", input);
+            assertNotNull(input, "version.properties should be present on the classpath");
         }
     }
 
     @Test
     public void testResolvedVersionIsNotBlank() {
-        assertNotNull("App version should resolve", AppVersion.get());
-        assertFalse("App version should not be blank", AppVersion.get().trim().isEmpty());
+        assertNotNull(AppVersion.get(), "App version should resolve");
+        assertFalse(AppVersion.get().trim().isEmpty(), "App version should not be blank");
     }
 
     @Test
     public void testMavenBuildDoesNotUseDevFallback() {
-        assertNotEquals("Maven test runs should resolve the filtered project version", "dev", AppVersion.get());
+        assertNotEquals("dev", AppVersion.get(), "Maven test runs should resolve the filtered project version");
     }
 
     @Test

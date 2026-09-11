@@ -70,6 +70,19 @@ public class Sonic3kLevelTriggerManager {
     }
 
     /**
+     * Clears the entire trigger byte to zero.
+     * ROM: move.b #0,(a3) — used by MGZDashTrigger when its 60-frame arm
+     * timer expires (sonic3k.asm:51539).
+     *
+     * @param index trigger index (0-15)
+     */
+    public static void clearAll(int index) {
+        if (index >= 0 && index < TRIGGER_COUNT) {
+            triggers[index] = 0;
+        }
+    }
+
+    /**
      * Tests if any bit in the trigger byte is set.
      * ROM: tst.b (a3) — used to gate sound effect playback
      *
@@ -85,5 +98,32 @@ public class Sonic3kLevelTriggerManager {
      */
     public static void reset() {
         Arrays.fill(triggers, 0);
+    }
+
+    /**
+     * Immutable rewind snapshot of {@code Level_trigger_array}. Defensively
+     * copies the backing array so a captured snapshot is safe to retain
+     * across frames.
+     */
+    public record Snapshot(int[] triggers) {
+        public Snapshot {
+            triggers = triggers.clone();
+        }
+
+        @Override
+        public int[] triggers() {
+            return triggers.clone();
+        }
+    }
+
+    /** Captures the current trigger array for rewind snapshots. */
+    public static Snapshot snapshot() {
+        return new Snapshot(triggers);
+    }
+
+    /** Restores the trigger array from a previously captured snapshot. */
+    public static void restore(Snapshot snapshot) {
+        int[] source = snapshot.triggers();
+        System.arraycopy(source, 0, triggers, 0, TRIGGER_COUNT);
     }
 }

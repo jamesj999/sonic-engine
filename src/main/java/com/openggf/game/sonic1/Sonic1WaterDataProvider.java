@@ -3,6 +3,7 @@ package com.openggf.game.sonic1;
 import com.openggf.data.PaletteLoader;
 import com.openggf.data.Rom;
 import com.openggf.game.DynamicWaterHandler;
+import com.openggf.game.OscillationManager;
 import com.openggf.game.PlayerCharacter;
 import com.openggf.game.WaterDataProvider;
 import com.openggf.game.sonic1.constants.Sonic1Constants;
@@ -96,5 +97,32 @@ public class Sonic1WaterDataProvider implements WaterDataProvider {
     public DynamicWaterHandler getDynamicHandler(int zoneId, int actId, PlayerCharacter character) {
         // S1 water is static (no dynamic handlers); level events set targets directly
         return null;
+    }
+
+    @Override
+    public int getGameplayWaterLevelOffset(int zoneId, int actId) {
+        // ROM: LZWaterFeatures writes v_waterpos1 = v_waterpos2 +
+        // ((v_oscillate+2) >> 1), then Sonic_Water compares Sonic against
+        // v_waterpos1 for underwater entry/exit.
+        // Refs: docs/s1disasm/_inc/LZWaterFeatures.asm:19-25;
+        // docs/s1disasm/_incObj/01 Sonic.asm:222-247.
+        return getOscillatedWaterOffset(zoneId, actId);
+    }
+
+    @Override
+    public int getVisualWaterLevelOffset(int zoneId, int actId) {
+        // S1 LZ and SBZ3: water surface bobs using oscillator data (v_oscillate+2).
+        // ROM (LZWaterFeatures.asm): reads byte at v_oscillate+2, shifts right by 1
+        // (divides by 2), and adds to v_waterpos2. SBZ3 reuses LZ water mechanics.
+        return getOscillatedWaterOffset(zoneId, actId);
+    }
+
+    private int getOscillatedWaterOffset(int zoneId, int actId) {
+        if (zoneId == Sonic1Constants.ZONE_LZ
+                || (zoneId == Sonic1Constants.ZONE_SBZ && actId == 2)) {
+            int oscillation = OscillationManager.getByte(0);
+            return oscillation >> 1;
+        }
+        return 0;
     }
 }

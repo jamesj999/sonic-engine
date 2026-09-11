@@ -1,6 +1,7 @@
 package com.openggf.game.sonic2.scroll;
 
 import com.openggf.level.scroll.AbstractZoneScrollHandler;
+import com.openggf.level.scroll.compose.ScrollEffectComposer;
 
 import static com.openggf.level.scroll.M68KMath.*;
 
@@ -26,13 +27,18 @@ import static com.openggf.level.scroll.M68KMath.*;
  * 18 lines: gradient 0.50 -> 0.75 speed
  * 45 lines: gradient 0.75 -> 1.00 speed
  * Total: 222 lines (last 2 lines intentionally unwritten - original bug)
+ *
+ * fixBugs (s2.asm:27 `fixBugs = 0`, block at s2.asm:15405-15412): the engine
+ * implements the SHIPPED (fixBugs=0) branch — only 222 of the 224 scanlines get an
+ * H-scroll value, so the bottom two lines keep whatever was left in Horiz_Scroll_Buf.
+ * The fixBugs=1 branch appends the four `move.w` writes that Knuckles in Sonic 2 added
+ * to fill lines 222 and 223. See the partial arraycopy at the end of update().
  */
 public class SwScrlEhz extends AbstractZoneScrollHandler {
 
     private final ParallaxTables tables;
 
-    // Persistent ripple counter, decrements every 8 frames (matches TempArray_LayerDef)
-    private int ripplePhase = 0;
+    private final ScrollEffectComposer composer = new ScrollEffectComposer();
 
     public SwScrlEhz(ParallaxTables tables) {
         this.tables = tables;
@@ -45,6 +51,7 @@ public class SwScrlEhz extends AbstractZoneScrollHandler {
             int frameCounter,
             int actId) {
         resetScrollTracking();
+        composer.reset();
 
         // d2 = -Camera_X_pos (FG scroll, constant for all lines)
         short d2 = negWord(cameraX);
@@ -53,33 +60,17 @@ public class SwScrlEhz extends AbstractZoneScrollHandler {
         short fgScroll = d2;
 
         // Vscroll_Factor_BG for EHZ is 0 (BG doesn't scroll vertically independently)
-        vscrollFactorBG = 0;
+        composer.setVscrollFactorBG((short) 0);
 
         int lineIndex = 0;
 
         // ==================== Band 1: Sky (22 lines) ====================
-        // BG = 0, FG = d2
-        {
-            short bgScroll = 0;
-            int packed = packScrollWords(fgScroll, bgScroll);
-            trackOffset(fgScroll, bgScroll); // Track once per constant region
-            int limit = Math.min(VISIBLE_LINES, lineIndex + 22);
-            for (; lineIndex < limit; lineIndex++) {
-                horizScrollBuf[lineIndex] = packed;
-            }
-        }
+        composer.fillPackedScrollWords(lineIndex, 22, fgScroll, (short) 0);
+        lineIndex = Math.min(VISIBLE_LINES, lineIndex + 22);
 
         // ==================== Band 2: Far Clouds (58 lines) ====================
-        // BG = d2 >> 6, FG = d2
-        {
-            short bgScroll = asrWord(d2, 6);
-            int packed = packScrollWords(fgScroll, bgScroll);
-            trackOffset(fgScroll, bgScroll);
-            int limit = Math.min(VISIBLE_LINES, lineIndex + 58);
-            for (; lineIndex < limit; lineIndex++) {
-                horizScrollBuf[lineIndex] = packed;
-            }
-        }
+        composer.fillPackedScrollWords(lineIndex, 58, fgScroll, asrWord(d2, 6));
+        lineIndex = Math.min(VISIBLE_LINES, lineIndex + 58);
 
         // ==================== Band 3: Water Surface (21 lines) ====================
         // Water surface with ripple effect using SwScrl_RippleData
@@ -88,46 +79,28 @@ public class SwScrlEhz extends AbstractZoneScrollHandler {
             short baseBgScroll = asrWord(d2, 6);
             int limit = Math.min(VISIBLE_LINES, lineIndex + 21);
 
-            // Ripple counter decrements every 8 frames (matches subq.w #1,(TempArray_LayerDef))
-            if ((frameCounter & 7) == 0) {
-                ripplePhase--;
-            }
+            // Ripple counter decrements every 8 frames (matches subq.w #1,(TempArray_LayerDef)).
+            // Derived from the frame counter (= -floor(frameCounter/8)) rather than a
+            // running per-call decrement, so held-rewind re-derivation reproduces the
+            // exact phase for any frame instead of drifting off the update-call count.
+            int ripplePhase = -(frameCounter / 8);
             int rippleIndex = ripplePhase & 0x1F;
 
             for (; lineIndex < limit; lineIndex++) {
                 int wobble = tables.getRippleSigned(rippleIndex & 0x1F);
                 short bgScroll = (short) (baseBgScroll + wobble);
-
-                horizScrollBuf[lineIndex] = packScrollWords(fgScroll, bgScroll);
-                trackOffset(fgScroll, bgScroll);
-
+                composer.writePackedScrollWord(lineIndex, fgScroll, bgScroll);
                 rippleIndex++;
             }
         }
 
         // ==================== Band 4: Gap (11 lines) ====================
-        // BG = 0, FG = d2
-        {
-            short bgScroll = 0;
-            int packed = packScrollWords(fgScroll, bgScroll);
-            trackOffset(fgScroll, bgScroll);
-            int limit = Math.min(VISIBLE_LINES, lineIndex + 11);
-            for (; lineIndex < limit; lineIndex++) {
-                horizScrollBuf[lineIndex] = packed;
-            }
-        }
+        composer.fillPackedScrollWords(lineIndex, 11, fgScroll, (short) 0);
+        lineIndex = Math.min(VISIBLE_LINES, lineIndex + 11);
 
         // ==================== Band 5: Near Hills (16 lines) ====================
-        // BG = d2 >> 4, FG = d2
-        {
-            short bgScroll = asrWord(d2, 4);
-            int packed = packScrollWords(fgScroll, bgScroll);
-            trackOffset(fgScroll, bgScroll);
-            int limit = Math.min(VISIBLE_LINES, lineIndex + 16);
-            for (; lineIndex < limit; lineIndex++) {
-                horizScrollBuf[lineIndex] = packed;
-            }
-        }
+        composer.fillPackedScrollWords(lineIndex, 16, fgScroll, asrWord(d2, 4));
+        lineIndex = Math.min(VISIBLE_LINES, lineIndex + 16);
 
         // ==================== Band 6: Nearer Hills (16 lines) ====================
         // BG = (d2 >> 4) * 1.5, FG = d2
@@ -135,12 +108,8 @@ public class SwScrlEhz extends AbstractZoneScrollHandler {
             short d0 = asrWord(d2, 4);
             short d3 = asrWord(d0, 1);
             short bgScroll = (short) (d0 + d3);
-            int packed = packScrollWords(fgScroll, bgScroll);
-            trackOffset(fgScroll, bgScroll);
-            int limit = Math.min(VISIBLE_LINES, lineIndex + 16);
-            for (; lineIndex < limit; lineIndex++) {
-                horizScrollBuf[lineIndex] = packed;
-            }
+            composer.fillPackedScrollWords(lineIndex, 16, fgScroll, bgScroll);
+            lineIndex = Math.min(VISIBLE_LINES, lineIndex + 16);
         }
 
         // ==================== Bottom Gradient Region ====================
@@ -172,24 +141,15 @@ public class SwScrlEhz extends AbstractZoneScrollHandler {
             int increment = ((int) quotientWord) << 8; // asl.l #8,d0
 
             // Starting BG value (s2.asm lines 15342-15344)
-            // moveq #0,d3; move.w d2,d3; asr.w #3,d3
-            // d3 in "normal" form: integer in low word, fraction (0) in high word
             short d3_integer = asrWord(d2, 3);    // d2/8
-            // Store in "swapped" form for easy arithmetic:
-            //   swapped = integer in high 16, fraction in low 16 (standard 16.16)
             int d3 = (d3_integer & 0xFFFF) << 16; // fraction = 0
-
-            // FG scroll for all gradient lines (d4.w after swap = d2 = FG scroll)
-            // Already have fgScroll = d2
 
             // ===== 15-line band: 1 line per iteration (s2.asm lines 15347-15353) =====
             {
                 int limit = Math.min(VISIBLE_LINES, lineIndex + 15);
                 for (; lineIndex < limit; lineIndex++) {
                     short bgScroll = (short) (d3 >> 16); // integer part from high word
-                    horizScrollBuf[lineIndex] = packScrollWords(fgScroll, bgScroll);
-                    trackOffset(fgScroll, bgScroll);
-                    // swap d3; add.l d0,d3; swap d3
+                    composer.writePackedScrollWord(lineIndex, fgScroll, bgScroll);
                     d3 += increment;
                 }
             }
@@ -200,14 +160,10 @@ public class SwScrlEhz extends AbstractZoneScrollHandler {
                 int limit = Math.min(VISIBLE_LINES, lineIndex + 18);
                 for (int pair = 0; pair < 9 && lineIndex < limit; pair++) {
                     short bgScroll = (short) (d3 >> 16);
-                    int packed = packScrollWords(fgScroll, bgScroll);
-                    trackOffset(fgScroll, bgScroll);
-                    // Write 2 lines with same BG value
-                    horizScrollBuf[lineIndex++] = packed;
+                    composer.writePackedScrollWord(lineIndex++, fgScroll, bgScroll);
                     if (lineIndex < limit) {
-                        horizScrollBuf[lineIndex++] = packed;
+                        composer.writePackedScrollWord(lineIndex++, fgScroll, bgScroll);
                     }
-                    // add.l d0,d3; add.l d0,d3 (advance by 2 increments)
                     d3 += increment;
                     d3 += increment;
                 }
@@ -219,17 +175,13 @@ public class SwScrlEhz extends AbstractZoneScrollHandler {
                 int limit = Math.min(VISIBLE_LINES, lineIndex + 45);
                 for (int trip = 0; trip < 15 && lineIndex < limit; trip++) {
                     short bgScroll = (short) (d3 >> 16);
-                    int packed = packScrollWords(fgScroll, bgScroll);
-                    trackOffset(fgScroll, bgScroll);
-                    // Write 3 lines with same BG value
-                    horizScrollBuf[lineIndex++] = packed;
+                    composer.writePackedScrollWord(lineIndex++, fgScroll, bgScroll);
                     if (lineIndex < limit) {
-                        horizScrollBuf[lineIndex++] = packed;
+                        composer.writePackedScrollWord(lineIndex++, fgScroll, bgScroll);
                     }
                     if (lineIndex < limit) {
-                        horizScrollBuf[lineIndex++] = packed;
+                        composer.writePackedScrollWord(lineIndex++, fgScroll, bgScroll);
                     }
-                    // add.l d0,d3 x3 (advance by 3 increments)
                     d3 += increment;
                     d3 += increment;
                     d3 += increment;
@@ -239,6 +191,14 @@ public class SwScrlEhz extends AbstractZoneScrollHandler {
 
         // ==================== Bug Reproduction ====================
         // Original EHZ only writes 222 lines, leaving last 2 uninitialized.
+        // To preserve byte-identical behavior with the prior loop (lines 222/223
+        // retain whatever was in horizScrollBuf coming in), copy only the
+        // composed entries that correspond to lines actually written.
+        int[] composed = composer.packedScrollWordsView();
+        System.arraycopy(composed, 0, horizScrollBuf, 0, lineIndex);
+        vscrollFactorBG = composer.getVscrollFactorBG();
+        minScrollOffset = composer.getMinScrollOffset();
+        maxScrollOffset = composer.getMaxScrollOffset();
     }
 
 }

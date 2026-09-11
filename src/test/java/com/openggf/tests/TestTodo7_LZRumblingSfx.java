@@ -1,9 +1,9 @@
 package com.openggf.tests;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import com.openggf.game.sonic1.audio.Sonic1SmpsConstants;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * TODO #7 -- LZ Rumbling SFX.
@@ -39,11 +39,13 @@ public class TestTodo7_LZRumblingSfx {
         // sfx_Rumbling ($B7) index = $B7 - $A0 = $17 = 23 in the SFX block,
         // which is priority row $B0-$BF (second SFX block).
         int priority = Sonic1SmpsConstants.getSfxPriority(SFX_RUMBLING);
-        assertTrue("sfx_Rumbling priority should be > 0", priority > 0);
+        assertTrue(priority > 0, "sfx_Rumbling priority should be > 0");
         // From the SOUND_PRIORITIES table: $B7 is at index $B7-$81 = 0x36 = 54
         // In the $B0-$BF block: 0x70, 0x60, 0x70, 0x60, 0x70, 0x70, 0x70, 0x70,
         // Index within block: $B7-$B0 = 7 -> priority = 0x70
-        assertEquals("sfx_Rumbling priority should be 0x70", 0x70, priority);
+        assertEquals(0x70, priority, "sfx_Rumbling priority should be 0x70");
     }
 
 }
+
+

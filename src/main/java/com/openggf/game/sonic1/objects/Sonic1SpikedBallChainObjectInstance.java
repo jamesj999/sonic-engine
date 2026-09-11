@@ -3,15 +3,27 @@ import com.openggf.game.PlayableEntity;
 
 import com.openggf.debug.DebugRenderContext;
 import com.openggf.game.sonic1.constants.Sonic1Constants;
+import com.openggf.game.sonic1.constants.Sonic1ObjectIds;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
+import com.openggf.level.objects.ObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
+import com.openggf.level.objects.ObjectLifetimeOps;
+import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.SpawnRomZoneRewindRecreatable;
+import com.openggf.level.objects.TouchActorContextPolicy;
+import com.openggf.level.objects.TouchAttackBouncePolicy;
+import com.openggf.level.objects.TouchCategoryDecodeMode;
+import com.openggf.level.objects.TouchOverlapStopPolicy;
+import com.openggf.level.objects.TouchResponseProfile;
 import com.openggf.level.objects.TouchResponseProvider;
+import com.openggf.level.objects.TouchShieldDeflectCapability;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.TrigLookupTable;
-import com.openggf.sprites.playable.AbstractPlayableSprite;
 
 import java.util.List;
 
@@ -44,7 +56,7 @@ import java.util.List;
  * <b>Disassembly reference:</b> docs/s1disasm/_incObj/57 Spiked Ball and Chain.asm
  */
 public class Sonic1SpikedBallChainObjectInstance extends AbstractObjectInstance
-        implements TouchResponseProvider {
+        implements TouchResponseProvider, SpawnRomZoneRewindRecreatable {
 
     // Display priority: move.b #4,obPriority(a0)
     private static final int DISPLAY_PRIORITY = 4;
@@ -60,28 +72,49 @@ public class Sonic1SpikedBallChainObjectInstance extends AbstractObjectInstance
     // Only the end ball hurts in LZ — HURT ($80) + size index $0B
     private static final int LZ_PARENT_COLLISION_TYPE = 0x8B;
 
+    private static final TouchResponseProfile MULTI_REGION_HURT_PROFILE = hurtProfile(
+            true, TouchOverlapStopPolicy.STOP_AFTER_FIRST_OVERLAP_FOR_MAIN_ONLY);
+    private static final TouchResponseProfile SINGLE_REGION_HURT_PROFILE = hurtProfile(
+            false, TouchOverlapStopPolicy.STOP_AFTER_FIRST_OVERLAP_FOR_ALL_ACTORS);
+
     // Zone variant
-    private final boolean isLZ;
+    private boolean isLZ;
 
     // Anchor / pivot position (sball_origX = objoff_3A, sball_origY = objoff_38)
-    private final int origX;
-    private final int origY;
+    private int origX;
+    private int origY;
 
     // Rotation state
     private int angle;        // obAngle: 16-bit angle accumulator (high byte used for CalcSine)
-    private final int speed;  // sball_speed = objoff_3E: angular velocity per frame
+    private int speed;  // sball_speed = objoff_3E: angular velocity per frame
 
     // Chain element data (parent + children, ordered from outermost to innermost)
     // Index 0 = parent (outermost), last index = innermost (closest to pivot)
-    private final int elementCount;
+    private int elementCount;
     private final int[] elementRadius;   // sball_radius per element
     private final int[] elementFrame;    // mapping frame per element
     private final int[] elementColType;  // collision type per element
     private final int[] elementX;        // current X position
     private final int[] elementY;        // current Y position
+    private final transient ChainChild[] children;
+    private boolean childrenSpawned;
 
     // Art key for rendering
     private final String artKey;
+
+    private static TouchResponseProfile hurtProfile(boolean multiRegionSource,
+            TouchOverlapStopPolicy stopPolicy) {
+        return new TouchResponseProfile(
+                TouchCategoryDecodeMode.NORMAL,
+                false,
+                true,
+                multiRegionSource,
+                TouchShieldDeflectCapability.NONE,
+                0,
+                TouchAttackBouncePolicy.STANDARD_ENEMY_KILL,
+                TouchActorContextPolicy.MAIN_FULL_SIDEKICK_HURT_ONLY,
+                stopPolicy);
+    }
 
     public Sonic1SpikedBallChainObjectInstance(ObjectSpawn spawn, int zoneIndex) {
         super(spawn, "SpikedBallChain");
@@ -129,6 +162,7 @@ public class Sonic1SpikedBallChainObjectInstance extends AbstractObjectInstance
         this.elementColType = new int[elementCount];
         this.elementX = new int[elementCount];
         this.elementY = new int[elementCount];
+        this.children = new ChainChild[numChildren];
 
         // Build child elements from outermost inward
         // Disasm: d3 starts at outerRadius, children get d3 -= 0x10 each
@@ -175,16 +209,33 @@ public class Sonic1SpikedBallChainObjectInstance extends AbstractObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         if (isDestroyed()) {
             return;
+        }
+        if (!childrenSpawned) {
+            spawnChildren();
+            childrenSpawned = true;
         }
 
         // move.w sball_speed(a0),d0 / add.w d0,obAngle(a0)
         angle = (angle + speed) & 0xFFFF;
 
         updatePositions();
+        syncElementObjects();
+    }
+
+    private void spawnChildren() {
+        for (int i = 0; i < children.length; i++) {
+            final int index = i;
+            children[i] = spawnFreeChild(() -> new ChainChild(
+                    ChainChild.spawnFor(elementX[index], elementY[index], artKey, elementFrame[index],
+                            elementColType[index], origX, index),
+                    artKey,
+                    elementFrame[index],
+                    elementColType[index],
+                    origX));
+        }
     }
 
     /**
@@ -223,15 +274,24 @@ public class Sonic1SpikedBallChainObjectInstance extends AbstractObjectInstance
         }
     }
 
+    private void syncElementObjects() {
+        for (int i = 0; i < children.length; i++) {
+            if (children[i] != null) {
+                children[i].setPosition(elementX[i], elementY[i]);
+            }
+        }
+        int parentIdx = elementCount - 1;
+        updateDynamicSpawn(elementX[parentIdx], elementY[parentIdx]);
+    }
+
     @Override
     public void appendRenderCommands(List<GLCommand> commands) {
         PatternSpriteRenderer renderer = getRenderer(artKey);
         if (renderer == null) return;
 
-        // Render all chain elements (innermost first for correct layering)
-        for (int i = elementCount - 1; i >= 0; i--) {
-            renderer.drawFrameIndex(elementFrame[i], elementX[i], elementY[i], false, false);
-        }
+        int parentIdx = elementCount - 1;
+        renderer.drawFrameIndex(elementFrame[parentIdx], elementX[parentIdx], elementY[parentIdx],
+                false, false);
     }
 
     @Override
@@ -242,6 +302,16 @@ public class Sonic1SpikedBallChainObjectInstance extends AbstractObjectInstance
     // ---- TouchResponseProvider ----
     // In SYZ, all chain elements hurt. In LZ, only the parent (end ball) hurts.
     // We use getMultiTouchRegions() to report all harmful element positions.
+
+    @Override
+    public TouchResponseProfile getTouchResponseProfile() {
+        return SINGLE_REGION_HURT_PROFILE;
+    }
+
+    @Override
+    public TouchResponseProfile getTouchResponseProfile(boolean multiRegionSource) {
+        return SINGLE_REGION_HURT_PROFILE;
+    }
 
     @Override
     public int getCollisionFlags() {
@@ -256,43 +326,54 @@ public class Sonic1SpikedBallChainObjectInstance extends AbstractObjectInstance
 
     @Override
     public TouchRegion[] getMultiTouchRegions() {
-        int harmfulCount = 0;
-        for (int i = 0; i < elementCount; i++) {
-            if (elementColType[i] != 0) {
-                harmfulCount++;
-            }
-        }
-        if (harmfulCount == 0) {
-            return null;
-        }
-
-        TouchRegion[] regions = new TouchRegion[harmfulCount];
-        int idx = 0;
-        for (int i = 0; i < elementCount; i++) {
-            if (elementColType[i] != 0) {
-                regions[idx++] = new TouchRegion(elementX[i], elementY[i], elementColType[i]);
-            }
-        }
-        return regions;
+        return null;
     }
 
     // ---- Persistence ----
 
     @Override
-    public boolean isPersistent() {
-        // Disasm: out_of_range.w .delete,sball_origX(a0) — checks origX not current X
-        return !isDestroyed() && isOrigXOnScreen();
+    public int getOutOfRangeReferenceX() {
+        return origX;
     }
 
-    private boolean isOrigXOnScreen() {
-        var camera = services().camera();
-        if (camera == null) {
-            return true;
+    @Override
+    public void onUnload() {
+        ObjectManager objectManager = tryServices() != null ? tryServices().objectManager() : null;
+        for (ChainChild child : children) {
+            if (child != null) {
+                // Obj57 .delete loops sball_childs and calls DeleteChild, freeing each SST slot immediately.
+                ObjectLifetimeOps.expireDynamic(child);
+                if (objectManager != null) {
+                    objectManager.removeDynamicObject(child);
+                }
+            }
         }
-        int objRounded = origX & 0xFF80;
-        int camRounded = (camera.getX() - 128) & 0xFF80;
-        int distance = (objRounded - camRounded) & 0xFFFF;
-        return distance <= (128 + 320 + 192);
+    }
+
+    @Override
+    public String traceDebugDetails() {
+        StringBuilder slots = new StringBuilder();
+        for (ChainChild child : children) {
+            if (child != null) {
+                if (!slots.isEmpty()) {
+                    slots.append(',');
+                }
+                slots.append(child.getSlotIndex());
+            }
+        }
+        return String.format("angle=%04X speed=%d children=%d childSlots=[%s] orig=%04X,%04X",
+                angle & 0xFFFF,
+                speed,
+                children.length,
+                slots,
+                origX & 0xFFFF,
+                origY & 0xFFFF);
+    }
+
+    private void adoptRestoredChild(ChainChild child, int childIndex) {
+        if (childIndex >= 0 && childIndex < children.length) {
+            children[childIndex] = child;
+        }
     }
 
     // ---- Debug rendering ----
@@ -315,6 +396,170 @@ public class Sonic1SpikedBallChainObjectInstance extends AbstractObjectInstance
         // Draw line from pivot to parent element (outermost)
         int parentIdx = elementCount - 1;
         ctx.drawLine(origX, origY, elementX[parentIdx], elementY[parentIdx], 0.5f, 0.5f, 0.5f);
+    }
+
+    private static final class ChainChild extends AbstractObjectInstance
+            implements TouchResponseProvider, RewindRecreatable {
+        private static final int FRAME_MASK = 0x03;
+        private static final int COLLISION_SHIFT = 2;
+        private static final int COLLISION_MASK = 0x03;
+        private static final int CHILD_INDEX_SHIFT = 4;
+        private static final int CHILD_INDEX_MASK = 0x07;
+        private static final int LZ_FLAG = 0x80;
+
+        private final String artKey;
+        private final int frame;
+        private final int collisionType;
+        private final int originX;
+
+        private ChainChild(ObjectSpawn spawn) {
+            this(spawn,
+                    artKey(spawn),
+                    frame(spawn),
+                    collisionType(spawn),
+                    originX(spawn));
+        }
+
+        private ChainChild(ObjectSpawn spawn, String artKey, int frame, int collisionType,
+                           int originX) {
+            super(spawn, "SpikedBallChainChild");
+            this.artKey = artKey;
+            this.frame = frame;
+            this.collisionType = collisionType;
+            this.originX = originX;
+        }
+
+        private static ObjectSpawn spawnFor(int x, int y, String artKey, int frame, int collisionType,
+                                            int originX, int childIndex) {
+            int subtype = (frame & FRAME_MASK)
+                    | (collisionCode(collisionType) << COLLISION_SHIFT)
+                    | ((childIndex & CHILD_INDEX_MASK) << CHILD_INDEX_SHIFT);
+            if (ObjectArtKeys.LZ_SPIKEBALL_CHAIN.equals(artKey)) {
+                subtype |= LZ_FLAG;
+            }
+            return new ObjectSpawn(x, y, Sonic1ObjectIds.SPIKED_BALL_CHAIN,
+                    subtype, 0, false, originX);
+        }
+
+        @Override
+        public ChainChild recreateForRewind(RewindRecreateContext ctx) {
+            ChainChild child = new ChainChild(ctx.spawn());
+            Sonic1SpikedBallChainObjectInstance parent = nearestParent(ctx, child.originX);
+            if (parent == null) {
+                return null;
+            }
+            parent.adoptRestoredChild(child, childIndex(ctx.spawn()));
+            return child;
+        }
+
+        private void setPosition(int x, int y) {
+            updateDynamicSpawn(x, y);
+        }
+
+        @Override
+        public boolean isPersistent() {
+            return !isDestroyed();
+        }
+
+        @Override
+        public int getOutOfRangeReferenceX() {
+            return originX;
+        }
+
+        @Override
+        public void appendRenderCommands(List<GLCommand> commands) {
+            PatternSpriteRenderer renderer = getRenderer(artKey);
+            if (renderer != null) {
+                renderer.drawFrameIndex(frame, getX(), getY(), false, false);
+            }
+        }
+
+        @Override
+        public int getPriorityBucket() {
+            return RenderPriority.clamp(DISPLAY_PRIORITY);
+        }
+
+        @Override
+        public TouchResponseProfile getTouchResponseProfile() {
+            return SINGLE_REGION_HURT_PROFILE;
+        }
+
+        @Override
+        public TouchResponseProfile getTouchResponseProfile(boolean multiRegionSource) {
+            return SINGLE_REGION_HURT_PROFILE;
+        }
+
+        @Override
+        public int getCollisionFlags() {
+            return collisionType;
+        }
+
+        @Override
+        public int getCollisionProperty() {
+            return 0;
+        }
+
+        @Override
+        public String traceDebugDetails() {
+            return String.format("child frame=%d col=%02X orig=%04X",
+                    frame,
+                    collisionType & 0xFF,
+                    originX & 0xFFFF);
+        }
+
+        private static Sonic1SpikedBallChainObjectInstance nearestParent(
+                RewindRecreateContext ctx, int originX) {
+            Sonic1SpikedBallChainObjectInstance nearest = null;
+            int bestDistance = Integer.MAX_VALUE;
+            ObjectManager objectManager = ctx.objectServices().objectManager();
+            for (ObjectInstance object : objectManager.getActiveObjects()) {
+                if (object instanceof Sonic1SpikedBallChainObjectInstance parent
+                        && !parent.isDestroyed()) {
+                    int distance = Math.abs(parent.origX - originX);
+                    if (distance < bestDistance) {
+                        nearest = parent;
+                        bestDistance = distance;
+                    }
+                }
+            }
+            return nearest;
+        }
+
+        private static String artKey(ObjectSpawn spawn) {
+            return (spawn.subtype() & LZ_FLAG) != 0
+                    ? ObjectArtKeys.LZ_SPIKEBALL_CHAIN
+                    : ObjectArtKeys.SYZ_SPIKEBALL_CHAIN;
+        }
+
+        private static int frame(ObjectSpawn spawn) {
+            return spawn.subtype() & FRAME_MASK;
+        }
+
+        private static int collisionType(ObjectSpawn spawn) {
+            return switch ((spawn.subtype() >> COLLISION_SHIFT) & COLLISION_MASK) {
+                case 1 -> SYZ_COLLISION_TYPE;
+                case 2 -> LZ_PARENT_COLLISION_TYPE;
+                default -> 0;
+            };
+        }
+
+        private static int originX(ObjectSpawn spawn) {
+            return spawn.rawYWord();
+        }
+
+        private static int childIndex(ObjectSpawn spawn) {
+            return (spawn.subtype() >> CHILD_INDEX_SHIFT) & CHILD_INDEX_MASK;
+        }
+
+        private static int collisionCode(int collisionType) {
+            if (collisionType == SYZ_COLLISION_TYPE) {
+                return 1;
+            }
+            if (collisionType == LZ_PARENT_COLLISION_TYPE) {
+                return 2;
+            }
+            return 0;
+        }
     }
 
 

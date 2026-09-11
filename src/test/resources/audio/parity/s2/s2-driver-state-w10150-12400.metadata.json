@@ -1,0 +1,68 @@
+{
+  "schema": "openggf.s2_audio_driver_state_reference_fixture.v1",
+  "reference": "s2-driver-state-w10150-12400.reference-v2.jsonl.gz",
+  "reference_gzip_sha256": "7743d513cbcf05306455bf0afa3fbd7ead6fd6197a09ce893e1ac279bd34589a",
+  "reference_uncompressed_sha256": "e7456239c2f2da0804817d3c47cf81f9346877bbdf4b7f6f912acb7d7ebf0a87",
+  "payload_schema": "openggf.s2-driver-state-reference.v2",
+  "rom": {
+    "name": "Sonic 2 World REV01",
+    "sha1": "8bca5dcef1af3e00098666fd892dc1c2a76333f9",
+    "crc32": "7b905383"
+  },
+  "movie": {
+    "name": "sonic-2-sonic-tails-complete-emeralds.bk2",
+    "path": "src/test/resources/traces/s2/runs/s2-sonic-tails-complete-emeralds/sonic-2-sonic-tails-complete-emeralds.bk2",
+    "sha256": "e850798f882b8c580aad148bc97cb50f260cae1d336dd649fe2f4dfae6796aa5",
+    "rows": 259590
+  },
+  "window": {
+    "first_row": 10150,
+    "exclusive_end": 12400,
+    "frames": 2250
+  },
+  "ticks": 2243,
+  "write_count": 268327,
+  "residual_write_count": 113,
+  "tick_semantics": "one row per completed driver service, the vertical-interrupt service the S2 sound driver runs from its interrupt entry at Z80 0038h. A service that overruns its frame completes in a later one, so a frame it ran past contributes no row.",
+  "sampling": "driver RAM 12FEh..2000h captured by the observer core as a completion snapshot on the driver's own service boundaries, never mid-invocation. S2's zVInt falls through into zUpdateDAC, so the service has two returns rather than S3K's one: the common exit in zUpdateDAC at Z80 PC 00E7h (docs/s2disasm/s2.sounddriver.asm:496-502) and the DAC-queued exit at 010Fh (:531-535). Both were confirmed against the driver image in the committed v1 fixture: push af;exx sits at 0038h as the source says, exx;ld b,1;pop af;ei;ret sits at 00E2h, and the second ei;ret at 010Eh, which matches the zloc_10B comment plus three bytes. The three TAIL_POP_PUSH sites that also end the service, at 017Ah, 0710h and 1288h, carry the same snapshot, because the interrupt service genuinely ends there and hands off to a bounded digital-audio iteration.",
+  "rejected_alternatives": "zUpdateMusic's return at 014Bh closes only the music update, before the SFX FM and PSG track loops and before the DAC update, so a snapshot there is a prefix of the service's work. Frame-granular sampling, which is what the v1 payload does, cannot separate a service that overruns its frame from one that does not. The zWriteToDAC dispatch and loop-jump hooks close digital-audio services rather than the interrupt.",
+  "writes_partition": "ordered YM/PSG writes partitioned by the same service-completion boundary, so every write appears exactly once in stream order. residual_write_count are the writes after the final completed service in the window, which belong to no tick.",
+  "requests": "the pre-consumption request markers observed since the previous boundary ride along in each row so a request resolves against the service that consumed it. They carry no compared value.",
+  "frame_field": "provenance only. Nothing compared is derived from it, and the oracle test proves this by perturbing every frame value and showing the verdict does not move, while perturbing a RAM byte does.",
+  "frame_shape": {
+    "frames": 2250,
+    "ticks": 2243,
+    "zero_service_frames": 7,
+    "multi_service_frames": 0,
+    "note": "A zero-service frame is one the driver's work ran past, so the Z80 misses that frame's vertical interrupt and the service reaches its return in a later frame. multi_service_frames is 0 across this window: each return is reached once per interrupt and the movie is NTSC, so the PAL double-update path never runs.",
+    "pal_double_update": "The PAL double-update branch never fires on this NTSC movie, and could not add a tick if it did. The driver gates it on IsPalFlag ANDed with zPalModeByte: IsPalFlag at 1B97h is FFh across all 2243 ticks, a mask rather than a console flag, and zPalModeByte at Z80 0007h is 00h across the overlapping v1 window, so the AND is zero. Even when it does fire it calls zUpdateMusic a second time inside one interrupt; it adds no second return. The boundary is therefore reached once per interrupt whichever of the two exits is taken, which is why multi_service_frames is 0 for a structural reason and not merely an observed one."
+  },
+  "observer": {
+    "patch": "0001-buffer-z80-audio-events",
+    "core_zst_sha256": "25ee305d8bcac2567d60fd04c14238784ddd018808d4dafe7d5ef2b8372677b6",
+    "lock": "tools/tracechaser/bizhawk-headless/native/gpgx-audio-observer/artifact-lock.json",
+    "manifest": "fixtures/gpgx-audio-service-manifest-s2-oracle-v2.json (game s2)",
+    "manifest_sha256": "3f37de6751229f3b9ff1d93f78b3b370e316c0e936b10fdfd3db88b5fd57ab99",
+    "tracechaser_producer_commit": "24b009fa99f301724080517e84f5009c7b6f05c0",
+    "tracechaser_branch": "bugfix/ai-s2-request-window-producer"
+  },
+  "capture_command": "tools/tracechaser/bizhawk-headless/run-s2-request-window.sh --request-window-mode driver-state --rom <s2.gen> --movie <bk2> --movie-sha256 <sha> --service-manifest fixtures/gpgx-audio-service-manifest-s2-oracle-v2.json --bizhawk-home <observer install> --first-row 10150 --exclusive-end 12400 --output <absent file>",
+  "duplicate_capture": "met: two serial captures to distinct absent external paths, byte-identical at sha256 e7456239c2f2da0804817d3c47cf81f9346877bbdf4b7f6f912acb7d7ebf0a87",
+  "postprocess": "gzip -9 -n",
+  "supersedes": {
+    "reference": "s2-ehz-reload-w10150-10900.raw.jsonl.gz",
+    "reason": "v1 samples the whole 8KB Z80 RAM once per movie row, so it cannot separate a service that overruns its frame from one that does not, and its span is the 750-row EHZ-reload window only.",
+    "status": "live; v1 is retired from nothing and its 698-tick gate is unchanged"
+  },
+  "production_bound": false,
+  "production_bound_meaning": "Comparison-only reference data. Nothing here hydrates engine state and no compared value comes from this file; the engine produces every value it is checked against.",
+  "measurement": {
+    "gate": "TestS2DriverStateOracle#driverStateComparesAcrossTheWidenedSpan",
+    "anchoring": "Both sides anchor on driver state, never on a frame: the engine's first tick carrying exactly one EHZ music sequencer, and the reference's first tick whose music tracks are playing. Both land on movie row 10202 and the rows then pair one to one.",
+    "state_only": "first divergence at compared tick 1789, movie row 11991, global.currentTempo expected 9Eh actual BEh; 409 of 2198 compared ticks divergent",
+    "state_and_writes": "first divergence at compared tick 0, movie row 10202, writes[0] expected ym0[28h]=06h actual ym0[2Bh]=80h; 1525 of 2198 compared ticks divergent",
+    "tick_counts": "reference 2243, engine 2232, 2198 compared after anchoring",
+    "alignment_evidence": "Every one of the 7 zero-service frames falls before the anchor: 10184, 10195 and 10197 to 10201. The compared span 10202 to 12399 contains 2198 frames and 2198 reference ticks, one service per frame, and the engine contributes exactly 2198 ticks after its own anchor. So no overrun frame lies inside the compared span and the ordinal correspondence cannot have drifted; the divergence at movie row 11991 is driver state, not scheduling.",
+    "request_resolution": "Request markers are resolved to services at capture time rather than by a reader rule: a marker observed since the previous boundary is written into the row for the service that completes at this boundary, which is the same resolution as sending each observed row to the first service completing after it."
+  }
+}

@@ -2,14 +2,14 @@ package com.openggf.game.sonic1.objects.badniks;
 
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
-import com.openggf.level.LevelManager;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
+import com.openggf.level.objects.ObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnCoordinateZeroScalarArgsRewindRecreatable;
 import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
-import com.openggf.sprites.playable.AbstractPlayableSprite;
 import com.openggf.game.PlayableEntity;
 
 import java.util.List;
@@ -30,18 +30,17 @@ import java.util.List;
  * the missile is deleted immediately (Msl_ChkCancel).
  */
 public class Sonic1BuzzBomberMissileInstance extends AbstractObjectInstance
-        implements TouchResponseProvider {
+        implements TouchResponseProvider, SpawnCoordinateZeroScalarArgsRewindRecreatable {
 
     // Collision: obColType = $87 -> category HURT ($80), size index 7
     // Size 7: width=$06 (6px), height=$06 (6px)
     private static final int COLLISION_SIZE_INDEX = 0x07;
 
-    // Flare countdown: objoff_32 = $E (14), but the ROM missile runs on its creation
-    // frame within the same ExecuteObjects pass (slot M > parent slot N), decrementing
-    // the timer from $E to $D immediately. The engine uses deferred addition
-    // (ObjectManager.pendingDynamicAdditions), so the missile's first update() is the
-    // NEXT frame. Pre-decrement to $D to compensate for the missed creation-frame tick.
-    private static final int FLARE_COUNTDOWN = 0x0D;
+    // Flare countdown: objoff_32 = $E (14). The object manager can already execute
+    // newly spawned children in-frame when their slot falls later in ExecuteObjects,
+    // so pre-decrementing here would double-compensate and arm the missile one frame
+    // too early.
+    private static final int FLARE_COUNTDOWN = 0x0E;
 
     // Flare animation: speed=7 means each frame shows for 8 game frames, 2 frames total = 16 frames
     private static final int FLARE_ANIM_SPEED = 8;
@@ -61,11 +60,11 @@ public class Sonic1BuzzBomberMissileInstance extends AbstractObjectInstance
 
     private int currentX;
     private int currentY;
-    private final int xVelocity;
-    private final int yVelocity;
+    private int xVelocity;
+    private int yVelocity;
     private final SubpixelMotion.State motionState;
-    private final boolean facingLeft;
-    private final Sonic1BuzzBomberBadnikInstance parent;
+    private boolean facingLeft;
+    private int parentSlotIndex;
 
     private Phase phase;
     private int flareTimer;
@@ -82,11 +81,11 @@ public class Sonic1BuzzBomberMissileInstance extends AbstractObjectInstance
      * @param xVel      X velocity in subpixels ($200 or -$200)
      * @param yVel      Y velocity in subpixels ($200, always downward)
      * @param facingLeft Direction the parent was facing
-     * @param parent    Reference to parent Buzz Bomber (for cancellation tracking)
+     * @param parentSlotIndex The parent's object slot at missile spawn time.
      * @param levelManager Level manager reference
      */
     public Sonic1BuzzBomberMissileInstance(int x, int y, int xVel, int yVel,
-            boolean facingLeft, Sonic1BuzzBomberBadnikInstance parent) {
+            boolean facingLeft, int parentSlotIndex) {
         super(new ObjectSpawn(x, y, 0x23, 0, 0, false, 0), "BuzzBomberMissile");
         this.currentX = x;
         this.currentY = y;
@@ -94,7 +93,7 @@ public class Sonic1BuzzBomberMissileInstance extends AbstractObjectInstance
         this.yVelocity = yVel;
         this.motionState = new SubpixelMotion.State(x, y, 0, 0, xVel, yVel);
         this.facingLeft = facingLeft;
-        this.parent = parent;
+        this.parentSlotIndex = parentSlotIndex;
         
         this.phase = Phase.FLARE_COUNTDOWN;
         this.flareTimer = FLARE_COUNTDOWN;
@@ -104,14 +103,23 @@ public class Sonic1BuzzBomberMissileInstance extends AbstractObjectInstance
         this.collisionEnabled = false;
     }
 
-    private int updateCount; // temp diagnostic
+    private Sonic1BuzzBomberMissileInstance(int x, int y, int xVel, int yVel) {
+        this(x, y, xVel, yVel, false, -1);
+    }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
-        updateCount++;
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        // Msl_ChkCancel: if parent Buzz Bomber was destroyed, delete missile
-        if (parent != null && parent.isDestroyed()) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
+        // ROM Msl_ChkCancel (parent-destroyed -> delete) is called ONLY from
+        // Msl_Main (routine 0) and Msl_Animate (routine 2) — the flare phases.
+        // Msl_FromBuzz (routine 4, the active flight phase) does NOT call it
+        // (docs/s1disasm/_incObj/22, 23 Badnik - Buzz Bomber and Missile.asm:
+        // 162-194, 220-249). Once the missile is active it ignores the parent's
+        // fate and only deletes at the bottom-boundary check. Checking it in
+        // ACTIVE made the missile vanish the frame Sonic destroys the Buzz Bomber
+        // (MZ3 f239: Buzz Bomber slot 80 -> ExplosionItem 0x27), freeing the
+        // missile's OST slot ~840 frames early and shifting every later slot down
+        // one (Batbrain 73 vs ROM 74 -> missed React bounce at f2079).
+        if (phase != Phase.ACTIVE && isParentSlotExplosionItem()) {
             setDestroyed(true);
             return;
         }
@@ -149,7 +157,6 @@ public class Sonic1BuzzBomberMissileInstance extends AbstractObjectInstance
             if (animFrame >= FLARE_FRAME_COUNT) {
                 // afRoutine: advance to active phase
                 phase = Phase.ACTIVE;
-                collisionEnabled = true;
                 animFrame = 0;
                 renderedFrame = 2; // Active missile frame 0 (Ball1)
                 return;
@@ -163,6 +170,11 @@ public class Sonic1BuzzBomberMissileInstance extends AbstractObjectInstance
      * Deletes when below level bottom boundary + $E0.
      */
     private void updateActive() {
+        // Msl_FromBuzz writes obColType at the start of routine 4. AnimateSprite's
+        // afRoutine only advances obRoutine on the preceding pass, so collision
+        // must remain clear until this first ACTIVE execution.
+        collisionEnabled = true;
+
         // Apply velocity (SpeedToPos: 16.8 fixed-point)
         motionState.x = currentX;
         motionState.y = currentY;
@@ -172,8 +184,10 @@ public class Sonic1BuzzBomberMissileInstance extends AbstractObjectInstance
         currentX = motionState.x;
         currentY = motionState.y;
 
-        // Check if below level bottom boundary + $E0
-        if (!isOnScreen(BOTTOM_MARGIN)) {
+        // Msl_FromBuzz deletes only after y_pos passes v_limitbtm2 + $E0.
+        // It does not despawn for X/offscreen visibility, so missiles can keep
+        // occupying their FindFreeObj slot while travelling left of the camera.
+        if (currentY > getBottomBoundary() + BOTTOM_MARGIN) {
             setDestroyed(true);
             return;
         }
@@ -214,6 +228,33 @@ public class Sonic1BuzzBomberMissileInstance extends AbstractObjectInstance
     @Override
     public int getY() {
         return currentY;
+    }
+
+    @Override
+    public boolean isPersistent() {
+        // Msl_FromBuzz deletes through Msl_Delete only after the bottom-boundary
+        // check; it calls DisplaySprite directly rather than RememberState.
+        return !isDestroyed();
+    }
+
+    private int getBottomBoundary() {
+        var camera = services().camera();
+        return camera != null ? camera.getMaxY() & 0xFFFF : 0x700;
+    }
+
+    private boolean isParentSlotExplosionItem() {
+        if (parentSlotIndex < 0 || services().objectManager() == null) {
+            return false;
+        }
+        for (ObjectInstance instance : services().objectManager().getActiveObjects()) {
+            if (!(instance instanceof AbstractObjectInstance object)
+                    || object.getSlotIndex() != parentSlotIndex) {
+                continue;
+            }
+            ObjectSpawn slotSpawn = instance.getSpawn();
+            return slotSpawn != null && (slotSpawn.objectId() & 0xFF) == 0x27;
+        }
+        return false;
     }
 
     @Override

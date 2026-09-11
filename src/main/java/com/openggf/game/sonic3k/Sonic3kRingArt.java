@@ -6,7 +6,7 @@ import com.openggf.level.Pattern;
 import com.openggf.level.rings.RingFrame;
 import com.openggf.level.rings.RingFramePiece;
 import com.openggf.level.rings.RingSpriteSheet;
-import com.openggf.tools.NemesisReader;
+import com.openggf.data.compression.NemesisReader;
 import com.openggf.util.PatternDecompressor;
 
 import java.io.IOException;
@@ -60,8 +60,13 @@ public class Sonic3kRingArt {
 
     private Pattern[] loadRingPatterns() throws IOException {
         FileChannel channel = rom.getFileChannel();
-        channel.position(Sonic3kConstants.ART_NEM_RING_HUD_TEXT_ADDR);
-        byte[] result = NemesisReader.decompress(channel);
+        // Rom exposes a shared FileChannel; lock around seek+decode so concurrent
+        // readers cannot move the channel position mid-stream.
+        byte[] result;
+        synchronized (rom) {
+            channel.position(Sonic3kConstants.ART_NEM_RING_HUD_TEXT_ADDR);
+            result = NemesisReader.decompress(channel);
+        }
         return PatternDecompressor.fromBytes(result, RING_PATTERN_COUNT);
     }
 

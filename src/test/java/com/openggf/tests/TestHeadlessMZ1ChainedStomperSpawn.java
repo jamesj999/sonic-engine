@@ -1,10 +1,9 @@
 package com.openggf.tests;
 
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import com.openggf.game.sonic1.constants.Sonic1ObjectIds;
 import com.openggf.game.sonic1.objects.Sonic1ChainedStomperObjectInstance;
 import com.openggf.game.GameServices;
@@ -14,12 +13,11 @@ import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.sprites.playable.Sonic;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
 
 import java.util.Collection;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Regression test for left-side object spawning in MZ Act 1.
@@ -58,24 +56,21 @@ public class TestHeadlessMZ1ChainedStomperSpawn {
     private static final int CHUNK_MASK = 0xFF80;
     private static final int UNLOAD_BEHIND = 0x80;
     private static final int LOAD_AHEAD = 0x280;
-
-    @ClassRule public static RequiresRomRule romRule = new RequiresRomRule();
-
     private static SharedLevel sharedLevel;
 
-    @BeforeClass
+    @BeforeAll
     public static void loadLevel() throws Exception {
         sharedLevel = SharedLevel.load(SonicGame.SONIC_1, ZONE_MZ, ACT_1);
     }
 
-    @AfterClass
+    @AfterAll
     public static void cleanup() {
         if (sharedLevel != null) sharedLevel.dispose();
     }
 
     private HeadlessTestFixture fixture;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         fixture = HeadlessTestFixture.builder()
                 .withSharedLevel(sharedLevel)
@@ -96,30 +91,24 @@ public class TestHeadlessMZ1ChainedStomperSpawn {
         placeAndSettle(sprite);
 
         ObjectManager om = GameServices.level().getObjectManager();
-        assertNotNull("ObjectManager should exist", om);
+        assertNotNull(om, "ObjectManager should exist");
 
         int cameraX = fixture.camera().getX();
 
         // Verify the stomper exists in the layout
         ObjectSpawn stomperSpawn = findStomperInLayout(om, STOMPER_X);
-        assertNotNull(
-                "ChainedStomper should exist in MZ1 layout at x=" + STOMPER_X,
-                stomperSpawn);
+        assertNotNull(stomperSpawn, "ChainedStomper should exist in MZ1 layout at x=" + STOMPER_X);
 
         // Verify it is in the active spawn set
-        assertTrue(
-                "ChainedStomper at (" + stomperSpawn.x() + ", " + stomperSpawn.y()
+        assertTrue(om.getActiveSpawns().contains(stomperSpawn), "ChainedStomper at (" + stomperSpawn.x() + ", " + stomperSpawn.y()
                         + ") should be in the active spawn set. Camera X=" + cameraX
                         + ", chunk-aligned backward boundary="
-                        + ((cameraX & CHUNK_MASK) - UNLOAD_BEHIND),
-                om.getActiveSpawns().contains(stomperSpawn));
+                        + ((cameraX & CHUNK_MASK) - UNLOAD_BEHIND));
 
         // Verify it has been instantiated
         boolean instanceExists = om.getActiveObjects().stream()
                 .anyMatch(obj -> obj instanceof Sonic1ChainedStomperObjectInstance);
-        assertTrue(
-                "ChainedStomper instance should exist. Camera X=" + cameraX,
-                instanceExists);
+        assertTrue(instanceExists, "ChainedStomper instance should exist. Camera X=" + cameraX);
     }
 
     /**
@@ -141,7 +130,7 @@ public class TestHeadlessMZ1ChainedStomperSpawn {
         placeAndSettle(sprite);
 
         ObjectManager om = GameServices.level().getObjectManager();
-        assertNotNull("ObjectManager should exist", om);
+        assertNotNull(om, "ObjectManager should exist");
 
         int cameraX = fixture.camera().getX();
         int chunkAligned = cameraX & CHUNK_MASK;
@@ -155,7 +144,7 @@ public class TestHeadlessMZ1ChainedStomperSpawn {
         StringBuilder missing = new StringBuilder();
         for (ObjectSpawn spawn : om.getAllSpawns()) {
             // ROM: bls (Branch if Lower or Same) means objects at exactly the forward
-            // boundary are NOT spawned (windowEnd <= objectX → skip). Use strict less-than.
+            // boundary are NOT spawned (windowEnd <= objectX â†’ skip). Use strict less-than.
             if (spawn.x() >= romBackward && spawn.x() < romForward) {
                 if (!om.getActiveSpawns().contains(spawn)) {
                     missingCount++;
@@ -165,11 +154,9 @@ public class TestHeadlessMZ1ChainedStomperSpawn {
             }
         }
 
-        assertEquals(
-                "All objects within ROM-parity window [" + romBackward + ", " + romForward
+        assertEquals(0, missingCount, "All objects within ROM-parity window [" + romBackward + ", " + romForward
                         + "] should be in active set (camera X=" + cameraX
-                        + ", chunk=" + chunkAligned + "). Missing:\n" + missing,
-                0, missingCount);
+                        + ", chunk=" + chunkAligned + "). Missing:\n" + missing);
     }
 
     private void placeAndSettle(Sonic sprite) {
@@ -197,3 +184,5 @@ public class TestHeadlessMZ1ChainedStomperSpawn {
         return null;
     }
 }
+
+

@@ -171,4 +171,12 @@ public class Sonic3kSpecialStageGrid {
     public void andCellByIndex(int bufferIndex, int mask) {
         buffer[LAYOUT_GRID_OFFSET + (bufferIndex & 0x3FF)] &= mask;
     }
+
+    Sonic3kSpecialStageSnapshot.GridSnapshot captureRewindSnapshot() {
+        return new Sonic3kSpecialStageSnapshot.GridSnapshot(buffer);
+    }
+
+    void restoreRewindSnapshot(Sonic3kSpecialStageSnapshot.GridSnapshot snapshot) {
+        Sonic3kSpecialStageSnapshot.copyInto(snapshot.buffer(), buffer);
+    }
 }

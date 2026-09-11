@@ -8,13 +8,18 @@ import com.openggf.debug.DebugRenderContext;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
+import com.openggf.level.objects.ObjectConstructionContext;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.PlatformBobHelper;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.RomObjectCodePointerProvider;
 import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
+import com.openggf.level.objects.SolidRoutineProfile;
 import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.ObjectTerrainUtils;
@@ -55,12 +60,19 @@ import java.util.logging.Logger;
  * sub_24FDE (line 50229), Platform_Rising (line 50462), loc_252B8 (line 50556).
  */
 public class FloatingPlatformObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, RomObjectCodePointerProvider,
+        RewindRecreatable {
 
     private static final Logger LOG = Logger.getLogger(FloatingPlatformObjectInstance.class.getName());
 
     // Priority: $180 = bucket 3 (ROM: move.w #$180,priority(a0))
     private static final int PRIORITY = 3;
+
+    @Override
+    public int romObjectCodePointerHighWord() {
+        // Obj_FloatingPlatform dispatches through $000255F4.
+        return 0x0002;
+    }
 
     // ===== Size table (byte_254FA): 3-byte entries =====
     // Each entry: halfWidth, halfHeight, mappingFrame
@@ -109,16 +121,18 @@ public class FloatingPlatformObjectInstance extends AbstractObjectInstance
     // ===== Instance state =====
 
     private final ZoneConfig config;
-    private final int halfWidth;
-    private final int halfHeight;
-    private final int mappingFrame;
-    private final int moveType;
-    private final boolean xFlip;
+    private int halfWidth;
+    private int halfHeight;
+    private int mappingFrame;
+    private int moveType;
+    private boolean xFlip;
 
     private int x;
     private int y;
-    private final int baseX;  // objoff_30: saved X position
-    private final int baseY;  // objoff_34: saved Y position
+    private int baseX;  // objoff_30: saved X position
+    private int baseY;  // objoff_34: saved Y position
+    private int outOfRangeReferenceX; // objoff_44: saved deletion anchor
+    private int outOfRangeLimit;      // objoff_42: deletion range
     // Stationary bob state (type 0) — sine-based vertical nudge when player stands
     private final PlatformBobHelper bobHelper = new PlatformBobHelper();
 
@@ -162,6 +176,11 @@ public class FloatingPlatformObjectInstance extends AbstractObjectInstance
         this.baseY = spawn.y();
         this.x = baseX;
         this.y = baseY;
+        // ROM Obj_FloatingPlatform saves x_pos to $44 and checks that anchor
+        // at loc_25628, not the moving platform's live x_pos. Types 12+ widen
+        // the delete range and bias $44 by +$100 (sonic3k.asm:50810-50835).
+        this.outOfRangeReferenceX = moveType >= 12 ? baseX + 0x100 : baseX;
+        this.outOfRangeLimit = moveType >= 12 ? 0x380 : 0x280;
 
         // Initialize SubpixelMotion state for Rising platform (type 7)
         this.risingState = new SubpixelMotion.State(baseX, baseY, 0, 0, 0, 0);
@@ -185,13 +204,19 @@ public class FloatingPlatformObjectInstance extends AbstractObjectInstance
         updateDynamicSpawn(x, y);
     }
 
+    @Override
+    public FloatingPlatformObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return ObjectConstructionContext.construct(ctx.objectServices(),
+                () -> new FloatingPlatformObjectInstance(ctx.spawn()));
+    }
+
     // ===== SolidObjectProvider =====
 
     @Override
     public SolidObjectParams getSolidParams() {
         // ROM: move.b height_pixels(a0),d3; addq.w #1,d3 (sonic3k.asm:50839-50840)
         // height_pixels is never modified — only y_radius changes for ObjCheckCeilingDist
-        return new SolidObjectParams(halfWidth, halfHeight, halfHeight + 1);
+        return SolidObjectParams.of(halfWidth, halfHeight, halfHeight + 1);
     }
 
     @Override
@@ -200,9 +225,38 @@ public class FloatingPlatformObjectInstance extends AbstractObjectInstance
     }
 
     @Override
+    public SolidRoutineProfile getSolidRoutineProfile() {
+        return SolidRoutineProfile.fromProvider(this);
+    }
+
+    @Override
+    public boolean usesGroundHalfHeightForTopSolidContact() {
+        // Obj_FloatingPlatform increments d3 after loading height_pixels, then
+        // passes that height+1 surface to SolidObjectTop.
+        return true;
+    }
+
+    @Override
+    public boolean rejectsZeroDistanceTopSolidLanding() {
+        // SolidObjectTop reaches loc_1E45A, where the unsigned comparison
+        // accepts only the negative overlap band [-$10,-1]. Exact d0=0
+        // returns without installing a ride.
+        return true;
+    }
+
+    @Override
+    public boolean usesPlatformObjectLandingSnap() {
+        // The native caller uses SolidObjectTop's relative y_pos += d0 + 3
+        // result. It does not run PlatformObject_ChkYRange's absolute snap.
+        return false;
+    }
+
+    @Override
     public boolean isSolidFor(PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        return !isDestroyed();
+        // Obj_FloatingPlatform tests the object render_flags sign bit before
+        // calling SolidObjectTop (loc_255F4). Unlike SolidObjectTop itself,
+        // this caller-owned gate suppresses both fresh and continued contact.
+        return !isDestroyed() && isWithinSolidContactBounds();
     }
 
     // ===== SolidObjectListener =====
@@ -224,13 +278,42 @@ public class FloatingPlatformObjectInstance extends AbstractObjectInstance
     public int getY() {
         return y;
     }
+
+    @Override
+    public int getOnScreenHalfWidth() {
+        return halfWidth;
+    }
+
+    @Override
+    public int getOnScreenHalfHeight() {
+        return halfHeight;
+    }
+
+    @Override
+    public int getOutOfRangeReferenceX() {
+        return outOfRangeReferenceX;
+    }
+
+    @Override
+    public boolean usesCustomOutOfRangeCheck() {
+        return outOfRangeLimit != 0x280;
+    }
+
+    @Override
+    public boolean isCustomOutOfRange(int cameraX) {
+        int objRounded = outOfRangeReferenceX & 0xFF80;
+        int cameraBack = (cameraX - 0x80) & 0xFF80;
+        int distance = (objRounded - cameraBack) & 0xFFFF;
+        return distance > outOfRangeLimit;
+    }
+
     @Override
     public int getPriorityBucket() {
         return RenderPriority.clamp(PRIORITY);
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         applyMovement(player);
         updateDynamicSpawn(x, y);
@@ -355,13 +438,17 @@ public class FloatingPlatformObjectInstance extends AbstractObjectInstance
         if (!rising) {
             if (isPlayerRiding()) {
                 rising = true;
+                // ROM Platform_Rising sets $3C/y_radius and returns; MoveSprite2
+                // starts on the next object update (sonic3k.asm locret_25200).
+                return;
             } else {
                 return;
             }
         }
 
-        // MoveSprite2 via SubpixelMotion (ROM: ext.l d0; asl.l #8,d0; add.l d0,d3)
-        SubpixelMotion.moveSprite2(risingState);
+        // ROM MoveSprite2 updates the 32-bit object position with velocity << 8
+        // (sonic3k.asm:36053-36062), preserving the full 16-bit fractional word.
+        SubpixelMotion.speedToPos(risingState);
         y = risingState.y;
 
         // Accelerate upward only when below target (sonic3k.asm:50477-50483)

@@ -1,57 +1,54 @@
 package com.openggf.tests;
 
-import org.junit.Test;
-import com.openggf.tools.NemesisReader;
+import com.openggf.game.GameServices;
+import com.openggf.tests.rules.RequiresRom;
+import com.openggf.tests.rules.SonicGame;
+import com.openggf.data.compression.NemesisReader;
+import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
-import java.io.File;
 import java.io.IOException;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
-import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assume.assumeNotNull;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
+@RequiresRom(SonicGame.SONIC_2)
 public class NemesisReaderTest {
 
     @Test
-    public void testRingArtDecompressionLengthAndHash() throws Exception {
-        File romFile = RomTestUtils.ensureRomAvailable();
-        assumeNotNull("Sonic 2 ROM not available — skipping test", romFile);
+    void testRingArtDecompressionLengthAndHash() throws Exception {
         byte[] result;
-        try (FileChannel channel = FileChannel.open(romFile.toPath(), StandardOpenOption.READ)) {
-            channel.position(0x7945C);
-            result = NemesisReader.decompress(channel);
-        }
+        FileChannel channel = GameServices.rom().getRom().getFileChannel();
+        channel.position(0x7945C);
+        result = NemesisReader.decompress(channel);
 
-        assertEquals("Ring art should be 14 patterns", 14 * 0x20, result.length);
-        assertEquals("Ring art checksum mismatch", "3167aa6aa97faabadff19b28953ad122", md5Hex(result));
+        assertEquals(14 * 0x20, result.length, "Ring art should be 14 patterns");
+        assertEquals("3167aa6aa97faabadff19b28953ad122", md5Hex(result), "Ring art checksum mismatch");
     }
 
     @Test
-    public void testInlineRunsNormalMode() throws Exception {
+    void testInlineRunsNormalMode() throws Exception {
         byte[] payload = buildInlineNemesisStream(false, 1);
         byte[] result = NemesisReader.decompress(Channels.newChannel(new ByteArrayInputStream(payload)));
 
         assertEquals(0x20, result.length);
         for (int i = 0; i < result.length; i++) {
             int expected = (i < 4) ? 0x11 : 0x00;
-            assertEquals("Unexpected byte at " + i, expected, result[i] & 0xFF);
+            assertEquals(expected, result[i] & 0xFF, "Unexpected byte at " + i);
         }
     }
 
     @Test
-    public void testInlineRunsXorMode() throws Exception {
+    void testInlineRunsXorMode() throws Exception {
         byte[] payload = buildInlineNemesisStream(true, 1);
         byte[] result = NemesisReader.decompress(Channels.newChannel(new ByteArrayInputStream(payload)));
 
         assertEquals(0x20, result.length);
         for (int i = 0; i < result.length; i++) {
-            assertEquals("Unexpected byte at " + i, 0x11, result[i] & 0xFF);
+            assertEquals(0x11, result[i] & 0xFF, "Unexpected byte at " + i);
         }
     }
 
@@ -61,13 +58,13 @@ public class NemesisReaderTest {
         out.write((header >> 8) & 0xFF);
         out.write(header & 0xFF);
 
-        out.write(0xFF); // end of code table (inline-only data)
+        out.write(0xFF);
 
         BitPacker packer = new BitPacker(out);
         int rows = patternCount * 8;
         for (int i = 0; i < rows; i++) {
-            packer.writeBits(0x3F, 6); // inline prefix 111111
-            int inline = (i == 0) ? 0x71 : 0x70; // first row pal=1, rest pal=0
+            packer.writeBits(0x3F, 6);
+            int inline = (i == 0) ? 0x71 : 0x70;
             packer.writeBits(inline, 7);
         }
         packer.flush();
@@ -129,3 +126,5 @@ public class NemesisReaderTest {
         }
     }
 }
+
+

@@ -1,9 +1,13 @@
 package com.openggf.game.sonic3k;
 
 import com.openggf.game.AbstractBonusStageCoordinator;
+import com.openggf.game.BonusStageProvider;
 import com.openggf.game.BonusStageType;
 import com.openggf.game.GameServices;
 import com.openggf.game.sonic3k.bonusstage.slots.S3kSlotBonusStageRuntime;
+import com.openggf.game.sonic3k.constants.Sonic3kObjectIds;
+import com.openggf.game.sonic3k.objects.PachinkoEnergyTrapObjectInstance;
+import com.openggf.level.objects.ObjectSpawn;
 
 /**
  * S3K-specific bonus stage coordinator.
@@ -16,6 +20,7 @@ import com.openggf.game.sonic3k.bonusstage.slots.S3kSlotBonusStageRuntime;
  *   <li>1 -> GLOWING_SPHERE / Pachinko (zone $1400, music $1B)</li>
  *   <li>2 -> GUMBALL (zone $1300, music $1E)</li>
  * </ul>
+ * <p>Concrete ring ranges: 20–34 rings → SLOT_MACHINE, 35–49 rings → GLOWING_SPHERE, 50–64 rings → GUMBALL.
  * <p>
  * Note: SK_alone_flag handling is not implemented. The only supported S3K ROM
  * is the combined "Sonic and Knuckles &amp; Sonic 3 (W) [!].gen" which always sets
@@ -37,8 +42,20 @@ public class Sonic3kBonusStageCoordinator extends AbstractBonusStageCoordinator 
     private static final int RING_DIVISOR   = 15;
     private static final int STAGE_COUNT    = 3;
 
+    private static final BonusStageProvider.BootstrapObject PACHINKO_BOOTSTRAP =
+            new BonusStageProvider.BootstrapObject(
+                    new ObjectSpawn(0x78, 0x0F30,
+                            Sonic3kObjectIds.PACHINKO_ENERGY_TRAP,
+                            0, 0, false, 0),
+                    PachinkoEnergyTrapObjectInstance.class,
+                    PachinkoEnergyTrapObjectInstance::new);
+
     private S3kSlotBonusStageRuntime slotRuntime;
-    private int slotFrameCounter;
+
+    @Override
+    public BonusStageProvider.BootstrapObject bootstrapObject(BonusStageType type) {
+        return type == BonusStageType.GLOWING_SPHERE ? PACHINKO_BOOTSTRAP : null;
+    }
 
     @Override
     public BonusStageType selectBonusStage(int ringCount) {
@@ -81,17 +98,14 @@ public class Sonic3kBonusStageCoordinator extends AbstractBonusStageCoordinator 
         slotRuntime.bootstrap();
         if (!slotRuntime.isInitialized()) {
             slotRuntime = null;
-            slotFrameCounter = 0;
             return;
         }
-        var levelManager = GameServices.levelOrNull();
-        slotFrameCounter = levelManager != null ? levelManager.getFrameCounter() : 0;
     }
 
     @Override
     public void onFrameUpdate() {
         if (slotRuntime != null) {
-            slotRuntime.update(slotFrameCounter++);
+            slotRuntime.update(romLevelFrameCounter());
             if (slotRuntime.isExitTriggered()) {
                 requestExit();
             }
@@ -119,8 +133,32 @@ public class Sonic3kBonusStageCoordinator extends AbstractBonusStageCoordinator 
             slotRuntime.shutdown();
             slotRuntime = null;
         }
-        slotFrameCounter = 0;
         super.onExit();
+    }
+
+    /**
+     * The ROM's object-visible {@code Level_frame_counter}.
+     *
+     * <p>Every S3K/S2/S1 main loop increments it immediately after
+     * {@code Wait_VSync} and BEFORE the object pass -- for the bonus/special
+     * stages see {@code sonic3k.asm:10742-10744} and {@code :63207-63209}, where
+     * {@code addq.w #1,(Level_frame_counter).w} sits between {@code Wait_VSync}
+     * and {@code Process_Sprites} -- so an object running this frame reads the
+     * already-incremented value. The engine advances its own counter at the same
+     * point, in {@code LevelFrameStep} via
+     * {@code LevelManager.advanceLevelFrameCounter()}, so every ported
+     * {@code Level_frame_counter} gate reads {@code getFrameCounter()} with no
+     * adjustment.
+     *
+     * <p>This replaces a free-running counter that was seeded from the level
+     * counter once at stage setup and then self-incremented. It read one below
+     * the ROM's object-visible value, so the cage's reward-spawn gate
+     * {@code btst #0,(Level_frame_counter+1).w} ({@code sonic3k.asm:99435},
+     * {@code :99417}) fired on the ROM's EVEN frames instead of its odd ones.
+     */
+    private int romLevelFrameCounter() {
+        var levelManager = GameServices.levelOrNull();
+        return levelManager != null ? levelManager.getFrameCounter() : 0;
     }
 
     public S3kSlotBonusStageRuntime activeSlotRuntime() {

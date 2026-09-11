@@ -1,0 +1,77 @@
+{
+  "schema": "openggf.s3k_audio_oracle_reference_fixture.v1",
+  "reference": "s3k-aiz1-intro-reference-v2.jsonl.gz",
+  "reference_gzip_sha256": "ac0e03e2025d54d4de607beffca7db265b1514ce640cadb7e2ad901c44829d8f",
+  "reference_uncompressed_sha256": "c8174a3f150409bb2511c09b85d511ffd6acd98aff8abc682c1f52f632623f06",
+  "terminal_body_sha256": "0847644e5feb33f85d5f6d5ffe8748374324c4d1c3bb704a938817b29fb74edc",
+  "rom_sha1": "cfbf98c36c776677290a872547ac47c53d2761d6",
+  "rom_crc32": "63522553",
+  "movie": {
+    "path": "src/test/resources/traces/s3k/_movies/s3k-complete-sonic-tails.bk2",
+    "sha256": "82eabfbc65e33c160ce209baa1ca3f967cb677fe22350bc100625d8c41a8e1bf",
+    "frame_count": 466334
+  },
+  "ticks": 5263,
+  "frames": 5400,
+  "write_count": 725898,
+  "residual_write_count": 122,
+  "frame_range": "movie frames 0-5399 from power-on",
+  "tick_semantics": "one row per completed driver service, named in each row's service field. Two kinds qualify: the one-shot DriverInit that precedes the first vertical interrupt (kind 6, completing where the first zVInt begins), and every zVInt return (kind 3). 5400 movie frames yield 5263 ticks: pre-install frames run no service, and a frame whose driver work overruns it contributes no row because zVInt reaches its return in the following frame. Movie frame 252, the title-music load, is such a frame; its service completes in frame 253.",
+  "sampling": "driver RAM 1C00h..1FA0h captured by the observer core as a completion snapshot on the driver's own service boundaries: the zVInt ret at Z80 PC 0084h (skdisasm Sound/Z80 Sound Driver.asm:520; the ;loc_85 comment at :522 pins the address) and the DriverInit completion at PC 0038h. Never mid-invocation.",
+  "writes_partition": "ordered YM/PSG writes partitioned by the same service-completion boundary, so every write appears exactly once in stream order. residual_write_count are the writes after the final completed service, which belong to no tick.",
+  "supersedes": {
+    "reference": "s3k-aiz1-intro-reference-v1.jsonl.gz",
+    "reason": "v1 declared sampling post_invocation but read the RAM out of band after the frame advanced, so music-load frames recorded a truncated prefix of zUpdateMusic's track-iteration order. That is what stalled the oracle at v1 tick 138, movie frame 252.",
+    "status": "retired; retained unmodified for provenance and not compared"
+  },
+  "content": "boot, SEGA chant, title music (mus 25h), file select, Knuckles intro theme (mus 1Fh), AIZ1 music (mus 01h) with gameplay SFX",
+  "observer": {
+    "patch": "0001-buffer-z80-audio-events",
+    "core_zst_sha256": "28b7d3760d9770fa21c548366f9ec85d2e4038f0e77d3d8a847f99f0ddc48d41",
+    "lock": "tools/tracechaser/bizhawk-headless/native/gpgx-audio-observer/artifact-lock.json",
+    "tracechaser_gitlink": "146589c25a5bab579bc771bb67cd3c22c2cba668",
+    "manifest": "fixtures/gpgx-audio-service-manifest-s3k-oracle-v2.json (game s3k)",
+    "manifest_sha256": "00d703e3acedc9398352eeab05e2c0e332d60a7f08eee4c55f5475c881296660"
+  },
+  "capture_command": "OGGF_BIZHAWK_STOCK=<stock 2.11> OGGF_OBSERVER_CORE=<lock-matching gpgx.wbx.zst> OGGF_WORKDIR=<scratch> OGGF_OUT=<out.jsonl> tools/audio/run_s3k_audio_oracle_reference_v2.sh",
+  "duplicate_capture": "two serial captures to separate external roots were byte-identical at sha256 c8174a3f150409bb2511c09b85d511ffd6acd98aff8abc682c1f52f632623f06",
+  "postprocess": "gzip -9 -n out.jsonl",
+  "boot_boundary": "the DriverInit row carries 84 Z80 writes, ending at ym port 0 register 27h. v1's frame-granular projection reported 85 for its boot service because it swept the whole frame, taking in the 2Bh write that the first vertical interrupt actually owns.",
+  "frame_shape": {
+    "frames": 5400,
+    "ticks": 5263,
+    "zero_service_frames": 137,
+    "zero_service_pre_install": 14,
+    "zero_service_pre_install_range": "movie frames 0-13, before the 68k has loaded the driver",
+    "zero_service_overrun": 123,
+    "double_service_frames": 0,
+    "note": "A zero-service frame is one the driver's work ran past, so the Z80 misses that frame's vertical interrupt and zVInt reaches its return in a later frame. Movie frame 252, the title-music load, is one. The longest contiguous block begins at frame 64 and is zPlaySEGAPCM, which disables interrupts for its whole transport. double_service_frames is 0 across this window: 0084h is reached once per interrupt, and the movie is NTSC so the PAL double-update path never runs."
+  },
+  "request_sidecar": {
+    "file": "s3k-aiz1-intro-requests-v1.json",
+    "schema": "openggf.s3k-preconsumption-request-observations.v1",
+    "sha256": "d4fc2fae62c667b1da41ba428315ac121e04494836adca15e84e32c8cd696be4",
+    "bytes": 1483,
+    "production_bound": false,
+    "production_bound_meaning": "The sidecar's own metadata carries production_bound:false and that value is preserved verbatim; the reader refuses any sidecar that claims otherwise. Publication installs a reviewed capture as a committed comparison-side driver input. It does not bind the observation to a production producer, and it gives the sidecar no authority over any compared value: the sidecar supplies only the mailbox byte a service consumes, exactly as the S1 tool supplies the song it plays. Every compared value still comes from the engine alone.",
+    "what_it_supplies": "The 68k-written zMusicNumber byte for the movie rows this stream's frame-entry mailbox sampling cannot show. mailbox_sampling is frame_entry, so a request written and consumed before the next sampled frame entry is invisible; movie row 242's cmd_StopSEGA (0FEh) is such a request and is what stalled the v2 oracle at tick 128.",
+    "observation_site": "Z80 RAM 1C0Ah read at 68k PC 01370h, the move.w #0,$A11100 bus release that follows the request store, while the Z80 was still stopped. Recorded as observed_at_pc/observed_opcode/mailbox_address in the sidecar itself.",
+    "window": "movie rows [0,5400), the same power-on window as the reference",
+    "observations": 14,
+    "capture_sha256": "2063b558c9b81ba8ccdf487ddb95d9be1bfd7979997be831d0f73bd4164639d3",
+    "duplicate_capture_gate": "met: two independent serial captures to distinct absent external paths, byte-identical at sha256 2063b558c9b81ba8ccdf487ddb95d9be1bfd7979997be831d0f73bd4164639d3",
+    "capture_paths": [
+      "<agent-scratch>/claude/s3k-capture-a-20260903/s3k-request.raw.jsonl",
+      "<agent-scratch>/claude/s3k-capture-b-20260903/s3k-request.raw.jsonl"
+    ],
+    "capture_paths_note": "Two distinct absent external paths under a session scratch root, outside the repository; recorded for provenance, not as a re-runnable location.",
+    "service_manifest_sha256": "a2986032425af20fce19abd9e4bb0a1deabb142707510fe1d1830995adaaaf49",
+    "observer": {
+      "identity": "gpgx audio observer core with the request-observation action, TraceChaser branch bugfix/ai-s3k-request-observer at 7dd4cf3",
+      "core_zst_sha256": "28b7d3760d9770fa21c548366f9ec85d2e4038f0e77d3d8a847f99f0ddc48d41",
+      "note": "The same observer core family as the v2 reference; the request action reads the mailbox at the 68k store site and emits no compared value."
+    },
+    "resolution": "A sidecar row R is resolved against service ticks by the reader, never by a frame index in the fixture. See S3kAudioReferenceReader.resolveSidecarRequests for the rule and its derivation from this stream's own frame-entry samples.",
+    "notes": "Human approval for publication was granted on 2026-09-03 as part of the roadmap, after the duplicate-capture gate was met. The oracle defaults to this file; S3kAudioParityTool's --requests option remains an override."
+  }
+}

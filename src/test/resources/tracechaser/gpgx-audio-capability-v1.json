@@ -1,0 +1,48 @@
+{
+  "schema": "openggf.gpgx-audio-capability.v1",
+  "service_manifest_sha256": "ef8f8103c38d70e41cb09cb29751f56815a0401709dc509071aa514d614813a0",
+  "observer_identity_sha256": "815bfde02d78fd6caa1b127ddefe7be28cc84d6fdeef5a75cecc31f186f84d86",
+  "task8_harness_executable_sha256": "0b96b3dfb0ce8a246533ebd2b5d197833bce1024c1ef221113792d5ffd0ed679",
+  "collector_source_sha256": "e0be4819556cf74b82273cba7b748ddd13529f2dcc61029a302f4b0f8acfda89",
+  "host_source_sha256": "c45d7de53bd29101d896fadb0a69eda1ae206d1fac43a5733afb3f4bd7f86be7",
+  "runs": {
+    "s2": {
+      "movie": {"name":"sonic-2-sonic-tails-complete-emeralds.bk2","sha256":"e850798f882b8c580aad148bc97cb50f260cae1d336dd649fe2f4dfae6796aa5","rows":259590},
+      "frames": 1000,
+      "watch_mask_sha256": "fe7ff0a07df30d8793b4ad088ab0ea8f34496c949b6f56e187d4257dc01321df",
+      "events": 308148,
+      "service_begin": 37600,
+      "fm_write": 118673,
+      "psg_write": 452,
+      "ym_port0_2a_data_write": 69302,
+      "maximum_frame_occupancy": 1611,
+      "overflow": 0,
+      "event_digest_sha256": "286509fc9c3269a721193468dd66795369eedfe0e28f650479f933aea53c76be",
+      "kind_begin_fm_psg": {"3":[779,2825,189],"4":[22179,88708,0],"7":[12474,24948,0],"8":[1389,0,0],"9":[776,1792,255]},
+      "breakdown": {"event_kind":{"1":37600,"2":37600,"3":118673,"4":452,"5":37600,"6":38623,"7":37600},"begin_hook":{"1":673,"2":103,"5":22175,"7":1,"9":1,"11":1,"14":1,"15":12473,"16":1,"17":2,"18":1387,"19":2,"20":4,"21":776},"end_hook":{"3":756,"4":20,"6":22175,"8":1,"10":1,"12":1,"14":1,"15":12473,"16":1,"17":2,"18":1387,"19":2,"20":4,"22":776},"begin_kind":{"2":1,"3":779,"4":22179,"5":1,"6":1,"7":12474,"8":1389,"9":776},"end_kind":{"2":1,"3":779,"4":22179,"5":1,"6":1,"7":12474,"8":1389,"9":776},"begin_depth":{"0":36721,"1":776,"2":103},"source_cpu":{"1":307111,"2":1037},"fm_subject":{"0":45587,"1":70534,"2":1276,"3":1276},"snapshot_range_begin_chunk_bytes_end":{"1":[1,1024,8192,1],"2":[37599,37599,37599,37599]},"arm_completion":1,"pre_arm_z80_service_begin":0},
+      "state_digest_sha256": "b9933a71bebbf7ea4d546a28e0e3895c4704ec9c16155ced7d03a3276ebc0541",
+      "lifecycle": {"reset":{"events":91122,"warmup_frame":595,"reset_frame":0,"reset_ordinal":0,"reset_end_frame":0,"reset_end_ordinal":12,"arm_frame":8,"arm_ordinal":1026,"first_z80_frame":13,"first_z80_ordinal":0,"action_frame_events":13,"cancelled":2,"cancelled_depth":2},"power":{"events":52729,"warmup_frame":112,"reset_frame":0,"reset_ordinal":0,"reset_end_frame":0,"reset_end_ordinal":4,"arm_frame":112,"arm_ordinal":1026,"first_z80_frame":117,"first_z80_ordinal":0,"action_frame_events":5,"cancelled":0,"cancelled_depth":0}},
+      "complete": {"frames":259590,"events":169986419,"maximum_frame_occupancy":1825,"open_services_at_cutoff":0,"pending_services_at_cutoff":0,"frontier_digest_sha256":"2afa645a9471a7e084fa4273a9cfa0978868fe7be4f9a33f72f73de2ca907804","terminal_z80_sha256":"355ee9b9b697e674482dd8fe9329e0216d5d32a136454a223f79e784b74ccc02","event_digest_sha256":"c2b2f82374aaa16144b6bf121df051dcd5b4ba095431c16cf6224adc633de41d"},
+      "performance": {"method":"paired_interleaved_v1","warmup_orders":["AB","BA"],"measured_orders":["AB","BA","AB","BA","AB"],"disabled_ticks":[1935080,1887526,1875003,1898511,1872525],"enabled_ticks":[2070948,2067331,2053602,2075635,2048721],"paired_slowdowns":[0.0702,0.0953,0.0953,0.0933,0.0941],"median_slowdown":0.0941,"worst_slowdown":0.0953}
+    },
+    "s3k": {
+      "movie": {"name":"s3k-knuckles-complete-superemeralds.bk2","sha256":"aa892856df22b7bb1fe5accb48db10b90dc26845d1dccee90352da30349f53cc","rows":434417},
+      "frames": 1000,
+      "watch_mask_sha256": "71002af6a403d515ddcb3e94f5c6a4432a5df93192142b2a0c7c4a5247945def",
+      "events": 505061,
+      "service_begin": 62830,
+      "fm_write": 184616,
+      "psg_write": 5276,
+      "ym_port0_2a_data_write": 96078,
+      "maximum_frame_occupancy": 1446,
+      "overflow": 0,
+      "event_digest_sha256": "831acfc0a8f892c57794335eec8a1cbd60387470af6e90cf927c30fe772d7c65",
+      "kind_begin_fm_psg": {"3":[877,0,0],"7":[35984,143934,0],"8":[24111,24111,0],"11":[877,566,80],"12":[877,15642,5188]},
+      "breakdown": {"event_kind":{"1":62830,"2":62829,"3":184616,"4":5276,"5":62829,"6":63852,"7":62829},"begin_hook":{"1":1,"2":521,"5":1,"7":1,"9":58,"10":35926,"11":58,"13":1,"14":24110,"15":1,"17":42,"18":41,"19":1,"21":314,"23":877,"24":877},"end_hook":{"3":877,"6":1,"8":1,"11":58,"12":35983,"15":1,"16":24111,"17":42,"19":1,"24":877,"25":877},"begin_kind":{"2":1,"3":877,"5":1,"6":1,"7":35984,"8":24111,"9":100,"10":1,"11":877,"12":877},"end_kind":{"2":1,"3":877,"5":1,"6":1,"7":35983,"8":24111,"9":100,"10":1,"11":877,"12":877},"begin_depth":{"0":60762,"1":1440,"2":628},"source_cpu":{"1":504024,"2":1037},"fm_subject":{"0":77830,"1":101940,"2":2423,"3":2423},"snapshot_range_begin_chunk_bytes_end":{"1":[1,1024,8192,1],"2":[62828,62828,62828,62828]},"arm_completion":1,"pre_arm_z80_service_begin":0},
+      "state_digest_sha256": "c5874c833d75f17cdfdfecb455c50e2f4f7a6b11aabd0ddff75645c21d12fce9",
+      "lifecycle": {"reset":{"events":176014,"warmup_frame":236,"reset_frame":0,"reset_ordinal":0,"reset_end_frame":0,"reset_end_ordinal":12,"arm_frame":9,"arm_ordinal":1026,"first_z80_frame":9,"first_z80_ordinal":1027,"action_frame_events":13,"cancelled":2,"cancelled_depth":2},"power":{"events":175902,"warmup_frame":100,"reset_frame":0,"reset_ordinal":0,"reset_end_frame":0,"reset_end_ordinal":8,"arm_frame":13,"arm_ordinal":1026,"first_z80_frame":13,"first_z80_ordinal":1027,"action_frame_events":9,"cancelled":1,"cancelled_depth":1}},
+      "complete": {"frames":434417,"events":254921281,"maximum_frame_occupancy":1446,"open_services_at_cutoff":1,"pending_services_at_cutoff":4,"frontier_digest_sha256":"88d87b134b63df1b819321a95f4244f5204f45aa4be85267d0ab3f0876ec6c0c","terminal_z80_sha256":"96837adb198c520e42cc3a3a7aef5b6802fde97cfe0ec5f2afd9f6e230bbe373","event_digest_sha256":"08c2f6249dc379b18b0362c04ed757f4f053a3c1cf7c28c110b09b82af6cee7e"},
+      "performance": {"method":"paired_interleaved_v1","warmup_orders":["AB","BA"],"measured_orders":["AB","BA","AB","BA","AB"],"disabled_ticks":[2258204,2241527,2244589,2259646,2288273],"enabled_ticks":[2500988,2470768,2462741,2451562,2510763],"paired_slowdowns":[0.1075,0.1023,0.0972,0.0849,0.0972],"median_slowdown":0.0972,"worst_slowdown":0.1075}
+    }
+  }
+}

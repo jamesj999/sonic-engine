@@ -1,14 +1,16 @@
 package com.openggf.game.sonic2.objects;
 
+import com.openggf.game.sonic2.slotmachine.CNZPrizeSoundState;
 import com.openggf.game.PlayableEntity;
 import com.openggf.audio.GameSound;
+import com.openggf.game.rewind.RewindTransient;
 import com.openggf.game.sonic2.Sonic2ObjectArtKeys;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
-import com.openggf.level.LevelManager;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -25,31 +27,29 @@ import java.util.List;
  *   <li>Spawned at edge with initial angle</li>
  *   <li>Spirals inward toward cage center (1/16th distance per frame)</li>
  *   <li>When display delay expires, subtract 1 ring (Ring_Reduction)</li>
- *   <li>Plays spike sound every 5 bombs (from s2.asm line 58246)</li>
+ *   <li>Plays spike sound when the shared payout-update counter reaches 5</li>
  *   <li>Destroyed when off-screen or display delay expires</li>
  * </ol>
  */
-public class BombPrizeObjectInstance extends AbstractObjectInstance {
-
-    // Sound throttle counter (shared across all bomb instances)
-    // Plays spike sound every 5 bombs per disassembly
-    private static int soundThrottleCounter = 0;
-    private static final int SOUND_THROTTLE_INTERVAL = 5;
+public class BombPrizeObjectInstance extends AbstractObjectInstance implements SpawnRewindRecreatable {
 
     // Position tracking (16.16 fixed point for precision)
     private int currentX;      // 16.16 fixed point X
     private int currentY;      // 16.16 fixed point Y
-    private final int machineX; // Machine center X
-    private final int machineY; // Machine center Y
+    // Un-final for rewind: machineX/machineY are non-spawn-derivable scalars
+    // reapplied by GenericFieldCapturer after spawn-based recreate.
+    private int machineX; // Machine center X
+    private int machineY; // Machine center Y
 
     // Display delay before active
     private int displayDelay;
 
-    // Reference to parent counter (for decrementing)
-    private final int[] prizeCounter;
-
-    // State
-    private boolean destroyed = false;
+    // Reference to parent counter (for decrementing). Un-final for rewind: the
+    // shared array reference cannot be captured/relinked, so spawn-based recreate
+    // uses a fresh placeholder; only the parent slot-machine bookkeeping decrement drifts.
+    private int[] prizeCounter;
+    @RewindTransient(reason = "Structural ObjD6 parent link; live prize children are spawned and owned by PointPokey.")
+    private PointPokeyObjectInstance parent;
 
     // Reference to LevelManager for rendering
 
@@ -65,6 +65,11 @@ public class BombPrizeObjectInstance extends AbstractObjectInstance {
      */
     public BombPrizeObjectInstance(int x, int y, int machineX, int machineY,
                                    int displayDelay, int[] prizeCounter) {
+        this(x, y, machineX, machineY, displayDelay, prizeCounter, null);
+    }
+
+    BombPrizeObjectInstance(int x, int y, int machineX, int machineY,
+                            int displayDelay, int[] prizeCounter, PointPokeyObjectInstance parent) {
         super(new ObjectSpawn(x, y, 0xD3, 0, 0, false, 0), "BombPrize");
         this.currentX = x << 16;  // Convert to 16.16 fixed point
         this.currentY = y << 16;
@@ -72,12 +77,17 @@ public class BombPrizeObjectInstance extends AbstractObjectInstance {
         this.machineY = machineY;
         this.displayDelay = displayDelay;
         this.prizeCounter = prizeCounter;
+        this.parent = parent;
+    }
+
+    BombPrizeObjectInstance(ObjectSpawn spawn) {
+        this(spawn.x(), spawn.y(), 0, 0, 0, new int[]{0});
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        if (destroyed) {
+        if (isDestroyed()) {
             return;
         }
 
@@ -104,11 +114,11 @@ public class BombPrizeObjectInstance extends AbstractObjectInstance {
                     player.addRings(-1);
                 }
 
-                // Play spike sound every 5 bombs (from s2.asm line 58246)
-                // Sound plays regardless of whether player has rings
-                soundThrottleCounter++;
-                if (soundThrottleCounter >= SOUND_THROTTLE_INTERVAL) {
-                    soundThrottleCounter = 0;
+                // ObjD3 consumes Bonus_Countdown_3, advanced by ObjD6's
+                // payout loop (loc_2BD48), regardless of remaining rings.
+                var soundState = services().gameModule().getGameService(
+                        CNZPrizeSoundState.class);
+                if (soundState != null && soundState.consumeSpikeSound()) {
                     playSpikeSound();
                 }
 
@@ -116,13 +126,13 @@ public class BombPrizeObjectInstance extends AbstractObjectInstance {
                 if (prizeCounter != null && prizeCounter.length > 0) {
                     prizeCounter[0]--;
                 }
-                destroyed = true;
+                setDestroyed(true);
             }
         }
 
         // Check if off-screen for cleanup
         if (!isOnScreen(64)) {
-            destroyed = true;
+            setDestroyed(true);
         }
     }
 
@@ -151,19 +161,12 @@ public class BombPrizeObjectInstance extends AbstractObjectInstance {
     }
 
     /**
-     * Resets all global state for BombPrize objects.
-     * Call on level load to ensure clean state across level transitions.
-     */
-    public static void resetGlobalState() {
-        soundThrottleCounter = 0;
-    }
-
-    /**
      * Play spike sound effect for bomb impact.
      */
     private void playSpikeSound() {
         try {
-            services().playSfx(GameSound.HURT_SPIKE);
+            // ObjD3 uses PlaySound2 (SFX1), not PlaySound (SFX0).
+            services().audioManager().playSecondarySfx(GameSound.HURT_SPIKE);
         } catch (Exception e) {
             // Prevent audio failure from breaking game logic
         }
@@ -171,7 +174,7 @@ public class BombPrizeObjectInstance extends AbstractObjectInstance {
 
     @Override
     public void appendRenderCommands(List<GLCommand> commands) {
-        if (destroyed) {
+        if (isDestroyed()) {
             return;
         }
 
@@ -225,8 +228,4 @@ public class BombPrizeObjectInstance extends AbstractObjectInstance {
         return RenderPriority.clamp(3);
     }
 
-    @Override
-    public boolean isDestroyed() {
-        return destroyed;
-    }
 }

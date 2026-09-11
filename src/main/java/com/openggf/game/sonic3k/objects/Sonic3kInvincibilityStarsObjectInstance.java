@@ -6,6 +6,7 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
+import com.openggf.level.objects.PlayerBoundInvincibilityStarsRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.Direction;
 
@@ -28,8 +29,8 @@ import java.util.List;
  * Children rotate at 1 entry/frame (ROM: $02 byte offset).
  * Rotation direction reverses when the player faces left.
  */
-public class Sonic3kInvincibilityStarsObjectInstance extends AbstractObjectInstance implements PowerUpObject {
-
+public class Sonic3kInvincibilityStarsObjectInstance extends AbstractObjectInstance
+        implements PowerUpObject, PlayerBoundInvincibilityStarsRewindRecreatable {
     private final PlayableEntity player;
     private final PatternSpriteRenderer renderer;
 
@@ -82,6 +83,10 @@ public class Sonic3kInvincibilityStarsObjectInstance extends AbstractObjectInsta
     private final int[] childAngles = new int[CHILD_COUNT];
     private final int[] childAnimIndices = new int[CHILD_COUNT];
 
+    Sonic3kInvincibilityStarsObjectInstance() {
+        this(null);
+    }
+
     public Sonic3kInvincibilityStarsObjectInstance(PlayableEntity player) {
         super(null, "S3kInvincibilityStars");
         this.player = player;
@@ -106,7 +111,7 @@ public class Sonic3kInvincibilityStarsObjectInstance extends AbstractObjectInsta
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity player) {
+    public void update(int vIntRunCount, PlayableEntity player) {
         boolean facingLeft = player.getDirection() == Direction.LEFT;
         int dirSign = facingLeft ? -1 : 1;
 
@@ -175,5 +180,15 @@ public class Sonic3kInvincibilityStarsObjectInstance extends AbstractObjectInsta
     @Override
     public void setVisible(boolean visible) {
         // Stars are always visible while alive; no-op.
+    }
+
+    @Override
+    public boolean isInvincibilityStars() {
+        return true;
+    }
+
+    @Override
+    public PlayableEntity boundPlayer() {
+        return player;
     }
 }

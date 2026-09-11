@@ -1,16 +1,14 @@
 package com.openggf.tests;
 
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Regression test for S1 SBZ1 credits demo replay.
@@ -20,7 +18,7 @@ import static org.junit.Assert.*;
  *
  * History: this test originally checked for a bug where Sonic's speeds were
  * all reset to 0 at Y=889. After trace-replay-verified physics corrections
- * (commit 8a894f39b), the demo trajectory changed — Sonic no longer reaches
+ * (commit 8a894f39b), the demo trajectory changed â€” Sonic no longer reaches
  * Y=889 with the corrected collision model. The test now verifies the demo
  * replays cleanly and Sonic moves from the start position.
  *
@@ -49,27 +47,90 @@ public class TestSbz1CreditsDemoBug {
         {0x00, 0x0D}, // Idle 13 frames
         {0x08, 0x6E}, // Right 110 frames
     };
-
-    @ClassRule public static RequiresRomRule romRule = new RequiresRomRule();
     private static SharedLevel sharedLevel;
 
-    @BeforeClass
+    @BeforeAll
     public static void loadLevel() throws Exception {
         sharedLevel = SharedLevel.load(SonicGame.SONIC_1, ZONE_SBZ, ACT_1);
     }
 
-    @AfterClass
+    @AfterAll
     public static void cleanup() {
         if (sharedLevel != null) sharedLevel.dispose();
     }
 
     private HeadlessTestFixture fixture;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         fixture = HeadlessTestFixture.builder()
                 .withSharedLevel(sharedLevel)
                 .build();
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(ints = {0, 1, 2, 3, 4, 5, 6, 7})
+    public void demoFadeStartsWithThePublishedForegroundScroll(int demo) throws Exception {
+        // A preceding demo leaves the reused player and movement-animation
+        // latch live. Exercise the real movement path before loading the next.
+        for (int frame = 0; frame < 60; frame++) {
+            fixture.stepFrame(false, false, false, true, false);
+        }
+        var provider = org.mockito.Mockito.mock(com.openggf.game.EndingProvider.class);
+        org.mockito.Mockito.when(provider.getDemoZone()).thenReturn(
+                com.openggf.game.sonic1.credits.Sonic1CreditsDemoData.DEMO_ZONE[demo]);
+        org.mockito.Mockito.when(provider.getDemoAct()).thenReturn(
+                com.openggf.game.sonic1.credits.Sonic1CreditsDemoData.DEMO_ACT[demo]);
+        org.mockito.Mockito.when(provider.getDemoStartX()).thenReturn(
+                com.openggf.game.sonic1.credits.Sonic1CreditsDemoData.START_X[demo]);
+        org.mockito.Mockito.when(provider.getDemoStartY()).thenReturn(
+                com.openggf.game.sonic1.credits.Sonic1CreditsDemoData.START_Y[demo]);
+        if (demo == 3) {
+            // EndDemo_LampVar: the one credits demo that restores saved camera state.
+            org.mockito.Mockito.when(provider.getDemoLamppostState()).thenReturn(
+                    new com.openggf.game.DemoLamppostState(0xA00, 0x62C, 13,
+                            0x957, 0x5CC, 0x800, 0x308, 1));
+        }
+        var loop = new com.openggf.GameLoop();
+        var field = com.openggf.GameLoop.class.getDeclaredField("endingProvider");
+        field.setAccessible(true);
+        field.set(loop, provider);
+        var load = com.openggf.GameLoop.class.getDeclaredMethod("loadEndingDemoZone");
+        load.setAccessible(true);
+        load.invoke(loop);
+
+        var player = fixture.sprite();
+        System.out.printf("DEMO %d PLAYER: anim=%02X mapping=%02X air=%s speed=%04X%n",
+                demo, player.getAnimationId(), player.getMappingFrame(), player.getAir(),
+                player.getGSpeed() & 0xffff);
+        assertEquals(5, player.getAnimationId(),
+                "Level_LoadObj executes Sonic_Move with zero input/inertia before the fade: id_Wait");
+        assertEquals(1, player.getMappingFrame(), "SonAni_Wait starts with fr_Stand (1)");
+        int initialAnimationTick = player.getAnimationTick();
+        int initialAnimationFrame = player.getAnimationFrameIndex();
+        var camera = com.openggf.game.GameServices.camera();
+        var parallax = com.openggf.game.GameServices.parallax();
+        System.out.printf("DEMO %d BEFORE FADE: camera=(%04X,%04X) render=(%04X,%04X) FG VSRAM=%04X%n",
+                demo, camera.getX() & 0xffff, camera.getY() & 0xffff,
+                camera.getXWithShake() & 0xffff, camera.getYWithShake() & 0xffff,
+                parallax.getVscrollFactorFG() & 0xffff);
+        assertEquals(camera.getY(), parallax.getVscrollFactorFG(),
+                "Level's pre-fade DeformLayers must publish v_scrposy_vdp before gameplay starts");
+        assertEquals(camera.getX(), camera.getXWithShake());
+        assertEquals(camera.getY(), camera.getYWithShake());
+        int[] initialScroll = parallax.getHScroll().clone();
+        short initialY = parallax.getVscrollFactorFG();
+        var update = com.openggf.GameLoop.class.getDeclaredMethod("updateEndingCreditsDemo");
+        update.setAccessible(true);
+        // Frozen PalFadeIn_Alt frames must retain the prepared viewport.
+        for (int frame = 0; frame < 22; frame++) {
+            update.invoke(loop);
+            assertEquals(1, player.getMappingFrame(), "PalFadeIn_Alt does not execute Sonic_Animate");
+            assertEquals(initialAnimationTick, player.getAnimationTick());
+            assertEquals(initialAnimationFrame, player.getAnimationFrameIndex());
+            assertEquals(initialY, parallax.getVscrollFactorFG());
+            assertArrayEquals(initialScroll, parallax.getHScroll());
+        }
     }
 
     @Test
@@ -93,7 +154,7 @@ public class TestSbz1CreditsDemoBug {
 
         int settledX = sprite.getX();
         int settledY = sprite.getY();
-        assertFalse("Sonic should settle onto ground", sprite.getAir());
+        assertFalse(sprite.getAir(), "Sonic should settle onto ground");
 
         // Replay the demo input sequence
         int totalFrame = 0;
@@ -121,11 +182,10 @@ public class TestSbz1CreditsDemoBug {
         }
 
         // Verify Sonic moved during the demo (the leftward inputs should move him)
-        assertTrue("Sonic should have moved left during demo (minX=" + minX
-                + " settledX=" + settledX + ")",
-                minX < settledX - 50);
+        assertTrue(minX < settledX - 50, "Sonic should have moved left during demo (minX=" + minX
+                + " settledX=" + settledX + ")");
 
         // Verify Sonic didn't die
-        assertFalse("Sonic should not die during SBZ1 demo", sprite.getDead());
+        assertFalse(sprite.getDead(), "Sonic should not die during SBZ1 demo");
     }
 }

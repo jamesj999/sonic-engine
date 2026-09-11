@@ -9,9 +9,12 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 
 import com.openggf.level.ParallaxManager;
+import com.openggf.level.objects.RomObjectSnapshot;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.TouchResponseProfile;
 import com.openggf.level.render.PatternSpriteRenderer;
-import com.openggf.sprites.playable.AbstractPlayableSprite;
 
 import java.util.List;
 
@@ -34,7 +37,7 @@ import java.util.List;
  *   - loc_36776 (add Tornado_Velocity_X/Y to position)
  *   - Obj_DeleteBehindScreen
  */
-public class BalkiryBadnikInstance extends AbstractBadnikInstance {
+public class BalkiryBadnikInstance extends AbstractBadnikInstance implements RewindRecreatable {
     // From subObjData: collision = 8
     private static final int COLLISION_SIZE_INDEX = 0x08;
 
@@ -46,6 +49,7 @@ public class BalkiryBadnikInstance extends AbstractBadnikInstance {
     // Subpixel position accumulators (16.16 fixed point for ObjectMove)
     private int subPixelX;
     private int subPixelY;
+    private boolean initialized;
 
     public BalkiryBadnikInstance(ObjectSpawn spawn) {
         super(spawn, "Balkiry", Sonic2BadnikConfig.DESTRUCTION);
@@ -71,8 +75,24 @@ public class BalkiryBadnikInstance extends AbstractBadnikInstance {
     }
 
     @Override
-    protected void updateMovement(int frameCounter, PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
+    public BalkiryBadnikInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new BalkiryBadnikInstance(ctx.spawn());
+    }
+
+    @Override
+    public void hydrateFromRomSnapshot(RomObjectSnapshot snapshot) {
+        super.hydrateFromRomSnapshot(snapshot);
+        this.subPixelX = snapshot.xSub() & 0xFF;
+        this.subPixelY = snapshot.ySub() & 0xFF;
+        this.initialized = snapshot.routine() >= 2;
+    }
+
+    @Override
+    protected void updateMovement(int vIntRunCount, PlayableEntity playerEntity) {
+        if (!initialized) {
+            initialized = true;
+            return;
+        }
         // ROM: JmpTo26_ObjectMove - apply velocity to position (subpixel precision)
         // x_pos += x_vel (as 16.16 fixed point)
         subPixelX += xVelocity;
@@ -102,7 +122,7 @@ public class BalkiryBadnikInstance extends AbstractBadnikInstance {
      */
     private void spawnJetChild() {
         // Create jet child spawn - subtype $1A selects Obj9C_SubObjData
-        ObjectSpawn jetSpawn = new ObjectSpawn(
+        final ObjectSpawn jetSpawn = new ObjectSpawn(
                 currentX, currentY,
                 Sonic2ObjectIds.BALKIRY_JET,
                 0x1A, // subtype for jet exhaust
@@ -110,12 +130,11 @@ public class BalkiryBadnikInstance extends AbstractBadnikInstance {
                 false,
                 spawn.rawYWord());
 
-        BalkiryJetObjectInstance jet = new BalkiryJetObjectInstance(jetSpawn, this);
-        services().objectManager().addDynamicObject(jet);
+        spawnFreeChild(() -> new BalkiryJetObjectInstance(jetSpawn, this));
     }
 
     @Override
-    protected void updateAnimation(int frameCounter) {
+    protected void updateAnimation(int vIntRunCount) {
         // Balkiry has no animation state machine - always displays mapping_frame 1
         animFrame = 1;
     }
@@ -123,6 +142,11 @@ public class BalkiryBadnikInstance extends AbstractBadnikInstance {
     @Override
     protected int getCollisionSizeIndex() {
         return COLLISION_SIZE_INDEX;
+    }
+
+    @Override
+    public TouchResponseProfile getTouchResponseProfile() {
+        return TouchResponseProfile.standardEnemy();
     }
 
     @Override

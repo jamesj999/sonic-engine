@@ -1,0 +1,7 @@
+interface:
+  display_name: "Trace Green Fleet"
+  short_description: "Parallel trace replay cleanup"
+  default_prompt: "Use $trace-green-fleet to drive failing Sonic-engine *TraceReplay tests toward green from a supplied failing list."
+
+policy:
+  allow_implicit_invocation: true

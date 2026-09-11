@@ -79,6 +79,13 @@ public final class OscillationManager {
     private static int[] activeLimits = S2_LIMITS;
     private static int control = S2_INITIAL_CONTROL;
     private static int lastFrame = Integer.MIN_VALUE;
+    // Number of incoming update() calls to swallow before resuming normal
+    // OscillateNumDo ticking. Used by trace replay fixtures: the ROM only
+    // runs OscillateNumDo inside LevelLoop (gamemode 0x0C), but a headless
+    // fixture loads the level directly in gamemode 0x0C and starts ticking
+    // from BK2 frame 0 — 289 frames earlier than the recorder. Skipping
+    // that prefix keeps the ROM and engine oscillators phase-aligned.
+    private static int suppressedUpdates = 0;
 
     static {
         reset();
@@ -99,6 +106,7 @@ public final class OscillationManager {
             deltas[i] = S2_INITIAL_DELTAS[i] & 0xFFFF;
         }
         lastFrame = Integer.MIN_VALUE;
+        suppressedUpdates = 0;
     }
 
     /**
@@ -121,6 +129,30 @@ public final class OscillationManager {
             deltas[i] = S1_INITIAL_DELTAS[i] & 0xFFFF;
         }
         lastFrame = Integer.MIN_VALUE;
+        suppressedUpdates = 0;
+    }
+
+    /**
+     * Swallows the next {@code n} calls to {@link #update(int)} without
+     * advancing the oscillator values. Calls clamp at zero. Used by trace
+     * replay fixtures to skip the ROM's pre-LevelLoop frames (SEGA/title/
+     * level-load gamemodes 0x00/0x04/0x8C) that the headless fixture
+     * collapses into zero real ticks but where the replay driver still
+     * calls {@link com.openggf.level.LevelManager#advanceGlobalOscillation}
+     * once per stepped trace frame.
+     */
+    public static void suppressNextFrames(int n) {
+        suppressedUpdates = Math.max(0, n);
+    }
+
+    /** Advances the inherited table for the destination act's transition dispatch. */
+    public static void advanceForSeamlessTransition() {
+        int savedLastFrame = lastFrame;
+        int savedSuppressedUpdates = suppressedUpdates;
+        suppressedUpdates = 0;
+        update(savedLastFrame == Integer.MAX_VALUE ? Integer.MIN_VALUE : savedLastFrame + 1);
+        lastFrame = savedLastFrame;
+        suppressedUpdates = savedSuppressedUpdates;
     }
 
     public static void update(int frameCounter) {
@@ -128,6 +160,11 @@ public final class OscillationManager {
             return;
         }
         lastFrame = frameCounter;
+
+        if (suppressedUpdates > 0) {
+            suppressedUpdates--;
+            return;
+        }
 
         for (int i = 0; i < OSC_COUNT; i++) {
             int bit = OSC_COUNT - 1 - i;
@@ -189,5 +226,68 @@ public final class OscillationManager {
         int within = offset % 4;
         int word = (within < 2) ? values[index] : deltas[index];
         return (short) word; // Sign-extend to int
+    }
+
+    /**
+     * Returns the full ROM-format {@code Oscillating_table} bytes for
+     * diagnostic comparison against trace data. Layout matches ROM
+     * sonic3k.constants.asm:853 — control word followed by 16x (value word,
+     * delta word). Total 66 bytes ($42).
+     *
+     * <p>Used by trace replay diagnostics to ROM-verify engine oscillator
+     * phase. <strong>Do not use for hydration:</strong> the engine must
+     * produce the correct oscillator phase natively.
+     */
+    public static byte[] snapshotRomFormatBytes() {
+        byte[] out = new byte[2 + OSC_COUNT * 4];
+        out[0] = (byte) ((control >> 8) & 0xFF);
+        out[1] = (byte) (control & 0xFF);
+        for (int i = 0; i < OSC_COUNT; i++) {
+            out[2 + i * 4] = (byte) ((values[i] >> 8) & 0xFF);
+            out[2 + i * 4 + 1] = (byte) (values[i] & 0xFF);
+            out[2 + i * 4 + 2] = (byte) ((deltas[i] >> 8) & 0xFF);
+            out[2 + i * 4 + 3] = (byte) (deltas[i] & 0xFF);
+        }
+        return out;
+    }
+
+    /** Diagnostic-only access to the control bitfield (S1/S2/S3K shared). */
+    public static int controlForTest() {
+        return control;
+    }
+
+    /** Diagnostic-only access to oscillator value words (post-tick). */
+    public static int[] valuesForTest() {
+        return values.clone();
+    }
+
+    /** Diagnostic-only access to oscillator delta words (post-tick). */
+    public static int[] deltasForTest() {
+        return deltas.clone();
+    }
+
+    /** Captures the current oscillator phase for rewind snapshots. */
+    public static OscillationSnapshot snapshot() {
+        return new OscillationSnapshot(
+                values, deltas, activeSpeeds, activeLimits,
+                control, lastFrame, suppressedUpdates);
+    }
+
+    /** Restores oscillator phase from a previously captured snapshot. */
+    public static void restore(OscillationSnapshot snap) {
+        java.util.Objects.requireNonNull(snap, "snap");
+        int[] sv = snap.values();
+        int[] sd = snap.deltas();
+        int[] ss = snap.activeSpeeds();
+        int[] sl = snap.activeLimits();
+        for (int i = 0; i < OSC_COUNT; i++) {
+            values[i] = sv[i] & 0xFFFF;
+            deltas[i] = sd[i] & 0xFFFF;
+        }
+        activeSpeeds = ss;
+        activeLimits = sl;
+        control = snap.control() & 0xFFFF;
+        lastFrame = snap.lastFrame();
+        suppressedUpdates = Math.max(0, snap.suppressedUpdates());
     }
 }

@@ -8,11 +8,17 @@ import com.openggf.game.PlayableEntity;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.DestructionEffects.DestructionConfig;
 import com.openggf.level.objects.ObjectArtKeys;
+import com.openggf.level.objects.ObjectLifetimeOps;
+import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.ObjectServices;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
+import com.openggf.physics.TrigLookupTable;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
 import java.util.ArrayList;
@@ -23,7 +29,7 @@ import java.util.List;
  * <p>
  * ROM reference: docs/s1disasm/_incObj/60 Orbinaut.asm
  */
-public class Sonic1OrbinautBadnikInstance extends AbstractBadnikInstance {
+public class Sonic1OrbinautBadnikInstance extends AbstractBadnikInstance implements RewindRecreatable {
 
     private static final int COLLISION_SIZE_INDEX = 0x0B;
 
@@ -39,7 +45,8 @@ public class Sonic1OrbinautBadnikInstance extends AbstractBadnikInstance {
     private static final int ROUTINE_MOVE = 4;
 
     private int routine;
-    private int xSubpixel;
+    /** Subpixel accumulators (xSub / ySub) for ROM-accurate 16:8 fixed-point integration. */
+    private final SubpixelMotion.State motion = new SubpixelMotion.State(0, 0, 0, 0, 0, 0);
 
     private int animationId;
     private int animationFrame;
@@ -47,8 +54,12 @@ public class Sonic1OrbinautBadnikInstance extends AbstractBadnikInstance {
 
     private int angleStep;
     private int activeSpikes;
-
     private List<OrbSpikeObjectInstance> spikes;
+    /**
+     * True once React_BadnikHit replaced this Orbinaut, so teardown must leave the
+     * balls to self-delete at their own slots rather than freeing them here.
+     */
+    private boolean playerDestroyed;
     private boolean initialized;
 
     public Sonic1OrbinautBadnikInstance(ObjectSpawn spawn) {
@@ -68,11 +79,15 @@ public class Sonic1OrbinautBadnikInstance extends AbstractBadnikInstance {
 
         this.activeSpikes = 0;
         this.initialized = false;
-        this.xSubpixel = 0;
     }
 
     @Override
-    protected void updateMovement(int frameCounter, PlayableEntity playerEntity) {
+    public Sonic1OrbinautBadnikInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new Sonic1OrbinautBadnikInstance(ctx.spawn());
+    }
+
+    @Override
+    protected void updateMovement(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (!initialized) {
             spawnSatellites();
@@ -90,12 +105,14 @@ public class Sonic1OrbinautBadnikInstance extends AbstractBadnikInstance {
             }
         }
 
-        if (routine >= ROUTINE_MOVE) {
-            applySpeedToPos();
+        if (activeSpikes == 0) {
+            // ROM Orb_MoveOrb increments the parent routine as soon as the
+            // last satellite fires, before the parent's next Orb_Display pass.
+            routine = ROUTINE_MOVE;
         }
 
-        if (activeSpikes == 0) {
-            routine = ROUTINE_MOVE;
+        if (routine >= ROUTINE_MOVE) {
+            applySpeedToPos();
         }
     }
 
@@ -114,14 +131,14 @@ public class Sonic1OrbinautBadnikInstance extends AbstractBadnikInstance {
     }
 
     private void applySpeedToPos() {
-        int xPos24 = (currentX << 8) | (xSubpixel & 0xFF);
-        xPos24 += xVelocity;
-        currentX = xPos24 >> 8;
-        xSubpixel = xPos24 & 0xFF;
+        motion.x = currentX;
+        motion.xVel = xVelocity;
+        SubpixelMotion.moveX(motion);
+        currentX = motion.x;
     }
 
     @Override
-    protected void updateAnimation(int frameCounter) {
+    protected void updateAnimation(int vIntRunCount) {
         if (animationId == 0) {
             animationFrame = 0;
             return;
@@ -149,24 +166,23 @@ public class Sonic1OrbinautBadnikInstance extends AbstractBadnikInstance {
         }
 
         spikes = new ArrayList<>(4);
-        spikes.add(new OrbSpikeObjectInstance(this, 0x00));
-        spikes.add(new OrbSpikeObjectInstance(this, 0x40));
-        spikes.add(new OrbSpikeObjectInstance(this, 0x80));
-        spikes.add(new OrbSpikeObjectInstance(this, 0xC0));
-
-        activeSpikes = spikes.size();
+        int[] angleOffsets = { 0x00, 0x40, 0x80, 0xC0 };
         // ROM: Orb_Loop uses FindNextFreeObj, allocating consecutive slots
         int prevSlot = getSlotIndex();
-        for (OrbSpikeObjectInstance spike : spikes) {
-            if (prevSlot >= 0) {
-                int spikeSlot = services().objectManager().allocateSlotAfter(prevSlot);
-                if (spikeSlot >= 0) {
-                    spike.setSlotIndex(spikeSlot);
-                    prevSlot = spikeSlot;
-                }
+        for (int angleOffset : angleOffsets) {
+            final int angle = angleOffset;
+            final int prevSlotFinal = prevSlot;
+            OrbSpikeObjectInstance spike = spawnFreeChild(() -> {
+                OrbSpikeObjectInstance s = new OrbSpikeObjectInstance(this, angle);
+                ObjectLifetimeOps.assignFindNextFreeChildSlot(services().objectManager(), s, prevSlotFinal);
+                return s;
+            });
+            spikes.add(spike);
+            if (spike.getSlotIndex() >= 0) {
+                prevSlot = spike.getSlotIndex();
             }
-            services().objectManager().addDynamicObject(spike);
         }
+        activeSpikes = spikes.size();
     }
 
     int getAnimationFrame() {
@@ -187,6 +203,15 @@ public class Sonic1OrbinautBadnikInstance extends AbstractBadnikInstance {
         }
     }
 
+    void adoptSpikeForRewind(OrbSpikeObjectInstance restoredSpike) {
+        if (spikes == null) {
+            spikes = new ArrayList<>(4);
+        }
+        spikes.removeIf(spike -> spike == null || spike.isDestroyed() || spike.parent != this);
+        spikes.remove(restoredSpike);
+        spikes.add(restoredSpike);
+    }
+
     @Override
     protected int getCollisionSizeIndex() {
         return COLLISION_SIZE_INDEX;
@@ -200,31 +225,63 @@ public class Sonic1OrbinautBadnikInstance extends AbstractBadnikInstance {
     @Override
     protected void destroyBadnik(PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        destroySpikes();
+        // ROM has TWO distinct teardown branches and they free the balls'"'"' SST slots
+        // at different points in ExecuteObjects. Collapsing them into one eager
+        // parent-side delete moves every following FindFreeObj allocation:
+        //
+        //  - OUT OF RANGE (Orb_ChkDel, docs/s1disasm/_incObj/60 Badnik - Orbinaut.asm:135-152):
+        //    the PARENT walks orb_balldata and DeleteChild's each non-fired ball while
+        //    it is executing, then DeleteObject's itself. Slots free at the parent'"'"'s slot.
+        //  - DESTROYED BY THE PLAYER (React_BadnikHit): the parent'"'"'s obID becomes
+        //    id_ExplosionItem in place, so Orb_ChkDel never runs. Each ball instead
+        //    self-deletes when the ascending pass reaches ITS OWN slot and
+        //    Orb_CircleSpikeball sees the parent is no longer an Orbinaut
+        //    (:155-159). Slots free LATER, at each ball'"'"'s slot.
+        //
+        // The child already models the second branch (see OrbSpike.update'"'"'s
+        // parent.isDestroyed() check), so the kill path must simply not pre-empt it.
+        playerDestroyed = true;
         super.destroyBadnik(player);
     }
 
     @Override
-    public boolean isPersistent() {
-        return !isDestroyed() && isOnScreenX(192);
-    }
-
-    @Override
     public void onUnload() {
-        destroySpikes();
+        // Only the Orb_ChkDel out-of-range branch deletes the balls from the parent.
+        if (!playerDestroyed) {
+            destroySpikes();
+        }
     }
 
     private void destroySpikes() {
         if (spikes != null) {
+            ObjectServices svc = tryServices();
+            ObjectManager objectManager = svc != null ? svc.objectManager() : null;
             for (OrbSpikeObjectInstance spike : spikes) {
                 spike.setDestroyed(true);
+                if (objectManager != null) {
+                    // S1 Orb_ChkDel calls DeleteChild while the parent is
+                    // executing, so these SST slots are reusable immediately.
+                    objectManager.removeDynamicObject(spike);
+                }
             }
+            spikes.clear();
+            activeSpikes = 0;
         }
     }
 
     @Override
     public int getPriorityBucket() {
         return RenderPriority.clamp(4);
+    }
+
+    @Override
+    public String traceDebugDetails() {
+        return String.format("parent r=%02X frame=%d active=%d step=%d vel=%04X",
+                routine & 0xFF,
+                animationFrame,
+                activeSpikes,
+                angleStep,
+                xVelocity & 0xFFFF);
     }
 
     @Override
@@ -240,7 +297,9 @@ public class Sonic1OrbinautBadnikInstance extends AbstractBadnikInstance {
     }
 
     private static final class OrbSpikeObjectInstance extends AbstractObjectInstance
-            implements TouchResponseProvider {
+            implements TouchResponseProvider, RewindRecreatable {
+        private static final int SPIKE_RENDER_HALF_WIDTH = 16 / 2;
+        private static final int ASSUMED_RENDER_HALF_HEIGHT = 32;
 
         private final Sonic1OrbinautBadnikInstance parent;
 
@@ -250,7 +309,18 @@ public class Sonic1OrbinautBadnikInstance extends AbstractBadnikInstance {
 
         private boolean launched;
         private int xVelocity;
-        private int xSubpixel;
+        /** Subpixel accumulators (xSub / ySub) for ROM-accurate 16:8 fixed-point integration. */
+        private final SubpixelMotion.State motion = new SubpixelMotion.State(0, 0, 0, 0, 0, 0);
+
+        private OrbSpikeObjectInstance() {
+            super(new ObjectSpawn(0, 0, 0, 0, 0, false, 0), "OrbinautSpike");
+            this.parent = null;
+            this.angle = 0;
+            this.x = 0;
+            this.y = 0;
+            this.launched = false;
+            this.xVelocity = 0;
+        }
 
         OrbSpikeObjectInstance(Sonic1OrbinautBadnikInstance parent, int startAngle) {
             super(new ObjectSpawn(parent.currentX, parent.currentY, parent.spawn.objectId(), 0, 0, false, 0),
@@ -261,7 +331,45 @@ public class Sonic1OrbinautBadnikInstance extends AbstractBadnikInstance {
             this.y = parent.currentY;
             this.launched = false;
             this.xVelocity = 0;
-            this.xSubpixel = 0;
+        }
+
+        @Override
+        public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+            Sonic1OrbinautBadnikInstance restoredParent = nearestLiveOrbinautParentForRewind(ctx);
+            if (restoredParent == null) {
+                return null;
+            }
+            OrbSpikeObjectInstance restored = new OrbSpikeObjectInstance(restoredParent, 0);
+            restoredParent.adoptSpikeForRewind(restored);
+            return restored;
+        }
+
+        private static Sonic1OrbinautBadnikInstance nearestLiveOrbinautParentForRewind(
+                RewindRecreateContext ctx) {
+            ObjectServices services = ctx.objectServices();
+            ObjectManager objectManager = services != null ? services.objectManager() : null;
+            ObjectSpawn capturedSpawn = ctx.spawn();
+            if (objectManager == null) {
+                return null;
+            }
+            Sonic1OrbinautBadnikInstance best = null;
+            long bestDistance = Long.MAX_VALUE;
+            for (var object : objectManager.getActiveObjects()) {
+                if (!(object instanceof Sonic1OrbinautBadnikInstance orbinaut) || orbinaut.isDestroyed()) {
+                    continue;
+                }
+                if (capturedSpawn == null) {
+                    return orbinaut;
+                }
+                long dx = orbinaut.getX() - capturedSpawn.x();
+                long dy = orbinaut.getY() - capturedSpawn.y();
+                long distance = dx * dx + dy * dy;
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    best = orbinaut;
+                }
+            }
+            return best;
         }
 
         @Override
@@ -280,7 +388,7 @@ public class Sonic1OrbinautBadnikInstance extends AbstractBadnikInstance {
         }
 
         @Override
-        public void update(int frameCounter, PlayableEntity playerEntity) {
+        public void update(int vIntRunCount, PlayableEntity playerEntity) {
             AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
             if (isDestroyed()) {
                 return;
@@ -292,10 +400,10 @@ public class Sonic1OrbinautBadnikInstance extends AbstractBadnikInstance {
             }
 
             if (launched) {
-                int xPos24 = (x << 8) | (xSubpixel & 0xFF);
-                xPos24 += xVelocity;
-                x = xPos24 >> 8;
-                xSubpixel = xPos24 & 0xFF;
+                motion.x = x;
+                motion.xVel = xVelocity;
+                SubpixelMotion.moveX(motion);
+                x = motion.x;
 
                 if (!isOnScreen(256)) {
                     setDestroyed(true);
@@ -311,10 +419,15 @@ public class Sonic1OrbinautBadnikInstance extends AbstractBadnikInstance {
                 return;
             }
 
-            // Orbit around parent with radius 16.
-            double radians = (angle & 0xFF) * (Math.PI * 2.0 / 256.0);
-            x = parent.currentX + (int) Math.round(Math.cos(radians) * 16.0);
-            y = parent.currentY + (int) Math.round(Math.sin(radians) * 16.0);
+            // ROM Orb_CircleSpikeball: CalcSine on obAngle, then asr.w #4 for both
+            // components to give radius-16 orbit (docs/s1disasm/_incObj/60 Badnik -
+            // Orbinaut.asm:181-191). Using integer lookup matches ROM's truncating
+            // arithmetic shift exactly; floating-point Math.round rounds 254>>4=15.875
+            // up to 16 and places the spike 1px too low, causing a premature hurt hit.
+            int sinVal = TrigLookupTable.sinHex(angle); // d0 = CalcSine sine output
+            int cosVal = TrigLookupTable.cosHex(angle); // d1 = CalcSine cosine output
+            x = parent.currentX + (cosVal >> 4);        // obX + (d1 asr #4)
+            y = parent.currentY + (sinVal >> 4);        // obY + (d0 asr #4)
             angle = (angle + parent.getAngleStep()) & 0xFF;
         }
 
@@ -356,7 +469,35 @@ public class Sonic1OrbinautBadnikInstance extends AbstractBadnikInstance {
 
         @Override
         public boolean isPersistent() {
-            return !isDestroyed() && isOnScreenX(256);
+            return !isDestroyed() && !launched;
+        }
+
+        @Override
+        public boolean usesCustomOutOfRangeCheck() {
+            return true;
+        }
+
+        @Override
+        public boolean isCustomOutOfRange(int cameraX) {
+            // S1 Orb_MoveOrb (routine 6) has no out_of_range call; it only
+            // deletes when the parent is gone. Routine 8 launches the spike
+            // and then deletes when obRender bit 7 from the previous
+            // BuildSprites pass is clear (docs/s1disasm/s1disasm/_incObj/
+            // 60 Badnik - Orbinaut.asm:183-186). BuildSprites uses the
+            // satellite's obActWid=16/2 and the default 32px assumed height
+            // when setting that bit (BuildSprites.asm:48-58, 86-94).
+            return launched && !isWithinRenderSpriteBounds(
+                    SPIKE_RENDER_HALF_WIDTH, ASSUMED_RENDER_HALF_HEIGHT);
+        }
+
+        @Override
+        public String traceDebugDetails() {
+            return String.format("spike angle=%02X launched=%s vel=%04X parentSlot=%d parentFrame=%d",
+                    angle & 0xFF,
+                    launched,
+                    xVelocity & 0xFFFF,
+                    parent.getSlotIndex(),
+                    parent.getAnimationFrame());
         }
     }
 }

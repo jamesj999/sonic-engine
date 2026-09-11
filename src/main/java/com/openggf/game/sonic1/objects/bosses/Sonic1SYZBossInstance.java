@@ -5,6 +5,7 @@ import com.openggf.game.sonic1.audio.Sonic1Music;
 
 import com.openggf.level.objects.ObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnConstructionContextRewindRecreatable;
 import com.openggf.physics.TrigLookupTable;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -26,15 +27,19 @@ import com.openggf.sprites.playable.AbstractPlayableSprite;
  *  - Flame overlay (movement-driven)
  *  - Spike (child component with collision, extends below ship)
  */
-public class Sonic1SYZBossInstance extends AbstractS1EggmanBossInstance {
+public class Sonic1SYZBossInstance extends AbstractS1EggmanBossInstance
+        implements SpawnConstructionContextRewindRecreatable {
 
-    // State machine constants (routineSecondary, even-numbered to match ROM)
+    // State machine constants (routineSecondary, even-numbered to match ROM).
+    // STATE_DEFEAT_WAIT/STATE_ESCAPE are package-private: SYZBossSpike reads the boss's
+    // routineSecondary directly (ROM: BossSpringYard_SpikeMain dispatches independently
+    // every frame off the boss's ob2ndRout) and needs the same named thresholds.
     private static final int STATE_APPROACH = 0;
     private static final int STATE_PATROL = 2;
     private static final int STATE_BLOCK_DROP = 4;
-    private static final int STATE_DEFEAT_WAIT = 6;
+    static final int STATE_DEFEAT_WAIT = 6;
     private static final int STATE_ASCENT = 8;
-    private static final int STATE_ESCAPE = 10;
+    static final int STATE_ESCAPE = 10;
 
     // Arena constants from DynamicLevelEvents.asm / Constants.asm
     private static final int BOSS_SYZ_X = 0x2C00;
@@ -146,6 +151,28 @@ public class Sonic1SYZBossInstance extends AbstractS1EggmanBossInstance {
     }
 
     @Override
+    protected boolean defeatDeferralAppliesToThisBoss() {
+        // ROM: the killing hit sets obStatus bit 7; the boss only acts on it when its
+        // own routine reaches BSYZ_StatusUpdate, where BSYZ_Defeated does
+        //   move.b #6,ob2ndRout(a0)   ; select BSYZ_Explode
+        //   move.w #180,BossSpringYard_GenericTimer(a0)
+        //   rts
+        // (docs/s1disasm/_incObj/75, 76 Boss - SYZ Main and Blocks.asm:154-160).
+        // BSYZ_Defeated returns WITHOUT falling through to BSYZ_Explode, so the newly
+        // selected secondary routine — and its first defeat-timer decrement
+        // (BSYZ_Explode subq.w #1,GenericTimer, asm:434) — is not dispatched until the
+        // next frame (BSYZ_ShipMain re-reads ob2ndRout at the top, asm:70-74). The engine
+        // selects the defeat routine during the touch-response pass that runs before this
+        // object's own update(), so without this one-frame deferral updateDefeatWait()
+        // decrements the $B4 timer on the same frame the routine changed. The deferral
+        // restores that settle frame, which propagates through ascent (BSYZ_Recover) to
+        // BSYZ_Escape so the `addq.w #2,(v_limitright2)` camera scroll starts on the
+        // correct frame (SYZ3 trace f12491, not f12490). Same ROM dispatch shape as the
+        // GHZ boss (Sonic1GHZBossInstance.defeatDeferralAppliesToThisBoss).
+        return true;
+    }
+
+    @Override
     protected void onHitTaken(int remainingHits) {
         faceAnim = Sonic1BossAnimations.ANIM_FACE_HIT;
     }
@@ -159,13 +186,13 @@ public class Sonic1SYZBossInstance extends AbstractS1EggmanBossInstance {
     }
 
     @Override
-    protected void updateBossLogic(int frameCounter, PlayableEntity playerEntity) {
+    protected void updateBossLogic(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         switch (state.routineSecondary) {
             case STATE_APPROACH -> updateApproach();
             case STATE_PATROL -> updatePatrol(player);
             case STATE_BLOCK_DROP -> updateBlockDrop();
-            case STATE_DEFEAT_WAIT -> updateDefeatWait(frameCounter);
+            case STATE_DEFEAT_WAIT -> updateDefeatWait(vIntRunCount);
             case STATE_ASCENT -> updateAscent();
             case STATE_ESCAPE -> updateEscape();
         }
@@ -173,9 +200,6 @@ public class Sonic1SYZBossInstance extends AbstractS1EggmanBossInstance {
         // Update face/flame animations
         updateFaceAnimation(player);
         updateFlameAnimation();
-
-        // Update spike child position tracking
-        updateSpikeState();
     }
 
     // ========================================================================
@@ -318,10 +342,17 @@ public class Sonic1SYZBossInstance extends AbstractS1EggmanBossInstance {
             state.yVel = (grabbedBlock != null) ? RISE_Y_VEL : RISE_Y_VEL_NO_BLOCK;
         } else {
             // Timer >= 0: shake when timer <= $1E
-            // ROM: btst #1,objoff_3D(a0) — shake direction from justReturnedFlag bit 1
+            // ROM BSYZ_Lift (loc_19366): cmpi.w #30,GenericTimer / bgt (no shake);
+            // moveq #2,d0; btst #1,PhaseTimer; beq (+2); neg.w d0 (-2).
+            // PhaseTimer (objoff_3D) is the LOW BYTE of the word timer GenericTimer
+            // (objoff_3C); the preceding subq.w #1,GenericTimer overwrites it each
+            // frame, so the shake direction is bit 1 of the (decrementing) timer,
+            // NOT a separate persistent flag.
+            // (75 Boss - SYZ Main and Blocks.asm:264-295, with objoff_3C/3D
+            // word/low-byte aliasing documented at lines 20-21.)
             if (timer <= 0x1E) {
                 yOffset = 2;
-                if ((justReturnedFlag & 2) != 0) {
+                if ((timer & 2) != 0) {
                     yOffset = -yOffset;
                 }
             }
@@ -394,12 +425,15 @@ public class Sonic1SYZBossInstance extends AbstractS1EggmanBossInstance {
             state.yFixed -= (bobSpeed << 16);
         }
 
-        // ROM: loc_19424 — Y display shake when holding block
-        // btst #0,objoff_3D(a0) for shake direction
+        // ROM loc_19424 — Y display shake when holding block: btst #0,PhaseTimer.
+        // Same objoff_3C/3D word/low-byte aliasing as the hold phase above — the
+        // BSYZ_BreakBlock subq.w #1,GenericTimer overwrites PhaseTimer each frame,
+        // so the shake direction is bit 0 of the (decrementing) timer.
+        // (75 Boss - SYZ Main and Blocks.asm:334,378-386.)
         int yShake = 0;
         if (grabbedBlock != null) {
             yShake = 2;
-            if ((justReturnedFlag & 1) != 0) {
+            if ((timer & 1) != 0) {
                 yShake = -yShake;
             }
         }
@@ -413,7 +447,7 @@ public class Sonic1SYZBossInstance extends AbstractS1EggmanBossInstance {
     // State 6: DEFEAT_WAIT — explosions countdown
     // ROM: loc_19474
     // ========================================================================
-    private void updateDefeatWait(int frameCounter) {
+    private void updateDefeatWait(int vIntRunCount) {
         timer--;
         if (timer < 0) {
             // ROM: loc_1947E — Start ascent
@@ -424,10 +458,18 @@ public class Sonic1SYZBossInstance extends AbstractS1EggmanBossInstance {
             state.xVel = 0;
             timer = -1;
 
-            services().gameState().setCurrentBossId(0);
+            // ROM: BSYZ_Explode .transition (asm:440-453) clears velocities and the
+            // defeated status bit but does NOT touch f_lockscreen — the screen lock
+            // stays set through the ascent/escape and the run to the egg capsule, and
+            // is cleared only by the Egg Prison (Obj3E: clr.b (f_lockscreen).w). The
+            // engine models f_lockscreen via currentBossId, which the Egg Prison clears
+            // (Sonic1EggPrisonObjectInstance). Clearing it here dropped the strict
+            // right-boundary (RIGHT_EXTRA +0x40) one phase early, letting the player run
+            // past v_limitright2+0x128 to the egg capsule (SYZ3 trace f12767: ROM stops
+            // x_speed at the boundary x=0x2E68, engine kept running).
         } else {
             // ROM: BossDefeated — spawn explosions every 8 frames
-            if ((frameCounter & 7) == 0) {
+            if ((vIntRunCount & 7) == 0) {
                 spawnDefeatExplosion();
             }
         }
@@ -545,30 +587,37 @@ public class Sonic1SYZBossInstance extends AbstractS1EggmanBossInstance {
      * Spawn the spike child component.
      */
     private void spawnSpikeChild() {
-        spikeChild = new SYZBossSpike(this);
-        childComponents.add(spikeChild);
         if (services().objectManager() != null) {
-            services().objectManager().addDynamicObject(spikeChild);
+            spikeChild = spawnFreeChild(() -> new SYZBossSpike(this));
+        } else {
+            spikeChild = new SYZBossSpike(this);
         }
+        childComponents.add(spikeChild);
     }
 
     /**
-     * Update spike tracking state. The spike extends during drop and retracts during rise.
+     * ROM: {@code BossSpringYard_SpikeMain} (routine 8) is a fully independent SST object
+     * that reads {@code ob2ndRout}/{@code obSubtype}/{@code BossSpringYard_GenericTimer} off
+     * the boss every frame via its own dispatch — it is never driven by the boss's own
+     * routine handler. {@link SYZBossSpike#update} now mirrors that by pulling this state
+     * directly (see the accessors below) instead of the boss pushing it in from
+     * {@code updateBossLogic()}, which is skipped for one frame during the post-hit defeat
+     * dispatch deferral ({@link #defeatDeferralAppliesToThisBoss()}). Pushing from there left
+     * the spike's collision/extension frozen at their pre-defeat values for that one frame —
+     * a real, if narrow, divergence from ROM's independently-dispatched spike. Pulling from
+     * the spike's own {@code update()} (called unconditionally every frame via
+     * {@code AbstractBossInstance.updateChildren()}) removes that dependency entirely.
      */
-    private void updateSpikeState() {
-        if (spikeChild == null || spikeChild.isDestroyed()) {
-            return;
-        }
+    int getDropSubPhase() {
+        return dropSubPhase;
+    }
 
-        // ROM: BossSpringYard_SpikeMain logic
-        // Spike is harmful when boss isn't holding a block and isn't invulnerable
-        boolean spikeActive = !state.invulnerable && holdingFlag == 0
-                && state.routineSecondary < STATE_DEFEAT_WAIT;
-        spikeChild.setSpikeActive(spikeActive);
+    int getHoldingFlag() {
+        return holdingFlag;
+    }
 
-        // Pass current boss state to spike for Y extension tracking
-        spikeChild.setBossState(state.routineSecondary, dropSubPhase, timer);
-        spikeChild.updateExtension();
+    int getGenericTimer() {
+        return timer;
     }
 
     /**

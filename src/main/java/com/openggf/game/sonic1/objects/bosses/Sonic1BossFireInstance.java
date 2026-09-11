@@ -1,14 +1,14 @@
 package com.openggf.game.sonic1.objects.bosses;
 
-import com.openggf.audio.AudioManager;
-import com.openggf.game.sonic1.audio.Sonic1Sfx;
 import com.openggf.game.PlayableEntity;
+import com.openggf.game.sonic1.audio.Sonic1Sfx;
 import com.openggf.game.sonic1.constants.Sonic1ObjectIds;
 import com.openggf.graphics.GLCommand;
-import com.openggf.level.LevelManager;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.ObjectTerrainUtils;
@@ -21,7 +21,8 @@ import java.util.List;
  * Object 0x74 — MZ Boss Fire.
  * Reference: docs/s1disasm/_incObj/74 MZ Boss Fire.asm
  */
-public class Sonic1BossFireInstance extends AbstractObjectInstance implements TouchResponseProvider {
+public class Sonic1BossFireInstance extends AbstractObjectInstance
+        implements TouchResponseProvider, RewindRecreatable {
 
     // Main routine (obRoutine)
     private static final int ROUTINE_INIT = 0;
@@ -102,6 +103,11 @@ public class Sonic1BossFireInstance extends AbstractObjectInstance implements To
         this.animStep = 0;
     }
 
+    @Override
+    public Sonic1BossFireInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new Sonic1BossFireInstance(ctx.spawn());
+    }
+
     /**
      * Creates the short-lived stationary flame spawned by BossFire_Duplicate2.
      * ROM writes {@code move.w #$67,obSubtype(a1)}, i.e. obSubtype=0, objoff_29=$67.
@@ -149,7 +155,7 @@ public class Sonic1BossFireInstance extends AbstractObjectInstance implements To
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         switch (routine) {
             case ROUTINE_INIT -> updateInit();
@@ -186,8 +192,15 @@ public class Sonic1BossFireInstance extends AbstractObjectInstance implements To
         }
 
         // Non-zero subtype: delayed drop + sfx_Fireball (BossFire_Main -> loc_1870A).
+        // ROM loc_1870A has no rts/branch: it falls straight through into
+        // BossFire_Action, so the spawn frame ALSO runs one BossFire_Drop tick
+        // (plus SpeedToPos/AnimateSprite). Replicate that same-frame fall-through;
+        // otherwise the drop begins a frame late, leaving the falling fireball
+        // ~4px high at the contact frame and missing the player it should hurt.
         counter29 = 0x1E;
         services().playSfx(Sonic1Sfx.BURNING.id);
+        routine = ROUTINE_ACTION;
+        updateAction();
     }
 
     private void updateAction() {
@@ -246,10 +259,12 @@ public class Sonic1BossFireInstance extends AbstractObjectInstance implements To
 
         // Spawn mirrored twin by copying parent state then negating X speed.
         if (services().objectManager() != null) {
-            Sonic1BossFireInstance twin = new Sonic1BossFireInstance(this);
-            twin.xVel = -FLAME_X_VEL;
-            twin.xFixed = twin.currentX << 16;
-            services().objectManager().addDynamicObject(twin);
+            spawnFreeChild(() -> {
+                Sonic1BossFireInstance twin = new Sonic1BossFireInstance(this);
+                twin.xVel = -FLAME_X_VEL;
+                twin.xFixed = twin.currentX << 16;
+                return twin;
+            });
         }
 
         routineSecondary = STATE_DUPLICATE;
@@ -283,7 +298,7 @@ public class Sonic1BossFireInstance extends AbstractObjectInstance implements To
         if (services().objectManager() == null) {
             return;
         }
-        services().objectManager().addDynamicObject(createDuplicateDecayFlame(currentX, currentY));
+        spawnFreeChild(() -> createDuplicateDecayFlame(currentX, currentY));
     }
 
     private void updateFallEdge() {

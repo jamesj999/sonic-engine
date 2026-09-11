@@ -1,0 +1,26 @@
+{
+  "format": "openggf-tracechaser-consumer-copy-v1",
+  "origin_repository": "https://github.com/OpenGGF/TraceChaser.git",
+  "origin_commit": "9e51ff79e7a542f3c50d96618a7e24e6fc72397e",
+  "trace_contract_version": "v5-conformance-v1",
+  "copies": [
+    {
+      "source": "contracts/v5",
+      "destination": "src/test/resources/tracechaser/v5",
+      "manifest_sha256": "8b89764a07f35d59ad493e765e06972b36cc64303ac5edd52609214a439e0ff1",
+      "consumer": "com.openggf.trace.TestTraceChaserV5ConsumerContract"
+    },
+    {
+      "source": "bizhawk-headless/fixtures/gpgx-audio-capability-v1.json",
+      "destination": "src/test/resources/tracechaser/gpgx-audio-capability-v1.json",
+      "sha256": "845323d7fa50af24b4f516c8937fa231737d3e66df648a90e035fdd56072f326",
+      "consumer": "com.openggf.tools.audio.completerun.TestCompleteRunAudioCutoffFrontier"
+    },
+    {
+      "source": "contracts/audio/normalization-contract-v1.json",
+      "destination": "src/test/resources/audio/parity/s1/normalization-contract-v1.json",
+      "sha256": "7b06a1e5160e865f9716ce89b85f5874c429ad79b3030763d5d0496fb1a70c40",
+      "consumer": "OpenGGF S1 audio normalization tests"
+    }
+  ]
+}

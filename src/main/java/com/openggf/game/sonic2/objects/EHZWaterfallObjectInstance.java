@@ -5,6 +5,8 @@ import com.openggf.game.PlayableEntity;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -17,7 +19,7 @@ import java.util.logging.Logger;
  * Displays different frames based on proximity to the player.
  * Based on Obj49_ChkDel logic.
  */
-public class EHZWaterfallObjectInstance extends AbstractObjectInstance {
+public class EHZWaterfallObjectInstance extends AbstractObjectInstance implements RewindRecreatable {
     private static final Logger LOGGER = Logger.getLogger(EHZWaterfallObjectInstance.class.getName());
 
     private int mappingFrame;
@@ -29,7 +31,12 @@ public class EHZWaterfallObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public EHZWaterfallObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new EHZWaterfallObjectInstance(ctx.spawn(), getName());
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (player == null) {
             return;

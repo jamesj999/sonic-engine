@@ -9,6 +9,7 @@ import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 import com.openggf.game.PlayableEntity;
@@ -41,12 +42,14 @@ import java.util.List;
  * ROM reference: docs/s1disasm/_incObj/2A SBZ Small Door.asm
  */
 public class Sonic1SmallDoorObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, SpawnRewindRecreatable {
 
     // Detection range for door opening: move.w #$40,d1
     private static final int DETECTION_RANGE = 0x40;
 
-    // obActWid from ROM: move.b #8,obActWid(a0)
+    // obActWid from ROM: ADoor_Main writes move.b #16/2,obActWid(a0) = 8
+    // (docs/s1disasm/_incObj/2A SBZ Small Door.asm:20-21). Read by
+    // getOnScreenHalfWidth(), and through it by Sonic_Balance.
     private static final int ACT_WIDTH = 8;
 
     // SolidObject parameters when door is closed (frame 0):
@@ -68,7 +71,7 @@ public class Sonic1SmallDoorObjectInstance extends AbstractObjectInstance
 
     // obStatus bit 0: determines which side the door opens from.
     // Set from spawn renderFlags x-flip bit.
-    private final boolean openFromRight;
+    private boolean openFromRight;
 
     // Animation state
     private int animationId;         // 0 = closing, 1 = opening
@@ -95,7 +98,7 @@ public class Sonic1SmallDoorObjectInstance extends AbstractObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // ADoor_OpenShut logic:
         // clr.b obAnim(a0)  ; default to closing animation (0)
@@ -187,6 +190,30 @@ public class Sonic1SmallDoorObjectInstance extends AbstractObjectInstance
         return SOLID_PARAMS;
     }
 
+    /**
+     * The door's ROM {@code obActWid}.
+     *
+     * <p>{@code ADoor_Main} writes {@code move.b #16/2,obActWid(a0)} = 8
+     * (docs/s1disasm/_incObj/2A SBZ Small Door.asm:20-21). That is half the
+     * shared default, so the inherited 16 made the balance window wider than the
+     * ROM's rather than narrower: {@code Sonic_Balance} forms
+     * {@code d1 = obActWid + dx} and {@code d2 = 2*obActWid - 4}, so at 8 the
+     * ROM balances outside {@code |dx| >= 4} while the engine balanced only
+     * outside {@code |dx| >= 12} (docs/s1disasm/_incObj/01 Sonic.asm:422-431) —
+     * a band the player crosses on a top surface that only reaches
+     * {@code $11} either side.
+     *
+     * <p>Supplied here rather than at {@link #getBalanceWidthPixels()} because
+     * both ROM consumers want the byte, and the class is full-solid so the
+     * balance accessor inherits this one. {@code ADoor_Animate}'s separately
+     * authored {@code d1 = #12/2+sonic_solid_width} = {@code $11} at
+     * {@code :62} is unchanged.
+     */
+    @Override
+    public int getOnScreenHalfWidth() {
+        return ACT_WIDTH;
+    }
+
     @Override
     public boolean isSolidFor(PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
@@ -205,8 +232,23 @@ public class Sonic1SmallDoorObjectInstance extends AbstractObjectInstance
 
     @Override
     public boolean isPersistent() {
-        // RememberState: object persists while on screen
-        return !isDestroyed() && isOnScreenX(160);
+        // ROM: ADoor_OpenShut ends with `bra.w RememberState`, which deletes the
+        // door via the plain `out_of_range` macro -- there is no extended
+        // persistence window. Returning false lets ObjectManager's standard
+        // out_of_range check (isObjectOutOfRange -> isOutOfRangeS1) govern the
+        // unload, matching the ROM frame exactly.
+        //
+        // The previous `isOnScreenX(160)` symmetric margin kept the door alive
+        // ~32px too long off the left edge (ROM's chunk-aligned out_of_range
+        // unloads at ~camX-128; the 160px margin held it to ~camX-160), so the
+        // door's SST slot was freed one batch late. That inverted the slot
+        // allocation of objects spawned afterward and, downstream, the SBZ2
+        // conveyor handoff processing order at f2323 (two adjacent conveyors
+        // with opposite push directions resolve order-dependently).
+        //
+        // docs/s1disasm/_incObj/2A SBZ Small Door.asm:55 (bra.w RememberState)
+        // docs/s1disasm/_incObj/sub RememberState.asm:8-9 (out_of_range.w)
+        return false;
     }
 
     // ---- Debug Rendering ----

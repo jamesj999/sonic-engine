@@ -1,14 +1,19 @@
 package com.openggf.game.sonic3k.specialstage;
 
+import com.openggf.audio.GameMusic;
+import com.openggf.game.GameStateManager;
 import com.openggf.game.PlayerCharacter;
 import com.openggf.game.ResultsScreen;
 import com.openggf.game.SpecialStageAccessType;
+import com.openggf.game.SpecialStageDebugCapabilities;
 import com.openggf.game.SpecialStageDebugProvider;
 import com.openggf.game.SpecialStageProvider;
-import com.openggf.game.sonic3k.audio.Sonic3kMusic;
+import com.openggf.game.SpecialStageStartupPolicy;
+import com.openggf.game.rewind.RewindSnapshottable;
 import com.openggf.game.sonic3k.audio.Sonic3kSfx;
 
 import java.io.IOException;
+import java.util.Optional;
 
 /**
  * Sonic 3&K special stage provider implementation.
@@ -22,7 +27,26 @@ public class Sonic3kSpecialStageProvider implements SpecialStageProvider {
     private final Sonic3kSpecialStageManager manager;
 
     public Sonic3kSpecialStageProvider() {
-        this.manager = Sonic3kSpecialStageManager.getInstance();
+        this(new Sonic3kSpecialStageManager());
+    }
+
+    public Sonic3kSpecialStageProvider(Sonic3kSpecialStageManager manager) {
+        this.manager = manager;
+    }
+
+    @Override
+    public SpecialStageDebugCapabilities debugCapabilities() {
+        // X/Z stage and layout navigation are live manager operations. The
+        // manager's sprite flag has no viewer and the remaining diagnostics
+        // are not implemented, so those keys are intentionally unavailable.
+        return new SpecialStageDebugCapabilities(false, true, true, false, false, false, false);
+    }
+
+    @Override
+    public int consumeStageIndexForEntry(GameStateManager gameState) {
+        boolean superEmeraldMode = gameState.hasAllEmeralds()
+                && !gameState.hasAllSuperEmeralds();
+        return gameState.consumeCurrentSpecialStageIndexAndAdvanceSkippingCollected(superEmeraldMode);
     }
 
     @Override
@@ -32,8 +56,8 @@ public class Sonic3kSpecialStageProvider implements SpecialStageProvider {
     }
 
     @Override
-    public int getStageMusicId() {
-        return Sonic3kMusic.SPECIAL_STAGE.id;
+    public GameMusic getStageMusic() {
+        return GameMusic.SPECIAL_STAGE;
     }
 
     @Override
@@ -50,14 +74,50 @@ public class Sonic3kSpecialStageProvider implements SpecialStageProvider {
     }
 
     @Override
+    public boolean supportsRewind() {
+        return true;
+    }
+
+    @Override
+    public Optional<RewindSnapshottable<?>> rewindAdapter() {
+        return Optional.of(new Sonic3kSpecialStageRewindAdapter(manager));
+    }
+
+    @Override
     public SpecialStageAccessType getAccessType() {
         return SpecialStageAccessType.GIANT_RING;
     }
 
     @Override
     public void initializeStage(int stageIndex) throws IOException {
+        initializeStage(stageIndex, SpecialStageStartupPolicy.FAST);
+    }
+
+    /**
+     * The ROM opens {@code SpecialStage} with a blocking 22-frame
+     * {@code Pal_FadeToWhite} (sonic3k.asm:10591, routine at 5232-5242) before
+     * any special-stage state exists. That fade is visible (it runs over the
+     * level's last frame), so both policies leave the hold armed and step it
+     * frame by frame; the presentation controller reveals the stage once
+     * {@link #isEntryPresentationReady()} reports the fade has elapsed. The
+     * masked-interrupt load that follows has no live approximation yet.
+     */
+    @Override
+    public void initializeStage(int stageIndex, SpecialStageStartupPolicy policy)
+            throws IOException {
+        java.util.Objects.requireNonNull(policy, "policy");
         manager.reset();
         manager.initialize(stageIndex);
+    }
+
+    @Override
+    public boolean isEntryPresentationReady() {
+        return manager.isEntryPresentationReady();
+    }
+
+    @Override
+    public boolean isEntryFadeToWhiteActive() {
+        return manager.isEntryFadeToWhiteActive();
     }
 
     @Override
@@ -154,11 +214,6 @@ public class Sonic3kSpecialStageProvider implements SpecialStageProvider {
     }
 
     @Override
-    public double getLagCompensation() {
-        return manager.getLagCompensation();
-    }
-
-    @Override
     public void setLagCompensation(double factor) {
         manager.setLagCompensation(factor);
     }
@@ -168,10 +223,8 @@ public class Sonic3kSpecialStageProvider implements SpecialStageProvider {
     @Override
     public ResultsScreen createResultsScreen(int ringsCollected, boolean gotEmerald,
                                              int stageIndex, int totalEmeraldCount) {
-        PlayerCharacter character = com.openggf.game.sonic3k.Sonic3kLevelEventManager
-                .getInstance().getPlayerCharacter();
         return new S3kSpecialStageResultsScreen(
-                ringsCollected, gotEmerald, stageIndex, totalEmeraldCount, character);
+                ringsCollected, gotEmerald, stageIndex, totalEmeraldCount, manager.getPlayerCharacter());
     }
 
     // ==================== MiniGameProvider Methods ====================

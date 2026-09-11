@@ -7,6 +7,7 @@ import com.openggf.level.render.SpriteDplcFrame;
 import com.openggf.level.render.SpriteMappingFrame;
 import com.openggf.sprites.art.SpriteArtSet;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -14,6 +15,13 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class TestPlayerSpriteRendererPaletteContext {
+
+    @BeforeEach
+    void setUp() {
+        // Reset so the next donor created is the FIRST donor and therefore lands
+        // at the deterministic palette base (RenderContext.LINES_PER_CONTEXT).
+        RenderContext.reset();
+    }
 
     @AfterEach
     void tearDown() {
@@ -37,7 +45,13 @@ class TestPlayerSpriteRendererPaletteContext {
         RenderContext donorContext = RenderContext.getOrCreateDonor(GameId.S3K);
         renderer.setRenderContext(donorContext);
 
-        assertEquals(donorContext.getEffectivePaletteLine(2), renderer.resolveRenderPaletteIndex(2));
+        // Independent oracle: the first donor's palette block starts at
+        // LINES_PER_CONTEXT (4), so logical line 2 maps to the effective line
+        // LINES_PER_CONTEXT + 2. Computed here without calling the SUT's own
+        // getEffectivePaletteLine, so a wiring/offset regression in
+        // resolveRenderPaletteIndex is caught.
+        int expectedEffectiveLine = RenderContext.LINES_PER_CONTEXT + 2;
+        assertEquals(expectedEffectiveLine, renderer.resolveRenderPaletteIndex(2));
     }
 
     @Test
@@ -57,3 +71,5 @@ class TestPlayerSpriteRendererPaletteContext {
         assertEquals(1, renderer.resolveRenderPaletteIndex(1));
     }
 }
+
+

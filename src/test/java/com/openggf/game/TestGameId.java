@@ -1,8 +1,8 @@
 package com.openggf.game;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class TestGameId {
 
@@ -19,9 +19,9 @@ public class TestGameId {
         assertEquals(GameId.S3K, GameId.fromCode("S3K"));
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void fromCodeThrowsOnUnknown() {
-        GameId.fromCode("s4");
+        assertThrows(IllegalArgumentException.class, () -> GameId.fromCode("s4"));
     }
 
     @Test
@@ -31,3 +31,5 @@ public class TestGameId {
         assertEquals("s3k", GameId.S3K.code());
     }
 }
+
+

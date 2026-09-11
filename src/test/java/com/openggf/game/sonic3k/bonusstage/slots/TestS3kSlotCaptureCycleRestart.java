@@ -29,3 +29,5 @@ class TestS3kSlotCaptureCycleRestart {
         assertEquals(Integer.MIN_VALUE, state.optionCycleLastPrize());
     }
 }
+
+

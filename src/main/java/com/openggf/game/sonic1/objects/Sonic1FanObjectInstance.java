@@ -6,6 +6,7 @@ import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 import com.openggf.game.PlayableEntity;
@@ -40,7 +41,7 @@ import java.util.List;
  * <p>
  * Reference: docs/s1disasm/_incObj/5D Fan.asm
  */
-public class Sonic1FanObjectInstance extends AbstractObjectInstance {
+public class Sonic1FanObjectInstance extends AbstractObjectInstance implements SpawnRewindRecreatable {
 
     // From disassembly: move.b #4,obPriority(a0)
     private static final int PRIORITY = 4;
@@ -77,11 +78,11 @@ public class Sonic1FanObjectInstance extends AbstractObjectInstance {
     private static final int BASE_PUSH_STRENGTH = 0x60;
 
     // Subtype fields
-    private final boolean reverseDirection;  // bit 0: reverse wind direction
-    private final boolean alwaysOn;          // bit 1: always blowing
+    private boolean reverseDirection;  // bit 0: reverse wind direction
+    private boolean alwaysOn;          // bit 1: always blowing
 
     // Facing direction from obStatus bit 0 (spawn renderFlags bit 0)
-    private final boolean facingRight;
+    private boolean facingRight;
 
     // Cyclic on/off state
     // fan_time = objoff_30: countdown timer
@@ -115,7 +116,7 @@ public class Sonic1FanObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // Fan_Delay: handle cyclic on/off (unless always-on subtype)
         if (!alwaysOn) {
@@ -200,7 +201,20 @@ public class Sonic1FanObjectInstance extends AbstractObjectInstance {
         }
 
         // move.w obY(a1),d1 / addi.w #$60,d1 / sub.w obY(a0),d1
-        int playerY = player.getCentreY();
+        // ROM reads obY(a1) at the fan's slot in ExecuteObjects. Objects whose
+        // ROM slot is HIGHER than the fan (Obj5D) have not re-positioned Sonic
+        // yet — notably the SLZ staircase he rides, whose child pieces are
+        // allocated above the fan's slot and re-seat his Y each frame. The
+        // engine folds the staircase into a lower slot than the fan, so the live
+        // centre Y already reflects this frame's ride-seat lift, putting Sonic in
+        // the fan's vertical range one frame early (SLZ2 f2552: engine pushes +2
+        // a frame before ROM). Read the player's centre Y as captured at the
+        // start of the object exec pass (post-physics, pre-any-object re-seat) so
+        // the fan sees the same pre-staircase-seat Y ROM's fan slot observes.
+        var objectManager = services().objectManager();
+        int playerY = objectManager != null
+                ? objectManager.getPlayerCentreYAtExecStart(player)
+                : player.getCentreY();
         int fanY = getY();
         int dy = playerY + WIND_Y_CHECK_OFFSET - fanY;
 
@@ -247,8 +261,9 @@ public class Sonic1FanObjectInstance extends AbstractObjectInstance {
             pushStrength = -pushStrength;
         }
 
-        // .movesonic: add.w d0,obX(a1) — push Sonic away from the fan
-        player.setCentreX((short) (player.getCentreX() + pushStrength));
+        // .movesonic: add.w d0,obX(a1) — push Sonic's x_pos word only
+        // (docs/s1disasm/_incObj/5D Fan.asm:75), preserving x_sub.
+        player.shiftX(pushStrength);
     }
 
     /**

@@ -8,6 +8,7 @@ import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.ObjectTerrainUtils;
@@ -26,7 +27,8 @@ import java.util.List;
  * Animation: Anim 2 = frames 4,5,2,3,0,1,0,1,2,3,4,5 with delay 5, then $FC (delete).
  * Collision flags: 0x8B (inherited from projectile).
  */
-public class HtzGroundFireObjectInstance extends AbstractObjectInstance implements TouchResponseProvider {
+public class HtzGroundFireObjectInstance extends AbstractObjectInstance
+        implements TouchResponseProvider, SpawnRewindRecreatable {
 
     private static final int PRIORITY = 3;
     private static final int COLLISION_FLAGS = 0x8B;
@@ -41,7 +43,7 @@ public class HtzGroundFireObjectInstance extends AbstractObjectInstance implemen
 
     private int currentX;
     private int currentY;
-    private final int spreadDirection;  // +1 (right) or -1 (left)
+    private int spreadDirection;  // +1 (right) or -1 (left)
     private int spreadRemaining;        // Clones left to spawn
     private int spreadTimer;            // Countdown to next spread
     private int animFrame;
@@ -61,8 +63,12 @@ public class HtzGroundFireObjectInstance extends AbstractObjectInstance implemen
         this.animTimer = ANIM_DELAY;
     }
 
+    HtzGroundFireObjectInstance(ObjectSpawn spawn) {
+        this(spawn.x(), spawn.y(), 0, 0);
+    }
+
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) {
             return;

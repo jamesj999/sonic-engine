@@ -6,22 +6,18 @@ import com.openggf.level.objects.ObjectManager;
 import com.openggf.tests.HeadlessTestFixture;
 import com.openggf.tests.SharedLevel;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
-import org.junit.AfterClass;
-import org.junit.Assume;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @RequiresRom(SonicGame.SONIC_2)
 public class TestCpzStaircaseWallCollision {
-
-    @ClassRule public static RequiresRomRule romRule = new RequiresRomRule();
-
     private static final int ZONE_CPZ = 1;
     private static final int ACT_1 = 0;
     private static final int STAIRCASE_X = 8336;
@@ -31,19 +27,19 @@ public class TestCpzStaircaseWallCollision {
 
     private HeadlessTestFixture fixture;
 
-    @BeforeClass
+    @BeforeAll
     public static void loadLevel() throws Exception {
         sharedLevel = SharedLevel.load(SonicGame.SONIC_2, ZONE_CPZ, ACT_1);
     }
 
-    @AfterClass
+    @AfterAll
     public static void cleanup() {
         if (sharedLevel != null) {
             sharedLevel.dispose();
         }
     }
 
-    @Before
+    @BeforeEach
     public void setUp() {
         fixture = HeadlessTestFixture.builder()
                 .withSharedLevel(sharedLevel)
@@ -51,18 +47,36 @@ public class TestCpzStaircaseWallCollision {
     }
 
     @Test
+    public void topContactTimerDoesNotDecrementOnTriggerFrame() {
+        CPZStaircaseObjectInstance staircase = new CPZStaircaseObjectInstance(
+                new com.openggf.level.objects.ObjectSpawn(0x2090, 0x0350, 0x78, 0x00, 0, false, 0),
+                "CPZStaircase");
+
+        staircase.onPieceContact(0, null,
+                new com.openggf.level.objects.SolidContact(true, false, false, false, false), 0);
+        staircase.update(0, null);
+        for (int frame = 1; frame <= 30; frame++) {
+            staircase.update(frame, null);
+        }
+
+        assertEquals(0x0350, staircase.getPieceY(0),
+                "Obj78 loc_292C8 sets objoff_2C=$1E and returns; movement begins one frame later");
+        staircase.update(31, null);
+        assertEquals(0x0351, staircase.getPieceY(0));
+    }
+
+    @Test
     public void ridingIntoHigherStepPushesLikeWall() {
         CPZStaircaseObjectInstance staircase = activateMovingStaircase();
-        Assume.assumeNotNull("Expected CPZ staircase to become active near test coordinates", staircase);
+        Assumptions.assumeTrue(staircase != null, "Expected CPZ staircase to become active near test coordinates");
 
         StepPair pair = findLargestAdjacentStep(staircase);
-        Assume.assumeTrue("Expected a visible staircase height difference before wall-collision check",
-                pair != null && pair.heightDifference() >= 6);
+        Assumptions.assumeTrue(pair != null && pair.heightDifference() >= 6, "Expected a visible staircase height difference before wall-collision check");
 
         placeSpriteAbovePiece(staircase, pair.lowerPiece());
         ObjectManager objectManager = GameServices.level().getObjectManager();
         boolean landed = waitForRideOnPiece(objectManager, staircase, pair.lowerPiece(), 60);
-        Assume.assumeTrue("Sonic could not land on the lower CPZ staircase piece", landed);
+        Assumptions.assumeTrue(landed, "Sonic could not land on the lower CPZ staircase piece");
 
         int startX = fixture.sprite().getCentreX();
         boolean moveRight = staircase.getPieceX(pair.higherPiece()) > staircase.getPieceX(pair.lowerPiece());
@@ -77,10 +91,9 @@ public class TestCpzStaircaseWallCollision {
         }
 
         int horizontalAdvance = Math.abs(fixture.sprite().getCentreX() - startX);
-        assertTrue("Running from the lower CPZ staircase block into the higher adjacent block "
+        assertTrue(sawPush && horizontalAdvance < 32, "Running from the lower CPZ staircase block into the higher adjacent block "
                         + "should produce a wall-style push before Sonic can advance a full block "
-                        + "(advance=" + horizontalAdvance + ")",
-                sawPush && horizontalAdvance < 32);
+                        + "(advance=" + horizontalAdvance + ")");
     }
 
     private CPZStaircaseObjectInstance activateMovingStaircase() {

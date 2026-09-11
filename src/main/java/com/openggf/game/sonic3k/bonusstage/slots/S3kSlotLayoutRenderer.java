@@ -6,10 +6,6 @@ import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.TrigLookupTable;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-
 public final class S3kSlotLayoutRenderer {
 
     private static final int GRID_SIZE = 16;
@@ -129,18 +125,18 @@ public final class S3kSlotLayoutRenderer {
         }
     }
 
-    public List<VisibleCell> buildVisibleCells(S3kSlotRenderBuffers buffers) {
+    S3kSlotRenderBuffers.VisibleCells buildVisibleCells(S3kSlotRenderBuffers buffers) {
         if (buffers == null) {
-            return List.of();
+            return S3kSlotRenderBuffers.VisibleCells.empty();
         }
+        S3kSlotRenderBuffers.VisibleCells visible = buffers.beginVisibleCellFrame();
         short[] points = buffers.stagedPointGrid();
         if (points == null || points.length < POINT_GRID_LENGTH) {
-            return List.of();
+            return visible;
         }
 
         int layoutRow = Math.floorDiv(buffers.stagedCameraY(), CELL_SIZE);
         int layoutCol = Math.floorDiv(buffers.stagedCameraX(), CELL_SIZE);
-        List<VisibleCell> visible = new ArrayList<>(96);
 
         int pointIndex = 0;
         for (int row = 0; row < GRID_SIZE; row++) {
@@ -161,57 +157,13 @@ public final class S3kSlotLayoutRenderer {
                         || screenY < MIN_SCREEN_Y || screenY >= MAX_SCREEN_Y) {
                     continue;
                 }
-                visible.add(new VisibleCell((byte) cellId,
+                visible.add(cellId,
                         buffers.stagedCameraX() + pointX + WORLD_X_OFFSET,
-                        buffers.stagedCameraY() + pointY + WORLD_Y_OFFSET));
+                        buffers.stagedCameraY() + pointY + WORLD_Y_OFFSET);
             }
         }
 
-        return Collections.unmodifiableList(visible);
-    }
-
-    public List<VisibleCell> buildVisibleCells(byte[] layout, int angle, int cameraX, int cameraY) {
-        if (layout == null || layout.length < S3kSlotRomData.SLOT_LAYOUT_SIZE * S3kSlotRomData.SLOT_LAYOUT_SIZE) {
-            return List.of();
-        }
-
-        short[] points = buildPointGrid(angle, cameraX, cameraY);
-        int layoutRow = Math.floorDiv(cameraY, CELL_SIZE);
-        int layoutCol = Math.floorDiv(cameraX, CELL_SIZE);
-        List<VisibleCell> visible = new ArrayList<>(96);
-
-        int pointIndex = 0;
-        for (int row = 0; row < GRID_SIZE; row++) {
-            int sourceRow = layoutRow + row;
-            for (int col = 0; col < GRID_SIZE; col++) {
-                int sourceCol = layoutCol + col;
-                int cellId = 0;
-                int compactRow = sourceRow - S3kSlotRomData.SLOT_LAYOUT_WORLD_OFFSET;
-                int compactCol = sourceCol - S3kSlotRomData.SLOT_LAYOUT_WORLD_OFFSET;
-                if (compactRow >= 0 && compactRow < S3kSlotRomData.SLOT_LAYOUT_SIZE
-                        && compactCol >= 0 && compactCol < S3kSlotRomData.SLOT_LAYOUT_SIZE) {
-                    cellId = layout[compactRow * S3kSlotRomData.SLOT_LAYOUT_SIZE + compactCol] & 0xFF;
-                }
-
-                int pointX = points[pointIndex++];
-                int pointY = points[pointIndex++];
-                int screenX = pointX + SCREEN_X_OFFSET;
-                int screenY = pointY + SCREEN_Y_OFFSET;
-
-                if (cellId == 0 || cellId == 0x09 || cellId >= PIECE_DEFS.length || PIECE_DEFS[cellId] == null) {
-                    continue;
-                }
-                if (screenX < MIN_SCREEN_X || screenX >= MAX_SCREEN_X
-                        || screenY < MIN_SCREEN_Y || screenY >= MAX_SCREEN_Y) {
-                    continue;
-                }
-                visible.add(new VisibleCell((byte) cellId,
-                        cameraX + pointX + WORLD_X_OFFSET,
-                        cameraY + pointY + WORLD_Y_OFFSET));
-            }
-        }
-
-        return Collections.unmodifiableList(visible);
+        return visible;
     }
 
     public TransformedStagePoint transformStagePoint(int angle, int cameraX, int cameraY, int stageX, int stageY) {
@@ -248,8 +200,8 @@ public final class S3kSlotLayoutRenderer {
                 screenY);
     }
 
-    public void render(S3kSlotStageState state, S3kSlotRenderBuffers buffers,
-                       Camera camera, ObjectRenderManager renderManager) {
+    void render(S3kSlotStageState state, S3kSlotRenderBuffers buffers,
+                Camera camera, ObjectRenderManager renderManager) {
         if (state == null || buffers == null || camera == null || renderManager == null) {
             return;
         }
@@ -258,12 +210,13 @@ public final class S3kSlotLayoutRenderer {
         renderVisibleCells(buildVisibleCells(buffers), camera, renderManager);
     }
 
-    public void renderVisibleCells(List<VisibleCell> visibleCells, Camera camera, ObjectRenderManager renderManager) {
+    void renderVisibleCells(S3kSlotRenderBuffers.VisibleCells visibleCells,
+                            Camera camera, ObjectRenderManager renderManager) {
         if (visibleCells == null || visibleCells.isEmpty() || camera == null || renderManager == null) {
             return;
         }
-        for (VisibleCell cell : visibleCells) {
-            int cellId = cell.cellId() & 0xFF;
+        for (int i = 0; i < visibleCells.size(); i++) {
+            int cellId = visibleCells.cellIdAt(i);
             if (cellId <= 0 || cellId == 0x09 || cellId >= PIECE_DEFS.length) {
                 continue;
             }
@@ -288,16 +241,15 @@ public final class S3kSlotLayoutRenderer {
                 frameIdx = ringFrame;
             }
             if (def.palette() >= 0) {
-                renderer.drawFrameIndexWithPaletteBase(frameIdx, cell.worldX(), cell.worldY(),
+                renderer.drawFrameIndexWithPaletteBase(frameIdx,
+                        visibleCells.worldXAt(i), visibleCells.worldYAt(i),
                         false, false, def.palette());
             } else {
-                renderer.drawFrameIndex(frameIdx, cell.worldX(), cell.worldY(),
+                renderer.drawFrameIndex(frameIdx,
+                        visibleCells.worldXAt(i), visibleCells.worldYAt(i),
                         false, false, -1);
             }
         }
-    }
-
-    public record VisibleCell(byte cellId, int worldX, int worldY) {
     }
 
     public record TransformedStagePoint(int worldX, int worldY, int screenX, int screenY) {

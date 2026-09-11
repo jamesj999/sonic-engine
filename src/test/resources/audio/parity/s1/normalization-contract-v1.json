@@ -1,0 +1,31 @@
+{
+  "activeLoopIndices": [0, 2],
+  "busEvents": [
+    {"kind": "address", "port": 0, "value": 34},
+    {"kind": "data", "port": 0, "value": 17},
+    {"kind": "address", "port": 1, "value": 42},
+    {"kind": "data", "port": 1, "value": 128},
+    {"kind": "psg", "value": 159}
+  ],
+  "openGgf": {
+    "global": {"fadeActive": false, "fadeDelay": 0, "fadeDirection": "none", "fadeSteps": 0, "speedUp": false, "tempoReload": 21, "tempoTimeout": 3},
+    "tracks": [
+      {"active": false, "hardware": "DAC", "role": "DAC"},
+      {"active": true, "ams": 1, "baseFrequency": 9320, "detune": -3, "duration": 12, "fms": 2, "hardware": "FM1", "loopCounters": [4, 88, 2], "modEnabled": true, "overridden": true, "pan": 192, "position": 52, "returnStack": [38, 1112, 1792], "returnSp": 2, "role": "FM1", "scaledDuration": 16, "tieNext": true, "transpose": -2, "voiceId": 7, "volume": -1},
+      {"active": false, "hardware": "FM2", "role": "FM2"}, {"active": false, "hardware": "FM3", "role": "FM3"}, {"active": false, "hardware": "FM4", "role": "FM4"}, {"active": false, "hardware": "FM5", "role": "FM5"}, {"active": false, "hardware": "FM6", "role": "FM6"},
+      {"active": true, "baseFrequency": 0, "detune": 0, "duration": 0, "envPos": 254, "hardware": "PSG1", "instrumentId": 5, "loopCounters": [], "modEnabled": false, "overridden": false, "position": 0, "returnStack": [], "returnSp": 0, "role": "PSG1", "scaledDuration": 0, "tieNext": false, "transpose": 0, "volume": 0}, {"active": false, "hardware": "PSG2", "role": "PSG2"}, {"active": false, "hardware": "PSG3", "role": "PSG3"}
+    ]
+  },
+  "rawRom": {
+    "assetBase": 476636,
+    "assetEnd": 478532,
+    "global": {"fadeActive": 0, "fadeDelay": 0, "fadeOut": 0, "fadeSteps": 0, "speedUp": 0, "tempoReload": 21, "tempoTimeout": 3},
+    "tracks": [
+      {"status": 0, "voiceControl": 6},
+      {"baseFrequency": 9320, "dataPointer": 476688, "detune": 253, "duration": 12, "durationReload": 16, "loopCounters": [4, 88, 2], "panAmsFms": 210, "returnStack": [477746, 476672, 478428], "stackPointer": 40, "status": 156, "transpose": 254, "voiceControl": 0, "voiceOrEnvelope": 7, "volume": 255},
+      {"status": 0, "voiceControl": 1}, {"status": 0, "voiceControl": 2}, {"status": 0, "voiceControl": 4}, {"status": 0, "voiceControl": 5}, {"status": 0, "voiceControl": 0},
+      {"baseFrequency": 0, "dataPointer": 476636, "detune": 0, "duration": 0, "durationReload": 0, "loopCounters": [], "panAmsFms": 0, "returnStack": [], "stackPointer": 48, "status": 128, "transpose": 0, "voiceControl": 128, "voiceOrEnvelope": 5, "volume": 0, "volumeEnvelopeIndex": 254}, {"status": 0, "voiceControl": 160}, {"status": 0, "voiceControl": 192}
+    ]
+  },
+  "expectedCanonicalJson": "{\"events\":[{\"chip\":\"ym2612\",\"port\":0,\"register\":34,\"value\":17},{\"chip\":\"ym2612\",\"port\":1,\"register\":42,\"value\":128},{\"chip\":\"psg\",\"value\":159}],\"state\":{\"global\":{\"fadeActive\":false,\"fadeDirection\":\"none\",\"speedUp\":false,\"tempoReload\":21,\"tempoTimeout\":3},\"tracks\":[{\"active\":false,\"hardware\":\"DAC\",\"role\":\"DAC\"},{\"active\":true,\"ams\":1,\"baseFrequency\":9320,\"detune\":-3,\"doNotAttack\":true,\"duration\":12,\"durationReload\":16,\"fms\":2,\"hardware\":\"FM1\",\"loopCounters\":[4,2],\"modulationEnabled\":true,\"overridden\":true,\"pan\":192,\"returnStack\":[38,1112],\"role\":\"FM1\",\"sequencePosition\":52,\"transpose\":-2,\"voiceOrEnvelope\":7,\"volume\":-1},{\"active\":false,\"hardware\":\"FM2\",\"role\":\"FM2\"},{\"active\":false,\"hardware\":\"FM3\",\"role\":\"FM3\"},{\"active\":false,\"hardware\":\"FM4\",\"role\":\"FM4\"},{\"active\":false,\"hardware\":\"FM5\",\"role\":\"FM5\"},{\"active\":false,\"hardware\":\"FM6\",\"role\":\"FM6\"},{\"active\":true,\"baseFrequency\":0,\"detune\":0,\"doNotAttack\":false,\"duration\":0,\"durationReload\":0,\"envelopeCursor\":254,\"hardware\":\"PSG1\",\"loopCounters\":[0,0],\"modulationEnabled\":false,\"overridden\":false,\"returnStack\":[],\"role\":\"PSG1\",\"sequencePosition\":0,\"transpose\":0,\"voiceOrEnvelope\":5,\"volume\":0},{\"active\":false,\"hardware\":\"PSG2\",\"role\":\"PSG2\"},{\"active\":false,\"hardware\":\"PSG3\",\"role\":\"PSG3\"}]}}"
+}

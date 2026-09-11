@@ -1,12 +1,12 @@
 package com.openggf.level.scroll;
-import com.openggf.game.RuntimeManager;
+
+import com.openggf.tests.TestEnvironment;
+import com.openggf.game.session.SessionManager;
 import com.openggf.game.sonic2.scroll.SwScrlArz;
-
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
-
-import static org.junit.Assert.*;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Tests for SwScrlArz (Aquatic Ruin Zone parallax scrolling).
@@ -18,17 +18,17 @@ public class SwScrlArzTest {
     private SwScrlArz handler;
     private int[] horizScrollBuf;
 
-    @Before
+    @BeforeEach
     public void setUp() {
-        RuntimeManager.createGameplay();
+        TestEnvironment.activeGameplayMode();
         // Create handler with null tables (uses hardcoded row heights)
         handler = new SwScrlArz(null);
         horizScrollBuf = new int[224];
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
-        RuntimeManager.destroyCurrent();
+        SessionManager.clear();
     }
 
     @Test
@@ -36,10 +36,9 @@ public class SwScrlArzTest {
         handler.init(0, 1000, 500);
 
         // After init, BG X target should be approximately cameraX * 0x0119 / 256
-        // 1000 * 0x0119 / 256 = 1000 * 281 / 256 ≈ 1097
+        // 1000 * 0x0119 / 256 = 1000 * 281 / 256 â‰ˆ 1097
         int targetX = handler.getBgXTarget();
-        assertTrue("Target X should be around 1097, got: " + targetX,
-                targetX > 1000 && targetX < 1200);
+        assertTrue(targetX > 1000 && targetX < 1200, "Target X should be around 1097, got: " + targetX);
     }
 
     @Test
@@ -73,8 +72,7 @@ public class SwScrlArzTest {
 
         // With proper fixed-point arithmetic, max jump should be 1-2 pixels max
         // The old implementation could jump 5+ pixels at high X positions
-        assertTrue("Background scroll should be smooth (max jump <= 3 pixels), got max jump: " + maxJump,
-                maxJump <= 3);
+        assertTrue(maxJump <= 3, "Background scroll should be smooth (max jump <= 3 pixels), got max jump: " + maxJump);
     }
 
     @Test
@@ -107,8 +105,7 @@ public class SwScrlArzTest {
         }
 
         // Even at X=25000+, jumps should not exceed 3 pixels per frame
-        assertTrue("Scroll jitter at high X (max jump <= 3 pixels), got: " + maxJump,
-                maxJump <= 3);
+        assertTrue(maxJump <= 3, "Scroll jitter at high X (max jump <= 3 pixels), got: " + maxJump);
     }
 
     @Test
@@ -133,9 +130,8 @@ public class SwScrlArzTest {
 
         // The ratios should be similar (within 10%)
         double ratioDiff = Math.abs(ratioLow - ratioHigh) / ratioLow;
-        assertTrue("Scroll ratio should be consistent at different X positions. " +
-                "Low: " + ratioLow + ", High: " + ratioHigh + ", Diff: " + (ratioDiff * 100) + "%",
-                ratioDiff < 0.1);
+        assertTrue(ratioDiff < 0.1, "Scroll ratio should be consistent at different X positions. " +
+                "Low: " + ratioLow + ", High: " + ratioHigh + ", Diff: " + (ratioDiff * 100) + "%");
     }
 
     @Test
@@ -147,11 +143,11 @@ public class SwScrlArzTest {
         // Check that the handler produces valid scroll values (non-zero for this
         // camera)
         int scroll0 = (short) (horizScrollBuf[0] & 0xFFFF);
-        assertTrue("Scroll should be non-zero for cameraX=5000", scroll0 != 0);
+        assertTrue(scroll0 != 0, "Scroll should be non-zero for cameraX=5000");
 
         // Verify FG scroll is correct
         short fgScroll = (short) (horizScrollBuf[0] >> 16);
-        assertEquals("FG scroll should be -cameraX", (short) -5000, fgScroll);
+        assertEquals((short) -5000, fgScroll, "FG scroll should be -cameraX");
     }
 
     @Test
@@ -172,9 +168,9 @@ public class SwScrlArzTest {
         // Act 1: 1000 - 0x180 = 1000 - 384 = 616
         // Act 2: (1000 - 0xE0) / 2 = (1000 - 224) / 2 = 388
 
-        assertTrue("Act 1 bgY should be around 616, got: " + bgYAct1,
-                Math.abs(bgYAct1 - 616) < 10);
-        assertTrue("Act 2 bgY should be around 388, got: " + bgYAct2,
-                Math.abs(bgYAct2 - 388) < 10);
+        assertTrue(Math.abs(bgYAct1 - 616) < 10, "Act 1 bgY should be around 616, got: " + bgYAct1);
+        assertTrue(Math.abs(bgYAct2 - 388) < 10, "Act 2 bgY should be around 388, got: " + bgYAct2);
     }
 }
+
+

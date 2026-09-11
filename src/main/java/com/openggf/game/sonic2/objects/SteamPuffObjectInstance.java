@@ -7,6 +7,7 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRenderFlipRewindRecreatable;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
@@ -28,10 +29,15 @@ import java.util.List;
  * </ul>
  */
 public class SteamPuffObjectInstance extends AbstractObjectInstance
-        implements TouchResponseProvider {
+        implements TouchResponseProvider, SpawnRenderFlipRewindRecreatable {
 
-    // ROM: move.b #$18,width_pixels(a1) at loc_2674C (s2.asm line 52111)
-    // Used by MarkObjGone for off-screen culling in ROM; not consumed by engine base class
+    // ROM: move.b #$18,width_pixels(a1) at loc_2674C (s2.asm line 52111).
+    // In the ROM this width feeds the MarkObjGone off-screen culling test. The
+    // engine culls dynamic objects centrally (ObjectManager.Placement) and the
+    // puff exposes no per-object width hook (it implements only
+    // TouchResponseProvider, not a width/solid provider), so there is nothing to
+    // wire this into. Retained as documentation of the ROM value; behaviour is
+    // unchanged. Suppression is intentional — no consumer exists to remove it.
     @SuppressWarnings("unused")
     private static final int WIDTH_PIXELS = 0x18;
 
@@ -45,10 +51,14 @@ public class SteamPuffObjectInstance extends AbstractObjectInstance
     // Category $80 (HURT) + size index $26
     private static final int COLLISION_FLAGS_ACTIVE = 0xA6;
 
-    private final boolean xFlipped;
+    private boolean xFlipped;
     private int mappingFrame;
     private int frameDuration;
     private int collisionFlags;
+
+    private SteamPuffObjectInstance() {
+        this(0, 0, false);
+    }
 
     /**
      * Create a steam puff at the given world position.
@@ -67,7 +77,7 @@ public class SteamPuffObjectInstance extends AbstractObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // ROM: loc_2683A (routine 4)
         // subq.b #1,anim_frame_duration(a0) / bpl.s ++
@@ -104,6 +114,18 @@ public class SteamPuffObjectInstance extends AbstractObjectInstance
     @Override
     public int getCollisionProperty() {
         return 0;
+    }
+
+    @Override
+    public boolean usesCustomOutOfRangeCheck() {
+        // ROM loc_2683A tails to DisplaySprite, not MarkObjGone; the puff's
+        // lifetime is owned by its animation counter.
+        return true;
+    }
+
+    @Override
+    public boolean isCustomOutOfRange(int cameraX) {
+        return false;
     }
 
     // --- Rendering ---

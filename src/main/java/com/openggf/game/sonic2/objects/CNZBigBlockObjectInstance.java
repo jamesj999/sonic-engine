@@ -31,7 +31,7 @@ import java.util.List;
  * <b>Disassembly Reference:</b> s2.asm lines 58279-58366 (ObjD4)
  */
 public class CNZBigBlockObjectInstance extends BoxObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
 
     // Constants from disassembly
     private static final int INITIAL_OFFSET = 0x60;      // 96 pixels initial offset from spawn
@@ -53,10 +53,11 @@ public class CNZBigBlockObjectInstance extends BoxObjectInstance
     // The ROM uses 32-bit positions with 16-bit integer and 16-bit fractional parts
     private int x, y;           // Current position (integer part)
     private int xSub, ySub;     // Sub-pixel (fractional part)
-    private final int targetX;  // Original spawn = target X
-    private final int targetY;  // Original spawn = target Y
+    private int targetX;  // Original spawn = target X
+    private int targetY;  // Original spawn = target Y
     private int xVel, yVel;     // Velocity (16-bit signed)
-    private final int moveType; // 0 = horizontal, 2 = vertical
+    private int moveType; // 0 = horizontal, 2 = vertical
+    private int updateCount;
 
     public CNZBigBlockObjectInstance(ObjectSpawn spawn, String name) {
         // 64x64 pixel visual size, half dimensions = 32
@@ -100,7 +101,12 @@ public class CNZBigBlockObjectInstance extends BoxObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public CNZBigBlockObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new CNZBigBlockObjectInstance(ctx.spawn(), getName());
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // Apply movement based on type
         if (moveType == MOVE_HORIZONTAL) {
@@ -108,6 +114,7 @@ public class CNZBigBlockObjectInstance extends BoxObjectInstance
         } else {
             updateVerticalMovement();
         }
+        updateCount++;
     }
 
     /**
@@ -122,9 +129,10 @@ public class CNZBigBlockObjectInstance extends BoxObjectInstance
      */
     private void updateHorizontalMovement() {
         // Accelerate toward target
-        // ROM: move.w objoff_30(a0),d0 / cmp.w x_pos(a0),d0 / bge.s + / neg.w d1
+        // ROM: move.w objoff_30(a0),d0 / cmp.w x_pos(a0),d0 / bhi.s + / neg.w d1.
+        // Equality accelerates negative; otherwise ObjD4 drifts one phase ahead at each crossing.
         int accel = ACCELERATION;
-        if (targetX < x) {
+        if (targetX <= x) {
             accel = -accel;
         }
         xVel += accel;
@@ -143,9 +151,9 @@ public class CNZBigBlockObjectInstance extends BoxObjectInstance
      * ROM: loc_2B7E0 - Accelerate toward target Y, apply velocity to position.
      */
     private void updateVerticalMovement() {
-        // Accelerate toward target
+        // Same `bhi.s` equality-negative rule as ObjD4_Horizontal (s2.asm:58375-58384).
         int accel = ACCELERATION;
-        if (targetY < y) {
+        if (targetY <= y) {
             accel = -accel;
         }
         yVel += accel;
@@ -174,7 +182,37 @@ public class CNZBigBlockObjectInstance extends BoxObjectInstance
     public SolidObjectParams getSolidParams() {
         // No offset needed: getX()/getY() already return the current oscillating position,
         // so the collision anchor is already correct without additional displacement.
-        return new SolidObjectParams(HALF_WIDTH, AIR_HALF_HEIGHT, GROUND_HALF_HEIGHT, 0, 0);
+        return SolidObjectParams.of(HALF_WIDTH, AIR_HALF_HEIGHT, GROUND_HALF_HEIGHT, 0, 0);
+    }
+
+    @Override
+    public boolean fullSolidBottomOverlapUsesCurrentYRadiusOnly(PlayableEntity player) {
+        // ObjD4 calls the shared S2 SolidObject helper (s2.asm:58348-58356).
+        // SolidObject_cont builds the bottom reject bound after adding the
+        // live y_radius(a1) to d2 (s2.asm:35135-35166), so rolling players use
+        // the smaller rolling radius on both halves.
+        return true;
+    }
+
+    @Override
+    public int getOutOfRangeReferenceX() {
+        // ObjD4_Main passes objoff_30, the saved target/origin X, to MarkObjGone2
+        // after SolidObject (s2.asm:58380-58388). The oscillating x_pos can leave
+        // the object-load band while the origin is still in range; unloading on the
+        // current X incorrectly leaves the spawn dormant until the cursor re-enters.
+        return targetX;
+    }
+
+    @Override
+    public int getOnScreenHalfWidth() {
+        // ObjD4_Init sets width_pixels to $20 (s2.asm:58321), and the shared
+        // solid-contact render gate uses this footprint as the ROM render flag proxy.
+        return 0x20;
+    }
+
+    @Override
+    public int getOnScreenHalfHeight() {
+        return 0x20;
     }
 
     @Override
@@ -231,5 +269,17 @@ public class CNZBigBlockObjectInstance extends BoxObjectInstance
     @Override
     public int getY() {
         return y;
+    }
+
+    @Override
+    public String traceDebugDetails() {
+        return String.format("upd=%d sub=(%04X,%04X) vel=(%04X,%04X) target=(%04X,%04X)",
+                updateCount,
+                xSub & 0xFFFF,
+                ySub & 0xFFFF,
+                xVel & 0xFFFF,
+                yVel & 0xFFFF,
+                targetX & 0xFFFF,
+                targetY & 0xFFFF);
     }
 }

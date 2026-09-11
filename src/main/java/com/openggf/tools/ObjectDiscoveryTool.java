@@ -129,6 +129,9 @@ public class ObjectDiscoveryTool {
         StringBuilder sb = new StringBuilder();
         sb.append("# ").append(profile.gameName()).append(" Object Implementation Checklist\n\n");
         sb.append("Generated: ").append(report.scanTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))).append("\n\n");
+        if (profile.coverageNote() != null) {
+            sb.append(profile.coverageNote()).append("\n\n");
+        }
 
         // Summary
         int total = report.implemented + report.unimplemented;

@@ -120,9 +120,20 @@ which selects the correct decompressor based on the compression type.
 
 ### SmpsSequencer = Z80 Sound Driver
 
-The Z80 sound driver is not emulated -- it is reimplemented. The `SmpsSequencer` processes
-the same SMPS sequence data that the Z80 driver would, producing the same register writes
-to the YM2612 and SN76489 emulation cores.
+The Z80 sound driver is not emulated -- it is reimplemented. The `SmpsSequencer`
+processes ROM SMPS sequence data and drives the YM2612 and SN76489 emulation
+cores, but universal register-write parity is still a goal rather than a current
+guarantee. In particular, S3K coordinate flags are owned by
+`Sonic3kCoordFlagHandler`. Fixed-point traversal of every resolved S&K-loader
+shipped-ROM music/SFX track entry and both native SFX banks (`33-DF`, 173
+entries each) never reaches its `SND_CMD`, `MUS_PAUSE`, or `COPY_MEM` meta
+commands. Strict full-bank traversal covers all native roots/frontiers,
+including differing `9B`/`AD` payloads and `DC-DF` aliases; ROM type-check bytes
+prove S&K's `DC` CreditsK music special case and S3's `DC-DF` SFX dispatch.
+Their cases preserve operand alignment for custom/imported streams without
+claiming native effects.
+See the ROM inventory and source contract in
+`docs/architecture/research/audio/2026-08-08-s3k-smps-meta-command-reachability.md`.
 
 ## Finding Things
 

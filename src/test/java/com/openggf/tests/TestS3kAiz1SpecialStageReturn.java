@@ -4,23 +4,25 @@ import com.openggf.camera.Camera;
 import com.openggf.configuration.SonicConfiguration;
 import com.openggf.configuration.SonicConfigurationService;
 import com.openggf.game.GameServices;
+import com.openggf.game.sonic3k.objects.Sonic3kMonitorObjectInstance;
 import com.openggf.level.BigRingReturnState;
 import com.openggf.level.ChunkDesc;
 import com.openggf.level.LevelManager;
+import com.openggf.level.objects.ObjectInstance;
+import com.openggf.level.objects.ObjectManager;
+import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.physics.GroundSensor;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 import com.openggf.sprites.playable.Sonic;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
 
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Diagnostic test: reproduce the "in the floor" bug when returning from a
@@ -31,21 +33,17 @@ import static org.junit.Assert.*;
  * 2. Record position (simulating big ring save)
  * 3. Reload level via loadCurrentLevel (simulating special stage return)
  * 4. Restore position
- * 5. Step frames — Sonic should NOT die or fall through the floor
+ * 5. Step frames â€” Sonic should NOT die or fall through the floor
  */
 @RequiresRom(SonicGame.SONIC_3K)
 public class TestS3kAiz1SpecialStageReturn {
-
-    @ClassRule
-    public static RequiresRomRule romRule = new RequiresRomRule();
-
     private static final int ZONE_AIZ = 0;
     private static final int ACT_1 = 0;
 
     private static Object oldSkipIntros;
     private static SharedLevel sharedLevel;
 
-    @BeforeClass
+    @BeforeAll
     public static void loadLevel() throws Exception {
         SonicConfigurationService config = SonicConfigurationService.getInstance();
         oldSkipIntros = config.getConfigValue(SonicConfiguration.S3K_SKIP_INTROS);
@@ -53,7 +51,7 @@ public class TestS3kAiz1SpecialStageReturn {
         sharedLevel = SharedLevel.load(SonicGame.SONIC_3K, ZONE_AIZ, ACT_1);
     }
 
-    @AfterClass
+    @AfterAll
     public static void cleanup() {
         SonicConfigurationService.getInstance().setConfigValue(
                 SonicConfiguration.S3K_SKIP_INTROS,
@@ -64,7 +62,7 @@ public class TestS3kAiz1SpecialStageReturn {
     private HeadlessTestFixture fixture;
     private Sonic sprite;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         fixture = HeadlessTestFixture.builder()
                 .withSharedLevel(sharedLevel)
@@ -85,7 +83,7 @@ public class TestS3kAiz1SpecialStageReturn {
     }
 
     /**
-     * The REAL scenario — config has skip_intros=false (intro was enabled),
+     * The REAL scenario â€” config has skip_intros=false (intro was enabled),
      * then special stage return causes a reload where our fix must override
      * to SKIP_INTRO. This matches the user's actual game flow.
      */
@@ -149,26 +147,47 @@ public class TestS3kAiz1SpecialStageReturn {
 
         // Check secondary (path B) collision too
         System.out.println("\n=== SECONDARY PATH SCAN at X=0x1BC3 ===");
+        int secondaryTilesInspected = 0;
+        int secondarySolidBelowRing = 0;
         for (int y = 0x400; y <= 0x520; y += 16) {
             ChunkDesc desc = GameServices.level().getChunkDescAt((byte) 1, bigRingX, y);
             String info = "  Y=0x" + Integer.toHexString(y) + ": ";
             if (desc == null) {
                 info += "null";
             } else {
+                secondaryTilesInspected++;
+                boolean secondarySolid = desc.hasSecondarySolidity();
+                if (secondarySolid && y >= bigRingY) {
+                    secondarySolidBelowRing++;
+                }
                 info += "chunk=0x" + Integer.toHexString(desc.getChunkIndex())
-                        + " secondarySolid=" + desc.hasSecondarySolidity();
+                        + " secondarySolid=" + secondarySolid;
             }
             System.out.println(info);
         }
+
+        // Honest oracle: this is a diagnostic scan, not a behavioral test (the sibling
+        // specialStageReturn_* tests cover the real return/landing flow). Assert the
+        // scan actually resolved the level and inspected terrain at the big-ring
+        // secondary-path column, so the diagnostic can't silently no-op.
+        assertNotNull(GameServices.level().getCurrentLevel(),
+                "Level must be loaded for the big-ring terrain scan");
+        assertTrue(secondaryTilesInspected > 0,
+                "Secondary-path scan must inspect at least one chunk at the big-ring column");
+        // characterization: current terrain state at big-ring column. The secondary
+        // (path B) plane currently has NO solid terrain below the big ring; pin this
+        // observed value so a change in collision data at this column is surfaced.
+        assertEquals(0, secondarySolidBelowRing,
+                "Secondary-path solid-below-ring count changed from the observed value (0)");
     }
 
     /**
      * User-reported position of the first big ring in AIZ1: X~7107 Y~1194.
-     * This is at X=0x1BC3, Y=0x4AA — well past the terrain swap point.
+     * This is at X=0x1BC3, Y=0x4AA â€” well past the terrain swap point.
      */
     /**
      * The exact user-reported scenario: big ring at (7107, 1194) on the
-     * secondary collision path. Tests ONLY the reload flow — the initial
+     * secondary collision path. Tests ONLY the reload flow â€” the initial
      * SharedLevel won't have objects spawned at this position since the
      * camera was elsewhere, but loadCurrentLevel() respawns objects near
      * the big ring return position.
@@ -204,9 +223,11 @@ public class TestS3kAiz1SpecialStageReturn {
                     + " topSolidBit=0x" + Integer.toHexString(sprite.getTopSolidBit())
                     + " lrbSolidBit=0x" + Integer.toHexString(sprite.getLrbSolidBit()));
 
+            assertEquals(bigRingY - 0x60, fixture.camera().getY(),
+                    "Return load should apply Saved2_camera_max_Y_pos before its first camera snap");
+
             // Simulate enterTitleCardFromResults: restore position + solid bits
-            assertTrue("BigRingReturn should be active after reload",
-                    lm.hasBigRingReturn());
+            assertTrue(lm.hasBigRingReturn(), "BigRingReturn should be active after reload");
             lm.getBigRingReturn().restoreToPlayer(sprite, fixture.camera(), lm.getLevelGamestate());
             lm.clearBigRingReturn();
 
@@ -222,6 +243,9 @@ public class TestS3kAiz1SpecialStageReturn {
                     + " centreY=0x" + Integer.toHexString(sprite.getCentreY())
                     + " topSolidBit=0x" + Integer.toHexString(sprite.getTopSolidBit())
                     + " lrbSolidBit=0x" + Integer.toHexString(sprite.getLrbSolidBit()));
+
+            assertEquals(bigRingY - 0x60, fixture.camera().getY(),
+                    "Camera should use the ROM's player-centred return position after applying saved max Y");
 
             // Ground snap with correct solid bits
             GameServices.collision().resolveGroundAttachment(sprite, 14, () -> false);
@@ -249,10 +273,55 @@ public class TestS3kAiz1SpecialStageReturn {
                 }
             }
             System.out.println("=== bigRingPos ALIVE after 60 frames ===");
-            assertFalse("bigRingPos: Sonic should not be dead", sprite.getDead());
+            assertFalse(sprite.getDead(), "bigRingPos: Sonic should not be dead");
         } finally {
             config.setConfigValue(SonicConfiguration.S3K_SKIP_INTROS, true);
         }
+    }
+
+    @Test
+    public void specialStageReturn_preservesBrokenMonitorRespawnState() throws Exception {
+        LevelManager lm = GameServices.level();
+        ObjectManager objectManager = lm.getObjectManager();
+        ObjectSpawn monitor = lm.getCurrentLevel().getObjects().stream()
+                .filter(spawn -> (spawn.objectId() & 0xFF) == 0x01)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("AIZ1 should contain a monitor spawn"));
+
+        fixture.camera().setX((short) (monitor.x() - 0xA0));
+        fixture.camera().setY((short) (monitor.y() - 0x60));
+        objectManager.reset(fixture.camera().getX());
+        assertTrue(objectManager.getActiveSpawns().contains(monitor),
+                "The selected monitor should be in the active placement window");
+
+        objectManager.markRemembered(monitor);
+        assertTrue(objectManager.isRemembered(monitor),
+                "The setup monitor should be marked as broken before entering the special stage");
+
+        lm.saveBigRingReturn(new BigRingReturnState(
+                monitor.x(), monitor.y(),
+                monitor.x() - 0xA0, monitor.y() - 0x60, sprite.getRingCount(),
+                sprite.getTopSolidBit(), sprite.getLrbSolidBit(), fixture.camera().getMaxY(), 0));
+        lm.loadCurrentLevel();
+
+        ObjectSpawn reloadedMonitor = lm.getCurrentLevel().getObjects().stream()
+                .filter(spawn -> (spawn.objectId() & 0xFF) == 0x01)
+                .filter(spawn -> spawn.x() == monitor.x() && spawn.y() == monitor.y())
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("The saved monitor should exist after reload"));
+        ObjectManager reloadedObjectManager = lm.getObjectManager();
+        assertTrue(reloadedObjectManager.isRemembered(reloadedMonitor),
+                "A monitor broken before the special stage must remain broken on return");
+        reloadedObjectManager.preloadInitialSpawnsForHydration();
+        ObjectInstance reloadedInstance = reloadedObjectManager.getActiveObjects().stream()
+                .filter(instance -> reloadedMonitor.equals(instance.getSpawn()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("The remembered monitor should remain materialized"));
+        Sonic3kMonitorObjectInstance reloadedMonitorInstance =
+                assertInstanceOf(Sonic3kMonitorObjectInstance.class, reloadedInstance);
+        reloadedMonitorInstance.update(0, sprite);
+        assertEquals(0, reloadedMonitorInstance.getCollisionFlags(),
+                "A remembered monitor should materialize as a broken shell, not an intact monitor");
     }
 
     private void specialStageReturnFlowTest(String label, int teleportX, int teleportY) {
@@ -275,11 +344,10 @@ public class TestS3kAiz1SpecialStageReturn {
         for (int frame = 0; frame < 10; frame++) {
             fixture.stepFrame(false, false, false, false, false);
         }
-        assertFalse(label + ": Sonic should not die at initial position"
+        assertFalse(sprite.getDead(), label + ": Sonic should not die at initial position"
                         + " centreX=0x" + Integer.toHexString(sprite.getCentreX())
                         + " centreY=0x" + Integer.toHexString(sprite.getCentreY())
-                        + " air=" + sprite.getAir(),
-                sprite.getDead());
+                        + " air=" + sprite.getAir());
 
         // Record grounded position (may have shifted slightly from snap)
         int savedCentreX = sprite.getCentreX();
@@ -335,7 +403,7 @@ public class TestS3kAiz1SpecialStageReturn {
                 + Integer.toHexString(sprite.getCentreY())
                 + " air=" + sprite.getAir());
 
-        // Step 60 frames — check for death
+        // Step 60 frames â€” check for death
         for (int frame = 0; frame < 60; frame++) {
             fixture.stepFrame(false, false, false, false, false);
             if (sprite.getDead()) {
@@ -348,7 +416,7 @@ public class TestS3kAiz1SpecialStageReturn {
             }
         }
         System.out.println("=== " + label + " ALIVE after 60 frames ===");
-        assertFalse(label + ": Sonic should not be dead", sprite.getDead());
+        assertFalse(sprite.getDead(), label + ": Sonic should not be dead");
     }
 
     private boolean hasCollisionBelow(int worldX, int worldY) {

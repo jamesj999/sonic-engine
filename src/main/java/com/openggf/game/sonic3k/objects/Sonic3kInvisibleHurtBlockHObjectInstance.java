@@ -31,6 +31,7 @@ public class Sonic3kInvisibleHurtBlockHObjectInstance extends Sonic3kInvisibleBl
         }
 
         int sourceX = getX();
+        rewindPlayerYBeforeHurt(playerEntity);
         if (playerEntity.isCpuControlled()) {
             playerEntity.applyHurt(sourceX);
             return;
@@ -38,9 +39,24 @@ public class Sonic3kInvisibleHurtBlockHObjectInstance extends Sonic3kInvisibleBl
 
         boolean hadRings = playerEntity.getRingCount() > 0;
         if (hadRings && !playerEntity.hasShield()) {
-            services().spawnLostRings(playerEntity, frameCounter);
+            // HurtCharacter reserves the Obj37 owner; the shared slot scheduler
+            // derives whether its initializer clears Ring_count this pass or
+            // the next. This object has no separate ring-clear rule: it reaches
+            // the same HurtCharacter path as ordinary touch damage.
+            // ROM: sonic3k.asm:21065-21077, 35549-35616.
+            services().spawnLostRingsAfterCurrentFrame(playerEntity, frameCounter);
         }
         playerEntity.applyHurtOrDeath(sourceX, DamageCause.NORMAL, hadRings);
+    }
+
+    private void rewindPlayerYBeforeHurt(PlayableEntity player) {
+        short ySpeed = player.getYSpeed();
+        if (ySpeed != 0) {
+            // ROM sub_1F58C routes to sub_24280, which subtracts y_vel<<8 from
+            // y_pos before HurtCharacter (docs/skdisasm/sonic3k.asm:43422-43431,
+            // 49200-49220).
+            player.move((short) 0, (short) -ySpeed);
+        }
     }
 
     private boolean isActiveHurtFace(SolidContact contact) {

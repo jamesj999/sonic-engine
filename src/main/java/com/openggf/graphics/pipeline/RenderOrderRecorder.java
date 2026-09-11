@@ -2,7 +2,9 @@ package com.openggf.graphics.pipeline;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Records render commands in order for testing.
@@ -35,6 +37,10 @@ public class RenderOrderRecorder {
         }
     }
 
+    public void recordPostFadeDiagnostic(String component) {
+        record(RenderPhase.POST_FADE_DIAGNOSTIC, component);
+    }
+
     public List<RenderCommand> getCommands() {
         return Collections.unmodifiableList(commands);
     }
@@ -64,5 +70,32 @@ public class RenderOrderRecorder {
         if (commands.isEmpty()) return true;
         RenderCommand last = commands.get(commands.size() - 1);
         return last.phase() == RenderPhase.FADE_PASS;
+    }
+
+    /**
+     * Validate that every command after the fade pass is an explicitly allowed
+     * diagnostic/exception. The normal UI contract still ends at fade.
+     */
+    public List<String> verifyPostFadeDiagnosticsAllowed(List<String> allowedComponents) {
+        Set<String> allowed = new HashSet<>(allowedComponents);
+        List<String> violations = new ArrayList<>();
+        boolean sawFade = false;
+
+        for (RenderCommand cmd : commands) {
+            if (cmd.phase() == RenderPhase.FADE_PASS) {
+                sawFade = true;
+                continue;
+            }
+
+            if (sawFade) {
+                if (cmd.phase() != RenderPhase.POST_FADE_DIAGNOSTIC) {
+                    violations.add("Unexpected post-fade phase: " + cmd.component() + " (" + cmd.phase() + ")");
+                } else if (!allowed.contains(cmd.component())) {
+                    violations.add("Unregistered post-fade diagnostic: " + cmd.component());
+                }
+            }
+        }
+
+        return violations;
     }
 }

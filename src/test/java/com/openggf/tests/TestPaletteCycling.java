@@ -1,68 +1,63 @@
 package com.openggf.tests;
 
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import com.openggf.data.Rom;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
 
 import java.io.IOException;
 
 import static com.openggf.game.sonic2.constants.Sonic2Constants.*;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Tests for palette cycling ROM data locations.
  */
 @RequiresRom(SonicGame.SONIC_2)
 public class TestPaletteCycling {
-    @Rule
-    public RequiresRomRule romRule = new RequiresRomRule();
-
     private Rom rom;
 
-    @Before
+    @BeforeEach
     public void setUp() {
-        rom = romRule.rom();
+        rom = com.openggf.tests.TestEnvironment.currentRom();
     }
 
     @Test
     public void testEhzArzWaterPaletteData() throws IOException {
         byte[] data = readBytes(CYCLING_PAL_EHZ_ARZ_WATER_ADDR, CYCLING_PAL_EHZ_ARZ_WATER_LEN);
-        assertEquals("EHZ/ARZ water palette should be 32 bytes", 32, data.length);
-        assertNotEquals("First byte should not be zero", 0, data[0]);
+        assertEquals(32, data.length, "EHZ/ARZ water palette should be 32 bytes");
+        assertNotEquals(0, data[0], "First byte should not be zero");
     }
 
     @Test
     public void testCpzCycle1PaletteData() throws IOException {
         byte[] data = readBytes(CYCLING_PAL_CPZ1_ADDR, CYCLING_PAL_CPZ1_LEN);
-        assertEquals("CPZ cycle 1 should be 54 bytes", 54, data.length);
-        assertEquals("First byte should be 0x0E", 0x0E, data[0] & 0xFF);
-        assertEquals("Second byte should be 0x40", 0x40, data[1] & 0xFF);
+        assertEquals(54, data.length, "CPZ cycle 1 should be 54 bytes");
+        assertEquals(0x0E, data[0] & 0xFF, "First byte should be 0x0E");
+        assertEquals(0x40, data[1] & 0xFF, "Second byte should be 0x40");
     }
 
     @Test
     public void testCpzCycle2PaletteData() throws IOException {
         byte[] data = readBytes(CYCLING_PAL_CPZ2_ADDR, CYCLING_PAL_CPZ2_LEN);
-        assertEquals("CPZ cycle 2 should be 42 bytes", 42, data.length);
-        assertEquals("First color should be 0x00E0", 0x00, data[0] & 0xFF);
-        assertEquals("Second byte of first color", 0xE0, data[1] & 0xFF);
+        assertEquals(42, data.length, "CPZ cycle 2 should be 42 bytes");
+        assertEquals(0x00, data[0] & 0xFF, "First color should be 0x00E0");
+        assertEquals(0xE0, data[1] & 0xFF, "Second byte of first color");
     }
 
     @Test
     public void testCpzCycle3PaletteData() throws IOException {
         byte[] data = readBytes(CYCLING_PAL_CPZ3_ADDR, CYCLING_PAL_CPZ3_LEN);
-        assertEquals("CPZ cycle 3 should be 32 bytes", 32, data.length);
-        assertEquals("First color should be 0x000E", 0x00, data[0] & 0xFF);
-        assertEquals("Second byte of first color", 0x0E, data[1] & 0xFF);
+        assertEquals(32, data.length, "CPZ cycle 3 should be 32 bytes");
+        assertEquals(0x00, data[0] & 0xFF, "First color should be 0x000E");
+        assertEquals(0x0E, data[1] & 0xFF, "Second byte of first color");
     }
 
     @Test
     public void testHtzLavaPaletteData() throws IOException {
         byte[] data = readBytes(CYCLING_PAL_LAVA_ADDR, CYCLING_PAL_LAVA_LEN);
-        assertEquals("HTZ lava palette should be 128 bytes", 128, data.length);
+        assertEquals(128, data.length, "HTZ lava palette should be 128 bytes");
     }
 
     @Test
@@ -70,21 +65,21 @@ public class TestPaletteCycling {
         byte[] data1 = readBytes(CYCLING_PAL_MTZ1_ADDR, CYCLING_PAL_MTZ1_LEN);
         byte[] data2 = readBytes(CYCLING_PAL_MTZ2_ADDR, CYCLING_PAL_MTZ2_LEN);
         byte[] data3 = readBytes(CYCLING_PAL_MTZ3_ADDR, CYCLING_PAL_MTZ3_LEN);
-        assertEquals("MTZ cycle 1 should be 12 bytes", 12, data1.length);
-        assertEquals("MTZ cycle 2 should be 12 bytes", 12, data2.length);
-        assertEquals("MTZ cycle 3 should be 20 bytes", 20, data3.length);
+        assertEquals(12, data1.length, "MTZ cycle 1 should be 12 bytes");
+        assertEquals(12, data2.length, "MTZ cycle 2 should be 12 bytes");
+        assertEquals(20, data3.length, "MTZ cycle 3 should be 20 bytes");
     }
 
     @Test
     public void testOozOilPaletteData() throws IOException {
         byte[] data = readBytes(CYCLING_PAL_OIL_ADDR, CYCLING_PAL_OIL_LEN);
-        assertEquals("OOZ oil palette should be 16 bytes", 16, data.length);
+        assertEquals(16, data.length, "OOZ oil palette should be 16 bytes");
     }
 
     @Test
     public void testMczLanternPaletteData() throws IOException {
         byte[] data = readBytes(CYCLING_PAL_LANTERN_ADDR, CYCLING_PAL_LANTERN_LEN);
-        assertEquals("MCZ lantern palette should be 8 bytes", 8, data.length);
+        assertEquals(8, data.length, "MCZ lantern palette should be 8 bytes");
     }
 
     @Test
@@ -92,9 +87,9 @@ public class TestPaletteCycling {
         byte[] data1 = readBytes(CYCLING_PAL_CNZ1_ADDR, CYCLING_PAL_CNZ1_LEN);
         byte[] data3 = readBytes(CYCLING_PAL_CNZ3_ADDR, CYCLING_PAL_CNZ3_LEN);
         byte[] data4 = readBytes(CYCLING_PAL_CNZ4_ADDR, CYCLING_PAL_CNZ4_LEN);
-        assertEquals("CNZ cycle 1 should be 36 bytes", 36, data1.length);
-        assertEquals("CNZ cycle 3 should be 18 bytes", 18, data3.length);
-        assertEquals("CNZ cycle 4 should be 40 bytes", 40, data4.length);
+        assertEquals(36, data1.length, "CNZ cycle 1 should be 36 bytes");
+        assertEquals(18, data3.length, "CNZ cycle 3 should be 18 bytes");
+        assertEquals(40, data4.length, "CNZ cycle 4 should be 40 bytes");
     }
 
     private byte[] readBytes(int addr, int len) throws IOException {
@@ -105,3 +100,5 @@ public class TestPaletteCycling {
         return data;
     }
 }
+
+

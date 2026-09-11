@@ -21,3 +21,5 @@ public enum SonicGame {
         return displayName;
     }
 }
+
+

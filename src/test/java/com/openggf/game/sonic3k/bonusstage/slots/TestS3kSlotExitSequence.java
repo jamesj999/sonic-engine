@@ -104,3 +104,5 @@ class TestS3kSlotExitSequence {
         assertEquals(0x1880, controller.scalarIndex());
     }
 }
+
+

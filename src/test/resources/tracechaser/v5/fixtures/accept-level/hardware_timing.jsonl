@@ -1,0 +1,4 @@
+{"boundary":"vint_service","event":"hardware_work_completed","kind":"kos_module_queue","ordinal":2,"raw_frame":0,"submission_fingerprint":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+{"boundary":"post_objects","event":"hardware_work_completed","kind":"kos_module_queue","ordinal":3,"raw_frame":0,"submission_fingerprint":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}
+{"boundary":"pre_main_loop","event":"hardware_work_completed","kind":"kos_decompression_queue","ordinal":4,"raw_frame":0,"submission_fingerprint":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}
+{"boundary":"pre_main_loop","event":"hardware_work_completed","kind":"nemesis_plc_queue","ordinal":5,"raw_frame":0,"submission_fingerprint":"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}

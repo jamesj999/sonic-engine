@@ -5,6 +5,8 @@ import com.openggf.game.sonic2.audio.Sonic2Sfx;
 import com.openggf.game.sonic2.constants.Sonic2Constants;
 import com.openggf.game.sonic2.Sonic2ObjectArtKeys;
 import com.openggf.debug.DebugRenderContext;
+import com.openggf.game.solid.PlayerSolidContactResult;
+import com.openggf.game.solid.SolidCheckpointBatch;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.GraphicsManager;
 import com.openggf.graphics.RenderPriority;
@@ -33,16 +35,16 @@ import java.util.logging.Logger;
  * - ARZ: 8 fragments, uses level art tiles (0x55, 0x59, 0xA3, 0xA7)
  */
 public class CollapsingPlatformObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
 
     private static final Logger LOGGER = Logger.getLogger(CollapsingPlatformObjectInstance.class.getName());
 
     /**
      * Zone-specific configuration for collapsing platforms.
      * <p>
-     * Note: Fragment visual offsets are stored in the sprite mapping data,
-     * not here. Each fragment spawns at the parent's exact x/y position,
-     * and the sprite piece's offsets provide the visual displacement.
+     * Fragment visual offsets are stored in the sprite mapping data. Each
+     * fragment spawns at the parent's exact x/y position, and the sprite
+     * piece's offsets provide the visual displacement.
      */
     private record ZoneConfig(
             int halfWidth,
@@ -50,8 +52,7 @@ public class CollapsingPlatformObjectInstance extends AbstractObjectInstance
             int[] delayData,
             String artKey,
             int palette,
-            boolean usesLevelArt,
-            int[][] pieceOffsets  // For debug rendering only - actual offsets come from mappings
+            boolean usesLevelArt
     ) {}
 
     // OOZ: 7 fragments from obj1F_b.asm
@@ -63,16 +64,7 @@ public class CollapsingPlatformObjectInstance extends AbstractObjectInstance
             new int[]{0x1A, 0x12, 0x0A, 0x02, 0x16, 0x0E, 0x06},
             Sonic2ObjectArtKeys.OOZ_COLLAPSING_PLATFORM,
             3,
-            false,
-            new int[][]{  // Piece offsets from obj1F_b.asm for debug rendering
-                    {-0x40, -0x10},  // Piece 0
-                    {-0x20, -0x10},  // Piece 1
-                    {0x00, -0x10},   // Piece 2
-                    {0x20, -0x10},   // Piece 3
-                    {-0x40, 0x10},   // Piece 4
-                    {-0x20, 0x10},   // Piece 5
-                    {0x00, 0x10}     // Piece 6
-            }
+            false
     );
 
     // MCZ: 6 fragments from obj1F_c.asm
@@ -83,15 +75,7 @@ public class CollapsingPlatformObjectInstance extends AbstractObjectInstance
             new int[]{0x1A, 0x16, 0x12, 0x0E, 0x0A, 0x02},
             Sonic2ObjectArtKeys.MCZ_COLLAPSING_PLATFORM,
             3,
-            false,
-            new int[][]{  // Piece offsets from obj1F_c.asm frame 1 for debug rendering
-                    {-0x20, -0x10},  // Piece 0
-                    {-0x10, -0x10},  // Piece 1
-                    {0x00, -0x10},   // Piece 2
-                    {0x10, -0x10},   // Piece 3
-                    {-0x10, 0x00},   // Piece 4
-                    {0x08, 0x00}     // Piece 5
-            }
+            false
     );
 
     // ARZ: 8 fragments from obj1F_d.asm
@@ -102,17 +86,7 @@ public class CollapsingPlatformObjectInstance extends AbstractObjectInstance
             new int[]{0x16, 0x1A, 0x18, 0x12, 0x06, 0x0E, 0x0A, 0x02},
             null,  // Uses level art
             2,
-            true,
-            new int[][]{  // Piece offsets from obj1F_d.asm frame 1 for debug rendering
-                    {-0x20, -0x10},  // Piece 0
-                    {-0x10, -0x10},  // Piece 1
-                    {0x00, -0x10},   // Piece 2
-                    {0x10, -0x10},   // Piece 3
-                    {-0x20, 0x00},   // Piece 4
-                    {-0x10, 0x00},   // Piece 5
-                    {0x00, 0x00},    // Piece 6
-                    {0x10, 0x00}     // Piece 7
-            }
+            true
     );
 
     // Default config for unknown zones (uses OOZ config)
@@ -149,10 +123,15 @@ public class CollapsingPlatformObjectInstance extends AbstractObjectInstance
 
     // Gravity from ObjectMoveAndFall (s2.asm line 29950)
     private static final int GRAVITY = 0x38;
+    // Obj1F never sets render_flags.explicit_height, so S2 BuildSprites uses
+    // its approximate Y culling band instead of y_radius(a0)
+    // (docs/s2disasm/s2.asm:30584-30619).
+    private static final int APPROX_RENDER_Y_MARGIN = 0x20;
 
     private ZoneConfig config;
     private int delayCounter = INITIAL_DELAY;
     private boolean stoodOnFlag = false;
+    private boolean standingContactLastFrame = false;
     private boolean collapsed = false;
     private boolean inFragmentPhase = false;  // ROM: parent becomes fragment 0, stays solid during delay
     private int fragmentPhaseDelay = 0;       // ROM: delay_counter for the parent-as-fragment-0
@@ -164,8 +143,8 @@ public class CollapsingPlatformObjectInstance extends AbstractObjectInstance
     private int parentYFrac;
 
     // Orientation from spawn render_flags (inherited by fragments per disassembly)
-    private final boolean hFlip;
-    private final boolean vFlip;
+    private boolean hFlip;
+    private boolean vFlip;
 
     public CollapsingPlatformObjectInstance(ObjectSpawn spawn, String name) {
         super(spawn, name);
@@ -176,30 +155,61 @@ public class CollapsingPlatformObjectInstance extends AbstractObjectInstance
     }
 
     @Override
+    public CollapsingPlatformObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return ObjectConstructionContext.construct(ctx.objectServices(),
+                () -> new CollapsingPlatformObjectInstance(ctx.spawn(), getName()));
+    }
+
+    @Override
     public int getX() {
         return spawn.x();
     }
 
     @Override
     public int getY() {
-        return spawn.y();
+        // ROM Obj1F_FragmentFall moves the parent object itself with
+        // ObjectMoveAndFall before checking render_flags.on_screen and
+        // DeleteObject (docs/s2disasm/s2.asm:23860-23864). Once detached,
+        // expose that falling y_pos so slot/offscreen lifecycle observes the
+        // moving parent rather than the original placement y.
+        return collapsed ? parentY : spawn.y();
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) {
             return;
         }
 
-        // ROM: Obj1F_FragmentFall — collapsed parent falls with gravity, delete when offscreen.
+        SolidCheckpointBatch batch = services().solidExecution().resolveSolidNowAll();
+        boolean standingThisFrame = hasStandingContact(batch);
+
+        // ROM: Obj1F_FragmentFall - collapsed parent falls with gravity, then
+        // deletes when render_flags.on_screen is clear
+        // (docs/s2disasm/s2.asm:23860-23864).
         if (collapsed) {
+            // ROM Obj1F_FragmentFall tests render_flags.on_screen, which the
+            // LAST BuildSprites pass wrote (docs/s2disasm/s2.asm:23860-23864,
+            // 30560 for the per-object clear and 30612 for the draw that sets
+            // it). BuildSprites runs after RunObjects and after DeformBgLayer
+            // publishes Camera_X/Y_pos_copy (s2.asm:5095-5111, 15178-15179), so
+            // on this frame the flag describes the object's PREVIOUS-frame
+            // position against the camera the engine is still holding. Sample
+            // the bounds before ObjectMoveAndFall moves the object, exactly as
+            // S1's Obj1A fragment tail already does.
+            boolean renderedLastBuildSpritesPass =
+                    isPreUpdateWithinRenderSpriteBounds(config.halfWidth(), APPROX_RENDER_Y_MARGIN);
+            // ROM ObjectMoveAndFall reads the old y_vel for this frame's
+            // position update, then adds gravity for the next frame
+            // (docs/s2disasm/s2.asm:29945-29960).
+            int oldVelY = (int) (short) parentVelY;
             parentVelY += GRAVITY;
             int y32 = (parentY << 16) | (parentYFrac & 0xFFFF);
-            y32 += ((int) (short) parentVelY) << 8;
+            y32 += oldVelY << 8;
             parentY = y32 >> 16;
             parentYFrac = y32 & 0xFFFF;
-            if (!isOnScreen(128)) {
+            if (!renderedLastBuildSpritesPass) {
                 setDestroyed(true);
             }
             return;
@@ -212,18 +222,16 @@ public class CollapsingPlatformObjectInstance extends AbstractObjectInstance
         if (inFragmentPhase) {
             if (fragmentPhaseDelay > 0) {
                 fragmentPhaseDelay--;
-                // ROM: sub_10B36 — when delay reaches zero, detach both players.
-                // bclr #status.player.on_object / bset #status.player.in_air
+                // ROM: sub_10B36 (s2.asm:23730-23737) clears only
+                // Status_OnObj and Status_Push when the parent-fragment
+                // delay expires. Status_InAir is left for normal player
+                // movement to set on the next unsupported frame.
                 if (fragmentPhaseDelay <= 0) {
                     collapsed = true;
                     parentY = spawn.y();
-                    if (player != null) {
-                        if (services().objectManager() != null) {
-                            services().objectManager().clearRidingObject(player);
-                        }
-                        player.setAir(true);
-                        player.setOnObject(false);
-                    }
+                    parentYFrac = 0;
+                    parentVelY = 0;
+                    detachFragmentRiders(batch);
                 }
             }
             return;
@@ -238,21 +246,29 @@ public class CollapsingPlatformObjectInstance extends AbstractObjectInstance
             delayCounter--;
         }
 
-        // ROM: check status standing_mask bits — set stood_on_flag when player is on platform
-        boolean isStanding = isPlayerStanding();
-        if (isStanding) {
+        // ROM Obj1F_Main reads status(a0) before PlatformObject writes the
+        // current frame's standing bits (docs/s2disasm/s2.asm:23815-23827).
+        // The manual checkpoint already knows the current contact, so consume
+        // the previous-frame contact here to keep the collapse timer aligned.
+        if (standingContactLastFrame) {
             stoodOnFlag = true;
         }
+        standingContactLastFrame = standingThisFrame;
     }
 
     @Override
     public void appendRenderCommands(List<GLCommand> commands) {
-        if (isDestroyed() || collapsed) {
-            return; // ROM: parent is invisible during fragment-fall; fragments handle rendering
+        if (isDestroyed()) {
+            return;
         }
 
         ObjectRenderManager renderManager = services().renderManager();
         if (renderManager == null || config == null) {
+            return;
+        }
+
+        if (inFragmentPhase || collapsed) {
+            renderParentFragment(renderManager);
             return;
         }
 
@@ -269,12 +285,26 @@ public class CollapsingPlatformObjectInstance extends AbstractObjectInstance
         }
     }
 
+    private void renderParentFragment(ObjectRenderManager renderManager) {
+        if (config.usesLevelArt()) {
+            renderArzPieces(List.of(ARZ_FRAME_COLLAPSED.pieces().get(0)), spawn.x(), getY(), false);
+            return;
+        }
+
+        PatternSpriteRenderer renderer = renderManager.getRenderer(config.artKey());
+        if (renderer == null || !renderer.isReady()) {
+            return;
+        }
+
+        renderer.drawFramePieceByIndex(mappingFrame, 0, spawn.x(), getY(), hFlip, vFlip);
+    }
+
     @Override
     public SolidObjectParams getSolidParams() {
         if (config == null) {
-            return new SolidObjectParams(0x40, 0x10, 0x10);
+            return SolidObjectParams.of(0x40, 0x10, 0x10);
         }
-        return new SolidObjectParams(config.halfWidth(), config.halfHeight(), config.halfHeight());
+        return SolidObjectParams.of(config.halfWidth(), config.halfHeight(), config.halfHeight());
     }
 
     @Override
@@ -284,13 +314,12 @@ public class CollapsingPlatformObjectInstance extends AbstractObjectInstance
 
     @Override
     public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        // ROM: Obj1F_Main — standing_mask bits set stood_on_flag.
-        // Using the callback (like S1/S3K) instead of polling ensures the flag
-        // is set on the same frame the player lands, matching ROM timing.
-        if (contact.standing() && !inFragmentPhase && !collapsed) {
-            stoodOnFlag = true;
-        }
+        // Manual checkpoints drive collapsing-platform standing state from update().
+    }
+
+    @Override
+    public SolidExecutionMode solidExecutionMode() {
+        return SolidExecutionMode.MANUAL_CHECKPOINT;
     }
 
     @Override
@@ -302,9 +331,10 @@ public class CollapsingPlatformObjectInstance extends AbstractObjectInstance
     @Override
     public boolean shouldStayActiveWhenRemembered() {
         // Platform must remain in the active set during the fragment phase so
-        // SolidContacts can continue repositioning the player on the invisible
-        // parent. Matches S1 pattern where markRemembered is deferred to destroy.
-        return !collapsed;
+        // SolidContacts can continue repositioning the player on fragment 0,
+        // then render/update the parent fragment fall until offscreen deletion.
+        // Matches S1 pattern where markRemembered is deferred to destroy.
+        return true;
     }
 
     @Override
@@ -338,6 +368,15 @@ public class CollapsingPlatformObjectInstance extends AbstractObjectInstance
         return services().objectManager().isAnyPlayerRiding(this);
     }
 
+    protected boolean hasStandingContact(SolidCheckpointBatch batch) {
+        for (PlayerSolidContactResult result : batch.perPlayer().values()) {
+            if (result != null && result.standingNow()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private void collapse() {
         if (inFragmentPhase || collapsed) {
             return;
@@ -357,12 +396,25 @@ public class CollapsingPlatformObjectInstance extends AbstractObjectInstance
         spawnFragments();
 
         // Mark as remembered to prevent respawn (ROM-accurate behavior)
-        if (services().objectManager() != null) {
-            services().objectManager().markRemembered(spawn);
-        }
+        ObjectLifetimeOps.markSpawnRemembered(services().objectManager(), spawn);
 
         LOGGER.fine(() -> String.format("CollapsingPlatform at (%d,%d) collapsed, spawning %d fragments",
                 spawn.x(), spawn.y(), config.delayData().length));
+    }
+
+    private void detachFragmentRiders(SolidCheckpointBatch batch) {
+        ObjectManager objectManager = services().objectManager();
+        if (batch == null || objectManager == null) {
+            return;
+        }
+        for (PlayableEntity rider : batch.perPlayer().keySet()) {
+            if (rider != null && objectManager.isRidingObject(rider, this)) {
+                objectManager.clearRidingObject(rider);
+                rider.setOnObject(false);
+                rider.setPushing(false);
+                rider.forceAnimationRestart();
+            }
+        }
     }
 
     private void spawnFragments() {
@@ -374,14 +426,16 @@ public class CollapsingPlatformObjectInstance extends AbstractObjectInstance
 
         int[] delayData = config.delayData();
 
-        // Fragments spawn at parent's exact position - sprite piece offsets handle visual displacement
-        // (This matches the disassembly where fragments inherit parent x_pos/y_pos and render_flags)
-        for (int i = 0; i < delayData.length; i++) {
+        // ROM Obj1F_CreateFragments turns the parent object into fragment 0;
+        // FindFreeObj is only used for the remaining fragments
+        // (docs/s2disasm/s2.asm:23752-23815). Allocating a child for index 0
+        // consumes an extra SST slot and shifts later objects by one.
+        for (int i = 1; i < delayData.length; i++) {
             int delay = delayData[i];
 
-            CollapsingPlatformFragmentInstance fragment = new CollapsingPlatformFragmentInstance(
-                    spawn.x(), spawn.y(), delay, i, config, renderManager, hFlip, vFlip);
-            objectManager.addDynamicObject(fragment);
+            final int pieceIndex = i;
+            spawnFreeChild(() -> new CollapsingPlatformFragmentInstance(
+                    spawn.x(), spawn.y(), delay, pieceIndex, config, renderManager, hFlip, vFlip));
         }
     }
 
@@ -389,16 +443,20 @@ public class CollapsingPlatformObjectInstance extends AbstractObjectInstance
         // ARZ uses level art tiles at specific indices from obj1F_d.asm
         // basePatternIndex = 0 because level patterns start at index 0
         SpriteMappingFrame frame = (mappingFrame == 0) ? ARZ_FRAME_INTACT : ARZ_FRAME_COLLAPSED;
-        GraphicsManager graphicsManager = services().graphicsManager();
-        List<SpriteMappingPiece> pieces = frame.pieces();
+        renderArzPieces(frame.pieces(), spawn.x(), spawn.y(), true);
+    }
 
+    private void renderArzPieces(List<SpriteMappingPiece> pieces, int originX, int originY, boolean reverse) {
+        GraphicsManager graphicsManager = services().graphicsManager();
         // Draw in reverse order (Painter's Algorithm) - first piece in list appears on top
-        for (int i = pieces.size() - 1; i >= 0; i--) {
-            SpriteMappingPiece piece = pieces.get(i);
+        int start = reverse ? pieces.size() - 1 : 0;
+        int endExclusive = reverse ? -1 : pieces.size();
+        int step = reverse ? -1 : 1;
+        for (int i = start; i != endExclusive; i += step) {
             SpritePieceRenderer.renderPieces(
-                    List.of(piece),
-                    spawn.x(),
-                    spawn.y(),
+                    List.of(pieces.get(i)),
+                    originX,
+                    originY,
                     0,  // Level patterns start at index 0
                     ARZ_PALETTE,
                     hFlip,  // Frame H-flip from spawn render_flags
@@ -453,30 +511,43 @@ public class CollapsingPlatformObjectInstance extends AbstractObjectInstance
      * Each fragment uses static_mappings mode where the mappings pointer points to a
      * single sprite piece. The piece's x/y offsets provide visual displacement.
      */
-    public static class CollapsingPlatformFragmentInstance extends AbstractFallingFragment {
+    public static class CollapsingPlatformFragmentInstance extends AbstractFallingFragment
+            implements RewindRecreatable {
 
-        private final int fragmentIndex;
+        private static final int FRAGMENT_INDEX_MASK = 0x07;
+        private static final int CONFIG_SHIFT = 3;
+        private static final int CONFIG_MASK = 0x03;
+        private static final int CONFIG_OOZ = 0;
+        private static final int CONFIG_MCZ = 1;
+        private static final int CONFIG_ARZ = 2;
+        private static final int RENDER_H_FLIP = 0x01;
+        private static final int RENDER_V_FLIP = 0x02;
+
+        private int fragmentIndex;
         private final ZoneConfig config;
         private final ObjectRenderManager renderManager;
 
         // Inherited from parent (per disassembly: render_flags copied from parent to fragment)
-        private final boolean hFlip;
-        private final boolean vFlip;
-
-        // Piece offset from parent (for rendering positioning)
-        private final int pieceOffsetX;
-        private final int pieceOffsetY;
+        private boolean hFlip;
+        private boolean vFlip;
 
         public CollapsingPlatformFragmentInstance(int parentX, int parentY, int delay, int fragmentIndex,
                                                    ZoneConfig config, ObjectRenderManager renderManager,
                                                    boolean hFlip, boolean vFlip) {
-            super(new ObjectSpawn(parentX + computeOffsetX(config, fragmentIndex, hFlip),
-                            parentY + computeOffsetY(config, fragmentIndex, vFlip),
-                            0x1F, 0, 0, false, 0),
-                    "CollapsingPlatformFragment", delay, 4);
+            this(fragmentSpawn(parentX, parentY, fragmentIndex, config, hFlip, vFlip),
+                    delay, fragmentIndex, config, renderManager, hFlip, vFlip);
+        }
 
-            this.pieceOffsetX = computeOffsetX(config, fragmentIndex, hFlip);
-            this.pieceOffsetY = computeOffsetY(config, fragmentIndex, vFlip);
+        public CollapsingPlatformFragmentInstance(ObjectSpawn spawn) {
+            this(spawn, 0, decodeFragmentIndex(spawn), decodeConfig(spawn), null,
+                    decodeHFlip(spawn), decodeVFlip(spawn));
+        }
+
+        private CollapsingPlatformFragmentInstance(ObjectSpawn spawn, int delay, int fragmentIndex,
+                                                   ZoneConfig config, ObjectRenderManager renderManager,
+                                                   boolean hFlip, boolean vFlip) {
+            super(spawn, "CollapsingPlatformFragment", delay, 4);
+
             this.fragmentIndex = fragmentIndex;
             this.config = config;
             this.renderManager = renderManager;
@@ -484,22 +555,70 @@ public class CollapsingPlatformObjectInstance extends AbstractObjectInstance
             this.vFlip = vFlip;
         }
 
-        private static int computeOffsetX(ZoneConfig config, int fragmentIndex, boolean hFlip) {
-            int offsetX = 0;
-            if (config != null && config.pieceOffsets() != null &&
-                    fragmentIndex < config.pieceOffsets().length) {
-                offsetX = config.pieceOffsets()[fragmentIndex][0];
-            }
-            return hFlip ? -offsetX : offsetX;
+        @Override
+        public CollapsingPlatformFragmentInstance recreateForRewind(RewindRecreateContext ctx) {
+            return new CollapsingPlatformFragmentInstance(ctx.spawn());
         }
 
-        private static int computeOffsetY(ZoneConfig config, int fragmentIndex, boolean vFlip) {
-            int offsetY = 0;
-            if (config != null && config.pieceOffsets() != null &&
-                    fragmentIndex < config.pieceOffsets().length) {
-                offsetY = config.pieceOffsets()[fragmentIndex][1];
+        private static ObjectSpawn fragmentSpawn(int parentX, int parentY, int fragmentIndex,
+                                                 ZoneConfig config, boolean hFlip, boolean vFlip) {
+            int subtype = (fragmentIndex & FRAGMENT_INDEX_MASK)
+                    | ((configId(config) & CONFIG_MASK) << CONFIG_SHIFT);
+            int renderFlags = (hFlip ? RENDER_H_FLIP : 0) | (vFlip ? RENDER_V_FLIP : 0);
+            return new ObjectSpawn(parentX, parentY, 0x1F, subtype, renderFlags, false, 0);
+        }
+
+        private static int decodeFragmentIndex(ObjectSpawn spawn) {
+            return spawn.subtype() & FRAGMENT_INDEX_MASK;
+        }
+
+        private static ZoneConfig decodeConfig(ObjectSpawn spawn) {
+            int configId = (spawn.subtype() >> CONFIG_SHIFT) & CONFIG_MASK;
+            return switch (configId) {
+                case CONFIG_MCZ -> MCZ_CONFIG;
+                case CONFIG_ARZ -> ARZ_CONFIG;
+                default -> OOZ_CONFIG;
+            };
+        }
+
+        private static boolean decodeHFlip(ObjectSpawn spawn) {
+            return (spawn.renderFlags() & RENDER_H_FLIP) != 0;
+        }
+
+        private static boolean decodeVFlip(ObjectSpawn spawn) {
+            return (spawn.renderFlags() & RENDER_V_FLIP) != 0;
+        }
+
+        private static int configId(ZoneConfig config) {
+            if (config == MCZ_CONFIG) {
+                return CONFIG_MCZ;
             }
-            return vFlip ? -offsetY : offsetY;
+            if (config == ARZ_CONFIG) {
+                return CONFIG_ARZ;
+            }
+            return CONFIG_OOZ;
+        }
+
+        @Override
+        protected boolean shouldDeleteAfterFall() {
+            // ROM Obj1F_CreateFragments copies the parent's x_pos/y_pos into
+            // child slots and advances the mappings pointer per fragment; the
+            // visual offset is in mappings data
+            // (docs/s2disasm/s2.asm:23880-23906).
+            //
+            // Obj1F_FragmentFall then deletes on render_flags.on_screen
+            // (s2.asm:23860-23864), which is written by the LAST BuildSprites
+            // pass -- BuildSprites clears the bit per object (s2.asm:30560) and
+            // only DrawSprite re-sets it, and it runs after RunObjects and
+            // after DeformBgLayer publishes Camera_X/Y_pos_copy
+            // (s2.asm:5095-5111, 15178-15179). The deciding position is
+            // therefore this frame's PRE-fall one, matching the same tail in
+            // S1's Obj1A fragments. Testing the post-fall position instead
+            // retired the SST slot up to two frames early, which shifted every
+            // later FindFreeObj/AllocateObject result.
+            ZoneConfig activeConfig = config == null ? DEFAULT_CONFIG : config;
+            return !isPreUpdateWithinRenderSpriteBounds(
+                    activeConfig.halfWidth(), APPROX_RENDER_Y_MARGIN);
         }
 
         @Override
@@ -525,23 +644,18 @@ public class CollapsingPlatformObjectInstance extends AbstractObjectInstance
                 return;
             }
 
-            // Fragment frame index depends on zone - frame 1 is the collapsed/fragment frame
-            // Each fragment draws only its corresponding piece from that frame
+            // Obj1F_CreateFragments increments mapping_frame, then gives each
+            // fragment a static mapping pointer to one piece from that frame.
             int frameIndex = 1;
 
-            // Render at parent position (getX()/getY() minus offset) because
-            // the piece renderer will add the piece offset
-            int renderX = getX() - pieceOffsetX;
-            int renderY = getY() - pieceOffsetY;
-
-            renderer.drawFramePieceByIndex(frameIndex, fragmentIndex, renderX, renderY, hFlip, vFlip);
+            renderer.drawFramePieceByIndex(frameIndex, fragmentIndex, getX(), getY(), hFlip, vFlip);
         }
 
         /**
          * Render an ARZ fragment using level patterns.
          * Each fragment renders its corresponding piece from ARZ_FRAME_COLLAPSED.
-         * Since getX()/getY() already include the piece offset, we need to
-         * subtract it before passing to the renderer (which will add it back).
+         * ROM keeps every fragment slot at the parent's x_pos/y_pos and lets the
+         * static one-piece mapping supply the visual offset.
          */
         private void renderArzFragment() {
             if (fragmentIndex < 0 || fragmentIndex >= ARZ_FRAME_COLLAPSED.pieces().size()) {
@@ -551,15 +665,10 @@ public class CollapsingPlatformObjectInstance extends AbstractObjectInstance
             SpriteMappingPiece piece = ARZ_FRAME_COLLAPSED.pieces().get(fragmentIndex);
             GraphicsManager graphicsManager = services().graphicsManager();
 
-            // Render at parent position (getX()/getY() minus offset) because
-            // SpritePieceRenderer will add the piece offset
-            int renderX = getX() - pieceOffsetX;
-            int renderY = getY() - pieceOffsetY;
-
             SpritePieceRenderer.renderPieces(
                     List.of(piece),
-                    renderX,
-                    renderY,
+                    getX(),
+                    getY(),
                     0,  // Level patterns start at index 0
                     ARZ_PALETTE,
                     hFlip,  // Frame H-flip inherited from parent

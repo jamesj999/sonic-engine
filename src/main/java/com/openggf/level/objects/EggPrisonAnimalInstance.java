@@ -28,7 +28,8 @@ import java.util.List;
  *   <li>Walking or flying depending on animal type</li>
  * </ul>
  */
-public class EggPrisonAnimalInstance extends AbstractObjectInstance {
+public class EggPrisonAnimalInstance extends AbstractObjectInstance
+        implements SpawnTrailingZeroIntsRewindRecreatable {
     // Physics constants from s2.asm
     private static final int GRAVITY = 0x38;        // Standard gravity
     private static final int FLY_GRAVITY = 0x18;    // Reduced gravity for flying animals
@@ -49,7 +50,7 @@ public class EggPrisonAnimalInstance extends AbstractObjectInstance {
     private int currentY;
     private int xVelocity;      // Fixed-point (8.8)
     private int yVelocity;      // Fixed-point (8.8)
-    private int xSub = 0;       // Sub-pixel accumulator
+    private int xSub = 0;       // 16.16 sub-pixel accumulator for ObjectMove/ObjectFall
     private int ySub = 0;
     private int groundXVelocity;
     private int groundYVelocity;
@@ -60,6 +61,7 @@ public class EggPrisonAnimalInstance extends AbstractObjectInstance {
     private int waitDelay;
     private State state;
     private AnimalType definition;
+    private boolean romRenderOnScreen = true;
 
     public EggPrisonAnimalInstance(ObjectSpawn spawn, int delay, int artVariant) {
         super(spawn, "Animal");
@@ -91,11 +93,15 @@ public class EggPrisonAnimalInstance extends AbstractObjectInstance {
         this.yVelocity = 0;
     }
 
+    EggPrisonAnimalInstance(ObjectSpawn spawn) {
+        this(spawn, 0, 0);
+    }
+
     @Override
-    public void update(int frameCounter, PlayableEntity player) {
+    public void update(int vIntRunCount, PlayableEntity player) {
         switch (state) {
-            case PRISON_WAIT -> updatePrisonWait(frameCounter);
-            case MAIN -> updateMain();
+            case PRISON_WAIT -> updatePrisonWait(vIntRunCount);
+            case MAIN -> updateMain(vIntRunCount);
             case WALK -> updateWalk();
             case FLY -> updateFly();
         }
@@ -105,7 +111,7 @@ public class EggPrisonAnimalInstance extends AbstractObjectInstance {
      * ROM: Obj28_Prison (loc_11BF4)
      * Waits for delay, then activates.
      */
-    private void updatePrisonWait(int frameCounter) {
+    private void updatePrisonWait(int vIntRunCount) {
         // Check if still on screen
         if (!isOnScreen(64)) {
             setDestroyed(true);
@@ -122,18 +128,13 @@ public class EggPrisonAnimalInstance extends AbstractObjectInstance {
         state = State.MAIN;
         yVelocity = -0x400;  // Initial upward velocity
         animFrame = 2;
-
-        // ROM: btst #4,(Vint_runcount+3).w for random direction
-        if ((frameCounter & 0x10) != 0) {
-            groundXVelocity = -groundXVelocity;
-        }
     }
 
     /**
      * ROM: Obj28_Main (loc_11ADE)
      * Falling after initial spawn.
      */
-    private void updateMain() {
+    private void updateMain(int vIntRunCount) {
         objectMoveAndFall();
 
         if (yVelocity >= 0 && checkFloorCollision()) {
@@ -142,6 +143,13 @@ public class EggPrisonAnimalInstance extends AbstractObjectInstance {
             yVelocity = groundYVelocity;
             animFrame = 1;
             state = definition.flying() ? State.FLY : State.WALK;
+            // Prison animals sample Vint_runcount only after floor contact,
+            // while Obj28_Main switches to the walking/flying routine
+            // (docs/s2disasm/s2.asm:24644-24667).
+            if ((vIntRunCount & 0x10) != 0) {
+                xVelocity = -xVelocity;
+                groundXVelocity = -groundXVelocity;
+            }
         }
 
         if (!isOnScreen(64)) {
@@ -198,8 +206,10 @@ public class EggPrisonAnimalInstance extends AbstractObjectInstance {
      * Apply gravity and move.
      */
     private void objectMoveAndFall() {
-        yVelocity += GRAVITY;
-        objectMove();
+        SubpixelMotion.State motion = new SubpixelMotion.State(
+                currentX, currentY, xSub, ySub, xVelocity, yVelocity);
+        SubpixelMotion.objectFallXY(motion, GRAVITY);
+        applyMotion(motion);
     }
 
     /**
@@ -207,13 +217,18 @@ public class EggPrisonAnimalInstance extends AbstractObjectInstance {
      * Apply velocities to position.
      */
     private void objectMove() {
-        xSub += xVelocity;
-        ySub += yVelocity;
+        SubpixelMotion.State motion = new SubpixelMotion.State(
+                currentX, currentY, xSub, ySub, xVelocity, yVelocity);
+        SubpixelMotion.speedToPos(motion);
+        applyMotion(motion);
+    }
 
-        currentX += (xSub >> 8);
-        currentY += (ySub >> 8);
-        xSub &= 0xFF;
-        ySub &= 0xFF;
+    private void applyMotion(SubpixelMotion.State motion) {
+        currentX = motion.x;
+        currentY = motion.y;
+        xSub = motion.xSub;
+        ySub = motion.ySub;
+        yVelocity = motion.yVel;
     }
 
     /**
@@ -222,7 +237,10 @@ public class EggPrisonAnimalInstance extends AbstractObjectInstance {
      */
     private boolean checkFloorCollision() {
         TerrainCheckResult result = ObjectTerrainUtils.checkFloorDist(currentX, currentY, 12);
-        if (result.hasCollision()) {
+        // S2 Obj28_Main/Walk/Fly accepts only a negative ObjCheckFloorDist:
+        // tst.w d1 / bpl.s DisplaySprite, so a zero-distance probe must not
+        // advance the prison animal into its walk/fly routine early.
+        if (result.distance() < 0) {
             currentY = currentY + result.distance();
             return true;
         }
@@ -255,13 +273,32 @@ public class EggPrisonAnimalInstance extends AbstractObjectInstance {
 
     @Override
     protected boolean isOnScreen(int margin) {
+        return romRenderOnScreen;
+    }
+
+    @Override
+    public int getOnScreenHalfWidth() {
+        return 8;
+    }
+
+    @Override
+    public void refreshPostCameraRenderState() {
         Camera camera = services().camera();
         if (camera == null) {
-            return true;
+            romRenderOnScreen = true;
+            return;
         }
         int cameraX = camera.getX();
-        int screenWidth = 320;
-        return currentX >= cameraX - margin && currentX <= cameraX + screenWidth + margin;
+        int cameraY = camera.getY();
+        int screenWidth = viewportWidth();
+        int screenHeight = viewportHeight();
+        // S2 Obj28_Prison/Main/Walk/Fly delete through the cached
+        // render_flags.on_screen bit, not a fresh wide margin
+        // (docs/s2disasm/s2.asm:24732-24734,24644-24646,24683-24686,24713-24716).
+        romRenderOnScreen = currentX >= cameraX - getOnScreenHalfWidth()
+                && currentX < cameraX + screenWidth + getOnScreenHalfWidth()
+                && currentY >= cameraY - 32
+                && currentY < cameraY + screenHeight + 32;
     }
 
     @Override

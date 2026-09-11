@@ -8,6 +8,7 @@ public final class Sonic2ObjectIds {
     public static final int BUTTON = 0x47;         // Button (Obj47) - trigger button that activates other objects via ButtonVine_Trigger
     public static final int SPIKES = 0x36;
     public static final int MONITOR = 0x26;
+    public static final int MONITOR_CONTENTS = 0x2E;
     public static final int CHECKPOINT = 0x79;
     public static final int BRIDGE = 0x11;
     public static final int SEESAW = 0x14;
@@ -78,6 +79,7 @@ public final class Sonic2ObjectIds {
     public static final int BUBBLES = 0x24;       // Bubble Generator (Obj24) - spawns breathable bubbles underwater
 
     // Supporting objects spawned by Badniks
+    public static final int PROJECTILE = 0x98;
     public static final int EXPLOSION = 0x27;
     public static final int ANIMAL = 0x28;
     public static final int POINTS = 0x29;
@@ -92,12 +94,14 @@ public final class Sonic2ObjectIds {
     public static final int HTZ_BOSS = 0x52; // HTZ Act 2 Boss (lava flamethrower boss)
     public static final int MTZ_BOSS_ORB = 0x53; // Obj53 - Shield orbs that surround MTZ boss
     public static final int MTZ_BOSS = 0x54;     // Obj54 - MTZ boss (orbiting shield + laser)
+    public static final int OOZ_BOSS = 0x55;     // Obj55 - OOZ Act 2 submarine / laser boss
     public static final int EHZ_BOSS = 0x56; // EHZ Act 2 Boss (drill car boss)
     public static final int MCZ_BOSS = 0x57; // MCZ Act 2 Boss (drill-digger boss)
     public static final int CPZ_BOSS = 0x5D; // CPZ Act 2 Boss (water dropper boss)
     public static final int ARZ_BOSS = 0x89; // ARZ Act 2 Boss (hammer/arrow boss)
     public static final int MECHA_SONIC = 0xAF; // DEZ Silver Sonic / Mecha Sonic (first DEZ boss)
     public static final int WFZ_BOSS = 0xC5;    // WFZ Boss (ObjC5) - laser platform boss
+    public static final int DEZ_EGGMAN = 0xC6; // DEZ Eggman transition object (ObjC6)
     public static final int DEATH_EGG_ROBOT = 0xC7; // DEZ Death Egg Robot (ObjC7) - final boss
     public static final int BOSS_EXPLOSION = 0x58; // Boss explosion (Obj58)
     public static final int LAVA_BUBBLE = 0x20;    // Lava bubble (Obj20) - spawned when HTZ lava ball hits ground
@@ -151,6 +155,8 @@ public final class Sonic2ObjectIds {
     public static final int OOZ_POPPING_PLATFORM = 0x33; // OOZPoppingPform (Obj33) - green burner platform that pops up
     public static final int OOZ_LAUNCHER = 0x3D; // OOZLauncher (Obj3D) - breakable block that launches rolling player
     public static final int FAN = 0x3F; // Fan (Obj3F) - OOZ wind fan (horizontal/vertical push)
+    public static final int SLIDING_SPIKE = 0x43; // SlidingSpike (Obj43) - paired sliding spike obstacle
+    public static final int OOZ_SPRING = 0x45; // OOZSpring (Obj45) - pressure spring from OOZ
     public static final int LAUNCHER_BALL = 0x48; // LauncherBall (Obj48) - OOZ transporter ball
 
     // OOZ/MCZ/ARZ Objects
@@ -194,15 +200,20 @@ public final class Sonic2ObjectIds {
     public static final int WFZ_PAL_SWITCHER = 0x8B; // WFZPalSwitcher (Obj8B) - cycling palette switcher from WFZ
     public static final int VPROPELLER = 0xB4; // VPropeller (ObjB4) - vertical propeller platform from WFZ/SCZ
     public static final int TILTING_PLATFORM = 0xB6; // TiltingPlatform (ObjB6) - tilting/spinning platform from WFZ
+    public static final int VERTICAL_LASER = 0xB7; // VerticalLaser (ObjB7) - unused huge vertical laser from WFZ
     public static final int WALL_TURRET = 0xB8; // WallTurret (ObjB8) - wall-mounted turret from WFZ
     public static final int LASER = 0xB9; // Laser (ObjB9) - horizontal laser beam from WFZ that shoots down the Tornado
     public static final int WFZ_WHEEL = 0xBA; // WFZWheel (ObjBA) - conveyor belt wheel decoration from WFZ
+    public static final int WFZ_UNKNOWN = 0xBB; // Removed unknown WFZ object (ObjBB)
     public static final int WFZ_SHIP_FIRE = 0xBC; // WFZShipFire (ObjBC) - fire/flame from Robotnik's ship in WFZ
     public static final int SMALL_METAL_PFORM = 0xBD; // SmallMetalPform (ObjBD) - ascending/descending belt platform from WFZ
     public static final int LATERAL_CANNON = 0xBE; // LateralCannon (ObjBE) - retracting platform from WFZ
+    public static final int WFZ_STICK = 0xBF; // WFZStick (ObjBF) - unused rotating stick badnik from WFZ
     public static final int SPEED_LAUNCHER = 0xC0; // SpeedLauncher (ObjC0) - catapult platform from WFZ
     public static final int BREAKABLE_PLATING = 0xC1; // BreakablePlating (ObjC1) - breakable plating from WFZ / Robotnik's getaway ship
     public static final int RIVET = 0xC2; // Rivet (ObjC2) - rivet at end of WFZ that opens the ship when busted
+    public static final int TORNADO_SMOKE = 0xC3; // TornadoSmoke (ObjC3) - plane smoke from WFZ
+    public static final int TORNADO_SMOKE_2 = 0xC4; // TornadoSmoke2 (ObjC4) - same routine as ObjC3
     public static final int GRAB = 0xD9; // Grab (ObjD9) - invisible hang-on point from WFZ
 
     // CNZ/MTZ/WFZ Objects

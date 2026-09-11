@@ -1,11 +1,11 @@
 package com.openggf.game.sonic1.specialstage;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class Sonic1SpecialStageBackgroundShaderTest {
 
@@ -18,11 +18,10 @@ public class Sonic1SpecialStageBackgroundShaderTest {
         String shader = Files.readString(SHADER_PATH);
         String renderer = Files.readString(RENDERER_PATH);
 
-        assertTrue("Shared special stage shader should make the active display width configurable",
-                shader.contains("uniform float ActiveDisplayWidth;"));
-        assertTrue("Shader should center the configured active display width inside the 320px output",
-                shader.contains("(SCREEN_GAME_WIDTH - activeDisplayWidth) * 0.5"));
-        assertTrue("S1 special stage should keep the full 320px active display",
-                renderer.contains("shader.setActiveDisplayWidth((float) SCREEN_WIDTH);"));
+        assertTrue(shader.contains("uniform float ActiveDisplayWidth;"), "Shared special stage shader should make the active display width configurable");
+        assertTrue(shader.contains("(SCREEN_GAME_WIDTH - activeDisplayWidth) * 0.5"), "Shader should center the configured active display width inside the 320px output");
+        assertTrue(renderer.contains("shader.setActiveDisplayWidth((float) SCREEN_WIDTH);"), "S1 special stage should keep the full 320px active display");
     }
 }
+
+

@@ -96,6 +96,11 @@ public class Aiz2DynamicWaterHandler implements DynamicWaterHandler {
         state.setTarget(INITIAL_LEVEL);
     }
 
+    @Override
+    public boolean shakeTimerOccupiesObjectSlot() {
+        return true;
+    }
+
     /**
      * Reset handler state for level reload.
      */

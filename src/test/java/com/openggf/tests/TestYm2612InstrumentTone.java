@@ -1,9 +1,9 @@
 package com.openggf.tests;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import com.openggf.audio.synth.Ym2612Chip;
 
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Sanity check that loading a voice and keying on produces audible PCM.
@@ -41,11 +41,16 @@ public class TestYm2612InstrumentTone {
         int[] right = new int[2048];
         chip.renderStereo(left, right);
 
-        long sum = 0;
+        // The discrete YM2612 model rests at a constant positive level, so
+        // measure the swing around it rather than the absolute level.
+        int min = Integer.MAX_VALUE;
+        int max = Integer.MIN_VALUE;
         for (int s : left) {
-            sum += Math.abs(s);
+            min = Math.min(min, s);
+            max = Math.max(max, s);
         }
-        double avg = sum / (double) left.length;
-        assertTrue("Expected audible output after key-on", avg > 50.0);
+        assertTrue(max - min > 100, "Expected audible output after key-on, swing was " + (max - min));
     }
 }
+
+

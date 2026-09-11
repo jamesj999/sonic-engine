@@ -9,6 +9,8 @@ import com.openggf.game.PlayableEntity;
 import com.openggf.level.objects.DestructionEffects.DestructionConfig;
 import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
+import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.ObjectTerrainUtils;
 import com.openggf.physics.TerrainCheckResult;
@@ -47,7 +49,7 @@ import java.util.List;
  *   <li>Anim 2 (Roll): speed 3, frames {3,4,2}, afEnd -> loops</li>
  * </ul>
  */
-public class Sonic1RollerBadnikInstance extends AbstractBadnikInstance {
+public class Sonic1RollerBadnikInstance extends AbstractBadnikInstance implements SpawnRewindRecreatable {
 
     // From disassembly: obColType = $0E (normal) or $8E (invincible while rolling)
     // Size index is lower 6 bits = $0E
@@ -108,8 +110,8 @@ public class Sonic1RollerBadnikInstance extends AbstractBadnikInstance {
 
     private int secondaryState;
     private int pauseTimer;         // objoff_30: wait timer
-    private int xSubpixel;          // Fractional X for SpeedToPos
-    private int ySubpixel;          // Fractional Y for ObjectFall
+    /** Subpixel accumulators (xSub / ySub) for ROM-accurate 16:8 fixed-point integration. */
+    private final SubpixelMotion.State motion = new SubpixelMotion.State(0, 0, 0, 0, 0, 0);
     private boolean initialized;
     private int currentAnim;        // Current animation ID
     private int animIndex;          // Current index within animation frame array
@@ -124,8 +126,6 @@ public class Sonic1RollerBadnikInstance extends AbstractBadnikInstance {
         this.facingLeft = false;
         this.secondaryState = STATE_ROLL_CHK;
         this.pauseTimer = 0;
-        this.xSubpixel = 0;
-        this.ySubpixel = 0;
         this.initialized = false;
         this.currentAnim = ANIM_UNFOLD;
         this.animIndex = 0;
@@ -136,7 +136,7 @@ public class Sonic1RollerBadnikInstance extends AbstractBadnikInstance {
     }
 
     @Override
-    protected void updateMovement(int frameCounter, PlayableEntity playerEntity) {
+    protected void updateMovement(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (!initialized) {
             initialize();
@@ -157,11 +157,13 @@ public class Sonic1RollerBadnikInstance extends AbstractBadnikInstance {
      */
     private void initialize() {
         // ObjectFall: apply velocity then add gravity
-        int yPos24 = (currentY << 8) | (ySubpixel & 0xFF);
-        yPos24 += yVelocity;
-        currentY = yPos24 >> 8;
-        ySubpixel = yPos24 & 0xFF;
-        yVelocity += GRAVITY;
+        motion.x = currentX;
+        motion.y = currentY;
+        motion.xVel = 0;
+        motion.yVel = yVelocity;
+        SubpixelMotion.moveSprite(motion, GRAVITY);
+        currentY = motion.y;
+        yVelocity = motion.yVel;
 
         // ObjFloorDist
         TerrainCheckResult floorResult = ObjectTerrainUtils.checkFloorDist(currentX, currentY, Y_RADIUS);
@@ -248,10 +250,10 @@ public class Sonic1RollerBadnikInstance extends AbstractBadnikInstance {
         checkStop(player);
 
         // SpeedToPos: apply X velocity with subpixel precision
-        int xPos24 = (currentX << 8) | (xSubpixel & 0xFF);
-        xPos24 += xVelocity;
-        currentX = xPos24 >> 8;
-        xSubpixel = xPos24 & 0xFF;
+        motion.x = currentX;
+        motion.xVel = xVelocity;
+        SubpixelMotion.moveX(motion);
+        currentX = motion.x;
 
         // ObjFloorDist
         TerrainCheckResult floorResult = ObjectTerrainUtils.checkFloorDist(currentX, currentY, Y_RADIUS);
@@ -292,19 +294,15 @@ public class Sonic1RollerBadnikInstance extends AbstractBadnikInstance {
      *      add.w d1,obY(a0) / subq.b #2,ob2ndRout(a0) / move.w #0,obVelY(a0)
      */
     private void updateMatchFloor() {
-        // ObjectFall: apply velocity then add gravity
-        int yPos24 = (currentY << 8) | (ySubpixel & 0xFF);
-        yPos24 += yVelocity;
-        currentY = yPos24 >> 8;
-        ySubpixel = yPos24 & 0xFF;
-
-        // SpeedToPos for X (ObjectFall also applies X velocity in the ROM)
-        int xPos24 = (currentX << 8) | (xSubpixel & 0xFF);
-        xPos24 += xVelocity;
-        currentX = xPos24 >> 8;
-        xSubpixel = xPos24 & 0xFF;
-
-        yVelocity += GRAVITY;
+        // ObjectFall: apply velocity (using current values), then add gravity to yVel.
+        motion.x = currentX;
+        motion.y = currentY;
+        motion.xVel = xVelocity;
+        motion.yVel = yVelocity;
+        SubpixelMotion.moveSprite(motion, GRAVITY);
+        currentX = motion.x;
+        currentY = motion.y;
+        yVelocity = motion.yVel;
 
         // tst.w obVelY(a0) / bmi.s locret_E150 - only check floor when falling
         if (yVelocity < 0) {
@@ -378,14 +376,20 @@ public class Sonic1RollerBadnikInstance extends AbstractBadnikInstance {
     }
 
     @Override
-    protected void updateAnimation(int frameCounter) {
+    protected void updateAnimation(int vIntRunCount) {
         // Only animate in routine 2 (Roll_Action) - not during init
         if (!initialized) {
             return;
         }
 
-        // Roll_RollChk (state 0) skips animation on activation frame (addq.l #4,sp)
-        // But we still run animation for the waiting state
+        // Roll_Action_FromLeft (ob2ndRout=0) pops its own return address
+        // (addq.l #4,sp) on every call while dormant, so AnimateSprite is never
+        // reached until the Roller activates (docs/s1disasm/_incObj/"43 Badnik -
+        // Roller.asm":36-39). Skip animating the curled pose during that window.
+        if (secondaryState == STATE_ROLL_CHK) {
+            return;
+        }
+
         switch (currentAnim) {
             case ANIM_UNFOLD -> animateUnfold();
             case ANIM_FOLD -> animateFold();
@@ -459,6 +463,21 @@ public class Sonic1RollerBadnikInstance extends AbstractBadnikInstance {
 
     @Override
     public int getCollisionFlags() {
+        // ROM parity: Roll_Main (routine 0) never sets obColType, and the initial
+        // waiting state Roll_Action_FromLeft (ob2ndRout=0) leaves it untouched too
+        // (docs/s1disasm/_incObj/43 Badnik - Roller.asm:19-38,86-100). obColType is
+        // first written only when the Roller activates (Roll_Action_FromLeft sets
+        // $8E, ...:96) or stops-and-unfolds (Roll_Action_StopAndUnfold sets $0E,
+        // ...:177) — both advance ob2ndRout away from 0 and never return to it. So a
+        // Roller still in STATE_ROLL_CHK has obColType=0 (col_none) and ReactToItem
+        // skips it entirely (`move.b obColType(a1),d0 / bne ...`,
+        // docs/s1disasm/_incObj/Sonic ReactToItem.asm:52-53). Without this, a curled
+        // waiting Roller wrongly hurt Sonic when he fell onto it (S1 SYZ1 trace
+        // f2338: engine hurt + ring loss vs ROM's unscathed fall past the dormant
+        // Roller).
+        if (secondaryState == STATE_ROLL_CHK) {
+            return 0;
+        }
         if (invincible) {
             // obColType = $8E: $80 = invincible (BOSS category in engine), $0E = size index
             // Using $80 (BOSS) category makes the Roller invincible to Sonic's attacks
@@ -475,7 +494,27 @@ public class Sonic1RollerBadnikInstance extends AbstractBadnikInstance {
 
     @Override
     public boolean isPersistent() {
-        return !isDestroyed() && isOnScreenX(160);
+        // Roll_Action does NOT end at RememberState. Under FixBugs = 0 -- the
+        // branch both S1 builds take (docs/s1disasm/sonic.asm:20) -- it carries
+        // an inlined copy of RememberState that closes with `bgt.w .offscreen`
+        // instead of the macro's `bhi`
+        // (docs/s1disasm/_incObj/43 Badnik - Roller.asm:63-70, and the
+        // disassembly's own note at :58-62). That signed compare cannot be
+        // satisfied by a negative distance, so a Roller that has scrolled off
+        // the LEFT edge stays alive and keeps rolling; only the right edge
+        // despawns it. The FixBugs branch (:56) would `bra.w RememberState` and
+        // despawn on both edges.
+        //
+        // The difference is load-bearing, not cosmetic: in the SYZ1 complete-run
+        // trace the Roller that starts at x=0x710 rolls right while Sonic runs
+        // right, leaves the window on the left at x=0x859, and -- because the ROM
+        // keeps it -- is still rolling when Sonic comes back left, so it performs
+        // Roll_Action_StopAndUnfold 48px to his left at x=0x955 and is destroyed
+        // there. With the unsigned window the engine deleted it at 0x859, the
+        // respawned copy unfolded 372px too early, and Sonic never got the
+        // React_Enemy `addi.w #$100,obVelY` rebound
+        // (docs/s1disasm/_incObj/Sonic ReactToItem.asm:299-309).
+        return !isDestroyed() && isInRangeAtSigned(getX());
     }
 
     @Override
@@ -486,6 +525,16 @@ public class Sonic1RollerBadnikInstance extends AbstractBadnikInstance {
     @Override
     public void appendRenderCommands(List<GLCommand> commands) {
         if (isDestroyed()) {
+            return;
+        }
+
+        // ROM never calls DisplaySprite for a still-falling (routine 0, Roll_Main
+        // is entered via jmp and its own rts never reaches AnimateSprite/
+        // DisplaySprite) or still-dormant (ob2ndRout=0, Roll_Action_FromLeft's
+        // addq.l #4,sp skip, docs/s1disasm/_incObj/"43 Badnik - Roller.asm":36-39,
+        // 99) Roller -- both windows are invisible on real hardware, not just
+        // hitbox-less.
+        if (!initialized || secondaryState == STATE_ROLL_CHK) {
             return;
         }
 

@@ -10,8 +10,10 @@ import com.openggf.graphics.RenderPriority;
 
 import com.openggf.level.objects.DestructionEffects.DestructionConfig;
 import com.openggf.level.objects.ObjectArtKeys;
+import com.openggf.level.objects.ObjectLifetimeOps;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.ObjectServices;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.ObjectTerrainUtils;
 import com.openggf.physics.TerrainCheckResult;
@@ -51,7 +53,7 @@ import java.util.List;
  *   <li>2 (.fly): frames 1, 2, 3, 2 at speed 3 - wing flapping cycle</li>
  * </ul>
  */
-public class Sonic1BatbrainBadnikInstance extends AbstractBadnikInstance {
+public class Sonic1BatbrainBadnikInstance extends AbstractBadnikInstance implements SpawnRewindRecreatable {
 
     // From disassembly: obColType = $B (enemy category 0x00, size index $0B)
     private static final int COLLISION_SIZE_INDEX = 0x0B;
@@ -124,13 +126,13 @@ public class Sonic1BatbrainBadnikInstance extends AbstractBadnikInstance {
     }
 
     @Override
-    protected void updateMovement(int frameCounter, PlayableEntity playerEntity) {
+    protected void updateMovement(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         switch (state) {
-            case STATE_DROP_CHECK -> updateDropCheck(frameCounter, player);
-            case STATE_DROP_FLY -> updateDropFly(frameCounter, player);
-            case STATE_FLAP_SOUND -> updateFlapSound(frameCounter, player);
-            case STATE_FLY_UP -> updateFlyUp(frameCounter);
+            case STATE_DROP_CHECK -> updateDropCheck(vIntRunCount, player);
+            case STATE_DROP_FLY -> updateDropFly(vIntRunCount, player);
+            case STATE_FLAP_SOUND -> updateFlapSound(vIntRunCount, player);
+            case STATE_FLY_UP -> updateFlyUp(vIntRunCount);
         }
     }
 
@@ -156,7 +158,7 @@ public class Sonic1BatbrainBadnikInstance extends AbstractBadnikInstance {
      * addq.b  #2,ob2ndRout(a0)
      * </pre>
      */
-    private void updateDropCheck(int frameCounter, AbstractPlayableSprite player) {
+    private void updateDropCheck(int vIntRunCount, AbstractPlayableSprite player) {
         if (player == null) {
             return;
         }
@@ -195,7 +197,7 @@ public class Sonic1BatbrainBadnikInstance extends AbstractBadnikInstance {
         // slots, so slot N sees d7 = 127 - N. Different slots fire their timing
         // gates at different points in the 8-frame cycle.
         int d7 = Math.max(0, 127 - getSlotIndex());
-        if (((frameCounter + d7) & RANDOM_MASK) != 0) {
+        if (((vIntRunCount + d7) & RANDOM_MASK) != 0) {
             return;
         }
 
@@ -226,7 +228,7 @@ public class Sonic1BatbrainBadnikInstance extends AbstractBadnikInstance {
      * addq.b  #2,ob2ndRout(a0)    ; transition to flapsound state
      * </pre>
      */
-    private void updateDropFly(int frameCounter, AbstractPlayableSprite player) {
+    private void updateDropFly(int vIntRunCount, AbstractPlayableSprite player) {
         // SpeedToPos: apply velocity to position
         applyVelocity();
 
@@ -277,9 +279,9 @@ public class Sonic1BatbrainBadnikInstance extends AbstractBadnikInstance {
      * addq.b  #2,ob2ndRout(a0)    ; transition to flyup
      * </pre>
      */
-    private void updateFlapSound(int frameCounter, AbstractPlayableSprite player) {
+    private void updateFlapSound(int vIntRunCount, AbstractPlayableSprite player) {
         // Play flapping sound every 16 frames
-        if ((frameCounter & FLAP_SOUND_MASK) == 0) {
+        if ((vIntRunCount & FLAP_SOUND_MASK) == 0) {
             services().playSfx(Sonic1Sfx.BASARAN_FLAP.id);
         }
 
@@ -297,7 +299,7 @@ public class Sonic1BatbrainBadnikInstance extends AbstractBadnikInstance {
                 // d7 comes from ExecuteObjects' loop counter (same as dropcheck):
                 // slot N sees d7 = 127 - N.
                 int d7 = Math.max(0, 127 - getSlotIndex());
-                if (((frameCounter + d7) & RANDOM_MASK) == 0) {
+                if (((vIntRunCount + d7) & RANDOM_MASK) == 0) {
                     state = STATE_FLY_UP;
                 }
             }
@@ -320,7 +322,7 @@ public class Sonic1BatbrainBadnikInstance extends AbstractBadnikInstance {
      * clr.b   ob2ndRout(a0)       ; back to dropcheck state
      * </pre>
      */
-    private void updateFlyUp(int frameCounter) {
+    private void updateFlyUp(int vIntRunCount) {
         // SpeedToPos: apply velocity
         applyVelocity();
 
@@ -330,7 +332,13 @@ public class Sonic1BatbrainBadnikInstance extends AbstractBadnikInstance {
         // ObjHitCeiling: check ceiling collision
         // ROM ObjHitCeiling probes at (x, y - obHeight) upward.
         // Returns d1 = distance to ceiling (negative = hit).
-        TerrainCheckResult result = ObjectTerrainUtils.checkCeilingDist(currentX, currentY, Y_RADIUS);
+        // ObjHitCeiling enters FindFloor after EOR #$F on the probe Y. Use the
+        // native upward path so its distance is not shifted by the legacy
+        // surfaceY = tileTop + metric - 1 convention. That one-pixel shift
+        // leaves a rehung Batbrain one pixel too high and can delay its next
+        // fall-to-flight transition by a frame.
+        TerrainCheckResult result = ObjectTerrainUtils.checkNativeUpwardCeilingDist(
+                currentX, currentY, Y_RADIUS);
         if (result.foundSurface() && result.distance() < 0) {
             // Hit ceiling: snap position and reset
             // ROM: sub.w d1,obY(a0) -> obY -= d1 (d1 is negative, so pushes down)
@@ -339,8 +347,6 @@ public class Sonic1BatbrainBadnikInstance extends AbstractBadnikInstance {
             currentX = currentX & 0xFFF8;
             xVelocity = 0;
             yVelocity = 0;
-            motionState.xSub = 0;
-            motionState.ySub = 0;
             setAnimation(ANIM_STILL);
             state = STATE_DROP_CHECK;
         }
@@ -366,14 +372,15 @@ public class Sonic1BatbrainBadnikInstance extends AbstractBadnikInstance {
 
     /**
      * SpeedToPos: Apply X and Y velocity to position with subpixel precision.
-     * ROM SpeedToPos adds 16-bit velocity (subpixels) to 16.8 position.
+     * ROM SpeedToPos sign-extends the 16-bit velocity, shifts it by 8, and
+     * adds it to the object's 16.16 position longword.
      */
     private void applyVelocity() {
         motionState.x = currentX;
         motionState.y = currentY;
         motionState.xVel = xVelocity;
         motionState.yVel = yVelocity;
-        SubpixelMotion.moveSprite2(motionState);
+        SubpixelMotion.speedToPos(motionState);
         currentX = motionState.x;
         currentY = motionState.y;
     }
@@ -400,9 +407,7 @@ public class Sonic1BatbrainBadnikInstance extends AbstractBadnikInstance {
             setDestroyed(true);
             ObjectServices svc = tryServices();
             var objectManager = svc != null ? svc.objectManager() : null;
-            if (objectManager != null) {
-                objectManager.markRemembered(spawn);
-            }
+            ObjectLifetimeOps.markSpawnRemembered(objectManager, spawn);
         }
     }
 
@@ -414,7 +419,7 @@ public class Sonic1BatbrainBadnikInstance extends AbstractBadnikInstance {
     }
 
     @Override
-    protected void updateAnimation(int frameCounter) {
+    protected void updateAnimation(int vIntRunCount) {
         animTickCounter++;
     }
 

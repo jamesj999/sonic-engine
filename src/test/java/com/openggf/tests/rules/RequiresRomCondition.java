@@ -1,32 +1,30 @@
 package com.openggf.tests.rules;
 
 import com.openggf.data.Rom;
-import com.openggf.data.RomManager;
-import com.openggf.game.GameModuleRegistry;
 import com.openggf.tests.TestEnvironment;
 import org.junit.jupiter.api.extension.BeforeAllCallback;
+import org.junit.jupiter.api.extension.BeforeEachCallback;
 import org.junit.jupiter.api.extension.ConditionEvaluationResult;
 import org.junit.jupiter.api.extension.ExecutionCondition;
 import org.junit.jupiter.api.extension.ExtensionContext;
 
 /**
- * JUnit 5 (Jupiter) equivalent of {@link RequiresRomRule}.
+ * Jupiter extension backing {@link RequiresRom}.
  * <p>
  * Reads the {@link RequiresRom} annotation on the test class, checks ROM
  * availability, and disables the test when the ROM is absent. When the ROM
- * is present it resets test environment, loads the ROM, detects the game
- * module, and configures {@link RomManager}.
+ * is present it rebuilds the gameplay mode around the selected ROM before
+ * each test method.
  * <p>
  * Usage:
  * <pre>
  * {@literal @}RequiresRom(SonicGame.SONIC_3K)
- * {@literal @}ExtendWith(RequiresRomCondition.class)
  * class MyJupiterTest {
  *     // ...
  * }
  * </pre>
  */
-public class RequiresRomCondition implements ExecutionCondition, BeforeAllCallback {
+public class RequiresRomCondition implements ExecutionCondition, BeforeAllCallback, BeforeEachCallback {
 
     private static final ExtensionContext.Namespace NS =
             ExtensionContext.Namespace.create(RequiresRomCondition.class);
@@ -50,7 +48,20 @@ public class RequiresRomCondition implements ExecutionCondition, BeforeAllCallba
 
     @Override
     public void beforeAll(ExtensionContext context) {
+        configureRomFixture(context);
+    }
+
+    @Override
+    public void beforeEach(ExtensionContext context) {
+        configureRomFixture(context);
+    }
+
+    private void configureRomFixture(ExtensionContext context) {
         Class<?> testClass = context.getRequiredTestClass();
+        if (testClass.isAnnotationPresent(RequiresGameModule.class)) {
+            throw new IllegalStateException(
+                    "@RequiresRom and @RequiresGameModule are mutually exclusive on " + testClass.getName());
+        }
         RequiresRom annotation = testClass.getAnnotation(RequiresRom.class);
         if (annotation == null) {
             return;
@@ -62,9 +73,7 @@ public class RequiresRomCondition implements ExecutionCondition, BeforeAllCallba
             return; // Will be skipped by evaluateExecutionCondition
         }
 
-        TestEnvironment.resetAll();
-        GameModuleRegistry.detectAndSetModule(rom);
-        RomManager.getInstance().setRom(rom);
+        TestEnvironment.configureRomFixture(rom);
 
         // Store rom in extension store for test access
         context.getStore(NS).put("rom", rom);
@@ -77,3 +86,5 @@ public class RequiresRomCondition implements ExecutionCondition, BeforeAllCallba
         return context.getStore(NS).get("rom", Rom.class);
     }
 }
+
+

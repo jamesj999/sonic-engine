@@ -44,6 +44,11 @@ public void update(int frameCounter, PlayableEntity player) {
 Bosses track their health via `collision_property`, which starts at the boss's hit count
 (typically 8) and decrements on each hit.
 
+Boss touch behavior should use the canonical touch/profile vocabulary under
+`com.openggf.game.profiles.*` when the boss fits an existing profile. If a boss has
+bespoke hit windows or invulnerability rules, keep the bespoke logic local but do not add
+new game-local profile types.
+
 In the engine:
 
 ```java
@@ -81,9 +86,14 @@ Bosses frequently spawn child objects: projectiles, rotating platforms, body par
 debris. The pattern is the same as the ArrowShooter tutorial:
 
 ```java
-SomeProjectile projectile = new SomeProjectile(x, y, direction);
-services().objectManager().addDynamicObject(projectile);
+SomeProjectile projectile = spawnChild(() -> new SomeProjectile(spawn, direction));
 ```
+
+Use `spawnChild(...)`, `spawnFreeChild(...)`, or another `level.objects` compatibility
+wrapper when the child needs services during construction or has parent/slot lifetime
+coupling. Direct `ObjectManager.addDynamicObject(...)` is reserved for documented
+legacy or bridge paths; new boss work should use the wrapper that preserves construction
+context and `ObjectLifetimeOps` migration points.
 
 Common child objects for bosses:
 - **Projectiles** (fireballs, hammers, energy balls)
@@ -118,6 +128,12 @@ if (act == 1 && camera.getX() >= BOSS_TRIGGER_X) {
 The boss object itself handles its own behavior within the arena but does not manage
 camera boundaries.
 
+If the boss targets, grabs, carries, or damages players, choose an explicit
+`ObjectPlayerParticipationPolicy` and query participants through `ObjectPlayerQuery`.
+Use native P1/P2 policies only when the original two-slot limit is part of the intended
+behavior; route-critical S3K encounters usually need all-engine-player or extended
+sidekick participation.
+
 ## Defeat Sequence
 
 When a boss is defeated (hit count reaches zero), the typical sequence is:
@@ -145,9 +161,13 @@ private void updateDefeated() {
         return;
     }
     // Timer expired: delete boss, trigger end-of-act
-    setDestroyed(true);
+    ObjectLifetimeOps.deleteNoRespawn(this);
 }
 ```
+
+New defeat and cleanup paths should use `ObjectLifetimeOps` or an existing `level.objects`
+compatibility wrapper for deletion, respawn latches, child cleanup, and slot transfer.
+Direct lifecycle mutation is acceptable only as a documented legacy bridge.
 
 ## Example: EHZ Boss Structure
 
@@ -174,12 +194,17 @@ Files:
 1. Read the boss object in the disassembly. Map out all routines and child objects.
 2. Read the zone's level event code to understand camera lock triggers.
 3. Create the boss class extending `AbstractObjectInstance`.
-4. Implement the state machine with all phases.
-5. Create classes for each child object type.
-6. Register the boss in the object registry.
-7. Wire the level event to trigger the boss encounter.
-8. Test: approach trigger, attack patterns, hit detection, defeat sequence, camera unlock.
-9. Compare against the original: frame counts, positions, velocities, SFX timing.
+4. Pick the relevant `com.openggf.game.profiles.*` behavior profiles and compatibility
+   wrappers before writing local conditionals.
+5. Declare player participation with `ObjectPlayerQuery` /
+   `ObjectPlayerParticipationPolicy`.
+6. Implement the state machine with all phases. Use `ObjectControlState` for object-control
+   intent when the boss locks, carries, or suppresses player movement/touch/solid contact.
+7. Create classes for each child object type.
+8. Register the boss in the object registry.
+9. Wire the level event to trigger the boss encounter.
+10. Test: approach trigger, attack patterns, hit detection, defeat sequence, camera unlock.
+11. Compare against the original: frame counts, positions, velocities, SFX timing.
 
 ## Next Steps
 

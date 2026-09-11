@@ -129,6 +129,15 @@ public class Sonic3kSpecialStagePerspective {
         return paletteFrame;
     }
 
+    Sonic3kSpecialStageSnapshot.PerspectiveSnapshot captureRewindSnapshot() {
+        return new Sonic3kSpecialStageSnapshot.PerspectiveSnapshot(animFrame, paletteFrame);
+    }
+
+    void restoreRewindSnapshot(Sonic3kSpecialStageSnapshot.PerspectiveSnapshot snapshot) {
+        animFrame = snapshot.animFrame();
+        paletteFrame = snapshot.paletteFrame();
+    }
+
     /**
      * Get the direction table for the current angle quadrant.
      * ROM: word_98B0 (sonic3k.asm:12229)

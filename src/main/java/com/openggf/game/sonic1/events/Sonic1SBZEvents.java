@@ -5,7 +5,6 @@ import com.openggf.game.sonic1.objects.bosses.Sonic1FalseFloorInstance;
 import com.openggf.game.sonic1.objects.bosses.Sonic1ScrapEggmanInstance;
 import com.openggf.game.sonic1.constants.Sonic1ObjectIds;
 import com.openggf.game.sonic1.scroll.Sonic1ZoneConstants;
-import com.openggf.game.GameServices;
 import com.openggf.level.LevelManager;
 import com.openggf.level.objects.ObjectSpawn;
 
@@ -18,9 +17,8 @@ import com.openggf.level.objects.ObjectSpawn;
  * Act 3 (DLE_SBZ3): Zone transition to Final Zone (ROM: LZ act 3).
  * FZ   (DLE_FZ):    5-routine boss sequence with left boundary locking.
  *
- * TODO: Act 2 boss spawn + collapsing floor - DLE_SBZ lines 323-400 in s1disasm.
- *   Routine 2 spawns collapsing floor object; routine 4 spawns Eggman boss.
- *   Boss objects not yet implemented.
+ * Act 2 boss spawn + collapsing floor - DLE_SBZ lines 323-400 in s1disasm:
+ *   Routine 2 spawns the collapsing floor object; routine 4 spawns Eggman.
  * Act 3 zone transition to FZ - DLE_SBZ3: implemented.
  *   Locks player, clears checkpoint, restarts into Final Zone.
  * FZ boss spawn: routine 2 spawns FZ boss (Object 0x85).
@@ -50,8 +48,12 @@ class Sonic1SBZEvents extends Sonic1ZoneEvents {
         fzTransitionRequested = false;
     }
 
+    boolean isFzTransitionRequested() { return fzTransitionRequested; }
+    void setFzTransitionRequested(boolean v) { fzTransitionRequested = v; }
+
     @Override
     void update(int act) {
+        retryPendingPlc();
         switch (act) {
             case 0 -> updateAct1();
             case 1 -> updateAct2();
@@ -65,6 +67,7 @@ class Sonic1SBZEvents extends Sonic1ZoneEvents {
      * which is safe because init() resets it on each level load.
      */
     void updateFZ() {
+        retryPendingPlc();
         updateFinalZone();
     }
 
@@ -152,6 +155,7 @@ class Sonic1SBZEvents extends Sonic1ZoneEvents {
                 Sonic1ObjectIds.FALSE_FLOOR, 0, 0, false, 0);
         lm.getObjectManager().addDynamicObject(
                 new Sonic1FalseFloorInstance(floorSpawn));
+        requestSonic1Plc(30);
 
         // addq.b #2,(v_dle_routine).w
         eventRoutine += 2;
@@ -275,9 +279,7 @@ class Sonic1SBZEvents extends Sonic1ZoneEvents {
         if (camX >= (BOSS_FZ_X - 0x308)) {
             // addq.b #2,(v_dle_routine).w
             eventRoutine += 2;
-
-            // TODO: Load FZ boss patterns (not yet implemented)
-            // ROM loads boss art/patterns here
+            requestSonic1Plc(31);
         }
 
         // loc_72F4: bra.s loc_72C2 - lock left boundary
@@ -299,8 +301,7 @@ class Sonic1SBZEvents extends Sonic1ZoneEvents {
             ObjectSpawn bossSpawn = new ObjectSpawn(
                     BOSS_FZ_X + 0x160, BOSS_FZ_Y + 0x80,
                     Sonic1ObjectIds.FZ_BOSS, 0, 0, false, 0);
-            lm.getObjectManager().addDynamicObject(
-                    new Sonic1FZBossInstance(bossSpawn));
+            lm.getObjectManager().addDynamicObject(new Sonic1FZBossInstance(bossSpawn));
             gameState().setCurrentBossId(Sonic1ObjectIds.FZ_BOSS);
 
             // addq.b #2,(v_dle_routine).w

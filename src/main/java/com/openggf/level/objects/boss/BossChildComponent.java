@@ -2,6 +2,7 @@ package com.openggf.level.objects.boss;
 
 import com.openggf.graphics.GLCommand;
 import com.openggf.game.PlayableEntity;
+import com.openggf.level.objects.ObjectInstance;
 
 import java.util.List;
 
@@ -9,14 +10,14 @@ import java.util.List;
  * Interface for boss child components (propellers, weapons, decorative parts).
  * Children update their state based on the parent boss state.
  */
-public interface BossChildComponent {
+public interface BossChildComponent extends ObjectInstance {
     /**
      * Update the component's state.
      *
-     * @param frameCounter Global frame counter
+     * @param vIntRunCount Object-visible V-int run count
      * @param player       Player sprite
      */
-    void update(int frameCounter, PlayableEntity player);
+    void update(int vIntRunCount, PlayableEntity player);
 
     /**
      * Append render commands for this component.

@@ -1,7 +1,7 @@
 package com.openggf.debug;
 
 /**
- * Lightweight color class for debug rendering that doesn't depend on java.awt.
+ * Lightweight color class for debug rendering that doesn't depend on AWT.
  * This avoids AWT native library loading issues in GraalVM native images.
  */
 public final class DebugColor {

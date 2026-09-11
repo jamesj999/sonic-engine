@@ -7,6 +7,9 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractSpikeObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.RomObjectCodePointerProvider;
 import com.openggf.level.objects.SolidContact;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
@@ -25,8 +28,8 @@ import java.util.List;
  *   <li>Lower nibble (bits 3-0): behavior (0=static, 1=vertical, 2=horizontal, 3=push)</li>
  * </ul>
  */
-public class Sonic3kSpikeObjectInstance extends AbstractSpikeObjectInstance {
-
+public class Sonic3kSpikeObjectInstance extends AbstractSpikeObjectInstance
+        implements RomObjectCodePointerProvider, RewindRecreatable {
     // Push mode constants (ROM: sub_2438A)
     private static final int PUSH_RATE_PERIOD = 0x10;   // $3A reset value: every 17 frames
     private static final int PUSH_MAX_DISTANCE = 0x20;  // $3C init: 32 pixels total
@@ -35,9 +38,22 @@ public class Sonic3kSpikeObjectInstance extends AbstractSpikeObjectInstance {
     private boolean contactPushingActive;   // Set by onSolidContact, consumed by next update()
     private int pushRateTimer;              // $3A: frames until next push allowed
     private int pushDistanceRemaining = PUSH_MAX_DISTANCE; // $3C: remaining 1px pushes
+    private boolean mainRoutineReached;
+    private boolean suppressSolidThisFrame = true;
 
     public Sonic3kSpikeObjectInstance(ObjectSpawn spawn) {
         super(spawn, "Spikes");
+    }
+
+    @Override
+    public int romObjectCodePointerHighWord() {
+        // Every Obj_Spikes subtype routine used by interact(a0) is in bank $0002.
+        return 0x0002;
+    }
+
+    @Override
+    public Sonic3kSpikeObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new Sonic3kSpikeObjectInstance(ctx.spawn());
     }
 
     @Override
@@ -56,7 +72,30 @@ public class Sonic3kSpikeObjectInstance extends AbstractSpikeObjectInstance {
     }
 
     @Override
+    public boolean isWithinSolidContactBounds() {
+        // loc_24090/loc_2413E move the spike before calling SolidObjectFull,
+        // but loc_1DF88 observes render_flags bit 7 from the preceding
+        // Render_Sprites pass (sonic3k.asm:49011-49037,49102-49131,
+        // 41390-41392). Test the frame-start position, not the freshly moved
+        // one, so a spike entering the viewport cannot become solid early.
+        return isPreUpdateWithinRenderSpriteBounds(
+                getOnScreenHalfWidth(), getOnScreenHalfHeight());
+    }
+
+    @Override
     protected void moveSpikes(PlayableEntity playerEntity) {
+        if (!mainRoutineReached) {
+            // Obj_Spikes initialization stores loc_2413E/loc_24090/etc. in (a0)
+            // and returns before the movement + SolidObjectFull body can run
+            // (sonic3k.asm:48925-49012).  The first main-routine frame starts
+            // on the next object execution.
+            mainRoutineReached = true;
+            suppressSolidThisFrame = true;
+            currentX = baseX;
+            currentY = baseY;
+            return;
+        }
+        suppressSolidThisFrame = false;
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         int behavior = spawn.subtype() & 0xF;
         switch (behavior) {
@@ -68,6 +107,46 @@ public class Sonic3kSpikeObjectInstance extends AbstractSpikeObjectInstance {
                 currentY = baseY;
             }
         }
+    }
+
+    @Override
+    public boolean isSolidFor(PlayableEntity player) {
+        return !suppressSolidThisFrame;
+    }
+
+    @Override
+    public boolean allowsObjectControlledSolidContacts() {
+        // Obj_Spikes calls SolidObjectFull directly. Its shared
+        // SolidObject_cont gate rejects only a signed (bit-7) object_control;
+        // positive controller states such as the LBZ cup's $03 still receive
+        // ordinary side/top separation.
+        return true;
+    }
+
+    @Override
+    public boolean rejectsBit7ObjectControlNewSolidContact(PlayableEntity player) {
+        return true;
+    }
+
+    @Override
+    public int getOnScreenHalfWidth() {
+        // S3K Render_Sprites reads width_pixels(a0) for the on-screen X test,
+        // and Obj_Spikes initializes that byte from Spikes_Dimensions --
+        // $10/$20/$30/$40 for the upright sizes, $10 for the sideways ones
+        // (docs/skdisasm/sonic3k.asm:48926-48934 table, :48937-48939 store).
+        // The AbstractObjectInstance default of 16 is only correct for the
+        // narrowest entry, so a wide spike strip whose centre sits just left of
+        // the camera reads as offscreen, skips SolidObjectFull entirely, and
+        // lets a character walk through it.
+        return getEntryValue(WIDTH_PIXELS);
+    }
+
+    @Override
+    public int getOnScreenHalfHeight() {
+        // S3K Render_Sprites reads height_pixels(a0) directly. Obj_Spikes
+        // initializes that from byte_23F74, which matches the shared y-radius
+        // table for the spike subtypes.
+        return getEntryValue(Y_RADIUS);
     }
 
     @Override

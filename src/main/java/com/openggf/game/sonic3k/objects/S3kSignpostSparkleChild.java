@@ -4,27 +4,25 @@ import com.openggf.game.PlayableEntity;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
+import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.rings.RingManager;
-import com.openggf.sprites.playable.AbstractPlayableSprite;
 
 import java.util.List;
 import java.util.logging.Logger;
 
 /**
  * Short-lived sparkle effect spawned by the S3K signpost during its fall.
- *
- * <p>Spawned at the signpost's position, does not move.
- * Plays through 4 animation frames then self-destructs.
  */
-public class S3kSignpostSparkleChild extends AbstractObjectInstance {
+public class S3kSignpostSparkleChild extends AbstractObjectInstance implements SpawnRewindRecreatable {
 
     private static final Logger LOG = Logger.getLogger(S3kSignpostSparkleChild.class.getName());
 
     private static final int FRAME_DELAY = 4;
     private static final int TOTAL_FRAMES = 4;
 
-    private final int worldX;
-    private final int worldY;
+    private int worldX;
+    private int worldY;
     private int animTimer;
     private int animFrame;
 
@@ -32,6 +30,10 @@ public class S3kSignpostSparkleChild extends AbstractObjectInstance {
         super(null, "S3kSignpostSparkle");
         this.worldX = x;
         this.worldY = y;
+    }
+
+    public S3kSignpostSparkleChild(ObjectSpawn spawn) {
+        this(spawn != null ? spawn.x() : 0, spawn != null ? spawn.y() : 0);
     }
 
     @Override
@@ -45,8 +47,7 @@ public class S3kSignpostSparkleChild extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         animTimer++;
         if (animTimer >= FRAME_DELAY) {
             animTimer = 0;

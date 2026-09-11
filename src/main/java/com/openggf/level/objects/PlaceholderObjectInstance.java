@@ -4,7 +4,7 @@ import com.openggf.graphics.GLCommand;
 
 import java.util.List;
 
-public class PlaceholderObjectInstance extends AbstractObjectInstance {
+public class PlaceholderObjectInstance extends AbstractObjectInstance implements RewindRecreatable {
     private static final int DEFAULT_HALF_SIZE = 8;
     private static final float COLOR_R = 0.95f;
     private static final float COLOR_G = 0.25f;
@@ -12,6 +12,11 @@ public class PlaceholderObjectInstance extends AbstractObjectInstance {
 
     public PlaceholderObjectInstance(ObjectSpawn spawn, String name) {
         super(spawn, name);
+    }
+
+    @Override
+    public PlaceholderObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new PlaceholderObjectInstance(ctx.spawn(), "Placeholder");
     }
 
     @Override

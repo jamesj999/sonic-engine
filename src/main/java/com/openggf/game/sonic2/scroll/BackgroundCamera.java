@@ -186,7 +186,23 @@ public class BackgroundCamera {
 
         // Zone-specific BG tracking would go here
         // EHZ example: BG doesn't track X at all (static BG camera)
-        // MTZ: BG tracks proportionally
+        switch (zoneId) {
+            case ZONE_MTZ -> {
+                // SwScrl_MTZ (s2.asm:15605/15613-15615) reads Camera_BG_Y_pos and
+                // -Camera_BG_X_pos. InitCam_Std (the MTZ init case above) seeds the BG
+                // camera at 1/8 X and 1/4 Y; per-frame tracking keeps it locked to the
+                // same ratios so the BG camera (not the scroll handler) owns the 1/8 & 1/4.
+                int prevBgX = bgXPos;
+                int prevBgY = bgYPos;
+                bgXPos = fgX >> 3;
+                bgYPos = fgY >> 2;
+                bgXPosDiff = bgXPos - prevBgX;
+                bgYPosDiff = bgYPos - prevBgY;
+            }
+            default -> {
+                // Other zones rely on init() seeding plus their own SwScrl routines.
+            }
+        }
     }
 
     // ========== TempArray_LayerDef accessors ==========

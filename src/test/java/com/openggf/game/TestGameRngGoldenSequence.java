@@ -55,3 +55,5 @@ class TestGameRngGoldenSequence {
         assertThrows(IllegalArgumentException.class, () -> new GameRng(GameRng.Flavour.S3K).nextInt(0));
     }
 }
+
+

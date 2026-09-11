@@ -42,9 +42,7 @@ public class Sonic2ZoneRegistry extends AbstractZoneRegistry {
             Sonic2Music.DEATH_EGG.id        // Death Egg
     };
 
-    private static final Sonic2ZoneRegistry INSTANCE = new Sonic2ZoneRegistry();
-
-    private Sonic2ZoneRegistry() {
+    public Sonic2ZoneRegistry() {
         // Zone structure: outer list = zones, inner list = acts
         super(List.of(
                 List.of(LevelData.EMERALD_HILL_1, LevelData.EMERALD_HILL_2),
@@ -59,10 +57,6 @@ public class Sonic2ZoneRegistry extends AbstractZoneRegistry {
                 List.of(LevelData.WING_FORTRESS),
                 List.of(LevelData.DEATH_EGG)
         ), ZONE_NAMES);
-    }
-
-    public static Sonic2ZoneRegistry getInstance() {
-        return INSTANCE;
     }
 
     @Override

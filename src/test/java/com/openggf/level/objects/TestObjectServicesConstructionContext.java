@@ -1,5 +1,7 @@
 package com.openggf.level.objects;
 
+import com.openggf.game.session.EngineContext;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -20,6 +22,7 @@ class TestObjectServicesConstructionContext {
         @Override public ObjectRenderManager renderManager() { return null; }
         @Override public com.openggf.game.LevelState levelGamestate() { return null; }
         @Override public com.openggf.game.RespawnState checkpointState() { return null; }
+        @Override public com.openggf.level.LevelManager levelManager() { return null; }
         @Override public com.openggf.level.Level currentLevel() { return null; }
         @Override public int romZoneId() { return 0; }
         @Override public int currentAct() { return 0; }
@@ -31,19 +34,34 @@ class TestObjectServicesConstructionContext {
         @Override public void playMusic(int musicId) {}
         @Override public void fadeOutMusic() {}
         @Override public com.openggf.audio.AudioManager audioManager() { return null; }
+        @Override public com.openggf.game.GameRng rng() { return new com.openggf.game.GameRng(com.openggf.game.GameRng.Flavour.S3K); }
+        @Override public com.openggf.game.zone.ZoneRuntimeRegistry zoneRuntimeRegistry() { return new com.openggf.game.zone.ZoneRuntimeRegistry(); }
+        @Override public com.openggf.game.zone.ZoneRuntimeState zoneRuntimeState() { return zoneRuntimeRegistry().current(); }
+        @Override public com.openggf.game.palette.PaletteOwnershipRegistry paletteOwnershipRegistryOrNull() { return null; }
+        @Override public com.openggf.game.mutation.ZoneLayoutMutationPipeline zoneLayoutMutationPipeline() { return new com.openggf.game.mutation.ZoneLayoutMutationPipeline(); }
+        @Override public com.openggf.game.solid.SolidExecutionRegistry solidExecutionRegistry() { return com.openggf.game.solid.SolidExecutionRegistry.inert(); }
         @Override public void spawnLostRings(com.openggf.game.PlayableEntity player, int fc) {}
         @Override public com.openggf.camera.Camera camera() { return null; }
         @Override public com.openggf.game.GameStateManager gameState() { return null; }
+        @Override public com.openggf.game.session.WorldSession worldSession() { return null; }
+        @Override public com.openggf.game.GameModule gameModule() { return null; }
         @Override public java.util.List<com.openggf.game.PlayableEntity> sidekicks() { return java.util.List.of(); }
         @Override public com.openggf.sprites.managers.SpriteManager spriteManager() { return null; }
         @Override public com.openggf.graphics.GraphicsManager graphicsManager() { return null; }
         @Override public com.openggf.graphics.FadeManager fadeManager() { return null; }
+        @Override public com.openggf.game.session.EngineContext engineServices() { return null; }
+        @Override public com.openggf.configuration.SonicConfigurationService configuration() { return null; }
+        @Override public com.openggf.debug.DebugOverlayManager debugOverlay() { return null; }
+        @Override public com.openggf.data.RomManager romManager() { return null; }
+        @Override public com.openggf.game.CrossGameFeatureProvider crossGameFeatures() { return null; }
         @Override public com.openggf.data.Rom rom() { return null; }
         @Override public com.openggf.data.RomByteReader romReader() { return null; }
         @Override public com.openggf.level.WaterSystem waterSystem() { return null; }
         @Override public com.openggf.level.ParallaxManager parallaxManager() { return null; }
+        @Override public com.openggf.physics.CollisionSystem collisionSystem() { return null; }
         @Override public void advanceToNextLevel() {}
         @Override public void requestCreditsTransition() {}
+        @Override public void requestSessionSave(com.openggf.game.save.SaveReason reason) {}
         @Override public void requestSpecialStageEntry() {}
         @Override public void invalidateForegroundTilemap() {}
         @Override public boolean areAllRingsCollected() { return false; }
@@ -51,7 +69,7 @@ class TestObjectServicesConstructionContext {
         @Override public com.openggf.level.rings.RingManager ringManager() { return null; }
         @Override public void advanceZoneActOnly() {}
         @Override public void setApparentAct(int act) {}
-        @Override public void requestSpecialStageFromCheckpoint() {}
+        @Override public void advanceToSpecialStageEntryRoutine() {}
         @Override public void requestBonusStageEntry(com.openggf.game.BonusStageType type) {}
         @Override public void requestBonusStageExit() {}
         @Override public void addBonusStageRings(int count) {}
@@ -61,7 +79,16 @@ class TestObjectServicesConstructionContext {
         @Override public int getCurrentLevelMusicId() { return 0; }
         @Override public int[] findPatternOffset(int refX, int refY, int minTileIdx, int maxTileIdx, int searchRadius) { return null; }
         @Override public void saveBigRingReturn(com.openggf.level.BigRingReturnState state) {}
+        @Override public void clearLastStarPostHit() {}
     };
+
+    @AfterEach
+    void clearConstructionContext() {
+        // Defense in depth: if any test path forgets to clear the ThreadLocal
+        // (e.g. an assertion fires mid-try), the leak does not corrupt other
+        // tests in the same fork.
+        AbstractObjectInstance.CONSTRUCTION_CONTEXT.remove();
+    }
 
     /** Test object that calls services() in its constructor. */
     private static class ConstructorAccessObject extends AbstractObjectInstance {
@@ -195,3 +222,4 @@ class TestObjectServicesConstructionContext {
                 "created object should be registered as a dynamic object");
     }
 }
+

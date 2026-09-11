@@ -1,0 +1,13 @@
+[submodule "docs/s1disasm"]
+	path = docs/s1disasm
+	url = https://github.com/sonicretro/s1disasm.git
+[submodule "docs/s2disasm"]
+	path = docs/s2disasm
+	url = https://github.com/sonicretro/s2disasm.git
+[submodule "docs/skdisasm"]
+	path = docs/skdisasm
+	url = https://github.com/sonicretro/skdisasm.git
+
+[submodule "tools/tracechaser"]
+	path = tools/tracechaser
+	url = https://github.com/OpenGGF/TraceChaser.git

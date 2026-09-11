@@ -1,17 +1,17 @@
 package com.openggf.game.sonic3k.objects;
 
 import com.openggf.game.PlayableEntity;
-import com.openggf.game.sonic3k.Sonic3kLevelEventManager;
+import com.openggf.game.sonic3k.S3kPaletteOwners;
+import com.openggf.game.sonic3k.S3kPaletteWriteSupport;
 import com.openggf.game.sonic3k.Sonic3kObjectArtKeys;
 import com.openggf.game.sonic3k.audio.Sonic3kSfx;
 import com.openggf.game.sonic3k.constants.Sonic3kConstants;
-import com.openggf.game.sonic3k.events.Sonic3kAIZEvents;
+import com.openggf.game.sonic3k.events.S3kAizEventWriteSupport;
 import com.openggf.graphics.GLCommand;
-import com.openggf.level.Level;
-import com.openggf.level.Palette;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.ZeroArgRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 
 import java.util.List;
@@ -33,7 +33,8 @@ import java.util.logging.Logger;
  * <p>Every 16 frames plays {@code cfx_RobotnikSiren}.
  * Rendered using {@link Sonic3kObjectArtKeys#AIZ2_BOSS_SMALL} mapping frame 0.
  */
-public class AizBossSmallInstance extends AbstractObjectInstance {
+public class AizBossSmallInstance extends AbstractObjectInstance
+        implements ZeroArgRewindRecreatable {
     private static final Logger LOG = Logger.getLogger(AizBossSmallInstance.class.getName());
 
     /** Camera X threshold to start movement. ROM: cmpi.w #$4670,(Camera_X_pos).w */
@@ -82,7 +83,7 @@ public class AizBossSmallInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity player) {
+    public void update(int vIntRunCount, PlayableEntity player) {
         if (isDestroyed()) return;
 
         this.frameCounter++;
@@ -113,10 +114,19 @@ public class AizBossSmallInstance extends AbstractObjectInstance {
                     + Integer.toHexString(cameraX));
         }
 
-        // Play siren SFX every 16 frames (only after activation)
-        if ((this.frameCounter & 0xF) == 0) {
-            services().playSfx(Sonic3kSfx.ROBOTNIK_SIREN.id);
+        // ROM loc_50712 checks x_pos >= $240 before loc_50732 moves Robotnik;
+        // crossing the threshold deletes the object on the following update.
+        if (screenX >= EXIT_SCREEN_X) {
+            onExitScreen();
+            return;
         }
+
+        // ROM loc_50732 moves by the current x_vel before loc_5075E stores the
+        // decelerated/accelerated velocity for the next frame.
+        int xPos32 = (screenX << 16) | (xSub & 0xFFFF);
+        xPos32 += xVel;
+        screenX = xPos32 >> 16;
+        xSub = xPos32 & 0xFFFF;
 
         // Apply deceleration / acceleration arc
         if (decelerating) {
@@ -128,75 +138,41 @@ public class AizBossSmallInstance extends AbstractObjectInstance {
             xVel += ACCEL;
         }
 
-        // Apply velocity to screen position (16:16 fixed-point)
-        int xPos32 = (screenX << 16) | (xSub & 0xFFFF);
-        xPos32 += xVel;
-        screenX = xPos32 >> 16;
-        xSub = xPos32 & 0xFFFF;
-
-        // Check exit condition
-        if (screenX >= EXIT_SCREEN_X) {
-            onExitScreen();
+        // Play siren SFX every 16 frames (only after activation)
+        if ((this.frameCounter & 0xF) == 0) {
+            services().playSfx(Sonic3kSfx.ROBOTNIK_SIREN.id);
         }
     }
 
     private void onExitScreen() {
         // Signal the event system to unlock camera and stop auto-scroll
-        Sonic3kAIZEvents events = getAizEvents();
-        if (events != null) {
-            events.onBossSmallComplete();
-        }
+        S3kAizEventWriteSupport.onBossSmallComplete(services());
 
         LOG.info("AIZ2 BossSmall: exited screen at screenX=" + screenX
                 + " after " + frameCounter + " frames");
         setDestroyed(true);
     }
 
-    private Sonic3kAIZEvents getAizEvents() {
-        try {
-            return ((Sonic3kLevelEventManager) services().levelEventProvider()).getAizEvents();
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
     private void applyPalettePatch(int paletteIndex, int byteOffset, byte[] patchData) {
-        Level level = services().currentLevel();
-        if (level == null || patchData == null || patchData.length == 0) {
+        if (patchData == null || patchData.length == 0) {
             return;
         }
-        if (paletteIndex < 0 || paletteIndex >= level.getPaletteCount()) {
+        if ((byteOffset & 1) != 0) {
             return;
         }
-
-        byte[] lineData = toSegaLine(level.getPalette(paletteIndex));
-        if (byteOffset < 0 || byteOffset + patchData.length > lineData.length) {
+        int startColor = byteOffset / 2;
+        if (startColor < 0 || startColor + (patchData.length / 2) > 16) {
             return;
         }
-
-        System.arraycopy(patchData, 0, lineData, byteOffset, patchData.length);
-        services().updatePalette(paletteIndex, lineData);
-    }
-
-    private static byte[] toSegaLine(Palette palette) {
-        byte[] lineData = new byte[Palette.PALETTE_SIZE_IN_ROM];
-        for (int i = 0; i < Palette.PALETTE_SIZE; i++) {
-            int sega = toSegaColorWord(palette.getColor(i));
-            int offset = i * 2;
-            lineData[offset] = (byte) ((sega >>> 8) & 0xFF);
-            lineData[offset + 1] = (byte) (sega & 0xFF);
-        }
-        return lineData;
-    }
-
-    private static int toSegaColorWord(Palette.Color color) {
-        if (color == null) {
-            return 0;
-        }
-        int r3 = ((color.r & 0xFF) * 7 + 127) / 255;
-        int g3 = ((color.g & 0xFF) * 7 + 127) / 255;
-        int b3 = ((color.b & 0xFF) * 7 + 127) / 255;
-        return ((b3 & 0x7) << 9) | ((g3 & 0x7) << 5) | ((r3 & 0x7) << 1);
+        S3kPaletteWriteSupport.applyContiguousPatch(
+                services().paletteOwnershipRegistryOrNull(),
+                services().currentLevel(),
+                services().graphicsManager(),
+                S3kPaletteOwners.AIZ_BOSS_SMALL,
+                S3kPaletteOwners.PRIORITY_OBJECT_OVERRIDE,
+                paletteIndex,
+                startColor,
+                patchData);
     }
 
     /**

@@ -1,10 +1,10 @@
 package com.openggf.tests;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import com.openggf.level.ChunkDesc;
 import com.openggf.level.CollisionMode;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class TestChunkDesc {
     @Test
@@ -22,3 +22,5 @@ public class TestChunkDesc {
         assertFalse(desc.getHFlip());
     }
 }
+
+

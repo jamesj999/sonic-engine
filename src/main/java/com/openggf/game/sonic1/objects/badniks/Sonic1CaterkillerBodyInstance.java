@@ -3,10 +3,15 @@ package com.openggf.game.sonic1.objects.badniks;
 import com.openggf.debug.DebugRenderContext;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
-import com.openggf.level.LevelManager;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
+import com.openggf.level.objects.ObjectInstance;
+import com.openggf.level.objects.ObjectManager;
+import com.openggf.level.objects.ObjectServices;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.level.objects.TouchResponseListener;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.objects.TouchResponseResult;
@@ -49,13 +54,14 @@ interface CaterkillerParentState {
  * Based on docs/s1disasm/_incObj/78 Caterkiller.asm (Cat_BodySeg1, Cat_BodySeg2).
  */
 public class Sonic1CaterkillerBodyInstance extends AbstractObjectInstance
-        implements TouchResponseProvider, TouchResponseListener, CaterkillerParentState {
+        implements TouchResponseProvider, TouchResponseListener, CaterkillerParentState, RewindRecreatable {
 
     // Collision size index from disassembly (obColType low bits = $0B).
     private static final int COLLISION_SIZE_INDEX = 0x0B;
 
-    // Fragment velocities from Cat_FragSpeed: dc.w -$200, -$180, $180, $200
-    // Indexed by (obRoutine - 2): routine 4 → -$200, 6 → -$180, 8 → $180
+    // Fragment velocities from Cat_FragSpeed: dc.w -$200, -$180, $180, $200.
+    // ROM indexes with Cat_FragSpeed-2 + obRoutine, so body routines 4/6/8
+    // select entries 1/2/3. The head routine 2 selects entry 0 in the head class.
     private static final int[] FRAG_X_SPEEDS = { -0x200, -0x180, 0x180, 0x200 };
 
     // Frag Y velocity: move.w #-$400,obVelY(a0)
@@ -67,31 +73,39 @@ public class Sonic1CaterkillerBodyInstance extends AbstractObjectInstance
     // Ring buffer marker for direction change
     private static final int DIRECTION_CHANGE_MARKER = 0x80;
 
+    // Cat_Main gives body segments obActWid = 8 and copies obRender without bit 4,
+    // so BuildSprites uses an 8 px X half-width and the default 32 px Y band.
+    private static final int RENDER_HALF_WIDTH = 8;
+    private static final int ASSUMED_RENDER_HALF_HEIGHT = 32;
+
     int currentX;
     int currentY;
-    private int xSubpixel;
+    /** Subpixel accumulators (xSub / ySub) for ROM-accurate 16:8 fixed-point integration. */
+    private final SubpixelMotion.State motion = new SubpixelMotion.State(0, 0, 0, 0, 0, 0);
     private boolean facingLeft;
+    private boolean deleting;
     private boolean destroyed;
     private boolean fragmenting;
+    private boolean renderOnScreen;
+    private int deleteVIntRunCount = -1;
 
     // Body segment type: true if this is a BodySeg2 (has independent animation)
-    private final boolean isAnimatedSegment;
+    private boolean isAnimatedSegment;
 
     // Index into Cat_FragSpeed for fragment X velocity (based on routine index)
-    private final int fragSpeedIndex;
+    private int fragSpeedIndex;
 
     // Ring buffer read pointer (cat_parent low byte)
     private int ringBufferIndex;
 
     // Root head reference used for lifecycle/despawn checks.
-    private final Sonic1CaterkillerBadnikInstance head;
+    private Sonic1CaterkillerBadnikInstance head;
     // Immediate parent in the segment chain (head for seg1, seg1 for seg2, etc.).
-    private final CaterkillerParentState parentState;
+    private CaterkillerParentState parentState;
 
     // Velocity state
     private int xVelocity;
     private int yVelocity;
-    private int ySubpixel;
     private int inertia;
 
     // Animation state (for BodySeg2 only)
@@ -103,6 +117,9 @@ public class Sonic1CaterkillerBodyInstance extends AbstractObjectInstance
     // Per-segment ring buffer (objoff_2C+0..15). Child segments read from this.
     private final byte[] ringBuffer = new byte[16];
 
+    Sonic1CaterkillerBodyInstance() {
+        this(null, null, 0, 0, false, false, 0, 0);
+    }
 
     /**
      * Creates a Caterkiller body segment.
@@ -130,11 +147,10 @@ public class Sonic1CaterkillerBodyInstance extends AbstractObjectInstance
         this.facingLeft = facingLeft;
         this.isAnimatedSegment = isAnimated;
         this.ringBufferIndex = ringBufferStart;
-        
+        this.deleting = false;
         this.destroyed = false;
         this.fragmenting = false;
-        this.xSubpixel = 0;
-        this.ySubpixel = 0;
+        this.renderOnScreen = true;
         this.xVelocity = 0;
         this.yVelocity = 0;
         this.inertia = 0;
@@ -142,15 +158,74 @@ public class Sonic1CaterkillerBodyInstance extends AbstractObjectInstance
         this.secondaryState = 0;
         this.animControl = 0;
 
-        // Fragment speed index: segments alternate routine 4/6/4 → frag indices 0/1/2
-        // (routine 4 → index 0, routine 6 → index 1, routine 8 → index 2)
-        this.fragSpeedIndex = segmentIndex;
+        // Body routines are 4/6/8, which map to Cat_FragSpeed entries 1/2/3.
+        this.fragSpeedIndex = segmentIndex + 1;
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        ObjectSpawn capturedSpawn = ctx.spawn();
+        Sonic1CaterkillerBadnikInstance restoredHead = nearestLiveCaterkillerHeadForRewind(ctx);
+        if (capturedSpawn == null || restoredHead == null) {
+            return null;
+        }
+        Sonic1CaterkillerBodyInstance restored = new Sonic1CaterkillerBodyInstance(
+                restoredHead, restoredHead, capturedSpawn.x(), capturedSpawn.y(),
+                false, false, 0, 0);
+        restoredHead.adoptBodySegmentForRewind(restored);
+        return restored;
+    }
+
+    void relinkForRewind(
+            Sonic1CaterkillerBadnikInstance restoredHead,
+            CaterkillerParentState restoredParentState) {
+        this.head = restoredHead;
+        this.parentState = restoredParentState;
+    }
+
+    boolean isLinkedToHead(Sonic1CaterkillerBadnikInstance candidateHead) {
+        return head == candidateHead;
+    }
+
+    private static Sonic1CaterkillerBadnikInstance nearestLiveCaterkillerHeadForRewind(
+            RewindRecreateContext ctx) {
+        ObjectServices services = ctx.objectServices();
+        ObjectManager objectManager = services != null ? services.objectManager() : null;
+        ObjectSpawn capturedSpawn = ctx.spawn();
+        if (objectManager == null) {
+            return null;
+        }
+        Sonic1CaterkillerBadnikInstance best = null;
+        long bestDistance = Long.MAX_VALUE;
+        for (ObjectInstance object : objectManager.getActiveObjects()) {
+            if (!(object instanceof Sonic1CaterkillerBadnikInstance head) || head.isDestroyed()) {
+                continue;
+            }
+            if (capturedSpawn == null) {
+                return head;
+            }
+            long dx = head.getX() - capturedSpawn.x();
+            long dy = head.getY() - capturedSpawn.y();
+            long distance = dx * dx + dy * dy;
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = head;
+            }
+        }
+        return best;
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (destroyed) {
+            return;
+        }
+
+        if (deleting) {
+            if (vIntRunCount > deleteVIntRunCount) {
+                markDestroyed();
+            }
             return;
         }
 
@@ -166,8 +241,9 @@ public class Sonic1CaterkillerBodyInstance extends AbstractObjectInstance
             startFragmenting();
             return;
         }
-        if (head.isDeleting() || head.isDestroyed()) {
-            markDestroyed();
+        if (head.shouldDeleteBodySegments(vIntRunCount)) {
+            deleting = true;
+            deleteVIntRunCount = vIntRunCount;
             return;
         }
 
@@ -240,11 +316,11 @@ public class Sonic1CaterkillerBodyInstance extends AbstractObjectInstance
             effectiveVel = -effectiveVel;
         }
 
-        int xPos24 = (currentX << 8) | (xSubpixel & 0xFF);
         int oldXWhole = currentX;
-        xPos24 += effectiveVel;
-        currentX = xPos24 >> 8;
-        xSubpixel = xPos24 & 0xFF;
+        motion.x = currentX;
+        motion.xVel = effectiveVel;
+        SubpixelMotion.moveX(motion);
+        currentX = motion.x;
 
         // swap d3 / cmp.w obX(a0),d3 / beq.s loc_16C64
         // If X didn't change, skip terrain following
@@ -260,8 +336,8 @@ public class Sonic1CaterkillerBodyInstance extends AbstractObjectInstance
             // Direction change marker ($80): reverse direction and advance ring buffer
             // REV01: neg.w obX+2(a0) / beq.s / btst #0 / beq.s / cmpi.w #-$C0 / bne.s
             writeRingBuffer(bufferIndex, yDelta);
-            xSubpixel = (-xSubpixel) & 0xFFFF;
-            if (xSubpixel != 0 && !facingLeft && xVelocity == -0xC0) {
+            motion.xSub = (-motion.xSub) & 0xFFFF;
+            if (motion.xSub != 0 && !facingLeft && xVelocity == -0xC0) {
                 // subq.w #1,obX(a0) - adjust when bit 0 = 1 (facing right)
                 currentX--;
                 ringBufferIndex = (ringBufferIndex + 1) & 0x0F;
@@ -310,18 +386,15 @@ public class Sonic1CaterkillerBodyInstance extends AbstractObjectInstance
      * From loc_16CC0 in disassembly.
      */
     private void updateFragment() {
-        // ObjectFall: apply velocity + gravity
-        int yPos24 = (currentY << 8) | (ySubpixel & 0xFF);
-        yPos24 += yVelocity;
-        currentY = yPos24 >> 8;
-        ySubpixel = yPos24 & 0xFF;
-
-        int xPos24 = (currentX << 8) | (xSubpixel & 0xFF);
-        xPos24 += xVelocity;
-        currentX = xPos24 >> 8;
-        xSubpixel = xPos24 & 0xFF;
-
-        yVelocity += GRAVITY;
+        // ObjectFall: apply velocity, then gravity (uses pre-gravity velocity for movement).
+        motion.x = currentX;
+        motion.y = currentY;
+        motion.xVel = xVelocity;
+        motion.yVel = yVelocity;
+        SubpixelMotion.moveSprite(motion, GRAVITY);
+        currentX = motion.x;
+        currentY = motion.y;
+        yVelocity = motion.yVel;
 
         // Floor bounce when falling (tst.w obVelY(a0) / bmi.s .nofloor)
         if (yVelocity >= 0) {
@@ -333,11 +406,12 @@ public class Sonic1CaterkillerBodyInstance extends AbstractObjectInstance
             }
         }
 
-        // loc_16CE0: tst.b obRender(a0) / bpl.w Cat_ChkGone
-        // ROM checks both X and Y via obRender on-screen flag.
-        if (!isOnScreen(160)) {
+        // loc_16CE0: tst.b obRender(a0) / bpl.w Cat_ChkGone.
+        if (!renderOnScreen) {
             markDestroyed();
+            return;
         }
+        updateCaterkillerRenderFlag();
     }
 
     /**
@@ -373,7 +447,7 @@ public class Sonic1CaterkillerBodyInstance extends AbstractObjectInstance
 
     @Override
     public int getCollisionFlags() {
-        if (destroyed || fragmenting) {
+        if (destroyed || deleting || fragmenting) {
             return 0; // No collision when destroyed or fragmenting
         }
         // S1 React_Caterkiller behavior: body contact hurts Sonic even while rolling.
@@ -417,13 +491,35 @@ public class Sonic1CaterkillerBodyInstance extends AbstractObjectInstance
         if (destroyed) {
             return false;
         }
-        if (fragmenting) {
-            // tst.b obRender(a0) / bpl.w Cat_ChkGone
-            // ROM checks both X and Y via obRender on-screen flag.
-            return isOnScreen(160);
+        if (deleting) {
+            return true;
         }
-        // Body segments persist as long as head exists
-        return !head.isDestroyed() && !head.isDeleting();
+        if (fragmenting) {
+            return renderOnScreen;
+        }
+        // Body segments persist as long as the head's slot is still live.
+        // ROM Cat_BodySeg1 .chkBroken detects the head's Cat_Despawn routine $A
+        // and branches to .delete, which (FixBugs=0 in REV01) sets the segment's
+        // own routine $A and FALLS THROUGH to DisplaySprite — so each body
+        // segment displays for the SAME frame the head sets routine $A, then
+        // deletes via Cat_Delete on the next frame, the same frame the head's
+        // own Cat_Delete runs. Head + bodies therefore DeleteObject together one
+        // frame after Cat_Despawn (docs/s1disasm/_incObj/78 Badnik -
+        // Caterkiller.asm:139-152,368-391).
+        //
+        // The head's off-screen Cat_Despawn maps to head.isDeleting() being true
+        // for one frame before head.isDestroyed(). Gating persistence on
+        // !head.isDeleting() here culled the off-screen body segments via the
+        // generic out_of_range pass one frame early (the frame the head set
+        // deleting, before this segment's own update() could latch its deferred
+        // delete), freeing their SST slots a frame ahead of the head. Persist
+        // while the head's slot is live; update() then latches this segment's
+        // own deferred delete so it frees on the same frame as the head.
+        return !head.isDestroyed();
+    }
+
+    private void updateCaterkillerRenderFlag() {
+        renderOnScreen = isWithinRenderSpriteBounds(RENDER_HALF_WIDTH, ASSUMED_RENDER_HALF_HEIGHT);
     }
 
     @Override

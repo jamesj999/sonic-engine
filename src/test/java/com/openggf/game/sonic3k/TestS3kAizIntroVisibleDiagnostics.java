@@ -1,7 +1,5 @@
 package com.openggf.game.sonic3k;
-
-import org.junit.Rule;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import com.openggf.camera.Camera;
 import com.openggf.game.GameServices;
 import com.openggf.game.sonic3k.objects.AizPlaneIntroInstance;
@@ -16,17 +14,12 @@ import com.openggf.sprites.managers.SpriteManager;
 import com.openggf.sprites.playable.Sonic;
 import com.openggf.tests.HeadlessTestRunner;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 @RequiresRom(SonicGame.SONIC_3K)
 public class TestS3kAizIntroVisibleDiagnostics {
-
-    @Rule
-    public RequiresRomRule romRule = new RequiresRomRule();
-
     @Test
     public void logVisibleChunkCoverageAcrossAizIntro() throws Exception {
         GraphicsManager.getInstance().initHeadless();
@@ -78,9 +71,9 @@ public class TestS3kAizIntroVisibleDiagnostics {
                     bgParallaxZeroBlocks512, bgParallaxZeroBlocks1024, bgParallaxZeroBlocks2048,
                     bgParallaxScroll[0], bgParallaxScroll[1],
                     backdrop.r & 0xFF, backdrop.g & 0xFF, backdrop.b & 0xFF));
-            assertEquals("No invalid FG chunk references at frame " + frame, 0, fgInvalid);
-            assertEquals("No invalid BG chunk references at frame " + frame, 0, bgInvalid);
-            assertEquals("No invalid BG parallax chunk references at frame " + frame, 0, bgParallaxInvalid);
+            assertEquals(0, fgInvalid, "No invalid FG chunk references at frame " + frame);
+            assertEquals(0, bgInvalid, "No invalid BG chunk references at frame " + frame);
+            assertEquals(0, bgParallaxInvalid, "No invalid BG parallax chunk references at frame " + frame);
             checkpointIndex++;
         }
     }
@@ -200,3 +193,5 @@ public class TestS3kAizIntroVisibleDiagnostics {
         return new int[]{min, max};
     }
 }
+
+

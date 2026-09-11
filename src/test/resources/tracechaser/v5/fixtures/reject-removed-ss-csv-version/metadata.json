@@ -1,0 +1,47 @@
+{
+  "act": 2,
+  "aux_schema_extras": [
+    "synthetic_contract_extension"
+  ],
+  "bizhawk_version": "2.11",
+  "bk2_frame_offset": 7,
+  "bonus_stage_type": "slot_machine",
+  "characters": [
+    "sonic",
+    "tails"
+  ],
+  "credits_demo_index": 4,
+  "credits_demo_slug": "synthetic-credits",
+  "fresh_load": true,
+  "game": "s2",
+  "genesis_core": "GPGX",
+  "input_source": "bk2",
+  "main_character": "sonic",
+  "notes": "synthetic contract only",
+  "pre_trace_osc_frames": 9,
+  "recorder": "native-bizhawk-headless",
+  "recorder_version": "3.0",
+  "recording_date": "2000-01-02T03:04:05Z",
+  "ring_floor_check_counter_phase": 6,
+  "rng_seed": "0x80000001",
+  "rom_checksum": "synthetic-no-rom",
+  "rom_zone_id": 131,
+  "route": "synthetic-route",
+  "run_id": "synthetic-run",
+  "segment_index": 6,
+  "sidekicks": [
+    "tails"
+  ],
+  "source_bk2": "synthetic-input.bk2",
+  "special_stage_index": 5,
+  "ss_csv_version": 1,
+  "start_x": "0x8001",
+  "start_y": "0x7ffe",
+  "trace_frame_count": 1,
+  "trace_profile": "complete_run",
+  "trace_schema": 5,
+  "trace_type": "level",
+  "v_int_run_count": 254,
+  "zone": "synthetic-zone",
+  "zone_id": 3
+}

@@ -5,6 +5,7 @@ import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractProjectileInstance;
 import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnCoordinateDefaultArgsRewindRecreatable;
 import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
@@ -27,7 +28,8 @@ import java.util.List;
  *   <li>Deleted when falling below level bottom boundary + $E0</li>
  * </ul>
  */
-public class Sonic1CrabmeatProjectileInstance extends AbstractProjectileInstance {
+public class Sonic1CrabmeatProjectileInstance extends AbstractProjectileInstance
+        implements SpawnCoordinateDefaultArgsRewindRecreatable {
 
     // Standard Mega Drive gravity: $38 subpixels/frame² (ObjectFall)
     private static final int GRAVITY = 0x38;
@@ -47,6 +49,8 @@ public class Sonic1CrabmeatProjectileInstance extends AbstractProjectileInstance
 
     private int animTimer;
     private int renderedFrame;
+    private int launchYVelocity;
+    private boolean initialized;
 
     /**
      * Creates a Crabmeat projectile.
@@ -61,24 +65,63 @@ public class Sonic1CrabmeatProjectileInstance extends AbstractProjectileInstance
     public Sonic1CrabmeatProjectileInstance(int x, int y, int xVel, int yVel,
             Sonic1CrabmeatBadnikInstance parent) {
         super(new ObjectSpawn(x, y, 0x1F, 0, 0, false, 0), "CrabmeatBall",
-                xVel, yVel, GRAVITY, COLLISION_SIZE_INDEX, BOTTOM_MARGIN);
+                xVel, 0, GRAVITY, COLLISION_SIZE_INDEX, BOTTOM_MARGIN);
+        this.launchYVelocity = yVel;
         this.animTimer = 0;
         this.renderedFrame = BALL_FRAME_1;
+        this.touchCollisionActive = false;
+        this.deferSameFrameUpdateAfterSpawn = true;
+        this.initialized = false;
+    }
+
+    private Sonic1CrabmeatProjectileInstance(int x, int y, int xVel, int yVel) {
+        this(x, y, xVel, yVel, null);
     }
 
     /**
-     * S1 ObjectFall order: gravity is applied BEFORE the move, not after.
-     * This differs from the S3K moveSprite convention (move-then-gravity).
+     * S1 ObjectFall: move position with the OLD velocity (X first, no gravity;
+     * then Y), and only AFTER the Y move add gravity to {@code obVelY} for the
+     * next frame. This is move-with-old-velocity-then-gravity, NOT
+     * gravity-then-move.
+     *
+     * <p>The previous implementation did {@code obVelY += gravity} BEFORE the
+     * move (integrating with the already-incremented velocity), so each frame
+     * the ball moved one $38 gravity-step less upward / more downward than the
+     * ROM. Over the projectile's arc that compounds into ~2px of Y drift, which
+     * pushed the engine ball into Sonic's ReactToItem reaction box and triggered
+     * a spurious hurt the ROM never produces (GHZ1 trace f1390).
+     *
+     * <p>ROM ObjectFall (docs/s1disasm/_incObj/sub ObjectFall.asm:5-19):
+     * <pre>
+     *     move.w  obVelX(a0),d0           ; OLD x velocity
+     *     ext.l d0 / asl.l #8,d0 / add.l d0,obX   ; X += old vel (16.16)
+     *     move.w  obVelY(a0),d0           ; OLD y velocity
+     *     addi.w  #$38,obVelY(a0)         ; gravity AFTER reading old velocity
+     *     ext.l d0 / asl.l #8,d0 / add.l d0,obY   ; Y += old vel (16.16)
+     * </pre>
+     * {@link SubpixelMotion#objectFallXY} implements exactly this ordering.
+     * Ball arc set up by Crab_BallMain/Crab_BallMove
+     * (docs/s1disasm/_incObj/1F Crabmeat.asm:187-219).
      */
     @Override
     protected void updateMotion() {
-        // ObjectFall: addi.w #$38,obVelY(a0) then SpeedToPos
-        motionState.yVel += gravity;
-        SubpixelMotion.moveSprite2(motionState);
+        if (!initialized) {
+            // Crab_BallMain sets obColType=$87 and obVelY=-$400 when routine 6
+            // first executes; Crab_Move.fire only seeds obID/routine/x/y/x_vel
+            // (docs/s1disasm/_incObj/1F Crabmeat.asm:80-100,187-201).
+            motionState.yVel = launchYVelocity;
+            initialized = true;
+        } else {
+            // ReactToItem gates on obRender bit 7, which only reflects a prior
+            // DisplaySprite/BuildSprites pass, not the same Crab_BallMain tick
+            // that first stores obColType=$87.
+            touchCollisionActive = true;
+        }
+        SubpixelMotion.objectFallXY(motionState, gravity);
     }
 
     @Override
-    protected void updateExtra(int frameCounter, PlayableEntity playerEntity) {
+    protected void updateExtra(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // Animate: alternate between ball frame 1 and 2 at speed 1
         animTimer++;

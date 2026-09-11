@@ -5,6 +5,8 @@ import com.openggf.camera.Camera;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -21,7 +23,7 @@ import java.util.logging.Logger;
  * Each frame scrolls left by the parent's scroll speed and animates.
  * Self-deletes when X < 0x60.
  */
-public class AizIntroWaveChild extends AbstractObjectInstance {
+public class AizIntroWaveChild extends AbstractObjectInstance implements RewindRecreatable {
     private static final Logger LOG = Logger.getLogger(AizIntroWaveChild.class.getName());
 
     /** X threshold below which the wave self-deletes. */
@@ -43,7 +45,6 @@ public class AizIntroWaveChild extends AbstractObjectInstance {
         5, 1,   // offset 12: frame 5, 2 ticks
         -1       // sentinel: delete
     };
-
     private final AizPlaneIntroInstance parent;
     private int currentX;
     private int currentY;
@@ -52,6 +53,8 @@ public class AizIntroWaveChild extends AbstractObjectInstance {
     private int animTimer;
     /** Current mapping frame to render. */
     private int mappingFrame;
+    /** ROM callback has replaced the routine with Go_Delete_Sprite. */
+    private boolean deleteRoutinePending;
 
     /**
      * @param spawn  spawn position for the wave
@@ -65,8 +68,15 @@ public class AizIntroWaveChild extends AbstractObjectInstance {
     }
 
     @Override
+    public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        AizPlaneIntroInstance liveParent = AizIntroRewindLinks.liveIntroParent(ctx);
+        return liveParent == null ? null : new AizIntroWaveChild(ctx.spawn(), liveParent);
+    }
+
+    @Override
     public int getPriorityBucket() {
-        return 3;
+        // ROM: loc_678A0 writes priority(a0) = $100.
+        return 2;
     }
 
     @Override
@@ -80,9 +90,18 @@ public class AizIntroWaveChild extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public boolean isPersistent() {
+        return true;
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) {
+            return;
+        }
+        if (deleteRoutinePending) {
+            setDestroyed(true);
             return;
         }
 
@@ -101,8 +120,10 @@ public class AizIntroWaveChild extends AbstractObjectInstance {
             // Advance to next animation entry
             animIndex += 2;
             if (animIndex >= ANIM_DATA.length || ANIM_DATA[animIndex] == -1) {
-                // Sentinel: delete sprite
-                setDestroyed(true);
+                // $F4 invokes the $34 callback, which writes Go_Delete_Sprite
+                // into the object routine. The slot remains occupied by that
+                // routine until its next object dispatch.
+                deleteRoutinePending = true;
                 return;
             }
             mappingFrame = ANIM_DATA[animIndex];
@@ -114,9 +135,13 @@ public class AizIntroWaveChild extends AbstractObjectInstance {
         return mappingFrame;
     }
 
+    boolean isDeleteRoutinePending() {
+        return deleteRoutinePending;
+    }
+
     @Override
     public void appendRenderCommands(List<GLCommand> commands) {
-        PatternSpriteRenderer renderer = AizIntroArtLoader.getIntroSpritesRenderer();
+        PatternSpriteRenderer renderer = AizIntroArtLoader.getIntroSpritesRenderer(services());
         if (renderer == null || !renderer.isReady()) return;
         // Screen-space coordinates use the ROM +128 sprite-table bias.
         int renderX = currentX;

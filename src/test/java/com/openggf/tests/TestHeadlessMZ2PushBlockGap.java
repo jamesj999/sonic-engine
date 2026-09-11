@@ -1,22 +1,20 @@
 package com.openggf.tests;
 
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import com.openggf.game.sonic1.objects.Sonic1PushBlockObjectInstance;
 import com.openggf.game.GameServices;
 import com.openggf.level.LevelManager;
 import com.openggf.level.objects.ObjectInstance;
 import com.openggf.sprites.playable.Sonic;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
 
 import java.util.Collection;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Regression test for MZ Act 2 push block gap.
@@ -38,24 +36,21 @@ public class TestHeadlessMZ2PushBlockGap {
 
     private static final int MAX_FRAMES = 600;
     private static final int MIN_FALL_DISTANCE = 32;
-
-    @ClassRule public static RequiresRomRule romRule = new RequiresRomRule();
-
     private static SharedLevel sharedLevel;
 
-    @BeforeClass
+    @BeforeAll
     public static void loadLevel() throws Exception {
         sharedLevel = SharedLevel.load(SonicGame.SONIC_1, ZONE_MZ, ACT_2);
     }
 
-    @AfterClass
+    @AfterAll
     public static void cleanup() {
         if (sharedLevel != null) sharedLevel.dispose();
     }
 
     private HeadlessTestFixture fixture;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         fixture = HeadlessTestFixture.builder()
                 .withSharedLevel(sharedLevel)
@@ -81,7 +76,7 @@ public class TestHeadlessMZ2PushBlockGap {
         }
 
         Sonic1PushBlockObjectInstance block = findNearestPushBlock(sprite);
-        assertNotNull("Should find a push block near Sonic", block);
+        assertNotNull(block, "Should find a push block near Sonic");
 
         int blockStartX = block.getX();
         int startY = sprite.getCentreY();
@@ -125,3 +120,5 @@ public class TestHeadlessMZ2PushBlockGap {
         return nearest;
     }
 }
+
+

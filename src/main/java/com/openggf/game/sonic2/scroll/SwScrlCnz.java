@@ -2,6 +2,7 @@ package com.openggf.game.sonic2.scroll;
 
 import com.openggf.level.scroll.AbstractZoneScrollHandler;
 import com.openggf.level.scroll.M68KMath;
+import com.openggf.level.scroll.compose.ScrollEffectComposer;
 
 /**
  * ROM-accurate implementation of SwScrl_CNZ (Casino Night Zone scroll routine).
@@ -41,6 +42,8 @@ public class SwScrlCnz extends AbstractZoneScrollHandler {
     // Loaded row heights (allow ROM override)
     private int[] rowHeights = DEFAULT_ROW_HEIGHTS;
 
+    private final ScrollEffectComposer composer = new ScrollEffectComposer();
+
     public SwScrlCnz(ParallaxTables tables) {
         this.tables = tables;
         // Load row heights from tables if available
@@ -67,12 +70,13 @@ public class SwScrlCnz extends AbstractZoneScrollHandler {
                        int actId) {
 
         resetScrollTracking();
+        composer.reset();
 
         // ==================== Step 1: Vertical Scroll ====================
         // CNZ: Camera_BG_Y_pos = Camera_Y_pos >>> 6 (unsigned logical shift)
         // Treat cameraY as 16-bit unsigned, then logical shift right 6
         int cameraBgYPos = (cameraY & 0xFFFF) >>> 6;
-        vscrollFactorBG = (short) cameraBgYPos;
+        composer.setVscrollFactorBG((short) cameraBgYPos);
 
         // ==================== Step 2: Generate 10 Scroll Values ====================
         generateScrollValues((short) cameraX);
@@ -112,20 +116,16 @@ public class SwScrlCnz extends AbstractZoneScrollHandler {
 
             if (height == 0) {
                 // Special rippling segment (16 lines)
-                fillRippleSegment(horizScrollBuf, currentLine, fgScroll,
+                fillRippleSegment(currentLine, fgScroll,
                         scrollValues[currentSegment], frameCounter);
                 currentLine += 16;
                 linesRemainingInSegment = 0;
             } else {
                 // Normal segment - use the scroll value for this segment
                 short bgScroll = M68KMath.negWord(scrollValues[currentSegment]);
-                int packed = M68KMath.packScrollWords(fgScroll, bgScroll);
-                trackOffset(fgScroll, bgScroll);
-
                 int linesToFill = Math.min(linesRemainingInSegment, M68KMath.VISIBLE_LINES - currentLine);
-                for (int i = 0; i < linesToFill; i++) {
-                    horizScrollBuf[currentLine++] = packed;
-                }
+                composer.fillPackedScrollWords(currentLine, linesToFill, fgScroll, bgScroll);
+                currentLine += linesToFill;
                 linesRemainingInSegment -= linesToFill;
             }
 
@@ -135,6 +135,11 @@ public class SwScrlCnz extends AbstractZoneScrollHandler {
                 linesRemainingInSegment = getSegmentHeight(currentSegment);
             }
         }
+
+        composer.copyPackedScrollWordsTo(horizScrollBuf);
+        vscrollFactorBG = composer.getVscrollFactorBG();
+        minScrollOffset = composer.getMinScrollOffset();
+        maxScrollOffset = composer.getMaxScrollOffset();
     }
 
     /**
@@ -222,13 +227,12 @@ public class SwScrlCnz extends AbstractZoneScrollHandler {
      * - Read signed byte from RippleData[idx + lineOffset]
      * - Add to base BG scroll
      *
-     * @param horizScrollBuf Output buffer
      * @param startLine Starting line index
      * @param fgScroll Foreground scroll value (constant)
      * @param baseScrollValue Base scroll value for this segment
      * @param frameCounter Current frame counter (Vint_runcount)
      */
-    private void fillRippleSegment(int[] horizScrollBuf, int startLine,
+    private void fillRippleSegment(int startLine,
                                     short fgScroll, short baseScrollValue,
                                     int frameCounter) {
         // Base background scroll (negated)
@@ -251,8 +255,7 @@ public class SwScrlCnz extends AbstractZoneScrollHandler {
 
             // Add ripple offset to BG scroll
             short bgScroll = (short) (baseBgScroll + rippleOffset);
-            horizScrollBuf[startLine + i] = M68KMath.packScrollWords(fgScroll, bgScroll);
-            trackOffset(fgScroll, bgScroll);
+            composer.writePackedScrollWord(startLine + i, fgScroll, bgScroll);
         }
     }
 

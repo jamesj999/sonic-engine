@@ -39,6 +39,10 @@ public class DisassemblySearchTool {
             "^(\\w+):\\s*$"
     );
 
+    private static final Pattern ASM_LABEL_PATTERN = Pattern.compile(
+            "^(\\w+):\\b.*$"
+    );
+
     // Offset table labels: "Offs_Foo:" standalone or "Offs_Foo: dc.w ..."
     private static final Pattern OFFSET_TABLE_PATTERN = Pattern.compile(
             "^(Offs_\\w+):(?:\\s+dc\\.w\\s+.*)?\\s*$"
@@ -331,15 +335,15 @@ public class DisassemblySearchTool {
                 Matcher standaloneMatcher = STANDALONE_LABEL_PATTERN.matcher(line);
                 if (standaloneMatcher.find()) {
                     String label = standaloneMatcher.group(1);
+                    if (matchLabel && label.toLowerCase().contains(pattern)) {
+                        results.add(new DisassemblySearchResult(
+                                label, null, CompressionType.ASSEMBLY_DATA,
+                                disasmRoot.relativize(asmFile).toString(),
+                                lineNumber, line.trim()
+                        ));
+                    }
                     if (label.startsWith("Offs_")) {
                         pendingLabel = null;
-                        if (matchLabel && label.toLowerCase().contains(pattern)) {
-                            results.add(new DisassemblySearchResult(
-                                    label, null, null,
-                                    disasmRoot.relativize(asmFile).toString(),
-                                    lineNumber, line.trim()
-                            ));
-                        }
                     } else {
                         pendingLabel = label;
                         pendingLabelLine = lineNumber;
@@ -357,6 +361,19 @@ public class DisassemblySearchTool {
                     if (matchLabel && label.toLowerCase().contains(pattern)) {
                         results.add(new DisassemblySearchResult(
                                 label, null, null,
+                                disasmRoot.relativize(asmFile).toString(),
+                                lineNumber, line.trim()
+                        ));
+                    }
+                    continue;
+                }
+
+                Matcher asmLabelMatcher = ASM_LABEL_PATTERN.matcher(line);
+                if (asmLabelMatcher.find()) {
+                    String label = asmLabelMatcher.group(1);
+                    if (matchLabel && label.toLowerCase().contains(pattern)) {
+                        results.add(new DisassemblySearchResult(
+                                label, null, CompressionType.ASSEMBLY_DATA,
                                 disasmRoot.relativize(asmFile).toString(),
                                 lineNumber, line.trim()
                         ));
@@ -508,15 +525,15 @@ public class DisassemblySearchTool {
                 Matcher standaloneMatcher = STANDALONE_LABEL_PATTERN.matcher(line);
                 if (standaloneMatcher.find()) {
                     String label = standaloneMatcher.group(1);
+                    if (pattern.isEmpty() || label.toLowerCase().contains(pattern)) {
+                        results.add(new DisassemblySearchResult(
+                                label, null, CompressionType.ASSEMBLY_DATA,
+                                disasmRoot.relativize(asmFile).toString(),
+                                lineNumber, line.trim()
+                        ));
+                    }
                     if (label.startsWith("Offs_")) {
                         pendingLabel = null;
-                        if (pattern.isEmpty() || label.toLowerCase().contains(pattern)) {
-                            results.add(new DisassemblySearchResult(
-                                    label, null, null,
-                                    disasmRoot.relativize(asmFile).toString(),
-                                    lineNumber, line.trim()
-                            ));
-                        }
                     } else {
                         pendingLabel = label;
                         pendingLabelLine = lineNumber;
@@ -534,6 +551,19 @@ public class DisassemblySearchTool {
                     if (pattern.isEmpty() || label.toLowerCase().contains(pattern)) {
                         results.add(new DisassemblySearchResult(
                                 label, null, null,
+                                disasmRoot.relativize(asmFile).toString(),
+                                lineNumber, line.trim()
+                        ));
+                    }
+                    continue;
+                }
+
+                Matcher asmLabelMatcher = ASM_LABEL_PATTERN.matcher(line);
+                if (asmLabelMatcher.find()) {
+                    String label = asmLabelMatcher.group(1);
+                    if (pattern.isEmpty() || label.toLowerCase().contains(pattern)) {
+                        results.add(new DisassemblySearchResult(
+                                label, null, CompressionType.ASSEMBLY_DATA,
                                 disasmRoot.relativize(asmFile).toString(),
                                 lineNumber, line.trim()
                         ));

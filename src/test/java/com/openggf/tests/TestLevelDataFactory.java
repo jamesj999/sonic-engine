@@ -1,11 +1,11 @@
 package com.openggf.tests;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import com.openggf.level.ChunkDesc;
 import com.openggf.level.LevelConstants;
 import com.openggf.tools.LevelDataFactory;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class TestLevelDataFactory {
     @Test
@@ -25,8 +25,11 @@ public class TestLevelDataFactory {
         }
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void testInvalidLength() {
-        LevelDataFactory.chunksFromSegaByteArray(new byte[10]);
+        assertThrows(IllegalArgumentException.class,
+                () -> LevelDataFactory.chunksFromSegaByteArray(new byte[10]));
     }
 }
+
+

@@ -29,7 +29,7 @@ public class BossStateContext {
 
     // Render flags
     public int renderFlags;
-    public int lastUpdatedFrame = -1;
+    public int lastUpdatedVIntRunCount = -1;
 
     // Hover/sine wave state
     public int sineCounter;

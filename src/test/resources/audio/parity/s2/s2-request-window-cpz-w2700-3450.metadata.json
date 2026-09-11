@@ -1,0 +1,115 @@
+{
+  "schema": "openggf.s2-request-oracle-audio-raw-fixture.v1",
+  "payload": "s2-request-window-cpz-w2700-3450.raw-v2.jsonl.gz",
+  "payload_schema": "openggf.s2-oracle-audio-raw.v2",
+  "source_schema": "openggf.s2-complete-run-audio-raw.v4",
+  "request_transfer_schema": "openggf.s2-preconsumption-request-transfer.v2",
+  "game": "s2",
+  "rom": {
+    "name": "Sonic 2 World REV01",
+    "sha1": "8bca5dcef1af3e00098666fd892dc1c2a76333f9",
+    "crc32": "7b905383"
+  },
+  "movie": {
+    "name": "s2-lvl-select-CPZ.bk2",
+    "path": "src/test/resources/traces/s2/cpz/s2-lvl-select-CPZ.bk2",
+    "sha256": "7e28cf822d5dbbe64646965cd857f264bf51d3349075af94db1a818cac7311e4",
+    "rows": 21103
+  },
+  "window": {
+    "first_row": 2700,
+    "exclusive_end": 3450,
+    "rows": 750,
+    "source_first_row": 2700,
+    "source_exclusive_end": 3450,
+    "request_transfers": 35,
+    "request_pc": {
+      "sfx": "0x10d6",
+      "music": "0x10c0"
+    },
+    "request_opcode": {
+      "sfx": "13801009",
+      "music": "13400008"
+    },
+    "notes": "The 750 rows around the CPZ level load of the committed CPZ level-select recording, a different route and a different zone's music epoch from the complete run. Recaptured for the two-site observer: the 33 SFX transfers are unchanged and the two additions come from sndDriverInput's music store at loc_10C0 (s2.asm:1302-1304). Row 2724 is 8Eh, the CPZ music load, which zCurSong takes one service later; row 3225 is B5h, the ring the hundred-ring milestone check plays through PlayMusic rather than PlaySound (:25913-25914), which the single-site observer could not see. Recaptured for the two-site observer: every transfer now carries an explicit site, and the music site observes the store at loc_10C0 (docs/s2disasm/s2.asm:1302-1304), which move.b D0,$09(A1,D1.w) at 0x10D6 never reaches. The capture is bounded to this window, so source_first_row and source_exclusive_end are the window's own bounds.",
+    "request_transfers_by_site": {
+      "sfx": 33,
+      "music": 2
+    }
+  },
+  "digests": {
+    "payload_gz_sha256": "ff14cfca0e21007f9070e5d363087186225ab79d202cfd6d21a8331ab72ebb73",
+    "payload_raw_sha256": "fdb8584555be79ce6d23dff7a8f9e8185e77506a5bc2d3f441b1b2c3791363aa",
+    "payload_raw_bytes": 98767497,
+    "payload_raw_lines": 753
+  },
+  "capture": {
+    "duplicate_capture_gate": "not applicable to this recapture: the payload is comparison-only reference data, republished from a single deterministic bounded capture whose attestation and capability digests are pinned here and in S2PublishedRequestWindows.",
+    "source_raw_sha256": "0db7b9611fc6f17d46d1b517137ac8f5b78ab8906d1bbd053da5cf575210f555",
+    "capture_paths": [
+      "<agent-scratch>/regen-cpz/s2-request-window.oracle-raw-v2.jsonl"
+    ],
+    "capture_paths_note": "Two distinct absent external paths under a session scratch root, outside the repository; recorded for provenance, not as a re-runnable location.",
+    "candidate_core_sha256": "04555797c284358fe96dd018feed82aa9d6d4eaddc3cce8e1282a2f4fd636ffa",
+    "observer_identity_sha256": "95188e3c2cbb433188bce06e995d497afd290246ee6123da6f0060a5463893e7",
+    "service_manifest_sha256": "ef8f8103c38d70e41cb09cb29751f56815a0401709dc509071aa514d614813a0",
+    "extractor_capability_sha256": "2b049fe1eb7cb572f9231b91894d317c644802df276c2f705c432ad17d890441",
+    "extractor_attestation_sha256": "269c1af6ee0e9806a889d1479583d9ae9c3450696855dc83c18a3d9ec5c1f712",
+    "producer_diff_note": "Reproduced from the command. Recapturing movie rows 2700 to 3450 of the CPZ level-select recording with run-s2-request-window.sh, driven by a core built from the observer patch at TraceChaser 7ebed3b5182cbb8f0f33384f09f0f79c75fac1a9, reproduced this window's raw-v3 digest 0db7b9611fc6f17d46d1b517137ac8f5b78ab8906d1bbd053da5cf575210f555 and, after extraction, this fixture's payload digest f1e068cba2fbd342eed5d1d7d784ac8bdecd72a0d6ed58db68aad0893c0d2cbf. The original capture predated the command and used the ABI-4 candidate observer core; the marker is now part of the shipped observer patch.",
+    "control_reproduction": "Rebuilding the apparatus and recapturing the original 10150-10900 window reproduced the published source raw-v3 digest dd8b427d4a9a407102be83442d04dd21ddebebe6c3c7f72a3e453b479f870f05 and, after extraction, the published payload digest a7d56fe71674d9f4a9307e6fb6078f7832409bb310916e808faf28b1e9426c2c with the published capability and attestation digests, so these windows come from a producer proven byte-identical to the one that made the first fixture.",
+    "extractor_capability": {
+      "schema": "openggf.s2-request-aware-raw-v3-capability.v1",
+      "production_bound": false,
+      "producer": "s2-complete-audio-request-candidate",
+      "rom_sha1": "8bca5dcef1af3e00098666fd892dc1c2a76333f9",
+      "bk2_sha256": "7e28cf822d5dbbe64646965cd857f264bf51d3349075af94db1a818cac7311e4",
+      "service_manifest_sha256": "ef8f8103c38d70e41cb09cb29751f56815a0401709dc509071aa514d614813a0",
+      "candidate_manifest_sha256": "858ee7905edd1d31ebf0aa0a71213382354ec735267dad556831ac5dac0b5e52",
+      "candidate_patch_sha256": "2e1d1e59175f7e544558088bae48c4f45ee78401dbf808a494182c2575767a0b",
+      "candidate_recipe_sha256": "50efba4fdcf4d3787ceb42192e15b16e614823b117feeb8c30590f1db0c855a6",
+      "candidate_profile_sha256": "2589688946774b5a8977d16b969ec72e510eca4069bf3e8a61c3fde66d2a0212",
+      "harness_executable_sha256": "ff32ccd094c9b848da3c0b8ad7ff2ac1c451154be2b6fbceae3200b4fcb7f00e",
+      "first_row": 2700,
+      "exclusive_end": 3450,
+      "window_first_row": 2700,
+      "window_exclusive_end": 3450,
+      "base_event_count": 427258,
+      "all_event_count": 427291,
+      "marker_event_count": 33,
+      "request_count": 35,
+      "base_event_sha256": "9f70604a90505bf352c79f7e896b150fd0983551a19b2c48af389b6889c6bf46",
+      "all_event_sha256": "89c93a5c59eda6c8a13c4ab1d7a1941a35ed7a6e648570695ab86c3a2d1a8e0e",
+      "marker_event_sha256": "ae67ae1e238c71fbc1e70f4f5a69f20248e885c3fd43fa3ba29c1abafd1d056d",
+      "request_sha256": "f35926b3323962e186a9f38cbf608baa13b8eb9e8568035b345f96a4dff35eba",
+      "max_request_occupancy": 1,
+      "override_resume_count": 0,
+      "override_resume_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "pcm_count": 0,
+      "pcm_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "cutoff_frontier_sha256": "bd27147a5b947ccb8189cdd5f6d95784bcd0dcdc37cfa79d953d27af352a3736",
+      "terminal_state_sha256": "03c0274f9c6ee1a007c6c1eae5dfc4dd8725e155ec055787d35f595dc2b3defb",
+      "digest_domains": {
+        "raw_sha256": "raw-file-bytes-v1",
+        "event_and_request_sha256": "compact-json-lf-v1",
+        "override_resume_sha256": "compact-json-lf-v1",
+        "pcm_sha256": "compact-json-lf-v1",
+        "cutoff_frontier_sha256": "compact-json-lf-v1",
+        "terminal_state_sha256": "decoded-z80-state-bytes-v1"
+      }
+    },
+    "tracechaser_commit": "4fb6d0802cc6ad27f07dd845a1b98ea84d2c7b0e",
+    "tracechaser_branch": "bugfix/ai-s2-request-window-producer",
+    "source_attestation": {
+      "schema": "openggf.s2-request-aware-raw-v3-attestation.v1",
+      "authority_id": "s2-request-candidate-unbound",
+      "raw_sha256": "ff3b4b75f1d80605ab0b1d5184c831f988810898a64f6fa2f3c46a0ca2ae7168",
+      "raw_byte_count": 98783406,
+      "status_count": 1,
+      "fault_count": 0,
+      "overflow_count": 0
+    }
+  },
+  "production_bound": false,
+  "production_bound_meaning": "The payload's own metadata line carries production_bound:false and that value is preserved verbatim. This fixture is a committed comparison reference and binds nothing to a production producer. Nothing here hydrates engine state: it is comparison-only, MEASUREMENT_ONLY at the gate.",
+  "notes": "Published 2026-09-04 alongside the original 10150-10900 window as part of widening the S2 driver-oracle coverage. Gate: TestS2WidenedRequestOracle, which reads this payload and compares it against the engine's own request projection driven from the committed recording."
+}

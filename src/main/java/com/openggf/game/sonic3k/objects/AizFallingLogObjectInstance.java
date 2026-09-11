@@ -2,12 +2,16 @@ package com.openggf.game.sonic3k.objects;
 
 import com.openggf.game.PlayableEntity;
 import com.openggf.game.sonic3k.Sonic3kObjectArtKeys;
-import com.openggf.game.sonic3k.Sonic3kLevelEventManager;
 import com.openggf.game.sonic3k.constants.Sonic3kZoneIds;
+import com.openggf.game.sonic3k.runtime.S3kRuntimeStates;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
+import com.openggf.level.objects.ObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.RomObjectCodePointerProvider;
 import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
@@ -35,7 +39,7 @@ import java.util.logging.Logger;
  * loc_2B5D4 (spawner loop), loc_2B6A0 (log falling), loc_2B6BC (log at water),
  * loc_2B6D8 (solid + draw), loc_2B72C (splash animation).
  */
-public class AizFallingLogObjectInstance extends AbstractObjectInstance {
+public class AizFallingLogObjectInstance extends AbstractObjectInstance implements RewindRecreatable {
 
     private static final Logger LOG = Logger.getLogger(AizFallingLogObjectInstance.class.getName());
 
@@ -58,10 +62,10 @@ public class AizFallingLogObjectInstance extends AbstractObjectInstance {
     // past initial state, indicating dynamic level changes are active.
     private static final int EVENT_TRIGGER_ROUTINE_THRESHOLD = 2;
 
-    private final int timingMask;   // $32(a0): AND mask for Level_frame_counter
-    private final int phaseOffset;  // $34(a0): added to frame counter before masking
-    private final int spawnX;
-    private final int spawnY;
+    private int timingMask;   // $32(a0): AND mask for Level_frame_counter
+    private int phaseOffset;  // $34(a0): added to frame counter before masking
+    private int spawnX;
+    private int spawnY;
     private String logArtKey;
     private String splashArtKey;
     private boolean initialized;
@@ -83,6 +87,11 @@ public class AizFallingLogObjectInstance extends AbstractObjectInstance {
         this.phaseOffset = ((subtype >> 4) & 0x0F) << shift;
     }
 
+    @Override
+    public AizFallingLogObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new AizFallingLogObjectInstance(ctx.spawn());
+    }
+
     /**
      * Checks the Level_trigger_array deletion condition.
      * ROM: Obj_AIZFallingLog checks x_pos == $26B0 or $2700, AND Level_trigger_array[0] != 0.
@@ -94,11 +103,9 @@ public class AizFallingLogObjectInstance extends AbstractObjectInstance {
             return false;
         }
         try {
-            Sonic3kLevelEventManager lem = (Sonic3kLevelEventManager) services().levelEventProvider();
-            if (lem != null) {
-                if (services().romZoneId() == Sonic3kZoneIds.ZONE_AIZ) {
-                    return lem.getEventRoutineFg() >= EVENT_TRIGGER_ROUTINE_THRESHOLD;
-                }
+            if (services().romZoneId() == Sonic3kZoneIds.ZONE_AIZ) {
+                var state = S3kRuntimeStates.currentAiz(services().zoneRuntimeRegistry()).orElse(null);
+                return state != null && state.getDynamicResizeRoutine() >= EVENT_TRIGGER_ROUTINE_THRESHOLD;
             }
         } catch (Exception e) {
             LOG.fine(() -> "AizFallingLogObjectInstance.shouldDeleteForIntro: " + e.getMessage());
@@ -130,7 +137,7 @@ public class AizFallingLogObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         ensureInitialized();
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) return;
@@ -141,9 +148,13 @@ public class AizFallingLogObjectInstance extends AbstractObjectInstance {
             return;
         }
 
-        // Spawner timing: (Level_frame_counter + phaseOffset) & timingMask == 0
-        // ROM: loc_2B5D4 (sonic3k.asm line 59918-59922)
-        if (((frameCounter + phaseOffset) & timingMask) != 0) {
+        // Spawner timing: (Level_frame_counter + phaseOffset) & timingMask == 0.
+        // ObjectManager passes its VBlank execution clock, but the ROM reads the
+        // independent Level_frame_counter here (sonic3k.asm:59918-59922). The
+        // LevelManager stores the previous completed frame until its late-frame
+        // update, so +1 is the value visible during Process_Sprites.
+        int levelFrameCounter = levelFrameCounterForSpawner(vIntRunCount);
+        if (((levelFrameCounter + phaseOffset) & timingMask) != 0) {
             return;
         }
 
@@ -154,6 +165,12 @@ public class AizFallingLogObjectInstance extends AbstractObjectInstance {
 
         spawnDynamicObject(log);
         spawnDynamicObject(splash);
+    }
+
+    protected int levelFrameCounterForSpawner(int fallbackFrameCounter) {
+        return services().levelManager() != null
+                ? services().levelManager().getFrameCounter()
+                : fallbackFrameCounter;
     }
 
     @Override
@@ -182,7 +199,23 @@ public class AizFallingLogObjectInstance extends AbstractObjectInstance {
      * ROM references: loc_2B6A0 (falling), loc_2B6BC (at water), loc_2B6D8 (solid+draw).
      */
     static class FallingLogChild extends AbstractObjectInstance
-            implements SolidObjectProvider, SolidObjectListener {
+            implements SolidObjectProvider, SolidObjectListener, RewindRecreatable, RomObjectCodePointerProvider {
+
+        /**
+         * Word 0 of this object's S3K SST holds its live ROM code pointer.
+         * ROM {@code Obj_AIZFallingLog} is installed from the S3K object pointer table at
+         * {@code $0002B586} (table read from the user-supplied ROM; the
+         * label is defined at docs/skdisasm/sonic3k.asm:59892).
+         * Its whole code block lies in one bank, so the HIGH word that
+         * {@code sub_13EFC} latches into {@code Tails_CPU_interact} and compares
+         * on the next off-screen on-object frame is {@code $0002}
+         * (docs/skdisasm/sonic3k.asm:26816-26843).
+         */
+        @Override
+        public int romObjectCodePointerHighWord() {
+            return 0x0002;
+        }
+
 
         // ROM: move.b #$18,width_pixels(a1)
         private static final int HALF_WIDTH = 0x18;
@@ -195,10 +228,8 @@ public class AizFallingLogObjectInstance extends AbstractObjectInstance {
         // ROM: every 4 frames toggle visibility (andi.b #3,d0)
         private static final int BOB_MASK = 3;
         // ROM: cmpi.w #$280,d0 — coarse range threshold for culling
-        private static final int COARSE_RANGE_THRESHOLD = 0x280;
-
         private static final SolidObjectParams SOLID_PARAMS =
-                new SolidObjectParams(HALF_WIDTH, HALF_HEIGHT, HALF_HEIGHT + 1);
+                SolidObjectParams.of(HALF_WIDTH, HALF_HEIGHT, HALF_HEIGHT);
 
         private static final int STATE_FALLING = 0;
         private static final int STATE_AT_WATER = 1;
@@ -208,8 +239,14 @@ public class AizFallingLogObjectInstance extends AbstractObjectInstance {
         private int state = STATE_FALLING;
         private int timer;
         private boolean bobHidden; // $36(a0) bit 0: toggled for visibility bob
-        private final String artKey;
+        // Un-final so the generic field capturer reapplies the captured value
+        // after the rewind recreate hook uses a best-effort placeholder.
+        private String artKey;
         private SplashChild linkedSplash;
+
+        FallingLogChild() {
+            this(0, 0, Sonic3kObjectArtKeys.AIZ1_FALLING_LOG);
+        }
 
         FallingLogChild(int x, int y, String artKey) {
             super(createDummySpawn(x, y), "FallingLogBody");
@@ -223,12 +260,28 @@ public class AizFallingLogObjectInstance extends AbstractObjectInstance {
         }
 
         @Override
+        public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+            ObjectSpawn spawn = ctx.spawn();
+            if (spawn == null) {
+                return null;
+            }
+            return new FallingLogChild(spawn.x(), spawn.y(), Sonic3kObjectArtKeys.AIZ1_FALLING_LOG);
+        }
+
+        @Override
         public SolidObjectParams getSolidParams() {
             return SOLID_PARAMS;
         }
 
         @Override
         public boolean isTopSolidOnly() {
+            return true;
+        }
+
+        @Override
+        public boolean rejectsZeroDistanceTopSolidLanding() {
+            // SolidObjectTop accepts only d0 in [-16,-1]. At exact contact,
+            // cmpi.w #-$10,d0 / blo rejects d0 == 0 before RideObject_SetRide.
             return true;
         }
 
@@ -259,7 +312,7 @@ public class AizFallingLogObjectInstance extends AbstractObjectInstance {
         }
 
         @Override
-        public void update(int frameCounter, PlayableEntity playerEntity) {
+        public void update(int vIntRunCount, PlayableEntity playerEntity) {
             AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
             if (isDestroyed()) return;
 
@@ -270,8 +323,7 @@ public class AizFallingLogObjectInstance extends AbstractObjectInstance {
 
             // ROM coarse range check (loc_2B6D8, sonic3k.asm lines 59994-59998):
             // andi.w #$FF80,d0 / sub.w (Camera_X_pos_coarse_back).w,d0 / cmpi.w #$280,d0
-            int coarse = (x & 0xFF80) - services().camera().getX();
-            if (coarse < 0 || coarse > COARSE_RANGE_THRESHOLD) {
+            if (!isInRangeAt(x)) {
                 destroyWithSplash();
                 return;
             }
@@ -350,7 +402,7 @@ public class AizFallingLogObjectInstance extends AbstractObjectInstance {
      * <p>
      * ROM reference: loc_2B72C (sonic3k.asm line 60024).
      */
-    static class SplashChild extends AbstractObjectInstance {
+    static class SplashChild extends AbstractObjectInstance implements RewindRecreatable {
 
         // ROM: move.w #$200,priority(a1) → bucket 4
         private static final int PRIORITY = 4;
@@ -358,18 +410,54 @@ public class AizFallingLogObjectInstance extends AbstractObjectInstance {
         private static final int FRAME_DELAY = 3;
         // ROM: andi.b #3,mapping_frame(a0) → 4 frames total
         private static final int FRAME_COUNT = 4;
-
-        private final FallingLogChild linkedLog;
-        private final String artKey;
+        private FallingLogChild linkedLog;
+        private String artKey;
         private int mappingFrame;
         // ROM: AllocateObjectAfterCurrent zeroes object RAM, so anim_frame_timer starts at 0.
         // First decrement goes to -1 (bpl fails), immediately advancing to frame 1.
         private int animTimer = 0;
 
+        SplashChild() {
+            this(new FallingLogChild(), Sonic3kObjectArtKeys.AIZ1_FALLING_LOG_SPLASH);
+        }
+
         SplashChild(FallingLogChild linkedLog, String artKey) {
             super(createDummySpawn(linkedLog.getX(), linkedLog.getY()), "FallingLogSplash");
             this.linkedLog = linkedLog;
             this.artKey = artKey;
+        }
+
+        @Override
+        public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+            FallingLogChild liveLog = findNearestLiveFallingLog(ctx);
+            if (liveLog == null) {
+                return null;
+            }
+            return new SplashChild(liveLog, Sonic3kObjectArtKeys.AIZ1_FALLING_LOG_SPLASH);
+        }
+
+        private static FallingLogChild findNearestLiveFallingLog(RewindRecreateContext ctx) {
+            if (ctx == null || ctx.objectServices() == null
+                    || ctx.objectServices().objectManager() == null) {
+                return null;
+            }
+            ObjectSpawn spawn = ctx.spawn();
+            int targetX = spawn != null ? spawn.x() : 0;
+            int targetY = spawn != null ? spawn.y() : 0;
+            FallingLogChild best = null;
+            long bestDistance = Long.MAX_VALUE;
+            for (ObjectInstance object : ctx.objectServices().objectManager().getActiveObjects()) {
+                if (object instanceof FallingLogChild log && !log.isDestroyed()) {
+                    long dx = (long) log.getX() - targetX;
+                    long dy = (long) log.getY() - targetY;
+                    long distance = dx * dx + dy * dy;
+                    if (distance < bestDistance) {
+                        best = log;
+                        bestDistance = distance;
+                    }
+                }
+            }
+            return best;
         }
 
         @Override
@@ -388,7 +476,7 @@ public class AizFallingLogObjectInstance extends AbstractObjectInstance {
         }
 
         @Override
-        public void update(int frameCounter, PlayableEntity playerEntity) {
+        public void update(int vIntRunCount, PlayableEntity playerEntity) {
             AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
             if (isDestroyed()) return;
 

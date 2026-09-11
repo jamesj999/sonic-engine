@@ -1,22 +1,20 @@
 package com.openggf.level.scroll;
 
-import com.openggf.game.RuntimeManager;
-import org.junit.After;
-import org.junit.Before;
+import com.openggf.tests.TestEnvironment;
+import com.openggf.game.session.SessionManager;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import com.openggf.game.sonic2.scroll.ParallaxTables;
 import com.openggf.game.sonic2.scroll.SwScrlMcz;
-import org.junit.Test;
-
+import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import com.openggf.game.sonic2.scroll.ParallaxTables;
 import com.openggf.game.sonic2.scroll.SwScrlMcz;
-
 import com.openggf.data.Rom;
 import com.openggf.game.sonic2.scroll.SwScrlMcz;
 import com.openggf.game.sonic2.scroll.ParallaxTables;
 import com.openggf.game.sonic2.scroll.SwScrlMcz;
-
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import com.openggf.game.sonic2.scroll.ParallaxTables;
 import com.openggf.game.sonic2.scroll.SwScrlMcz;
 import static com.openggf.level.scroll.M68KMath.*;
@@ -41,17 +39,17 @@ public class SwScrlMczTest {
             32, 19, 13, 48, 2, 2, 7, 7, 32, 18, 23, 37
     };
 
-    @Before
+    @BeforeEach
     public void setUp() throws IOException {
-        RuntimeManager.createGameplay();
+        TestEnvironment.activeGameplayMode();
         mockRom = new MockMczRom();
         ParallaxTables tables = new ParallaxTables(mockRom);
         handler = new SwScrlMcz(tables);
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
-        RuntimeManager.destroyCurrent();
+        SessionManager.clear();
     }
 
     // ==================== Row Heights Table Tests ====================
@@ -62,12 +60,12 @@ public class SwScrlMczTest {
         for (byte h : MCZ_ROW_HEIGHTS) {
             sum += (h & 0xFF);
         }
-        assertEquals("MCZ row heights must sum to 512 (one full cycle)", 512, sum);
+        assertEquals(512, sum, "MCZ row heights must sum to 512 (one full cycle)");
     }
 
     @Test
     public void testRowHeightsCount() {
-        assertEquals("MCZ must have exactly 24 row heights", 24, MCZ_ROW_HEIGHTS.length);
+        assertEquals(24, MCZ_ROW_HEIGHTS.length, "MCZ must have exactly 24 row heights");
     }
 
     // ==================== segScroll Generation Tests ====================
@@ -78,7 +76,7 @@ public class SwScrlMczTest {
 
         // At cameraX=0, all segment scroll values should be 0
         for (int i = 0; i < 24; i++) {
-            assertEquals("segScroll[" + i + "] at cameraX=0", 0, segScroll[i]);
+            assertEquals(0, segScroll[i], "segScroll[" + i + "] at cameraX=0");
         }
     }
 
@@ -99,10 +97,10 @@ public class SwScrlMczTest {
         // step9: accFixed = 589824, val = 9
 
         // Verify mapping:
-        assertEquals("segScroll[0] (step9, 0.9x)", 9, segScroll[0]);
-        assertEquals("segScroll[7] (step1, 0.1x)", 1, segScroll[7]);
-        assertEquals("segScroll[11] (step9, 0.9x)", 9, segScroll[11]);
-        assertEquals("segScroll[15] (step1, 0.1x)", 1, segScroll[15]);
+        assertEquals(9, segScroll[0], "segScroll[0] (step9, 0.9x)");
+        assertEquals(1, segScroll[7], "segScroll[7] (step1, 0.1x)");
+        assertEquals(9, segScroll[11], "segScroll[11] (step9, 0.9x)");
+        assertEquals(1, segScroll[15], "segScroll[15] (step1, 0.1x)");
     }
 
     @Test
@@ -118,7 +116,7 @@ public class SwScrlMczTest {
         };
 
         for (int i = 0; i < 24; i++) {
-            assertEquals("segScroll[" + i + "] at cameraX=256", expected[i], segScroll[i]);
+            assertEquals(expected[i], segScroll[i], "segScroll[" + i + "] at cameraX=256");
         }
     }
 
@@ -138,10 +136,10 @@ public class SwScrlMczTest {
         // step8: 52428800 >> 16 = 800
         // step9: 58982400 >> 16 = 900
 
-        assertEquals("segScroll[0] (step9)", 900, segScroll[0]);
-        assertEquals("segScroll[7] (step1)", 100, segScroll[7]);
-        assertEquals("segScroll[15] (step1)", 100, segScroll[15]);
-        assertEquals("segScroll[20] (step6)", 600, segScroll[20]);
+        assertEquals(900, segScroll[0], "segScroll[0] (step9)");
+        assertEquals(100, segScroll[7], "segScroll[7] (step1)");
+        assertEquals(100, segScroll[15], "segScroll[15] (step1)");
+        assertEquals(600, segScroll[20], "segScroll[20] (step6)");
     }
 
     // ==================== Per-Scanline Expansion Tests ====================
@@ -164,14 +162,14 @@ public class SwScrlMczTest {
         for (int i = 0; i < 37; i++) {
             short fg = unpackFG(hScroll[i]);
             short bg = unpackBG(hScroll[i]);
-            assertEquals("Line " + i + " FG", (short) -256, fg);
-            assertEquals("Line " + i + " BG", (short) -230, bg);
+            assertEquals((short) -256, fg, "Line " + i + " FG");
+            assertEquals((short) -230, bg, "Line " + i + " BG");
         }
 
         // Line 37 should be segment 1 (segScroll[1] = 204)
         // BG scroll = -256 + (256 - 204) = -204
         short bg37 = unpackBG(hScroll[37]);
-        assertEquals("Line 37 BG (segment 1)", (short) -204, bg37);
+        assertEquals((short) -204, bg37, "Line 37 BG (segment 1)");
     }
 
     @Test
@@ -185,14 +183,14 @@ public class SwScrlMczTest {
 
         handler.update(hScroll, cameraX, cameraY, 0, 0);
 
-        // At bgY=100, we need to find which segment we're in
+        // At bgY=100, we need to find which segment we're in.
         // Cumulative heights: 0-37(0), 37-60(1), 60-78(2), 78-85(3), 85-92(4),
         // 92-94(5), 94-96(6), 96-144(7)
-        // bgY=100 is in segment 7 (96-144), offset = 100 - 96 = 4 pixels into segment 7
-
-        // Verify the handler doesn't crash and produces reasonable output
-        assertNotNull("hScroll should not be null", hScroll);
-        assertTrue("hScroll[0] should be non-zero", hScroll[0] != 0 || cameraX == 0);
+        // bgY=100 is in segment 7 (96-144), offset = 100 - 96 = 4 pixels into segment 7.
+        // segScroll[7] = 25 at cameraX=256 (see testSegScrollAtCameraX256).
+        // BG = -cameraX + (cameraX - segScroll[7]) = -256 + (256 - 25) = -25.
+        short bg0 = unpackBG(hScroll[0]);
+        assertEquals((short) -25, bg0, "Line 0 BG at bgY=100 (segment 7)");
     }
 
     @Test
@@ -210,7 +208,7 @@ public class SwScrlMczTest {
         // Line 0 should be in segment 12
         short bg0 = unpackBG(hScroll[0]);
         // BG = -256 + (256 - 204) = -204
-        assertEquals("Line 0 BG at bgY=300", (short) -204, bg0);
+        assertEquals((short) -204, bg0, "Line 0 BG at bgY=300");
     }
 
     // ==================== BG Y Calculation Tests ====================
@@ -222,11 +220,11 @@ public class SwScrlMczTest {
         // Act 1: bgY = floor(cameraY / 3) - 320
         // Test cameraY = 960: bgY = 320 - 320 = 0
         handler.update(hScroll, 0, 960, 0, 0);
-        assertEquals("Act 1 bgY at cameraY=960", (short) 0, handler.getVscrollFactorBG());
+        assertEquals((short) 0, handler.getVscrollFactorBG(), "Act 1 bgY at cameraY=960");
 
         // Test cameraY = 1000: bgY = 333 - 320 = 13
         handler.update(hScroll, 0, 1000, 0, 0);
-        assertEquals("Act 1 bgY at cameraY=1000", (short) 13, handler.getVscrollFactorBG());
+        assertEquals((short) 13, handler.getVscrollFactorBG(), "Act 1 bgY at cameraY=1000");
     }
 
     @Test
@@ -236,11 +234,11 @@ public class SwScrlMczTest {
         // Act 2: bgY = floor(cameraY / 6) - 16
         // Test cameraY = 960: bgY = 160 - 16 = 144
         handler.update(hScroll, 0, 960, 0, 1);
-        assertEquals("Act 2 bgY at cameraY=960", (short) 144, handler.getVscrollFactorBG());
+        assertEquals((short) 144, handler.getVscrollFactorBG(), "Act 2 bgY at cameraY=960");
 
         // Test cameraY = 96: bgY = 16 - 16 = 0
         handler.update(hScroll, 0, 96, 0, 1);
-        assertEquals("Act 2 bgY at cameraY=96", (short) 0, handler.getVscrollFactorBG());
+        assertEquals((short) 0, handler.getVscrollFactorBG(), "Act 2 bgY at cameraY=96");
     }
 
     // ==================== Screen Shake Tests ====================
@@ -261,17 +259,17 @@ public class SwScrlMczTest {
         shakeHandler.update(hScroll, cameraX, cameraY, 10, 0); // frameCounter=10
 
         // vscrollFactorBG = bgY + rippleY = 0 + 5 = 5
-        assertEquals("Shake should affect vscrollFactorBG", (short) 5, shakeHandler.getVscrollFactorBG());
+        assertEquals((short) 5, shakeHandler.getVscrollFactorBG(), "Shake should affect vscrollFactorBG");
 
         // vscrollFactorFG = cameraY + rippleY = 960 + 5 = 965
-        assertEquals("Shake should affect vscrollFactorFG", (short) 965, shakeHandler.getVscrollFactorFG());
+        assertEquals((short) 965, shakeHandler.getVscrollFactorFG(), "Shake should affect vscrollFactorFG");
 
         // FG scroll = -(cameraX + rippleX) = -(100 + 3) = -103
         short fg = unpackFG(hScroll[0]);
-        assertEquals("Shake should affect FG scroll", (short) -103, fg);
+        assertEquals((short) -103, fg, "Shake should affect FG scroll");
 
         // getBgY should return raw bgY without ripple (for bgCamera update)
-        assertEquals("getBgY should return raw bgY without ripple", 0, shakeHandler.getBgY());
+        assertEquals(0, shakeHandler.getBgY(), "getBgY should return raw bgY without ripple");
     }
 
     // ==================== Segment Multiplier Mapping Tests ====================
@@ -290,11 +288,11 @@ public class SwScrlMczTest {
         // 15:0.1 16:0.2 17:0.3 18:0.4 19:0.5 20:0.6 21:0.7 22:0.8 23:0.9
 
         // At cameraX=1000, 0.1x should be 100, 0.9x should be 900
-        assertEquals("seg 0 should be 0.9x", 900, segScroll[0]);
-        assertEquals("seg 7 should be 0.1x", 100, segScroll[7]);
-        assertEquals("seg 11 should be 0.9x", 900, segScroll[11]);
-        assertEquals("seg 15 should be 0.1x", 100, segScroll[15]);
-        assertEquals("seg 20 should be 0.6x", 600, segScroll[20]);
+        assertEquals(900, segScroll[0], "seg 0 should be 0.9x");
+        assertEquals(100, segScroll[7], "seg 7 should be 0.1x");
+        assertEquals(900, segScroll[11], "seg 11 should be 0.9x");
+        assertEquals(100, segScroll[15], "seg 15 should be 0.1x");
+        assertEquals(600, segScroll[20], "seg 20 should be 0.6x");
     }
 
     // ==================== Mock ROM ====================
@@ -324,3 +322,5 @@ public class SwScrlMczTest {
         }
     }
 }
+
+

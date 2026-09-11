@@ -10,6 +10,9 @@ import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.ObjectTerrainUtils;
@@ -42,7 +45,7 @@ import java.util.List;
  * Collision: obColType = $87 (HURT category $80, size index $07)
  */
 public class Sonic1CannonballInstance extends AbstractObjectInstance
-        implements TouchResponseProvider {
+        implements TouchResponseProvider, RewindRecreatable {
 
     // --- Collision ---
     // From disassembly: move.b #$87,obColType(a0)
@@ -75,8 +78,8 @@ public class Sonic1CannonballInstance extends AbstractObjectInstance
     private int currentY;
     private int xVelocity;
     private int yVelocity;
-    private int xSubpixel;
-    private int ySubpixel;
+    /** Subpixel accumulators (xSub / ySub) for ROM-accurate 16:8 fixed-point integration. */
+    private final SubpixelMotion.State motion = new SubpixelMotion.State(0, 0, 0, 0, 0, 0);
     private int explosionTimer; // cbal_time (objoff_30)
     private int animTimer;      // obTimeFrame countdown
     private int currentFrame;   // obFrame: toggles between 4 and 5
@@ -98,8 +101,6 @@ public class Sonic1CannonballInstance extends AbstractObjectInstance
         this.currentY = y;
         this.xVelocity = xVel;
         this.yVelocity = 0;       // move.w #0,obVelY(a1)
-        this.xSubpixel = 0;
-        this.ySubpixel = 0;
 
         // cbal_time = subtype * 60 frames
         // From disassembly: moveq #0,d0 / move.b obSubtype(a0),d0 / mulu.w #60,d0
@@ -113,7 +114,13 @@ public class Sonic1CannonballInstance extends AbstractObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        ObjectSpawn spawn = ctx.spawn();
+        return new Sonic1CannonballInstance(spawn.x(), spawn.y(), 0, spawn.subtype());
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (destroyed) {
             return;
@@ -151,23 +158,29 @@ public class Sonic1CannonballInstance extends AbstractObjectInstance
      * </pre>
      */
     private void updateBounce() {
-        // ObjectFall: X += VelX, VelY += gravity, Y += VelY (gravity applied before move)
-        int xPos24 = (currentX << 8) | (xSubpixel & 0xFF);
-        xPos24 += xVelocity;
-        currentX = xPos24 >> 8;
-        xSubpixel = xPos24 & 0xFF;
-
-        // addi.w #$38,d0 / move.w d0,obVelY(a0) - gravity applied BEFORE Y movement
-        yVelocity += GRAVITY;
-        int yPos24 = (currentY << 8) | (ySubpixel & 0xFF);
-        yPos24 += yVelocity;
-        currentY = yPos24 >> 8;
-        ySubpixel = yPos24 & 0xFF;
+        // ROM ObjectFall (_incObj/sub ObjectFall & SpeedToPos.asm:8-23): X moves with
+        // x_vel (no gravity), then Y moves with the OLD y_vel and gravity is added to
+        // y_vel afterwards (one-frame delayed gravity). The previous manual
+        // pre-increment applied gravity BEFORE the Y move, making the cannonball fall
+        // one gravity-step too fast each frame and arrive ~2 frames early / 12px off
+        // its bounce arc (SBZ1 f6081 cannonball hit 2 frames early).
+        // motion is a persistent field; its xSub/ySub accumulators carry across frames.
+        motion.x = currentX;
+        motion.y = currentY;
+        motion.xVel = xVelocity;
+        motion.yVel = yVelocity;
+        SubpixelMotion.objectFallXY(motion, GRAVITY);
+        currentX = motion.x;
+        currentY = motion.y;
+        yVelocity = (short) motion.yVel;
 
         // tst.w obVelY(a0) / bmi.s Cbal_ChkExplode (tests POST-gravity velocity)
         if (yVelocity >= 0) {
             // Only check floor when moving downward
-            TerrainCheckResult floorResult = ObjectTerrainUtils.checkFloorDist(currentX, currentY, 7);
+            // ObjFloorDist returns the angle after FindFloor applies the chunk's H/V flips.
+            // Cannonball consumes the sign of d3 to choose its horizontal bounce direction.
+            TerrainCheckResult floorResult = ObjectTerrainUtils.checkFloorDistWithFlipAwareAngle(
+                    currentX, currentY, 7);
 
             // tst.w d1 / bpl.s Cbal_ChkExplode
             if (floorResult.foundSurface() && floorResult.distance() < 0) {
@@ -245,16 +258,14 @@ public class Sonic1CannonballInstance extends AbstractObjectInstance
         destroyed = true;
         setDestroyed(true);
 
-        var objectManager = services().objectManager();
-        if (objectManager == null) {
+        if (services().objectManager() == null) {
             return;
         }
 
         // Spawn bomb explosion (object $3F)
-        ExplosionObjectInstance explosion = new ExplosionObjectInstance(
+        spawnFreeChild(() -> new ExplosionObjectInstance(
                 0x3F, currentX, currentY,
-                services().renderManager());
-        objectManager.addDynamicObject(explosion);
+                services().renderManager()));
 
         // sfx_Bomb = $C4 = BOSS_EXPLOSION
         services().playSfx(Sonic1Sfx.BOSS_EXPLOSION.id);

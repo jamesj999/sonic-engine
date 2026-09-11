@@ -62,6 +62,36 @@ public final class S1SpriteDataLoader {
     }
 
     /**
+     * Loads S1-format sprite mappings whose offset table may reference shared
+     * frames before the table with signed word offsets.
+     */
+    public static List<SpriteMappingFrame> loadMappingFramesWithSignedOffsets(
+            RomByteReader reader, int mappingAddr) {
+        int firstOffset = reader.readU16BE(mappingAddr);
+        int frameCount = firstOffset / 2;
+        if (frameCount <= 0 || frameCount > 512) {
+            throw new IllegalArgumentException(String.format(
+                    "S1 mapping table at 0x%X has implausible frame count %d (first word=0x%04X) - wrong address?",
+                    mappingAddr, frameCount, firstOffset));
+        }
+        return loadMappingFramesWithSignedOffsets(reader, mappingAddr, frameCount);
+    }
+
+    /**
+     * Loads S1-format sprite mappings with signed word offsets.
+     */
+    public static List<SpriteMappingFrame> loadMappingFramesWithSignedOffsets(
+            RomByteReader reader, int mappingAddr, int frameCount) {
+        List<SpriteMappingFrame> frames = new ArrayList<>(frameCount);
+        for (int i = 0; i < frameCount; i++) {
+            int frameOffset = (short) reader.readU16BE(mappingAddr + i * 2);
+            int frameAddr = mappingAddr + frameOffset;
+            frames.add(loadMappingFrameAt(reader, frameAddr));
+        }
+        return frames;
+    }
+
+    /**
      * Loads S1-format sprite mappings with an explicit frame count.
      *
      * <p>S1 format (SonicMappingsVer=1):
@@ -81,34 +111,37 @@ public final class S1SpriteDataLoader {
         for (int i = 0; i < frameCount; i++) {
             int frameOffset = reader.readU16BE(mappingAddr + i * 2);
             int frameAddr = mappingAddr + frameOffset;
-            int pieceCount = reader.readU8(frameAddr);
-            frameAddr += 1;
-
-            List<SpriteMappingPiece> pieces = new ArrayList<>(pieceCount);
-            for (int p = 0; p < pieceCount; p++) {
-                int yOffset = (byte) reader.readU8(frameAddr);     // signed byte
-                int size = reader.readU8(frameAddr + 1);
-                int tileHi = reader.readU8(frameAddr + 2);
-                int tileLo = reader.readU8(frameAddr + 3);
-                int xOffset = (byte) reader.readU8(frameAddr + 4); // signed byte
-                frameAddr += 5;
-
-                int widthTiles = ((size >> 2) & 0x3) + 1;
-                int heightTiles = (size & 0x3) + 1;
-
-                int tileWord = (tileHi << 8) | tileLo;
-                int tileIndex = tileWord & 0x7FF;
-                boolean hFlip = (tileWord & 0x800) != 0;
-                boolean vFlip = (tileWord & 0x1000) != 0;
-                int paletteIndex = (tileWord >> 13) & 0x3;
-
-                pieces.add(new SpriteMappingPiece(
-                        xOffset, yOffset, widthTiles, heightTiles,
-                        tileIndex, hFlip, vFlip, paletteIndex));
-            }
-            frames.add(new SpriteMappingFrame(pieces));
+            frames.add(loadMappingFrameAt(reader, frameAddr));
         }
         return frames;
+    }
+
+    private static SpriteMappingFrame loadMappingFrameAt(RomByteReader reader, int frameAddr) {
+        int pieceCount = reader.readU8(frameAddr);
+        frameAddr += 1;
+
+        List<SpriteMappingPiece> pieces = new ArrayList<>(pieceCount);
+        for (int p = 0; p < pieceCount; p++) {
+            int yOffset = (byte) reader.readU8(frameAddr);
+            int size = reader.readU8(frameAddr + 1);
+            int tileHi = reader.readU8(frameAddr + 2);
+            int tileLo = reader.readU8(frameAddr + 3);
+            int xOffset = (byte) reader.readU8(frameAddr + 4);
+            frameAddr += 5;
+
+            int widthTiles = ((size >> 2) & 0x3) + 1;
+            int heightTiles = (size & 0x3) + 1;
+
+            int tileWord = (tileHi << 8) | tileLo;
+            pieces.add(new SpriteMappingPiece(
+                    xOffset, yOffset, widthTiles, heightTiles,
+                    tileWord & 0x7FF,
+                    (tileWord & 0x800) != 0,
+                    (tileWord & 0x1000) != 0,
+                    (tileWord >> 13) & 0x3,
+                    (tileWord & 0x8000) != 0));
+        }
+        return new SpriteMappingFrame(pieces);
     }
 
     /**

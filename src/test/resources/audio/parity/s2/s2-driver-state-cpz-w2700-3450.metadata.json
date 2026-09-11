@@ -1,0 +1,59 @@
+{
+  "schema": "openggf.s2_audio_driver_state_reference_fixture.v1",
+  "reference": "s2-driver-state-cpz-w2700-3450.reference-v2.jsonl.gz",
+  "reference_gzip_sha256": "8b70ba61c9727323a0470169c14f915aa205f1f04802a2fbb228f1f12893a90a",
+  "reference_uncompressed_sha256": "af5ec3e65137d3cc1670433b368247dcf25440cc8ea2a7ebf7478c6ddc680bd7",
+  "payload_schema": "openggf.s2-driver-state-reference.v2",
+  "rom": {
+    "name": "Sonic 2 World REV01",
+    "sha1": "8bca5dcef1af3e00098666fd892dc1c2a76333f9",
+    "crc32": "7b905383"
+  },
+  "movie": {
+    "name": "s2-lvl-select-CPZ.bk2",
+    "path": "src/test/resources/traces/s2/cpz/s2-lvl-select-CPZ.bk2",
+    "sha256": "7e28cf822d5dbbe64646965cd857f264bf51d3349075af94db1a818cac7311e4",
+    "rows": 21103
+  },
+  "window": {
+    "first_row": 2700,
+    "exclusive_end": 3450,
+    "frames": 750
+  },
+  "ticks": 744,
+  "write_count": 94990,
+  "frame_shape": {
+    "frames": 750,
+    "ticks": 744,
+    "zero_service_frames": 6,
+    "multi_service_frames": 0
+  },
+  "why_this_window": "The second S2 driver-state recording, and deliberately not another span of the complete-emeralds run: a different movie, a different zone and a different song. The CPZ level load is inside it. zCurSong moves from 91h to 8Eh at the service ending on row 2725 and the loaded song's own header tempo EEh reaches zAbsVar.TempoMod on the next one (s2.sounddriver.asm:1817-1826), so the load spans two services here where the EHZ window's fits inside one; the Saxman decompression overruns its frame.",
+  "engine_music_id": "The ROM request id 8Eh is engine id 8Ch, Chemical Plant Zone. The two are not a fixed distance apart -- EHZ is driver 82h against engine 81h -- so the id was settled by matching the song's stored header tempo EEh against every loadable id rather than by assuming a shift.",
+  "request_sidecar": "s2-request-window-cpz-w2700-3450.raw-v2.jsonl.gz, already committed for this same movie and span. The driver-state payload's own pre-consumption markers carry no sound id, so the sidecar's 33 request transfers supply the SFX ids as engine stimuli.",
+  "sampling": "driver RAM 12FEh..2000h captured by the observer core as a completion snapshot on the driver's own service boundaries, identical in shape and bounds to the committed w10150-12400 reference.",
+  "observer": {
+    "patch": "0001-buffer-z80-audio-events",
+    "core_compressed_sha256": "25ee305d8bcac2567d60fd04c14238784ddd018808d4dafe7d5ef2b8372677b6",
+    "core_decompressed_sha256": "177fb4b04e73fa12edc2fdcb097d6f11a8850a8cdf86fabeaaf8b374d62e4464",
+    "build_id": "9ded8f477abe193d",
+    "observer_identity_sha256": "95188e3c2cbb433188bce06e995d497afd290246ee6123da6f0060a5463893e7",
+    "lock": "tools/tracechaser/bizhawk-headless/native/gpgx-audio-observer/artifact-lock.json",
+    "manifest": "fixtures/gpgx-audio-service-manifest-s2-oracle-v2.json (game s2)",
+    "manifest_sha256": "3f37de6751229f3b9ff1d93f78b3b370e316c0e936b10fdfd3db88b5fd57ab99",
+    "tracechaser_producer_commit": "24b009fa99f301724080517e84f5009c7b6f05c0",
+    "core_provenance": "The core was not rebuilt for this capture. The build the widen lane produced was checked against artifact-lock.json on all four values -- compressed digest, decompressed digest, build id and observer identity -- and installed beside the stock distribution."
+  },
+  "capture_command": "tools/tracechaser/bizhawk-headless/run-s2-request-window.sh --request-window-mode driver-state --rom <s2.gen> --movie <s2-lvl-select-CPZ.bk2> --movie-sha256 7e28cf822d5dbbe64646965cd857f264bf51d3349075af94db1a818cac7311e4 --service-manifest fixtures/gpgx-audio-service-manifest-s2-oracle-v2.json --bizhawk-home <observer install> --first-row 2700 --exclusive-end 3450 --output <absent file>",
+  "duplicate_capture": "met: two serial captures to distinct absent external paths, byte-identical at sha256 af5ec3e65137d3cc1670433b368247dcf25440cc8ea2a7ebf7478c6ddc680bd7",
+  "postprocess": "gzip -9 -n",
+  "production_bound": false,
+  "production_bound_meaning": "Comparison-only reference data. Nothing here hydrates engine state and no compared value comes from this file; the engine produces every value it is checked against. The sidecar's request ids are stimuli the recording's own 68k issued, never a compared value.",
+  "measurement": {
+    "gate": "TestS2CpzDriverStateOracle#driverStateComparesAcrossTheCpzWindow",
+    "anchor": "driver state, never a row: the first service whose zCurSong is 8Eh and whose music tracks are playing.",
+    "state_only": "MATCH (720 ticks)",
+    "state_and_writes": "DIVERGENCE at tick 237 (movie row 2968), field writes[4], reference ym1[0xb1]=0x4 against the engine's ym1[0xb0]=0x4; 36 of 719 ticks divergent.",
+    "write_comparison_offset": "The writes are compared from the first wholly post-load service onwards, one later than the state. This window's load spans two services, so the anchored service still carries the tail of zBGMLoad's writes, while the engine capture emits its load burst as one block and drains it. Where the two halves of a split load land is a capture-window property rather than driver behaviour."
+  }
+}

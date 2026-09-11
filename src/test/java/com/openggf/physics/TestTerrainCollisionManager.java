@@ -1,24 +1,24 @@
 package com.openggf.physics;
 
-import com.openggf.game.RuntimeManager;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import com.openggf.tests.TestEnvironment;
+import com.openggf.game.session.SessionManager;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import com.openggf.game.GameServices;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
-
-import static org.junit.Assert.assertSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 public class TestTerrainCollisionManager {
 
-    @Before
+    @BeforeEach
     public void setUp() {
-        RuntimeManager.createGameplay();
+        TestEnvironment.activeGameplayMode();
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
-        RuntimeManager.destroyCurrent();
+        SessionManager.clear();
     }
 
     @Test
@@ -64,3 +64,5 @@ public class TestTerrainCollisionManager {
         }
     }
 }
+
+

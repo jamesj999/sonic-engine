@@ -23,6 +23,10 @@ public final class Sonic1Constants {
     public static final int LEVEL_HEADERS_ADDR    = 0x1DD16; // 16 bytes per zone header
     public static final int LEVEL_INDEX_ADDR      = 0x68B96; // Layout offset table
     public static final int OBJ_POS_INDEX_ADDR    = 0x6B000; // Object placement index
+    public static final int OBJ_POS_LZ_PLATFORM_INDEX_ADDR = OBJ_POS_INDEX_ADDR + 0x70;
+    public static final int OBJ_POS_SBZ_PLATFORM_INDEX_ADDR = OBJ_POS_INDEX_ADDR + 0x80;
+    public static final int LZ_CONVEYOR_PATH_TABLE_ADDR = 0x12CBC; // LCon_Data pointer table
+    public static final int SBZ_SPIN_CONVEYOR_PATH_TABLE_ADDR = 0x16C0E; // SpinC_Data pointer table
     public static final int START_LOC_ARRAY_ADDR  = 0x0611E; // Start positions (4 bytes per act)
 
     // ---- Level size / boundary array ----
@@ -56,6 +60,7 @@ public final class Sonic1Constants {
     //   dc.l rom_address, dc.w vram_byte_offset
     // Divide vram_byte_offset by 0x20 to get tile index.
     public static final int ART_LOAD_CUES_ADDR = 0x01DD86;
+    public static final int ART_LOAD_CUES_ENTRY_COUNT = 32;
 
     // Per-zone art addresses (patterns, 16x16, 256x256) are read dynamically
     // from LevelHeaders at runtime - no need for per-zone constants here.
@@ -85,12 +90,110 @@ public final class Sonic1Constants {
     // ---- Object sprite mapping addresses (S1 format, verified via ROM binary pattern search) ----
     public static final int MAP_LAMPPOST_ADDR    = 0x0178A4; // Map_Lamp (Obj79: 4 frames)
     public static final int MAP_SIGNPOST_ADDR    = 0x00F3C4; // Map_Sign (Obj0D: 5 frames)
+    public static final int MAP_END_EMERALDS_ADDR = 0x005788; // Map_ECha (Obj88: 7 frames)
+    public static final int MAP_END_SONIC_ADDR   = 0x00568E; // Map_ESon (Obj87: 8 frames)
+    public static final int MAP_END_STH_ADDR     = 0x0057C0; // Map_ESth (Obj89: 1 frame)
     public static final int MAP_PURPLE_ROCK_ADDR = 0x00D79C; // Map_PRock (Obj3B: 2 frames)
     public static final int MAP_CHOPPER_ADDR     = 0x00B254; // Map_Chop (Obj2B: 2 frames)
+    public static final int MAP_JAWS_ADDR        = 0x00B2FA; // Map_Jaws (Obj2C: 4 frames)
+    public static final int MAP_BURROBOT_ADDR    = 0x00B4E6; // Map_Burro (Obj2D: 7 frames)
+    public static final int MAP_FIREBALL_ADDR    = 0x00B9F8; // Map_Fire (Obj14/35/74: 6 frames)
+    public static final int MAP_MZ_LARGE_GRASSY_PLATFORM_ADDR = 0x00B95E; // Map_LGrass (Obj2F: 3 frames)
+    public static final int MAP_MZ_GLASS_ADDR    = 0x00BC84; // Map_Glass (Obj30: 3 frames)
+    public static final int MAP_MZ_CHAINED_STOMPER_ADDR = 0x00C1D8; // Map_CStom (Obj31: 11 frames)
+    public static final int MAP_BUTTON_ADDR      = 0x00C52E; // Map_But (Obj32/Obj82: 4 frames)
+    public static final int MAP_PUSH_BLOCK_ADDR  = 0x00C970; // Map_Push (Obj33: 2 frames)
+    public static final int MAP_MZ_SMASH_BLOCK_ADDR = 0x010460; // Map_Smab (Obj51: 2 frames)
+    public static final int MAP_MZ_SBZ_MOVING_BLOCK_ADDR = 0x0106D6; // Map_MBlock (Obj52 MZ/SBZ: 5 frames)
+    public static final int MAP_LZ_MOVING_BLOCK_ADDR = 0x01072C; // Map_MBlockLZ (Obj52 LZ: 1 frame)
+    public static final int MAP_SMASH_ADDR       = 0x00D944; // Map_Smash (Obj2D: 3 frames)
+    public static final int MAP_SBZ_FLAMETHROWER_ADDR = 0x00EC82; // Map_Flame (Obj6D: 22 frames)
+    public static final int MAP_SYZ_BUMPER_ADDR  = 0x00F18C; // Map_Bump (Obj47: 3 frames)
+    public static final int MAP_MZ_LAVA_GEYSER_ADDR = 0x00F8D6; // Map_Geyser (Obj4C/4D: 20 frames)
+    public static final int MAP_MZ_LAVA_WALL_ADDR = 0x00FBBA; // Map_LWall (Obj4E: 5 frames)
+    public static final int MAP_MOTOBUG_ADDR     = 0x00FE2C; // Map_Moto (Obj40: 7 frames)
+    public static final int MAP_YADRIN_ADDR      = 0x00FFBA; // Map_Yad (Obj50: 6 frames)
+    public static final int MAP_LZ_FLAPPING_DOOR_ADDR = 0x011AC6; // Map_Flap (Obj0C: 3 frames)
     public static final int MAP_GHZ_EDGE_WALL_ADDR = 0x00E8DF; // Map_Edge (Obj44: 3 frames)
+    public static final int MAP_MZ_BRICK_ADDR  = 0x00EF90; // Map_Brick (Obj46: 1 frame)
+    public static final int MAP_SYZ_SPINNING_LIGHT_ADDR = 0x00F00E; // Map_Light (Obj12: 6 frames)
     public static final int MAP_BRIDGE_ADDR      = 0x007FB2; // Map_Bri (Obj11: 3 frames)
+    public static final int MAP_SWING_GHZ_ADDR   = 0x0082C6; // Map_Swing_GHZ (Obj15/48: 3 frames)
+    public static final int MAP_SWING_SLZ_ADDR   = 0x0082E4; // Map_Swing_SLZ (Obj15: 3 frames)
+    public static final int MAP_SPIKED_POLE_HELIX_ADDR = 0x008476; // Map_Hel (Obj17: 8 frames)
+    public static final int MAP_GIANT_BALL_ADDR  = 0x008828; // Map_GBall (Obj15 GHZ subtype $1X: 4 frames)
+    public static final int MAP_PLATFORM_GHZ_ADDR = 0x0087BA; // Map_Plat_GHZ (Obj18: 2 frames)
+    public static final int MAP_PLATFORM_SYZ_ADDR = 0x008806; // Map_Plat_SYZ (Obj18: 1 frame)
+    public static final int MAP_PLATFORM_SLZ_ADDR = 0x008818; // Map_Plat_SLZ (Obj18: 1 frame)
+    public static final int MAP_COLLAPSING_LEDGE_ADDR = 0x008C1E; // Map_Ledge (Obj1A: 4 frames)
+    public static final int MAP_COLLAPSING_FLOOR_ADDR = 0x008DC4; // Map_CFlo (Obj53: 4 frames)
+    public static final int MAP_SCENERY_ADDR     = 0x008ED4; // Map_Scen (Obj1C: 1 frame)
+    public static final int MAP_SBZ_SMALL_DOOR_ADDR = 0x00906A; // Map_ADoor (Obj2A: 9 frames)
+    public static final int MAP_BALL_HOG_ADDR    = 0x0094E0; // Map_Hog (Obj1E/20: 6 frames)
+    public static final int MAP_EXPLOSION_ADDR   = 0x009544; // Map_ExplodeItem (Obj24/27/3F: 5 frames)
+    public static final int MAP_ANIMAL1_ADDR     = 0x009AE4; // Map_Animal1 (Obj28/ending animals: 3 frames)
+    public static final int MAP_ANIMAL2_ADDR     = 0x009AFC; // Map_Animal2 (Obj28/ending animals: 3 frames)
+    public static final int MAP_ANIMAL3_ADDR     = 0x009B14; // Map_Animal3 (Obj28/ending animals: 3 frames)
+    public static final int MAP_POINTS_ADDR      = 0x009B2C; // Map_Poi (Obj29: 7 frames)
+    public static final int MAP_CRABMEAT_ADDR    = 0x009DCE; // Map_Crab (Obj1F: 7 frames)
+    public static final int MAP_BUZZ_BOMBER_ADDR = 0x00A0B4; // Map_Buzz (Obj22: 6 frames)
+    public static final int MAP_BUZZ_MISSILE_ADDR = 0x00A184; // Map_Missile (Obj23: 4 frames)
+    public static final int MAP_GIANT_RING_ADDR  = 0x00A654; // Map_GRing (Obj4B: 4 frames)
+    public static final int MAP_GIANT_RING_FLASH_ADDR = 0x00A6F6; // Map_Flash (Obj7C: 8 frames)
+    public static final int MAP_SHIELD_ADDR      = 0x014B1A; // Map_Shield (Obj38: shield + invincibility stars)
+    public static final int MAP_UNUSED_EXPLOSION_ADDR = 0x009524; // Map_UnkExplode (Obj24: 4 frames)
     public static final int MAP_SPIKE_ADDR       = 0x00D676; // Map_Spike (Obj36: 6 frames)
     public static final int MAP_MONITOR_ADDR     = 0x00AC14; // Map_Monitor (Obj26: 12 frames)
+    public static final int MAP_SPRING_ADDR      = 0x00E3A8; // Map_Spring (Obj41: 6 frames)
+    public static final int MAP_NEWTRON_ADDR     = 0x00E5D0; // Map_Newt (Obj42: 11 frames)
+    public static final int MAP_ROLLER_ADDR      = 0x00E830; // Map_Roll (Obj43: 5 frames)
+    public static final int MAP_SLZ_PYLON_ADDR   = 0x01176A; // Map_Pylon (Obj5C: 1 frame)
+    public static final int MAP_BASARAN_ADDR     = 0x0108CA; // Map_Bas (Obj4F: 4 frames)
+    public static final int MAP_SYZ_SPIKEBALL_CHAIN_ADDR = 0x01102A; // Map_SBall (Obj57 SYZ: 1 frame)
+    public static final int MAP_LZ_SPIKEBALL_CHAIN_ADDR = 0x011032; // Map_SBall2 (Obj57 LZ: 3 frames)
+    public static final int MAP_BIG_SPIKED_BALL_ADDR = 0x011174; // Map_BBall (Obj58/SBZ swing ball: 3 frames)
+    public static final int MAP_FLOATING_BLOCK_ADDR = 0x010DD4; // Map_FBlock (Obj56: 8 frames)
+    public static final int MAP_SLZ_ELEVATOR_ADDR = 0x01141C; // Map_Elev (Obj59: 1 frame)
+    public static final int MAP_SLZ_CIRCLING_PLATFORM_ADDR = 0x011556; // Map_Circ (Obj5A: 1 frame)
+    public static final int MAP_SLZ_STAIRCASE_ADDR = 0x011710; // Map_Stair (Obj5B: 1 frame)
+    public static final int MAP_SLZ_FAN_ADDR     = 0x011CE4; // Map_Fan (Obj5D: 5 frames)
+    public static final int MAP_SLZ_SEESAW_ADDR  = 0x012078; // Map_Seesaw (Obj5E: 4 frames)
+    public static final int MAP_SLZ_SEESAW_BALL_ADDR = 0x0120BA; // Map_SSawBall (Obj5F: 2 frames)
+    public static final int MAP_BOMB_ADDR        = 0x0122FC; // Map_Bomb (Obj4A: 12 frames)
+    public static final int MAP_ORBINAUT_ADDR    = 0x0125B8; // Map_Orb (Obj60: 4 frames)
+    public static final int MAP_LZ_HARPOON_ADDR  = 0x01266E; // Map_Harp (Obj16: 6 frames)
+    public static final int MAP_LZ_GARGOYLE_ADDR = 0x0129EC; // Map_Gar (Obj62: 4 frames)
+    public static final int MAP_LZ_BLOCK_ADDR    = 0x012896; // Map_LBlock (Obj61: 4 frames)
+    public static final int MAP_LZ_CONVEYOR_ADDR = 0x012D50; // Map_LConv (Obj63: 5 frames)
+    public static final int MAP_LZ_BUBBLES_ADDR  = 0x0130A0; // Map_Bub (Obj0A/64: 23 frames)
+    public static final int MAP_LZ_BREAKABLE_POLE_ADDR = 0x0119F6; // Map_Pole (Obj0B: 2 frames)
+    public static final int MAP_RESULTS_GOT_ADDR = 0x00D266; // Map_Got (results/title-card text: 9 frames, signed offsets)
+    public static final int MAP_RESULTS_SPECIAL_STAGE_ADDR = 0x00D328; // Map_SSR (special-stage results text: 9 frames, signed offsets)
+    public static final int MAP_SS_RESULT_EMERALDS_ADDR = 0x00D482; // Map_SSRC (Obj7F: 7 frames)
+    public static final int MAP_LZ_WATERFALL_ADDR = 0x013228; // Map_WFall (Obj65: 12 frames)
+    public static final int MAP_LZ_SPLASH_ADDR   = 0x014D34; // Map_Splash (Obj08: 3 frames)
+    public static final int MAP_SBZ_JUNCTION_ADDR = 0x0159FA; // Map_Jun (Obj66: 17 frames)
+    public static final int MAP_SBZ_RUNNING_DISC_ADDR = 0x015DEE; // Map_Disc (Obj67: 1 frame)
+    public static final int MAP_SBZ_TRAP_DOOR_ADDR = 0x016048; // Map_Trap (Obj69: 3 frames)
+    public static final int MAP_SBZ_SPINNING_PLATFORM_ADDR = 0x0160A2; // Map_Spin (Obj69: 5 frames)
+    public static final int MAP_SBZ_SAW_ADDR     = 0x016300; // Map_Saw (Obj6A: 4 frames)
+    public static final int MAP_SBZ_STOMPER_DOOR_ADDR = 0x0166D0; // Map_Stomp (Obj6B: 5 frames)
+    public static final int MAP_SBZ_VANISHING_PLATFORM_ADDR = 0x016892; // Map_VanP (Obj6C: 4 frames)
+    public static final int MAP_SBZ_ELECTROCUTER_ADDR = 0x016948; // Map_Elec (Obj6E: 6 frames)
+    public static final int MAP_SBZ_GIRDER_ADDR  = 0x016D90; // Map_Gird (Obj70: 1 frame)
+    public static final int MAP_CATERKILLER_ADDR = 0x01751A; // Map_Cat (Obj78: 24 frames)
+    public static final int MAP_HIDDEN_BONUS_ADDR = 0x0179F4; // Map_Bonus (Obj7D: 4 frames)
+    public static final int MAP_EGGMAN_ADDR      = 0x0184B8; // Map_Eggman (bosses: 13 frames)
+    public static final int MAP_BOSS_ITEMS_ADDR  = 0x018580; // Map_BossItems (boss extras: 8 frames)
+    public static final int MAP_SYZ_BOSS_BLOCK_ADDR = 0x019FAE; // Map_BossBlock (Obj76: 5 frames)
+    public static final int MAP_SEGG_ADDR        = 0x01A1E4; // Map_SEgg (Obj82/Obj85: 11 frames)
+    public static final int MAP_SBZ_FALSE_FLOOR_ADDR = 0x01A4C2; // Map_FFloor (Obj83: 5 frames)
+    public static final int MAP_FZ_DAMAGED_ADDR  = 0x01AB90; // Map_FZDamaged (Obj85: 2 frames)
+    public static final int MAP_FZ_LEGS_ADDR     = 0x01ABD2; // Map_FZLegs (Obj85: 3 frames)
+    public static final int MAP_FZ_EGGCYL_ADDR   = 0x01AE2C; // Map_EggCyl (Obj85: 12 frames)
+    public static final int MAP_FZ_PLAUNCH_ADDR  = 0x01B20C; // Map_PLaunch (Obj86: 4 frames)
+    public static final int MAP_FZ_PLASMA_ADDR   = 0x01B25C; // Map_Plasma (Obj87: 11 frames)
+    public static final int MAP_PRISON_ADDR      = 0x01B52A; // Map_Pri (Obj3E: 7 frames)
 
     // Sonic's animation scripts (31 animations)
     public static final int SONIC_ANIM_DATA_ADDR = 0x1421C;
@@ -131,6 +234,22 @@ public final class Sonic1Constants {
     // Verified by binary search matching docs/s1disasm/artnem/Title Cards.nem
     public static final int ART_NEM_TITLE_CARD_ADDR = 0x39204;
 
+    // ---- GAME OVER / TIME OVER card (Obj39 GameOverCard) ----
+    // Nem_GameOver (docs/s1disasm/sonic.lst:94090, artnem/Game Over.nem, 401 bytes;
+    // verified by byte match against the ROM). Loaded by PLC_GameOver at
+    // ArtTile_Game_Over ($55E): docs/s1disasm/_inc/Pattern Load Cues.asm:100-102.
+    public static final int ART_NEM_GAME_OVER_ADDR = 0x3A678;
+    // Map_Over (_maps/Game Over.asm): four frames GAME / OVER / TIME / OVER,
+    // tile ids relative to ArtTile_Game_Over (docs/s1disasm/sonic.lst:46362-46367).
+    public static final int MAP_GAME_OVER_ADDR = 0xD232;
+    public static final int MAP_GAME_OVER_FRAME_COUNT = 4;
+    // plcid_GameOver: fourth entry of ArtLoadCues (docs/s1disasm/_inc/Pattern Load Cues.asm:29-32).
+    public static final int PLC_GAME_OVER = 3;
+    // v_gameovertext1 / v_gameovertext2 = v_objspace + object_size*2 / *3
+    // (docs/s1disasm/_Variables.asm:62-63).
+    public static final int SST_SLOT_GAME_OVER_WORD = 2;
+    public static final int SST_SLOT_GAME_OVER_OVER = 3;
+
     // ---- Ending sequence Kosinski-compressed flower art ----
     // Kos_EndFlowers: decompressed at GM_Ending into RAM buffer, used by
     // AniArt_Ending_BigFlower (offset 0), Flower3 (+$400) and Flower4 (+$A00).
@@ -156,8 +275,10 @@ public final class Sonic1Constants {
     public static final int ART_NEM_TITLE_FG_ADDR    = 0x1ED80;  // Nem_TitleFg (title foreground)
     public static final int ART_NEM_TITLE_SONIC_ADDR  = 0x1FD8C;  // Nem_TitleSonic (Sonic sprite)
     public static final int ART_NEM_TITLE_TM_ADDR     = 0x2175A;  // Nem_TitleTM (trademark symbol)
+    public static final int ART_NEM_SEGA_LOGO_ADDR    = 0x1E700;  // Nem_SegaLogo (REV01, sonic.lst)
     public static final int ART_NEM_CREDIT_TEXT_ADDR   = 0x6203A;  // Nem_CreditText (credit text font)
     public static final int MAP_ENI_TITLE_ADDR         = 0x1EC6C;  // Eni_Title (title foreground tilemap)
+    public static final int MAP_ENI_SEGA_LOGO_ADDR     = 0x1EB70;  // Eni_SegaLogo (REV01, sonic.lst)
     public static final int ART_NEM_GHZ_1ST_ADDR       = 0x3CB3C;  // Nem_GHZ_1st (GHZ background patterns)
     public static final int BLK16_GHZ_ADDR             = 0x3C19C;  // Blk16_GHZ (16x16 chunk mappings, Enigma)
     public static final int BLK256_GHZ_ADDR            = 0x3F544;  // Blk256_GHZ (256x256 block mappings, Kosinski)
@@ -166,6 +287,27 @@ public final class Sonic1Constants {
     // ---- Title screen palettes ----
     public static final int PAL_TITLE_ADDR       = 0x2280;  // Pal_Title (128 bytes, 4 palette lines)
     public static final int PAL_TITLE_CYCLE_ADDR = 0x1B5E;  // Pal_TitleCyc (32 bytes, water cycle palette)
+    public static final int PAL_SEGA_SCAN_ADDR   = 0x20B8;  // Pal_Sega1 (12 bytes, light scan)
+    public static final int PAL_SEGA_FADE_ADDR   = 0x20C4;  // Pal_Sega2 (48 bytes, fade-in sets)
+    public static final int PAL_SEGA_BG_ADDR     = 0x2200;  // Pal_SegaBG (128 bytes, 4 palette lines)
+    public static final int PAL_GHZ_CYCLE_ADDR = 0x1B7E;
+    public static final int PAL_LZ_CYCLE1_ADDR = 0x1B9E;
+    public static final int PAL_LZ_CYCLE2_ADDR = 0x1BBE;
+    public static final int PAL_LZ_CYCLE3_ADDR = 0x1BD0;
+    public static final int PAL_SBZ3_CYCLE_ADDR = 0x1BE2;
+    public static final int PAL_SLZ_CYCLE_ADDR = 0x1C4A;
+    public static final int PAL_SYZ_CYCLE1_ADDR = 0x1C6E;
+    public static final int PAL_SYZ_CYCLE2_ADDR = 0x1C8E;
+    public static final int PAL_SBZ_CYCLE1_ADDR = 0x1D02;
+    public static final int PAL_SBZ_CYCLE2_ADDR = 0x1D12;
+    public static final int PAL_SBZ_CYCLE3_ADDR = 0x1D22;
+    public static final int PAL_SBZ_CYCLE4_ADDR = 0x1D32;
+    public static final int PAL_SBZ_CYCLE5_ADDR = 0x1D3E;
+    public static final int PAL_SBZ_CYCLE6_ADDR = 0x1D4E;
+    public static final int PAL_SBZ_CYCLE7_ADDR = 0x1D5E;
+    public static final int PAL_SBZ_CYCLE8_ADDR = 0x1D7E;
+    public static final int PAL_SBZ_CYCLE9_ADDR = 0x1D88;
+    public static final int PAL_SBZ_CYCLE10_ADDR = 0x1D98;
 
     // ---- Title screen VRAM tile indices (from Constants.asm) ----
     public static final int ARTTILE_TITLE_FOREGROUND   = 0x200;
@@ -181,6 +323,12 @@ public final class Sonic1Constants {
     // Art_LivesNums: Uncompressed 8x8 lives counter digit tiles (0-9)
     public static final int ART_UNC_LIVES_NUMBERS_ADDR = 0x1D5A6;
     public static final int ART_UNC_LIVES_NUMBERS_SIZE = 320; // 10 tiles
+
+    // Art_Text: Uncompressed 8x8 font used by level select + debug HUD hex coords.
+    // ASCII-aligned layout: tile n = character ('0' + n), so digits 0-9 at tiles 0-9
+    // and A-F at tiles 17-22 (matches '0'=0x30, 'A'=0x41 -> offset 0x11).
+    public static final int ART_UNC_TEXT_ADDR = 0x5F0;
+    public static final int ART_UNC_TEXT_SIZE = 1312; // 41 tiles
 
     // Nem_Hud: Nemesis-compressed HUD text labels (SCORE/TIME/RINGS)
     public static final int ART_NEM_HUD_ADDR = 0x39812;
@@ -231,6 +379,8 @@ public final class Sonic1Constants {
     // Nem_Bridge: Nemesis-compressed bridge art (GHZ, ~10 tiles: log, stump, rope)
     // Loaded via PLC_GHZ2: plcm Nem_Bridge, ArtTile_GHZ_Bridge
     public static final int ART_NEM_BRIDGE_ADDR = 0x2FA2C;
+    public static final int BRIDGE_BEND_Y_MAX_ADDR = 0x7D4A; // Bri_Data_Y_Max, 17 rows x 16 bytes
+    public static final int BRIDGE_BEND_ALIGN_ADDR = 0x7E5A; // Bri_Data_Align, 16 rows x 16 bytes
 
     // Nem_MzBlock: Nemesis-compressed MZ green pushable/smashable block art
     // ArtTile_MZ_Block = $2B8, loaded via PLC_MZ
@@ -820,4 +970,5 @@ public final class Sonic1Constants {
     public static final int SS_BUMPER_FORCE    = 0x700;  // bumper bounce force
     public static final int SS_INIT_ROTATION   = 0x40;   // initial rotation speed
     public static final int SS_UP_DOWN_COOLDOWN = 0x1E;  // UP/DOWN/R block cooldown frames
+    public static final int SS_JUMP_BUTTONS     = 0x70;  // btnABC: A/B/C bits SonicSS_Jump tests (v_jpadpress2)
 }

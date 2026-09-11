@@ -1,25 +1,34 @@
 package com.openggf.game.sonic3k.objects;
 
 import com.openggf.audio.GameAudioProfile;
+import com.openggf.audio.GameMusic;
 import com.openggf.audio.GameSound;
 import com.openggf.game.PlayableEntity;
 import com.openggf.level.objects.ExplosionObjectInstance;
 import com.openggf.level.objects.ObjectAnimationState;
-import com.openggf.game.sonic3k.audio.Sonic3kMusic;
 import com.openggf.game.sonic3k.audio.Sonic3kSfx;
+import com.openggf.game.sonic3k.constants.Sonic3kAnimationIds;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
+import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.AbstractMonitorObjectInstance;
 import com.openggf.level.objects.ObjectManager;
+import com.openggf.level.objects.ObjectLifetimeOps;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.ObjectSpriteSheet;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreateObjectLinks;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.RomObjectCodePointerProvider;
 import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
+import com.openggf.level.objects.SolidRoutineProfile;
 import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.level.objects.TouchResponseListener;
+import com.openggf.level.objects.TouchResponseProfile;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.objects.TouchResponseResult;
 import com.openggf.level.render.PatternSpriteRenderer;
@@ -28,6 +37,8 @@ import com.openggf.level.render.SpriteMappingPiece;
 import com.openggf.physics.ObjectTerrainUtils;
 import com.openggf.physics.TerrainCheckResult;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
+import com.openggf.sprites.playable.SecondaryAbility;
+import com.openggf.sprites.playable.SuperStateController;
 import com.openggf.game.ShieldType;
 
 import java.util.List;
@@ -47,7 +58,7 @@ import java.util.logging.Logger;
  */
 public class Sonic3kMonitorObjectInstance extends AbstractMonitorObjectInstance
         implements TouchResponseProvider, TouchResponseListener,
-        SolidObjectProvider, SolidObjectListener {
+        SolidObjectProvider, SolidObjectListener, RomObjectCodePointerProvider, RewindRecreatable {
     private static final Logger LOGGER = Logger.getLogger(Sonic3kMonitorObjectInstance.class.getName());
 
     // From disassembly: solid params d1=$19, d2=$10, d3=$11
@@ -72,7 +83,21 @@ public class Sonic3kMonitorObjectInstance extends AbstractMonitorObjectInstance
     // Y radius for floor collision (from solid params d2)
     private static final int Y_RADIUS = 0x10;
 
-    private final MonitorType type;
+    // Obj_Monitor = 0x0001D566 in the S&K-side ROM.
+    private static final int ROM_CODE_POINTER_HIGH_WORD = 0x0001;
+
+    // docs/skdisasm/sonic3k.constants.asm:131-148 define object status bits 3-6
+    // as p1/p2 standing and pushing. Obj_MonitorBreak consumes these at
+    // docs/skdisasm/sonic3k.asm:40624-40638 to release touching players.
+    private static final int P1_STANDING = 1 << 3;
+    private static final int P2_STANDING = 1 << 4;
+    private static final int P1_PUSHING = 1 << 5;
+    private static final int P2_PUSHING = 1 << 6;
+    private static final int P1_CONTACT_MASK = P1_STANDING | P1_PUSHING;
+    private static final int P2_CONTACT_MASK = P2_STANDING | P2_PUSHING;
+    private static final int PLAYER_CONTACT_MASK = P1_CONTACT_MASK | P2_CONTACT_MASK;
+
+    private MonitorType type;
     private ObjectAnimationState animationState;
     private boolean broken;
     private int mappingFrame;
@@ -81,13 +106,27 @@ public class Sonic3kMonitorObjectInstance extends AbstractMonitorObjectInstance
     // "Revealed from hidden monitor" mode: pop up with velocity, fall with gravity
     private boolean revealed;
     private final SubpixelMotion.State motion;
+    private int solidStatusBits;
+    private PlayableEntity p1SolidContact;
+    private PlayableEntity p2SolidContact;
+    private int p2SolidContactFrame = Integer.MIN_VALUE;
+    private PlayableEntity p2RecentlyClearedSolidContact;
+    private int p2SolidContactClearedFrame = Integer.MIN_VALUE;
+    private boolean pendingBreakContactRelease;
+    private MonitorContentsSlot monitorContentsSlot;
 
     // (Icon rising state is managed by AbstractMonitorObjectInstance)
 
     public Sonic3kMonitorObjectInstance(ObjectSpawn spawn) {
         super(spawn, "Monitor");
         this.type = MonitorType.fromSubtype(spawn.subtype());
+        this.animationState = new ObjectAnimationState(currentMonitorAnimations(), type.animId, 0);
         this.motion = new SubpixelMotion.State(spawn.x(), spawn.y(), 0, 0, 0, 0);
+    }
+
+    @Override
+    public Sonic3kMonitorObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new Sonic3kMonitorObjectInstance(ctx.spawn());
     }
 
     /**
@@ -130,6 +169,23 @@ public class Sonic3kMonitorObjectInstance extends AbstractMonitorObjectInstance
         return true;
     }
 
+    @Override
+    public int romObjectCodePointerHighWord() {
+        // Tails_CPU_interact stores word 0 of the stood-on object SST
+        // (docs/skdisasm/sonic3k.asm:26816-26843).
+        return ROM_CODE_POINTER_HIGH_WORD;
+    }
+
+    @Override
+    protected boolean delayFirstIconUpdateAfterBreak() {
+        // ROM Obj_MonitorBreak allocates Obj_MonitorContents after the current
+        // slot, then Obj_MonitorContents init falls through into sub_1D820 on
+        // its first execution (docs/skdisasm/sonic3k.asm:40645-40718). Engine
+        // touch responses break the shell before the post-physics object pass,
+        // so this embedded content must consume that pass rather than skipping it.
+        return false;
+    }
+
     private void ensureInitialized() {
         if (initialized) {
             return;
@@ -144,20 +200,23 @@ public class Sonic3kMonitorObjectInstance extends AbstractMonitorObjectInstance
         // Initialize animation: animId = subtype
         int initialAnim = type.animId;
         int initialFrame = broken ? BROKEN_FRAME : 0;
-        ObjectRenderManager renderManager = services().renderManager();
-        this.animationState = new ObjectAnimationState(
-                renderManager != null ? renderManager.getMonitorAnimations() : null,
-                initialAnim,
-                initialFrame);
+        this.animationState = new ObjectAnimationState(currentMonitorAnimations(), initialAnim, initialFrame);
         this.mappingFrame = initialFrame;
         if (broken) {
             effectApplied = true;
         }
     }
 
+    private com.openggf.sprites.animation.SpriteAnimationSet currentMonitorAnimations() {
+        var ctx = tryServices();
+        ObjectRenderManager renderManager = ctx != null ? ctx.renderManager() : null;
+        return renderManager != null ? renderManager.getMonitorAnimations() : null;
+    }
+
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         ensureInitialized();
+        expireRecentlyClearedP2Contact(vIntRunCount);
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (revealed && !broken) {
             updateRevealed();
@@ -166,6 +225,10 @@ public class Sonic3kMonitorObjectInstance extends AbstractMonitorObjectInstance
             animationState.update();
             mappingFrame = animationState.getMappingFrame();
             return;
+        }
+        if (pendingBreakContactRelease) {
+            pendingBreakContactRelease = false;
+            releaseTouchingPlayersOnBreak(player, vIntRunCount);
         }
         updateIcon();
     }
@@ -198,6 +261,7 @@ public class Sonic3kMonitorObjectInstance extends AbstractMonitorObjectInstance
      */
     @Override
     public void onTouchResponse(PlayableEntity playerEntity, TouchResponseResult result, int frameCounter) {
+        ensureInitialized();
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (broken || player == null) {
             return;
@@ -208,12 +272,14 @@ public class Sonic3kMonitorObjectInstance extends AbstractMonitorObjectInstance
             return;
         }
 
-        // S&K: check if player can break monitors
-        // Must be rolling (spinning), spindashing, or Knuckles gliding/sliding
-        boolean canBreak = player.getRolling() || player.getSpindash();
-        // Knuckles glide/slide check requires PlayerCharacter system (not yet implemented)
-        // canBreak |= (player.getCharacter() == PlayerCharacter.KNUCKLES
-        //              && (player.getDoubleJumpFlag() == 1 || player.getDoubleJumpFlag() == 3));
+        // ROM: Touch_Monitor checks anim(a0) == AniIDSonAni_Roll here, not the
+        // broader rolling status bit. The animation can lag the status byte by
+        // a frame during object releases, which affects monitor break timing.
+        boolean canBreak = player.getAnimationId() == Sonic3kAnimationIds.ROLL.id();
+        // ROM Touch_Monitor.checkdestroy (docs/skdisasm/sonic3k.asm:20858-20866):
+        // Knuckles gliding (double_jump_flag==1) or sliding (==3) also breaks the
+        // monitor -- the identical set as the solid gate (isKnucklesGlidingOrSliding).
+        canBreak |= isKnucklesGlidingOrSliding(player);
 
         if (!canBreak) {
             return;
@@ -222,36 +288,57 @@ public class Sonic3kMonitorObjectInstance extends AbstractMonitorObjectInstance
         // Negate player's Y-speed: neg.w y_vel(a0)
         player.setYSpeed((short) -player.getYSpeed());
 
-        breakMonitor(player);
+        breakMonitor(player, frameCounter);
     }
 
     /**
      * Break the monitor: spawn explosion, start icon rising, mark persistence.
      * ROM: Mon_BreakOpen (sonic3k.asm ~line 40685)
      */
-    private void breakMonitor(AbstractPlayableSprite player) {
+    private void breakMonitor(AbstractPlayableSprite player, int frameCounter) {
         broken = true;
+
+        // Touch_Monitor selects Obj_MonitorBreak during the player slot; the
+        // contact-bit release runs later when the monitor's own SST slot is
+        // dispatched. Deferring prevents an earlier HCZ block slot from
+        // re-landing a released sidekick in the same frame.
+        pendingBreakContactRelease = true;
 
         // Mark as broken in persistence table
         ObjectManager objectManager = services().objectManager();
-        if (objectManager != null) {
-            objectManager.markRemembered(spawn);
-        }
+        ObjectLifetimeOps.markSpawnRemembered(objectManager, spawn);
 
         mappingFrame = BROKEN_FRAME;
 
         // Initialize icon rising
         startIconRise(posY(), player);
+        spawnMonitorContentsSlot(objectManager);
 
         // Spawn explosion
         ObjectRenderManager renderManager = services().renderManager();
         if (renderManager != null && objectManager != null
                 && renderManager.getExplosionRenderer() != null) {
-            objectManager.addDynamicObject(
-                    new ExplosionObjectInstance(0x27, posX(), posY(), renderManager));
+            // ROM Obj_MonitorSpawnIcon creates Obj_MonitorContents, then
+            // Obj_Explosion, with AllocateObjectAfterCurrent both times
+            // (docs/skdisasm/sonic3k.asm:40640-40659; allocator at 37911-37925).
+            objectManager.addDynamicObjectAfterSlot(
+                    new ExplosionObjectInstance(0x27, posX(), posY(), renderManager),
+                    getSlotIndex());
         }
         // ROM: Obj_Explosion loc_1E61A plays sfx_Break ($3D)
         services().playSfx(Sonic3kSfx.BREAK.id);
+    }
+
+    private void spawnMonitorContentsSlot(ObjectManager objectManager) {
+        if (objectManager == null || monitorContentsSlot != null) {
+            return;
+        }
+        monitorContentsSlot = new MonitorContentsSlot(this, buildSpawnAt(posX(), posY()));
+        // The parent shell can be broken by TouchResponse before ObjectManager
+        // is executing the monitor slot. Anchor AllocateObjectAfterCurrent to
+        // this monitor's SST slot so the content object still lands after the
+        // shell, matching Obj_MonitorSpawnIcon (sonic3k.asm:40640-40652).
+        objectManager.addDynamicObjectAfterSlot(monitorContentsSlot, getSlotIndex());
     }
 
     /**
@@ -276,7 +363,7 @@ public class Sonic3kMonitorObjectInstance extends AbstractMonitorObjectInstance
             }
             case ONE_UP -> {
                 services().gameState().addLife();
-                services().playMusic(Sonic3kMusic.EXTRA_LIFE.id);
+                services().playMusic(GameMusic.EXTRA_LIFE);
             }
             case RINGS -> {
                 player.addRings(RING_MONITOR_REWARD);
@@ -286,7 +373,10 @@ public class Sonic3kMonitorObjectInstance extends AbstractMonitorObjectInstance
                 player.giveSpeedShoes();
                 GameAudioProfile audioProfile = services().audioManager().getAudioProfile();
                 if (audioProfile != null) {
-                    services().playMusic(audioProfile.getSpeedShoesOnCommandId());
+                    // S3K monitor code writes 8 directly to zTempoSpeedup;
+                    // E2/E3 are unrelated driver commands.
+                    services().audioManager().setSpeedMultiplier(
+                            audioProfile.getSpeedMultiplierValue());
                 }
             }
             case FIRE_SHIELD -> {
@@ -305,14 +395,39 @@ public class Sonic3kMonitorObjectInstance extends AbstractMonitorObjectInstance
                 // Skip invincibility if player is already Super Sonic
                 if (!player.isSuperSonic()) {
                     player.giveInvincibility();
-                    services().playMusic(Sonic3kMusic.INVINCIBILITY.id);
+                    services().playMusic(GameMusic.INVINCIBILITY);
                 }
             }
             case SUPER -> {
-                // Award 50 rings; super transformation system not yet implemented
                 player.addRings(SUPER_RING_REWARD);
-                LOGGER.info("Super monitor collected — 50 rings awarded (super transformation TODO)");
+                SuperStateController superState = player.getSuperStateController();
+                if (superState != null && superState.activateFromMonitor()) {
+                    LOGGER.info("Super monitor collected - 50 rings awarded and transformation started");
+                } else {
+                    LOGGER.info("Super monitor collected - 50 rings awarded");
+                }
             }
+        }
+    }
+
+    @Override
+    protected void onIconDeactivated() {
+        destroyMonitorContentsSlot();
+    }
+
+    @Override
+    public void onUnload() {
+        destroyMonitorContentsSlot();
+    }
+
+    private boolean isMonitorContentsSlotActive() {
+        return iconActive;
+    }
+
+    private void destroyMonitorContentsSlot() {
+        if (monitorContentsSlot != null) {
+            monitorContentsSlot.setDestroyed(true);
+            monitorContentsSlot = null;
         }
     }
 
@@ -406,10 +521,28 @@ public class Sonic3kMonitorObjectInstance extends AbstractMonitorObjectInstance
         return 0;
     }
 
+    @Override
+    public TouchResponseProfile getTouchResponseProfile() {
+        return TouchResponseProfile.fromProvider(this);
+    }
+
+    @Override
+    public TouchResponseProfile getTouchResponseProfile(boolean multiRegionSource) {
+        return TouchResponseProfile.fromProvider(this, multiRegionSource);
+    }
+
+    @Override
+    public boolean requiresContinuousTouchCallbacks() {
+        // ROM TouchResponse polls Obj_Monitor every frame. The first overlap can
+        // see status.player.rolling before anim reaches AniIDSonAni_Roll, so keep
+        // rechecking while the player remains inside the monitor touch box.
+        return true;
+    }
+
     // From disassembly: SolidObject_Monitor_SetValues params d1=$19, d2=$10, d3=$11
     @Override
     public SolidObjectParams getSolidParams() {
-        return new SolidObjectParams(SOLID_WIDTH, SOLID_D2, SOLID_D3);
+        return SolidObjectParams.of(SOLID_WIDTH, SOLID_D2, SOLID_D3);
     }
 
     @Override
@@ -421,13 +554,99 @@ public class Sonic3kMonitorObjectInstance extends AbstractMonitorObjectInstance
         if (player == null) {
             return true;
         }
-        // Monitors are not solid when player is rolling (allows breaking from above)
-        return !player.getRolling();
+        // ROM: SolidObject_Monitor_SonicKnux and SolidObject_Monitor_Tails both
+        // open with `btst d6,status(a0) / bne Monitor_ChkOverEdge`
+        // (docs/skdisasm/sonic3k.asm:40559-40562,40583-40585). When the monitor's
+        // own p1/p2 standing bit is already set, the ROM jumps straight to the
+        // continued-ride edge test and NEVER evaluates the roll-anim, Knuckles
+        // glide or competition-mode exemptions below. A rider who starts rolling
+        // while standing on a monitor therefore keeps the ride: Monitor_ChkOverEdge
+        // (sonic3k.asm:40594-40612) releases them only on Status_InAir or on
+        // leaving the horizontal span. Re-testing the acquire-time exemptions on
+        // every frame unseats the rider on the roll-entry frame, which the ROM
+        // does not do.
+        // The object-side bit is mirrored by the rider's own Status_OnObj: both are
+        // set together in RideObject_SetRide (sonic3k.asm:42027-42041) and cleared
+        // together in Monitor_ChkOverEdge (:40613-40617), so require both.
+        ObjectManager solidObjectManager = services().objectManager();
+        if (player.isOnObject() && solidObjectManager != null
+                && solidObjectManager.getRidingObject(player) == this) {
+            return true;
+        }
+        if (player.isCpuControlled()) {
+            // ROM: SolidObject_Monitor_Tails branches directly to SolidObject_cont
+            // outside competition mode before testing the roll anim
+            // (docs/skdisasm/sonic3k.asm:40583-40590).
+            return true;
+        }
+        // ROM: SolidObject_Monitor_SonicKnux (docs/skdisasm/sonic3k.asm:40567-40573)
+        // also returns non-solid for Knuckles gliding (double_jump_flag==1) or
+        // sliding after gliding (==3), after the roll-anim check.
+        if (isKnucklesGlidingOrSliding(player)) {
+            return false;
+        }
+        // ROM: SolidObject_Monitor_SonicKnux tests anim(a1) == AniIDSonAni_Roll,
+        // not the broader rolling status bit (docs/skdisasm/sonic3k.asm:40559-40572).
+        return player.getAnimationId() != Sonic3kAnimationIds.ROLL.id();
+    }
+
+    /**
+     * ROM parity for the monitor's Knuckles glide/slide exemptions, shared by
+     * the solid gate ({@code SolidObject_Monitor_SonicKnux},
+     * docs/skdisasm/sonic3k.asm:40567-40573) and the break gate
+     * ({@code Touch_Monitor.checkdestroy}, docs/skdisasm/sonic3k.asm:20858-20866)
+     * -- both test {@code character_id==2} then {@code double_jump_flag} 1
+     * (gliding) or 3 (sliding after gliding). Gated on the GLIDE secondary
+     * ability so Sonic's insta-shield {@code double_jump_flag==1}
+     * (InstaShieldObjectInstance) never qualifies.
+     */
+    private static boolean isKnucklesGlidingOrSliding(AbstractPlayableSprite player) {
+        if (player.getSecondaryAbility() != SecondaryAbility.GLIDE) {
+            return false;
+        }
+        int djf = player.getDoubleJumpFlag();
+        return djf == 1 || djf == 3;
     }
 
     @Override
     public boolean hasMonitorSolidity() {
+        return false;
+    }
+
+    @Override
+    public int getMonitorSolidObjectVerticalOffset() {
+        // ROM: SolidObject_Monitor_SonicKnux falls through to SolidObject_cont
+        // (docs/skdisasm/sonic3k.asm:40559-40576), whose normal-gravity path
+        // adds +4 before the d2/y_radius overlap check (lines 41429-41432).
+        return 4;
+    }
+
+    @Override
+    public boolean usesInclusiveRightEdge() {
+        // ROM SolidObject_cont rejects with bhi after comparing relX against
+        // width*2, so the exact right edge remains a zero-distance side contact.
+        // HCZ1 trace frame 97 depends on that contact setting Status_Push while
+        // Sonic is pinned against the monitor.
         return true;
+    }
+
+    @Override
+    public boolean zeroXSpeedStopsOnLeftSideContact() {
+        // S3K SolidObject_cont's player-left branch reaches loc_1E056 when
+        // x_vel is zero: only a negative velocity takes the skip branch
+        // (docs/skdisasm/sonic3k.asm:41473-41491). This also publishes the
+        // wall-cling status_tertiary flag used by later controller slots.
+        return true;
+    }
+
+    @Override
+    public SolidRoutineProfile getSolidRoutineProfile() {
+        // S3K monitor wrappers gate roll-animation hits, then branch into the
+        // shared SolidObject_cont side/top classifier (docs/skdisasm/sonic3k.asm:
+        // 40559-40590, 41394-41632). That normal classifier is required for
+        // P2 side contact to win over top landing when horizontal penetration is
+        // smaller, e.g. CNZ f11061 against the monitor at $1A50,$00D0.
+        return SolidRoutineProfile.fullSolid(false, usesInclusiveRightEdge(), false);
     }
 
     @Override
@@ -439,14 +658,201 @@ public class Sonic3kMonitorObjectInstance extends AbstractMonitorObjectInstance
     }
 
     @Override
+    public void setPlayerPushing(PlayableEntity player, boolean pushing) {
+        if (player == null) {
+            return;
+        }
+        int bit = player.isCpuControlled() ? P2_PUSHING : P1_PUSHING;
+        if (pushing) {
+            solidStatusBits |= bit;
+            rememberSolidContactPlayer(player, Integer.MIN_VALUE);
+        } else {
+            solidStatusBits &= ~bit;
+        }
+    }
+
+    @Override
     public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        // Solid contact for standing/edge checks; no additional behavior needed.
+        if (playerEntity == null || contact == null) {
+            return;
+        }
+        int standingBit = playerEntity.isCpuControlled() ? P2_STANDING : P1_STANDING;
+        if (contact.standing()) {
+            solidStatusBits |= standingBit;
+            rememberSolidContactPlayer(playerEntity, frameCounter);
+        } else {
+            solidStatusBits &= ~standingBit;
+        }
+    }
+
+    @Override
+    public void onSolidContactCleared(PlayableEntity playerEntity, int frameCounter) {
+        if (playerEntity == null) {
+            return;
+        }
+        if (!playerEntity.isCpuControlled()) {
+            // ROM: Monitor_ChkOverEdge's .notonmonitor arm does
+            // `bclr d6,status(a0)` (docs/skdisasm/sonic3k.asm:40613-40617), so a
+            // rider who leaves the monitor clears the object's OWN p1_standing
+            // bit immediately. Leaving it latched makes a later Obj_MonitorBreak
+            // (:40628-40634) force Status_InAir on a player who is nowhere near
+            // the monitor. Only the standing bit is cleared here; p1_pushing is
+            // maintained separately by setPlayerPushing, matching the ROM's
+            // independent pushing_mask.
+            solidStatusBits &= ~P1_STANDING;
+            return;
+        }
+
+        // ROM: the sidekick monitor path uses p2_standing_bit (sonic3k.asm:
+        // 40492-40494), and Obj_MonitorBreak releases P2 only if p2_standing or
+        // p2_pushing is still set (40624-40638). MGZ aux at F342 has the monitor
+        // status clear while Tails remains grounded, so clear stale engine-side P2
+        // bookkeeping on no-contact without disturbing the P1 break-release path.
+        solidStatusBits &= ~P2_CONTACT_MASK;
+        if (p2SolidContact == playerEntity) {
+            if (p2SolidContactFrame == frameCounter) {
+                p2RecentlyClearedSolidContact = p2SolidContact;
+                p2SolidContactClearedFrame = frameCounter;
+            }
+            p2SolidContact = null;
+            p2SolidContactFrame = Integer.MIN_VALUE;
+        }
     }
 
     @Override
     public int getPriorityBucket() {
         return RenderPriority.clamp(3);
+    }
+
+    private void rememberSolidContactPlayer(PlayableEntity player, int frameCounter) {
+        if (player.isCpuControlled()) {
+            p2SolidContact = player;
+            p2SolidContactFrame = frameCounter;
+            p2RecentlyClearedSolidContact = null;
+            p2SolidContactClearedFrame = Integer.MIN_VALUE;
+        } else {
+            p1SolidContact = player;
+        }
+    }
+
+    private void releaseTouchingPlayersOnBreak(AbstractPlayableSprite breaker, int vIntRunCount) {
+        int contactBits = solidStatusBits & PLAYER_CONTACT_MASK;
+        PlayableEntity sameFrameClearedP2Contact = p2SolidContactClearedFrame == vIntRunCount
+                ? p2RecentlyClearedSolidContact
+                : null;
+        PlayableEntity inferredP2Contact = inferSidekickMonitorStandingBitOnBreak();
+        if (contactBits == 0 && sameFrameClearedP2Contact == null && inferredP2Contact == null) {
+            return;
+        }
+
+        // ROM: Obj_MonitorBreak checks standing_mask|pushing_mask, then applies
+        // andi.b #$D7 plus Status_InAir for P1/P2 before spawning the icon/explosion
+        // (docs/skdisasm/sonic3k.asm:40624-40638). This covers MGZ F239 where
+        // Touch_Monitor sets routine=4 while the monitor still has p1_pushing set.
+        if ((contactBits & P1_CONTACT_MASK) != 0) {
+            releasePlayerFromBrokenMonitor(p1SolidContact != null ? p1SolidContact : breaker);
+        }
+        if ((contactBits & P2_CONTACT_MASK) != 0 && p2SolidContact != null) {
+            releasePlayerFromBrokenMonitor(p2SolidContact);
+        } else if (sameFrameClearedP2Contact != null) {
+            releasePlayerFromBrokenMonitor(sameFrameClearedP2Contact);
+        } else if (inferredP2Contact != null) {
+            releasePlayerFromBrokenMonitor(inferredP2Contact);
+        }
+        solidStatusBits &= ~PLAYER_CONTACT_MASK;
+        p2RecentlyClearedSolidContact = null;
+        p2SolidContactClearedFrame = Integer.MIN_VALUE;
+    }
+
+    private PlayableEntity inferSidekickMonitorStandingBitOnBreak() {
+        List<PlayableEntity> sidekicks = services().playerQuery().sidekicks();
+        if (sidekicks == null || sidekicks.isEmpty()) {
+            return null;
+        }
+        for (PlayableEntity sidekick : sidekicks) {
+            if (sidekick != null && sidekick.isCpuControlled() && isWithinMonitorStandingBitBounds(sidekick)) {
+                return sidekick;
+            }
+        }
+        return null;
+    }
+
+    private boolean isWithinMonitorStandingBitBounds(PlayableEntity sidekick) {
+        int relX = sidekick.getCentreX() - posX() + SOLID_WIDTH;
+        int maxRelXInclusive = SOLID_WIDTH * 2;
+        if (relX < 0 || relX > maxRelXInclusive) {
+            return false;
+        }
+        return Math.abs(sidekick.getCentreY() - posY()) <= SOLID_D3;
+    }
+
+    private void expireRecentlyClearedP2Contact(int vIntRunCount) {
+        if (p2RecentlyClearedSolidContact != null && p2SolidContactClearedFrame != vIntRunCount) {
+            p2RecentlyClearedSolidContact = null;
+            p2SolidContactClearedFrame = Integer.MIN_VALUE;
+        }
+    }
+
+    private void releasePlayerFromBrokenMonitor(PlayableEntity player) {
+        if (player == null) {
+            return;
+        }
+        player.setOnObject(false);
+        player.setPushing(false);
+        player.setAir(true);
+    }
+
+    private static final class MonitorContentsSlot extends AbstractObjectInstance implements RewindRecreatable {
+        private final Sonic3kMonitorObjectInstance parent;
+
+        private MonitorContentsSlot(Sonic3kMonitorObjectInstance parent, ObjectSpawn spawn) {
+            super(spawn, "MonitorContents");
+            this.parent = parent;
+        }
+
+        private MonitorContentsSlot(Sonic3kMonitorObjectInstance parent) {
+            this(parent, parent.buildSpawnAt(parent.posX(), parent.posY()));
+        }
+
+        @Override
+        public MonitorContentsSlot recreateForRewind(RewindRecreateContext ctx) {
+            Sonic3kMonitorObjectInstance restoredParent =
+                    RewindRecreateObjectLinks.nearestLiveObject(ctx, Sonic3kMonitorObjectInstance.class);
+            return restoredParent == null ? null : new MonitorContentsSlot(restoredParent, ctx.spawn());
+        }
+
+        @Override
+        public void update(int vIntRunCount, PlayableEntity player) {
+            if (!parent.isMonitorContentsSlotActive()) {
+                setDestroyed(true);
+            }
+        }
+
+        @Override
+        public int getX() {
+            return parent.posX();
+        }
+
+        @Override
+        public int getY() {
+            return parent.iconSubY >> 8;
+        }
+
+        @Override
+        public ObjectSpawn getSpawn() {
+            return parent.buildSpawnAt(getX(), getY());
+        }
+
+        @Override
+        public boolean isDestroyed() {
+            return super.isDestroyed() || parent.isDestroyed();
+        }
+
+        @Override
+        public void appendRenderCommands(List<GLCommand> commands) {
+            // Slot-only mirror of ROM Obj_MonitorContents. The parent shell
+            // still owns the existing embedded icon render/update state.
+        }
     }
 
     /**

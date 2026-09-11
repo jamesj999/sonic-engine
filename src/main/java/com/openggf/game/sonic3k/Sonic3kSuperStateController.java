@@ -1,22 +1,29 @@
 package com.openggf.game.sonic3k;
 
+import com.openggf.audio.GameMusic;
 import com.openggf.data.RomByteReader;
 import com.openggf.game.CrossGameFeatureProvider;
+import com.openggf.game.GameServices;
 import com.openggf.game.PhysicsProfile;
-import com.openggf.game.sonic3k.audio.Sonic3kMusic;
+import com.openggf.game.ShieldType;
 import com.openggf.game.sonic3k.audio.Sonic3kSfx;
 import com.openggf.game.sonic3k.constants.Sonic3kConstants;
-import com.openggf.graphics.GraphicsManager;
-import com.openggf.level.Palette;
 import com.openggf.sprites.animation.SpriteAnimationSet;
 import com.openggf.sprites.art.SpriteArtSet;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
+import com.openggf.sprites.playable.Knuckles;
+import com.openggf.sprites.playable.SuperState;
 import com.openggf.sprites.playable.SuperStateController;
 import com.openggf.sprites.playable.Tails;
 import com.openggf.sprites.render.PlayerSpriteRenderer;
 
+import com.openggf.level.Level;
+import com.openggf.level.LevelManager;
+import com.openggf.level.WaterSystem;
+
+import java.util.HashMap;
+import java.util.Map;
 import java.util.logging.Logger;
-import com.openggf.game.GameServices;
 
 /**
  * S3K-specific Super Sonic state controller.
@@ -47,6 +54,11 @@ public class Sonic3kSuperStateController extends SuperStateController {
 
     /** Raw ROM palette data (60 bytes: 10 frames x 3 colors x 2 bytes). */
     private byte[] paletteData;
+
+    /** Retained for lazy loads of the zone's underwater cycle table. */
+    private RomByteReader romReader;
+    /** Underwater cycle tables, keyed by ROM address. */
+    private final Map<Integer, byte[]> underwaterPaletteData = new HashMap<>();
 
     /** Super Sonic animation set (loaded from ROM). */
     private SpriteAnimationSet superAnimSet;
@@ -85,6 +97,24 @@ public class Sonic3kSuperStateController extends SuperStateController {
     }
 
     @Override
+    public RewindState captureRewindState() {
+        return createRewindState(paletteState, paletteFrame, paletteTimer, transformFramesRemaining);
+    }
+
+    @Override
+    public void restoreRewindState(RewindState rewindState) {
+        if (rewindState == null) {
+            return;
+        }
+        restoreCoreRewindState(rewindState);
+        paletteState = rewindState.paletteState();
+        paletteFrame = rewindState.paletteFrame();
+        paletteTimer = rewindState.paletteTimer();
+        transformFramesRemaining = rewindState.transformFramesRemaining();
+        reconcileRewindPresentation(rewindState.state());
+    }
+
+    @Override
     public void loadRomData(RomByteReader reader) {
         int addr = Sonic3kConstants.PAL_CYCLE_SUPER_SONIC_ADDR;
         int len = Sonic3kConstants.PAL_CYCLE_SUPER_SONIC_ENTRY_COUNT
@@ -95,6 +125,8 @@ public class Sonic3kSuperStateController extends SuperStateController {
             return;
         }
         paletteData = reader.slice(addr, len);
+        romReader = reader;
+        underwaterPaletteData.clear();
         LOGGER.fine("Loaded S3K Super Sonic palette data: " + len + " bytes from ROM 0x"
                 + Integer.toHexString(addr));
 
@@ -110,7 +142,7 @@ public class Sonic3kSuperStateController extends SuperStateController {
                 superRenderer = new PlayerSpriteRenderer(superArtSet);
                 if (CrossGameFeatureProvider.isActive()) {
                     superRenderer.setRenderContext(
-                            CrossGameFeatureProvider.getInstance().getDonorRenderContext());
+                            GameServices.crossGameFeatures().getDonorRenderContext());
                 }
                 LOGGER.fine("Loaded S3K Super Sonic sprite renderer");
             }
@@ -130,11 +162,54 @@ public class Sonic3kSuperStateController extends SuperStateController {
     }
 
     @Override
+    protected boolean usesAutomaticJumpTrigger() {
+        return false;
+    }
+
+    @Override
+    protected boolean usesExplicitAirAbilityTrigger() {
+        return true;
+    }
+
+    @Override
+    protected int getTransformationAnimationId() {
+        return player instanceof Tails ? 0x29 : super.getTransformationAnimationId();
+    }
+
+    @Override
+    protected boolean hasTransformationEmeralds() {
+        var gameState = player.currentGameState();
+        if (player instanceof Tails) {
+            return gameState.hasAllSuperEmeralds();
+        }
+        return gameState.hasAllSuperEmeralds()
+                || (gameState.hasAllEmeralds() && !gameState.isEmeraldsConverted());
+    }
+
+    @Override
+    protected boolean passesGameSpecificTransformGates() {
+        if (player instanceof Tails) {
+            return GameServices.sprites().getMainPlayable() == player;
+        }
+        if (player instanceof Knuckles) {
+            return true;
+        }
+        ShieldType shield = player.getShieldType();
+        boolean elementalShield = shield == ShieldType.FIRE
+                || shield == ShieldType.LIGHTNING
+                || shield == ShieldType.BUBBLE;
+        return !elementalShield && player.getInvincibleFrames() <= 0;
+    }
+
+    @Override
     protected PhysicsProfile getSuperProfile() {
         // S3K Super Tails: max=$800, accel=$18, decel=$C0 (sonic3k.asm:26325-26327)
         // S3K Super Sonic: max=$A00, accel=$30, decel=$100 (sonic3k.asm:22084-22086)
         if (player instanceof Tails) {
             return PhysicsProfile.SONIC_3K_SUPER_TAILS;
+        }
+        if (player instanceof Knuckles) {
+            return PhysicsProfile.SONIC_3K_SUPER_KNUCKLES;
         }
         return PhysicsProfile.SONIC_3K_SUPER_SONIC;
     }
@@ -145,6 +220,9 @@ public class Sonic3kSuperStateController extends SuperStateController {
         // ROM: speed shoes expire code sets $600/$C/$80 for all characters.
         if (player instanceof Tails) {
             return PhysicsProfile.SONIC_2_TAILS;
+        }
+        if (player instanceof Knuckles) {
+            return PhysicsProfile.SONIC_3K_KNUCKLES;
         }
         return PhysicsProfile.SONIC_2_SONIC;
     }
@@ -159,7 +237,7 @@ public class Sonic3kSuperStateController extends SuperStateController {
         try {
             if (CrossGameFeatureProvider.isActive()) {
                 GameServices.audio().playDonorSfx(
-                        CrossGameFeatureProvider.getInstance().getDonorGameId(),
+                        GameServices.crossGameFeatures().getDonorGameId(),
                         Sonic3kSfx.SUPER_TRANSFORM.id);
             } else {
                 GameServices.audio().playSfx(Sonic3kSfx.SUPER_TRANSFORM.id);
@@ -184,22 +262,26 @@ public class Sonic3kSuperStateController extends SuperStateController {
         try {
             if (CrossGameFeatureProvider.isActive()) {
                 GameServices.audio().playDonorMusic(
-                        CrossGameFeatureProvider.getInstance().getDonorGameId(),
-                        Sonic3kMusic.INVINCIBILITY.id);
+                        GameServices.crossGameFeatures().getDonorGameId(),
+                        GameMusic.SUPER);
             } else {
-                GameServices.audio().playMusic(Sonic3kMusic.INVINCIBILITY.id);
+                GameServices.audio().playMusic(GameMusic.SUPER);
             }
         } catch (Exception e) {
             LOGGER.fine("Could not play Super Sonic music: " + e.getMessage());
         }
         player.setInvincibleFrames(0);
         if (superAnimSet != null) {
-            normalAnimSet = player.getAnimationSet();
+            if (normalAnimSet == null) {
+                normalAnimSet = player.getAnimationSet();
+            }
             player.setAnimationSet(superAnimSet);
         }
         // Swap to Super Sonic sprite renderer (different mappings/DPLCs)
         if (superRenderer != null) {
-            normalRenderer = player.getSpriteRenderer();
+            if (normalRenderer == null) {
+                normalRenderer = player.getSpriteRenderer();
+            }
             player.setSpriteRenderer(superRenderer);
         }
         player.setShieldVisible(false);
@@ -208,6 +290,10 @@ public class Sonic3kSuperStateController extends SuperStateController {
 
     @Override
     protected void updateSuperPalette() {
+        var paletteRegistry = GameServices.paletteOwnershipRegistryOrNull();
+        if (paletteRegistry != null && paletteRegistry.isPaletteRotationDisabled()) {
+            return;
+        }
         if (paletteState != -1) return;
 
         paletteTimer--;
@@ -230,24 +316,42 @@ public class Sonic3kSuperStateController extends SuperStateController {
         paletteState = 2;
         paletteFrame = FADE_COMPLETE_OFFSET - BYTES_PER_FRAME;
         paletteTimer = 3;
+        // ROM: move.b #1,invincibility_timer(a0). Besides the one-frame grace
+        // period, this is how SonicKnux_SuperHyper.revertToNormal restores the
+        // zone music: it plays none itself and lets Sonic_ChkInvin re-issue
+        // Current_music when the timer expires.
         player.setInvincibleFrames(1);
         if (normalAnimSet != null) {
             player.setAnimationSet(normalAnimSet);
-            normalAnimSet = null;
         }
         // Restore normal sprite renderer
         if (normalRenderer != null) {
             player.setSpriteRenderer(normalRenderer);
-            normalRenderer = null;
         }
         player.setShieldVisible(true);
-        // Revert to zone music
-        try {
-            GameServices.audio().endMusicOverride(Sonic3kMusic.INVINCIBILITY.id);
-        } catch (Exception e) {
-            LOGGER.fine("Could not revert Super Sonic music: " + e.getMessage());
-        }
         LOGGER.info("Super Sonic deactivated (S3K)");
+    }
+
+    private void reconcileRewindPresentation(SuperState restoredState) {
+        boolean activeSuper = restoredState == SuperState.SUPER;
+        reconcileRewindPhysicsAndAnimationProfile(activeSuper);
+        if (activeSuper) {
+            if (superAnimSet != null) {
+                player.setAnimationSet(superAnimSet);
+            }
+            if (superRenderer != null) {
+                player.setSpriteRenderer(superRenderer);
+            }
+            player.setShieldVisible(false);
+        } else {
+            if (normalAnimSet != null) {
+                player.setAnimationSet(normalAnimSet);
+            }
+            if (normalRenderer != null) {
+                player.setSpriteRenderer(normalRenderer);
+            }
+            player.setShieldVisible(true);
+        }
     }
 
     /**
@@ -307,16 +411,87 @@ public class Sonic3kSuperStateController extends SuperStateController {
         PaletteTarget target = resolvePaletteTarget(SONIC_PALETTE_INDEX);
         if (target == null) return;
 
-        Palette palette = target.palette();
+        LevelManager levelManager = GameServices.levelOrNull();
+        Level level = levelManager != null ? levelManager.getCurrentLevel() : null;
 
-        for (int i = 0; i < COLORS_PER_FRAME; i++) {
-            palette.getColor(FIRST_COLOR_INDEX + i)
-                    .fromSegaFormat(paletteData, frameOffset + i * 2);
-        }
+        byte[] patch = new byte[BYTES_PER_FRAME];
+        System.arraycopy(paletteData, frameOffset, patch, 0, patch.length);
+        S3kPaletteWriteSupport.applyContiguousPatchToPalette(
+                GameServices.paletteOwnershipRegistryOrNull(),
+                level,
+                GameServices.graphics(),
+                target.palette(),
+                target.gpuLine(),
+                S3kPaletteOwners.SUPER_PALETTE,
+                S3kPaletteOwners.PRIORITY_OBJECT_OVERRIDE,
+                FIRST_COLOR_INDEX,
+                patch);
 
-        GraphicsManager gfx = GraphicsManager.getInstance();
-        if (gfx.isGlInitialized()) {
-            gfx.cachePaletteTexture(palette, target.gpuLine());
+        applyUnderwaterPaletteFrame(frameOffset, target.gpuLine(), levelManager, level);
+    }
+
+    /**
+     * Mirrors the cycle frame into the water palette so Super Sonic stays gold
+     * below the surface.
+     *
+     * <p>ROM: {@code SuperHyper_PalCycle_SonicApply} (sonic3k.asm:4666-4681)
+     * writes {@code Water_palette+$04} from a zone-specific underwater table
+     * whenever {@code Water_flag} is set.
+     */
+    private void applyUnderwaterPaletteFrame(int frameOffset, int gpuLine,
+                                             LevelManager levelManager, Level level) {
+        // The donor palette in cross-game mode lives above the four level lines and
+        // has no underwater counterpart.
+        if (gpuLine != SONIC_PALETTE_INDEX || levelManager == null || level == null) {
+            return;
         }
+        WaterSystem water = GameServices.waterOrNull();
+        if (water == null) {
+            return;
+        }
+        int zone = level.getZoneIndex();
+        int act = levelManager.getCurrentAct();
+        if (!water.hasWater(zone, act)) {
+            return;
+        }
+        byte[] underwaterData = underwaterPaletteTable(zone, act);
+        if (underwaterData == null || frameOffset + BYTES_PER_FRAME > underwaterData.length) {
+            return;
+        }
+        byte[] patch = new byte[BYTES_PER_FRAME];
+        System.arraycopy(underwaterData, frameOffset, patch, 0, patch.length);
+        S3kPaletteWriteSupport.applyUnderwaterContiguousPatch(
+                GameServices.paletteOwnershipRegistryOrNull(),
+                level,
+                GameServices.graphics(),
+                S3kPaletteOwners.SUPER_PALETTE,
+                S3kPaletteOwners.PRIORITY_OBJECT_OVERRIDE,
+                SONIC_PALETTE_INDEX,
+                FIRST_COLOR_INDEX,
+                patch);
+    }
+
+    /**
+     * Returns the underwater cycle table for the zone/act, falling back to the
+     * surface table when the zone declares no underwater variant.
+     */
+    private byte[] underwaterPaletteTable(int zone, int act) {
+        var waterData = GameServices.module().getWaterDataProvider();
+        int addr = waterData != null
+                ? waterData.getUnderwaterSuperPaletteCycleAddress(zone, act)
+                : 0;
+        if (addr <= 0 || romReader == null) {
+            return paletteData;
+        }
+        return underwaterPaletteData.computeIfAbsent(addr, address -> {
+            int len = Sonic3kConstants.PAL_CYCLE_SUPER_SONIC_ENTRY_COUNT
+                    * Sonic3kConstants.PAL_CYCLE_SUPER_SONIC_ENTRY_SIZE;
+            if (address + len > romReader.size()) {
+                LOGGER.warning("S3K underwater Super Sonic palette data not available at ROM address 0x"
+                        + Integer.toHexString(address));
+                return paletteData;
+            }
+            return romReader.slice(address, len);
+        });
     }
 }

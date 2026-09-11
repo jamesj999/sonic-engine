@@ -8,9 +8,12 @@ package com.openggf.level.resources;
  * @param romAddr        Absolute ROM address to load from
  * @param compressionType Type of compression used (KOSINSKI, NEMESIS, or UNCOMPRESSED)
  * @param destOffsetBytes Byte offset in the destination buffer where this data should be written.
- *                        Use 0 for base loads; use specific offsets for overlays.
+ *                        Use 0 for base loads; use specific offsets for overlays; use
+ *                        {@link #APPEND_TO_PREVIOUS} to append after the currently composed extent.
  */
 public record LoadOp(int romAddr, CompressionType compressionType, int destOffsetBytes) {
+    /** Sentinel destination meaning "append after the data composed so far". */
+    public static final int APPEND_TO_PREVIOUS = -1;
 
     /**
      * Creates a load operation with offset 0 (base load).
@@ -24,6 +27,13 @@ public record LoadOp(int romAddr, CompressionType compressionType, int destOffse
      */
     public static LoadOp overlay(int romAddr, CompressionType compressionType, int destOffsetBytes) {
         return new LoadOp(romAddr, compressionType, destOffsetBytes);
+    }
+
+    /**
+     * Creates a load operation that appends after the currently composed extent.
+     */
+    public static LoadOp append(int romAddr, CompressionType compressionType) {
+        return new LoadOp(romAddr, compressionType, APPEND_TO_PREVIOUS);
     }
 
     /**
@@ -41,6 +51,13 @@ public record LoadOp(int romAddr, CompressionType compressionType, int destOffse
     }
 
     /**
+     * Creates a Kosinski-compressed append load operation.
+     */
+    public static LoadOp kosinskiAppend(int romAddr) {
+        return append(romAddr, CompressionType.KOSINSKI);
+    }
+
+    /**
      * Creates a Kosinski Moduled base load operation.
      */
     public static LoadOp kosinskiMBase(int romAddr) {
@@ -55,9 +72,23 @@ public record LoadOp(int romAddr, CompressionType compressionType, int destOffse
     }
 
     /**
+     * Creates a Kosinski Moduled append load operation.
+     */
+    public static LoadOp kosinskiMAppend(int romAddr) {
+        return append(romAddr, CompressionType.KOSINSKI_MODULED);
+    }
+
+    /**
      * Creates an uncompressed base load operation.
      */
     public static LoadOp uncompressedBase(int romAddr) {
         return base(romAddr, CompressionType.UNCOMPRESSED);
+    }
+
+    /**
+     * Returns true when this operation should append after the current composed extent.
+     */
+    public boolean appendsToPrevious() {
+        return destOffsetBytes == APPEND_TO_PREVIOUS;
     }
 }

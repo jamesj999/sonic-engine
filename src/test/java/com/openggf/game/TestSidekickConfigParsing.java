@@ -35,3 +35,5 @@ class TestSidekickConfigParsing {
             Engine.parseSidekickConfig("sonic,sonic,sonic"));
     }
 }
+
+

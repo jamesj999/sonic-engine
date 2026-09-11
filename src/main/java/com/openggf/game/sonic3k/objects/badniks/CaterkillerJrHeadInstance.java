@@ -3,8 +3,10 @@ package com.openggf.game.sonic3k.objects.badniks;
 import com.openggf.game.sonic3k.Sonic3kObjectArtKeys;
 import com.openggf.game.PlayableEntity;
 
-import com.openggf.level.objects.ObjectManager;
+import com.openggf.level.objects.ObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.objects.TouchResponseResult;
 import com.openggf.physics.SwingMotion;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
@@ -26,7 +28,8 @@ import java.util.List;
  *   <li>Routine 8: Continue swing, at next peak: return to step 1</li>
  * </ol>
  */
-public final class CaterkillerJrHeadInstance extends AbstractS3kBadnikInstance {
+public final class CaterkillerJrHeadInstance extends AbstractS3kBadnikInstance
+        implements SpawnRewindRecreatable {
 
     private static final int COLLISION_SIZE_INDEX = 0x17;
     private static final int PRIORITY_BUCKET = 5;
@@ -37,6 +40,8 @@ public final class CaterkillerJrHeadInstance extends AbstractS3kBadnikInstance {
     private static final int SLOW_PEAK_COUNT = 3;
     private static final int BODY_SEGMENT_COUNT = 6;
     private static final int[] SEGMENT_WAIT_DELAYS = {0x0B, 0x17, 0x23, 0x2F, 0x37, 0x3F};
+    /** Obj_WaitOffscreen's placeholder is width_pixels = height_pixels = $20. */
+    private static final int WAIT_OFFSCREEN_MARGIN = 0x20;
 
     private enum Phase { SWING_COUNTED, SWING_FAST, SWING_FINISH }
 
@@ -47,6 +52,13 @@ public final class CaterkillerJrHeadInstance extends AbstractS3kBadnikInstance {
 
     private final List<CaterkillerJrBodyInstance> bodySegments = new ArrayList<>();
     private boolean bodySpawned;
+    /** ROM loc_85B02 restores the saved operation pointer exactly once. */
+    private boolean waitOffscreenReleased;
+    /**
+     * routine 0. loc_85B02 returns without dispatching and leaves routine at 0, so
+     * the first dispatch after the gate releases runs CaterKillerJr_Init.
+     */
+    private boolean initPending = true;
 
     public CaterkillerJrHeadInstance(ObjectSpawn spawn) {
         super(spawn, "CaterKillerJr",
@@ -56,22 +68,44 @@ public final class CaterkillerJrHeadInstance extends AbstractS3kBadnikInstance {
         initSwingPhase1();
     }
 
-    private void spawnBodySegments() {
-        ObjectManager objectManager = services().objectManager();
-
-        for (int i = 0; i < BODY_SEGMENT_COUNT; i++) {
-            CaterkillerJrBodyInstance segment = new CaterkillerJrBodyInstance(
-                    spawn, i, SEGMENT_WAIT_DELAYS[i]);
-            bodySegments.add(segment);
-            objectManager.addDynamicObject(segment);
-        }
-        bodySpawned = true;
-    }
-
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    protected void updateMovement(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        if (destroyed) return;
+        if (isDestroyed()) return;
+
+        // ROM Obj_WaitOffscreen (docs/skdisasm/sonic3k.asm:180271-180305) is a ONE-SHOT
+        // latch. It saves the caller's return address in $34(a0) and overwrites the
+        // operation pointer with loc_85AD2, so the badnik's own routine does not run
+        // while it waits; once the $20-by-$20 placeholder has been drawn, loc_85B02
+        // does `move.l $34(a0),(a0) / rts`, restoring the real operation PERMANENTLY.
+        // The badnik then runs for the rest of its life on or off screen. Re-testing
+        // visibility every frame re-freezes it the moment it leaves the viewport.
+        // loc_85B02 returns without running the routine, so the release frame consumes
+        // a dispatch and the first real one is the frame after.
+        if (!waitOffscreenReleased) {
+            if (!isOnScreen(WAIT_OFFSCREEN_MARGIN)) return;
+            waitOffscreenReleased = true;
+            return;
+        }
+
+        if (initPending) {
+            // CaterKillerJr_Init (sonic3k.asm:183338-183356) calls
+            // SetUp_ObjAttributes (tail `addq.b #2,routine(a0)` / `rts`,
+            // sonic3k.asm:176901-176919), sets x_vel = -$100, then creates the
+            // body segments with CreateChild3_NormalRepeated. Unlike the other
+            // badniks in this family it DOES fall through to a second label,
+            // CaterKillerJr_StartSlowSwing, which overwrites routine with 4 and
+            // primes the swing ($39 = 3, $3E = y_vel = $80, $40 = 8, $38 bit 0
+            // clear) — but that label ends in `rts` too. So the field writes and
+            // the child creation all belong to the Init dispatch, while
+            // CaterKillerJr_SlowSwing (Swing_UpAndDown_Count + MoveSprite2) does
+            // not run until the following dispatch. The constructor already
+            // applies the x_vel and StartSlowSwing field writes.
+            initPending = false;
+            spawnBodySegments();
+            return;
+        }
+
         if (!bodySpawned) spawnBodySegments();
 
         boolean shouldMove = switch (phase) {
@@ -82,6 +116,61 @@ public final class CaterkillerJrHeadInstance extends AbstractS3kBadnikInstance {
         if (shouldMove) {
             moveWithVelocity();
         }
+    }
+
+    @Override
+    public int getCollisionFlags() {
+        // Obj_WaitOffscreen replaces the operation before SetUp_ObjAttributes
+        // writes collision_flags. The parked placeholder therefore cannot hurt
+        // a player that reaches its coordinates while it is vertically hidden.
+        // It also stays zero for the whole Init dispatch, because the frame's
+        // touch scan runs at the player slot before this object's routine:
+        // bodySpawned only turns true partway through that dispatch.
+        return bodySpawned ? super.getCollisionFlags() : 0;
+    }
+
+    private void spawnBodySegments() {
+        for (int i = 0; i < BODY_SEGMENT_COUNT; i++) {
+            int segmentIndex = i;
+            // CreateChild3_NormalRepeated allocates each child with
+            // AllocateObjectAfterCurrent, preserving head-before-body touch order.
+            CaterkillerJrBodyInstance segment = spawnChild(
+                    () -> new CaterkillerJrBodyInstance(
+                            spawn, segmentIndex, SEGMENT_WAIT_DELAYS[segmentIndex]));
+            if (!segment.isDestroyed() && segment.getSlotIndex() >= 0) {
+                bodySegments.add(segment);
+            }
+        }
+        bodySpawned = true;
+    }
+
+    void attachBodySegmentForRewind(CaterkillerJrBodyInstance segment) {
+        if (!bodySegments.contains(segment)) {
+            bodySegments.add(segment);
+        }
+        bodySpawned = true;
+    }
+
+    static CaterkillerJrHeadInstance findLiveHeadForRewind(RewindRecreateContext ctx) {
+        if (ctx == null || ctx.spawn() == null || ctx.objectServices() == null
+                || ctx.objectServices().objectManager() == null) {
+            return null;
+        }
+        CaterkillerJrHeadInstance best = null;
+        long bestDistance = Long.MAX_VALUE;
+        for (ObjectInstance instance : ctx.objectServices().objectManager().getActiveObjects()) {
+            if (!(instance instanceof CaterkillerJrHeadInstance head) || head.isDestroyed()) {
+                continue;
+            }
+            long dx = head.getX() - ctx.spawn().x();
+            long dy = head.getY() - ctx.spawn().y();
+            long distance = dx * dx + dy * dy;
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = head;
+            }
+        }
+        return best;
     }
 
     /** Routine 4: swing with counter. Skip movement on transition to phase 2. */

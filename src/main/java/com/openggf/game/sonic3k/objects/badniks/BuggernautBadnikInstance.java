@@ -5,11 +5,15 @@ import com.openggf.game.sonic3k.Sonic3kObjectArtKeys;
 import com.openggf.level.WaterSystem;
 import com.openggf.level.objects.ObjectInstance;
 import com.openggf.level.objects.ObjectManager;
+import com.openggf.level.objects.ObjectPlayerParticipationPolicy;
+import com.openggf.level.objects.ObjectPlayerQuery;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.ObjectServices;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
 import java.util.Collection;
+import java.util.List;
 
 /**
  * S3K Obj $95 — Buggernaut (HCZ Acts 1 &amp; 2).
@@ -43,7 +47,7 @@ import java.util.Collection;
  * <h3>Animation:</h3>
  * Frames 0→1→2 loop (speed 0 = every frame). Wing flapping cycle.
  */
-public final class BuggernautBadnikInstance extends AbstractS3kBadnikInstance {
+public final class BuggernautBadnikInstance extends AbstractS3kBadnikInstance implements SpawnRewindRecreatable {
 
     // --- ObjDat_Buggernaut constants ---
 
@@ -91,6 +95,9 @@ public final class BuggernautBadnikInstance extends AbstractS3kBadnikInstance {
     // sub_87B72: cmpi.b #4,d1 — maximum children per parent
     static final int MAX_CHILDREN = 4;
 
+    private static final ObjectPlayerParticipationPolicy TARGET_PARTICIPATION =
+            ObjectPlayerParticipationPolicy.NATIVE_P1_P2;
+
     // --- State ---
 
     private enum State { HOVER, CHASE }
@@ -123,8 +130,8 @@ public final class BuggernautBadnikInstance extends AbstractS3kBadnikInstance {
     private boolean babySpawned;
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
-        if (destroyed) return;
+    protected void updateMovement(int vIntRunCount, PlayableEntity playerEntity) {
+        if (isDestroyed()) return;
 
         // Obj_WaitOffscreen parity: suppress logic until on-screen
         if (!isOnScreenX()) return;
@@ -316,46 +323,45 @@ public final class BuggernautBadnikInstance extends AbstractS3kBadnikInstance {
     private void spawnBaby() {
         int babyX = currentX + BABY_SPAWN_X_OFFSET;
         int babyY = currentY;
-        ObjectManager objectManager = services().objectManager();
-        if (objectManager == null) {
-            return;
+        BuggernautBabyInstance baby = spawnChild(
+                () -> new BuggernautBabyInstance(spawn, babyX, babyY, this));
+        if (!baby.isDestroyed() && baby.getSlotIndex() >= 0) {
+            childCount++;
         }
+    }
 
-        BuggernautBabyInstance baby =
-                new BuggernautBabyInstance(spawn, babyX, babyY, this);
-        int parentSlot = getSlotIndex();
-        if (parentSlot >= 0) {
-            int childSlot = objectManager.allocateSlotAfter(parentSlot);
-            if (childSlot < 0) {
-                return;
-            }
-            baby.setSlotIndex(childSlot);
-        }
-        objectManager.addDynamicObject(baby);
-        childCount++;
+    /**
+     * Rewind recreate factory for {@link BuggernautBabyInstance}. The baby's
+     * constructor and the baby class are package-private, so the registry (in the
+     * parent package) reaches them through this public static bridge — mirroring
+     * {@code S3kBadnikProjectileInstance.forRewindRecreate}. The {@code parent} is
+     * relinked by object-reference restore; all other baby state is reapplied by the generic
+     * field capturer after recreate.
+     */
+    public static BuggernautBabyInstance recreateBabyForRewind(
+            ObjectSpawn ownerSpawn, int x, int y, BuggernautBadnikInstance parent) {
+        return new BuggernautBabyInstance(ownerSpawn, x, y, parent);
     }
 
     // ── Player proximity (Find_SonicTails) ───────────────────────────────
 
     /**
-     * Find nearest player (Sonic or Tails) by combined distance.
+     * Find nearest native player (Player_1 or Player_2) by horizontal distance.
      */
     private AbstractPlayableSprite findNearestPlayer(AbstractPlayableSprite mainPlayer) {
-        AbstractPlayableSprite nearest = mainPlayer;
-        int nearestDist = mainPlayer != null && !mainPlayer.getDead()
-                ? Math.abs(currentX - mainPlayer.getCentreX()) : Integer.MAX_VALUE;
-
         ObjectServices svc = tryServices();
-        if (svc == null) return nearest;
-        for (PlayableEntity sidekick : svc.sidekicks()) {
-            if (!(sidekick instanceof AbstractPlayableSprite s) || s.getDead()) continue;
-            int dist = Math.abs(currentX - s.getCentreX());
-            if (dist < nearestDist) {
-                nearest = s;
-                nearestDist = dist;
-            }
-        }
-        return nearest;
+        ObjectPlayerQuery query = new ObjectPlayerQuery(
+                () -> mainPlayer,
+                () -> svc != null ? svc.playerQuery().sidekicks() : List.of());
+        PlayableEntity nearest = query.nearestByRomX(
+                TARGET_PARTICIPATION,
+                currentX,
+                BuggernautBadnikInstance::isLivePlayable).player();
+        return nearest instanceof AbstractPlayableSprite sprite ? sprite : null;
+    }
+
+    private static boolean isLivePlayable(PlayableEntity player) {
+        return player instanceof AbstractPlayableSprite sprite && !sprite.getDead();
     }
 
     // ── Water level resolution ───────────────────────────────────────────
@@ -381,7 +387,7 @@ public final class BuggernautBadnikInstance extends AbstractS3kBadnikInstance {
         Collection<ObjectInstance> objects = objectManager.getActiveObjects();
         for (ObjectInstance obj : objects) {
             if (obj instanceof BuggernautBadnikInstance parent
-                    && !parent.destroyed
+                    && !parent.isDestroyed()
                     && parent.childCount < MAX_CHILDREN) {
                 return parent;
             }

@@ -1,12 +1,12 @@
 package com.openggf.game.sonic2.events;
 
-import com.openggf.game.sonic2.audio.Sonic2Music;
 import com.openggf.game.GameServices;
+import com.openggf.game.mutation.MutationEffects;
+import com.openggf.game.sonic2.audio.Sonic2Music;
 import com.openggf.game.sonic2.constants.Sonic2Constants;
 import com.openggf.game.sonic2.constants.Sonic2ObjectIds;
 import com.openggf.game.sonic2.objects.bosses.Sonic2CNZBossInstance;
 import com.openggf.level.Level;
-import com.openggf.level.LevelManager;
 import com.openggf.level.Map;
 import com.openggf.level.objects.ObjectSpawn;
 
@@ -54,6 +54,7 @@ public class Sonic2CNZEvents extends Sonic2ZoneEvents {
 
     @Override
     public void update(int act, int frameCounter) {
+        retryPendingPlc();
         if (act == 0) {
             // Act 1: No dynamic events (ROM: LevEvents_CNZ just calls SlotMachine and returns)
             return;
@@ -87,6 +88,7 @@ public class Sonic2CNZEvents extends Sonic2ZoneEvents {
                     audio().fadeOutMusic();
                     // ROM: Set Current_Boss_ID to 6 (CNZ boss ID in BossCollision_Index)
                     gameState().setCurrentBossId(6);
+                    requestSonic2Plc(Sonic2Constants.PLC_CNZ_BOSS);
 
                     // ROM: Load CNZ boss palette (Pal_CNZ_B to palette line 1)
                     // This palette contains the electricity effect colors
@@ -139,6 +141,37 @@ public class Sonic2CNZEvents extends Sonic2ZoneEvents {
         removeCNZArenaWalls();
     }
 
+    // ---- Rewind accessors ----
+    public int getCnzLeftWallX()        { return cnzLeftWallX; }
+    public void setCnzLeftWallX(int v)  { cnzLeftWallX = v; }
+    public int getCnzLeftWallY()        { return cnzLeftWallY; }
+    public void setCnzLeftWallY(int v)  { cnzLeftWallY = v; }
+    public int getCnzRightWallX()       { return cnzRightWallX; }
+    public void setCnzRightWallX(int v) { cnzRightWallX = v; }
+    public int getCnzRightWallY()       { return cnzRightWallY; }
+    public void setCnzRightWallY(int v) { cnzRightWallY = v; }
+    // ---- end rewind accessors ----
+
+    public boolean isBossArenaActive() {
+        return eventRoutine >= 4;
+    }
+
+    public boolean isBossSpawnPending() {
+        return eventRoutine >= 4 && cnzBoss == null;
+    }
+
+    public boolean isBossSpawned() {
+        return cnzBoss != null;
+    }
+
+    public boolean isLeftArenaWallPlaced() {
+        return cnzLeftWallX >= 0 && cnzLeftWallY >= 0;
+    }
+
+    public boolean isRightArenaWallPlaced() {
+        return cnzRightWallX >= 0 && cnzRightWallY >= 0;
+    }
+
     /**
      * Spawns the CNZ Act 2 boss.
      * ROM: Creates Object 0x51 via JmpTo_AllocateObject in LevEvents_CNZ2_Routine3
@@ -166,8 +199,7 @@ public class Sonic2CNZEvents extends Sonic2ZoneEvents {
      * - Offset $C50 (3152): x = 3152 % 256 = 80, y = 3152 / 256 = 12
      */
     private void placeCNZArenaWalls() {
-        LevelManager levelManager = levelManager();
-        Level level = levelManager.getCurrentLevel();
+        Level level = levelManager().getCurrentLevel();
         if (level == null) {
             return;
         }
@@ -191,17 +223,15 @@ public class Sonic2CNZEvents extends Sonic2ZoneEvents {
         cnzRightWallX = RIGHT_OFFSET % LAYOUT_WIDTH; // 84
         cnzRightWallY = RIGHT_OFFSET / LAYOUT_WIDTH; // 12
 
-        // Place wall blocks in the layout (layer 0 = foreground)
-        try {
-            map.setValue(0, cnzLeftWallX, cnzLeftWallY, (byte) WALL_BLOCK);
-            map.setValue(0, cnzRightWallX, cnzRightWallY, (byte) WALL_BLOCK);
-            // Invalidate the foreground tilemap so changes are rendered
-            // This is equivalent to setting Screen_redraw_flag in the original ROM
-            levelManager.invalidateForegroundTilemap();
-        } catch (IllegalArgumentException e) {
-            // Layout dimensions may differ - log and continue
-            LOGGER.log(java.util.logging.Level.WARNING, "CNZ wall placement failed", e);
-        }
+        mutationPipeline().queue(context -> {
+            try {
+                context.surface().setBlockInMap(0, cnzLeftWallX, cnzLeftWallY, WALL_BLOCK);
+                return context.surface().setBlockInMap(0, cnzRightWallX, cnzRightWallY, WALL_BLOCK);
+            } catch (IllegalArgumentException e) {
+                LOGGER.log(java.util.logging.Level.WARNING, "CNZ wall placement failed", e);
+                return MutationEffects.NONE;
+            }
+        });
     }
 
     /**
@@ -214,8 +244,7 @@ public class Sonic2CNZEvents extends Sonic2ZoneEvents {
      * This allows Sonic to exit the arena to the right after defeating the boss.
      */
     private void removeCNZArenaWalls() {
-        LevelManager levelManager = levelManager();
-        Level level = levelManager.getCurrentLevel();
+        Level level = levelManager().getCurrentLevel();
         if (level == null || cnzRightWallX < 0) {
             return;
         }
@@ -227,13 +256,12 @@ public class Sonic2CNZEvents extends Sonic2ZoneEvents {
         // ROM: Removes right wall (offset $C54, x=84) with block $DD after defeat
         final int EMPTY_BLOCK = 0xDD;
 
-        try {
-            map.setValue(0, cnzRightWallX, cnzRightWallY, (byte) EMPTY_BLOCK);
-            // Invalidate the foreground tilemap so changes are rendered
-            // ROM sets Screen_redraw_flag at line 66297
-            levelManager.invalidateForegroundTilemap();
-        } catch (IllegalArgumentException e) {
-            // Layout dimensions may differ - ignore
-        }
+        mutationPipeline().queue(context -> {
+            try {
+                return context.surface().setBlockInMap(0, cnzRightWallX, cnzRightWallY, EMPTY_BLOCK);
+            } catch (IllegalArgumentException e) {
+                return MutationEffects.NONE;
+            }
+        });
     }
 }

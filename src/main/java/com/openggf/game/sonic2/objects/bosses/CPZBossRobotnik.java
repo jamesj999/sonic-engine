@@ -7,6 +7,8 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -17,7 +19,7 @@ import java.util.List;
  * ROM Reference: s2.asm Obj5D (ROUTINE_ROBOTNIK = 0x16)
  * Follows parent position and shows expressions based on hit state.
  */
-public class CPZBossRobotnik extends AbstractObjectInstance {
+public class CPZBossRobotnik extends AbstractObjectInstance implements RewindRecreatable {
     private final Sonic2CPZBossInstance mainBoss;
 
     private int x;
@@ -42,7 +44,13 @@ public class CPZBossRobotnik extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        Sonic2CPZBossInstance boss = CpzBossRewindLinks.nearestBoss(ctx);
+        return boss == null ? null : new CPZBossRobotnik(ctx.spawn(), boss);
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) {
             return;

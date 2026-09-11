@@ -1,10 +1,10 @@
 package com.openggf.tools.disasm;
 
 import com.openggf.data.Rom;
-import com.openggf.tools.EnigmaReader;
-import com.openggf.tools.KosinskiReader;
-import com.openggf.tools.NemesisReader;
-import com.openggf.tools.SaxmanDecompressor;
+import com.openggf.data.compression.EnigmaReader;
+import com.openggf.data.compression.KosinskiReader;
+import com.openggf.data.compression.NemesisReader;
+import com.openggf.data.compression.SaxmanDecompressor;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;

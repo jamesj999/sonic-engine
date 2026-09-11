@@ -1,9 +1,9 @@
 package com.openggf.game.sonic1.scroll;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 public class SwScrlMzTest {
 
@@ -20,8 +20,8 @@ public class SwScrlMzTest {
         short mountain = unpackBG(hScroll[88]);  // mountain entry
         short bushes = unpackBG(hScroll[120]);   // bushes/buildings entry
 
-        assertNotEquals("Cloud and mountain bands should differ", cloud, mountain);
-        assertNotEquals("Mountain and bushes bands should differ", mountain, bushes);
+        assertNotEquals(cloud, mountain, "Cloud and mountain bands should differ");
+        assertNotEquals(mountain, bushes, "Mountain and bushes bands should differ");
     }
 
     @Test
@@ -38,8 +38,8 @@ public class SwScrlMzTest {
         short mountainEnd = unpackBG(hScroll[88]);
         short bushesEnd = unpackBG(hScroll[120]);
 
-        assertEquals("Mountain band should move at 1/4x", -64, delta(mountainStart, mountainEnd));
-        assertEquals("Bushes band should move at 1/2x", -128, delta(bushesStart, bushesEnd));
+        assertEquals(-64, delta(mountainStart, mountainEnd), "Mountain band should move at 1/4x");
+        assertEquals(-128, delta(bushesStart, bushesEnd), "Bushes band should move at 1/2x");
     }
 
     @Test
@@ -54,7 +54,7 @@ public class SwScrlMzTest {
         handler.update(hScroll, 256, deepCameraY, 1, 0);
         short interiorEnd = unpackBG(hScroll[100]);
 
-        assertEquals("Interior band should move at 3/4x", -192, delta(interiorStart, interiorEnd));
+        assertEquals(-192, delta(interiorStart, interiorEnd), "Interior band should move at 3/4x");
     }
 
     @Test
@@ -80,3 +80,5 @@ public class SwScrlMzTest {
         return (short) (end - start);
     }
 }
+
+

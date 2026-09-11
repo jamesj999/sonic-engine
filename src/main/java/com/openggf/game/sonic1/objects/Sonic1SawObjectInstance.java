@@ -9,6 +9,8 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
+import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
@@ -37,7 +39,7 @@ import java.util.List;
  * ROM reference: docs/s1disasm/_incObj/6A Saws and Pizza Cutters.asm
  */
 public class Sonic1SawObjectInstance extends AbstractObjectInstance
-        implements TouchResponseProvider {
+        implements TouchResponseProvider, SpawnRewindRecreatable {
 
     // ---- Collision ----
     // obColType for active saws: $A2 = HURT($80) | size index $22
@@ -89,8 +91,8 @@ public class Sonic1SawObjectInstance extends AbstractObjectInstance
     private static final DebugColor DEBUG_COLOR_INACTIVE = new DebugColor(180, 180, 100);
 
     // ---- Instance state ----
-    private final int sawType;           // subtype & 7 (0-4)
-    private final boolean xFlipped;      // obStatus bit 0
+    private int sawType;           // subtype & 7 (0-4)
+    private boolean xFlipped;      // obStatus bit 0
 
     // Dynamic position
     private int x;
@@ -106,8 +108,8 @@ public class Sonic1SawObjectInstance extends AbstractObjectInstance
     // X velocity (subpixel, 16-bit signed)
     private int velX;
 
-    // Subpixel X accumulator (fractional part)
-    private int subPixelX;
+    /** Subpixel accumulators (xSub / ySub) for ROM-accurate 16:8 fixed-point integration. */
+    private final SubpixelMotion.State motion = new SubpixelMotion.State(0, 0, 0, 0, 0, 0);
 
     // Animation state
     private int mappingFrame;     // 0 or 1 for pizza cutters; 2 or 3 for ground saws
@@ -115,6 +117,21 @@ public class Sonic1SawObjectInstance extends AbstractObjectInstance
 
     // Collision active flag
     private boolean collisionActive;
+
+    // ROM parity: a not-yet-appeared ground saw (type 3/4, saw_here=0) that fails
+    // its player-X proximity test — or that activates this frame — runs
+    // `addq.l #4,sp` to POP Saw_Action's return address, SKIPPING the trailing
+    // `out_of_range.s .delete` check entirely (docs/s1disasm/_incObj/6A SBZ Saws
+    // and Pizza Cutters.asm:127-131,150-152,165-170). So a dormant ground saw
+    // waiting off to the right does NOT delete itself while the player is still
+    // approaching — only the player-Y failure path (.nosawNNy) falls through to
+    // out_of_range. The engine's out_of_range runs in a separate post-execute
+    // pass, so model the pop as a one-frame "skip out_of_range" flag set by the
+    // X-fail/activation paths and consumed by isPersistent(). Without it the
+    // engine deleted a dormant ground saw that ROM kept, freeing its slot early
+    // (SBZ2 f3085: ground saw slot 0x45 deleted vs ROM-retained, cascading
+    // FindFreeObj into the f6839 bomb-slot error).
+    private boolean skipOutOfRangeThisFrame;
 
     public Sonic1SawObjectInstance(ObjectSpawn spawn) {
         super(spawn, "Saw");
@@ -157,11 +174,14 @@ public class Sonic1SawObjectInstance extends AbstractObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
+        // Reset the ROM `addq.l #4,sp` out_of_range-skip each frame; only the
+        // dormant ground-saw X-fail/activation paths re-arm it below.
+        skipOutOfRangeThisFrame = false;
         switch (sawType) {
             case 0 -> updateType00();
-            case 1 -> updateType01(frameCounter);
+            case 1 -> updateType01(vIntRunCount);
             case 2 -> updateType02();
             case 3 -> updateType03(player);
             case 4 -> updateType04(player);
@@ -199,7 +219,7 @@ public class Sonic1SawObjectInstance extends AbstractObjectInstance
      *     move.w  d1,obX(a0)
      * </pre>
      */
-    private void updateType01(int frameCounter) {
+    private void updateType01(int vIntRunCount) {
         int amplitude = TYPE01_AMPLITUDE;
         int d0 = OscillationManager.getByte(OSC_TYPE01_OFFSET) & 0xFF;
 
@@ -217,7 +237,7 @@ public class Sonic1SawObjectInstance extends AbstractObjectInstance
         // Sound: play every 16 frames when on screen
         // tst.b obRender(a0) / bpl.s .nosound01
         // move.w (v_framecount).w,d0 / andi.w #$F,d0 / bne.s .nosound01
-        if (isOnScreen() && (frameCounter & TYPE01_SOUND_MASK) == 0) {
+        if (isOnScreen() && (vIntRunCount & TYPE01_SOUND_MASK) == 0) {
             services().playSfx(Sonic1Sfx.SAW.id);
         }
     }
@@ -299,37 +319,42 @@ public class Sonic1SawObjectInstance extends AbstractObjectInstance
             int playerX = player.getCentreX();
             int playerY = player.getCentreY();
 
-            // subi.w #$C0,d0 / bcs.s .nosaw03x
+            // subi.w #$C0,d0 / bcs.s .nosaw03x (.nosaw03x runs addq.l #4,sp)
             int d0 = playerX - TYPE03_TRIGGER_OFFSET;
             if (d0 < 0) {
-                return; // Player too far left - also skip rendering (addq.l #4,sp)
+                skipOutOfRangeThisFrame = true; // .nosaw03x: skip out_of_range
+                return; // Player too far left
             }
 
             // sub.w obX(a0),d0 / bcs.s .nosaw03x
             d0 = d0 - x;
             if (d0 < 0) {
+                skipOutOfRangeThisFrame = true; // .nosaw03x: skip out_of_range
                 return; // Saw is to the right of trigger point
             }
 
             // Y proximity check:
             // subi.w #$80,d0 [uses player Y] / cmp.w obY(a0),d0 / bhs.s .nosaw03y
             // addi.w #$100,d0 / cmp.w obY(a0),d0 / blo.s .nosaw03y
+            // The .nosaw03y path does NOT pop the return address, so out_of_range
+            // STILL runs on a player-Y failure (leave skipOutOfRangeThisFrame false).
             int yCheck = playerY - GROUND_SAW_Y_RANGE_ABOVE;
             if (yCheck >= y) {
-                return; // Player too far below
+                return; // Player too far below (.nosaw03y: out_of_range runs)
             }
             yCheck += GROUND_SAW_Y_RANGE_TOTAL;
             if (yCheck < y) {
-                return; // Player too far above
+                return; // Player too far above (.nosaw03y: out_of_range runs)
             }
 
-            // Activate the ground saw
+            // Activate the ground saw, then fall through to .nosaw03x (addq.l #4,sp).
             sawHere = true;
             velX = GROUND_SAW_VELOCITY;
             collisionActive = true;
             mappingFrame = 2; // move.b #2,obFrame(a0) -> ground saw frame
 
             services().playSfx(Sonic1Sfx.SAW.id);
+            skipOutOfRangeThisFrame = true; // activation falls through to .nosaw03x
         } else {
             // .here03: Apply velocity and animate
             applyVelocity();
@@ -369,29 +394,32 @@ public class Sonic1SawObjectInstance extends AbstractObjectInstance
             int playerX = player.getCentreX();
             int playerY = player.getCentreY();
 
-            // addi.w #$E0,d0 / sub.w obX(a0),d0 / bcc.s .nosaw04x
+            // addi.w #$E0,d0 / sub.w obX(a0),d0 / bcc.s .nosaw04x (runs addq.l #4,sp)
             int d0 = (playerX + TYPE04_TRIGGER_OFFSET) - x;
             if (d0 >= 0) {
+                skipOutOfRangeThisFrame = true; // .nosaw04x: skip out_of_range
                 return; // Player not far enough to the left
             }
 
-            // Y proximity check (same as type 3)
+            // Y proximity check (same as type 3). .nosaw04y does NOT pop the
+            // return address, so out_of_range STILL runs on a player-Y failure.
             int yCheck = playerY - GROUND_SAW_Y_RANGE_ABOVE;
             if (yCheck >= y) {
-                return;
+                return; // (.nosaw04y: out_of_range runs)
             }
             yCheck += GROUND_SAW_Y_RANGE_TOTAL;
             if (yCheck < y) {
-                return;
+                return; // (.nosaw04y: out_of_range runs)
             }
 
-            // Activate the ground saw
+            // Activate the ground saw, then fall through to .nosaw04x (addq.l #4,sp).
             sawHere = true;
             velX = -GROUND_SAW_VELOCITY;
             collisionActive = true;
             mappingFrame = 2;
 
             services().playSfx(Sonic1Sfx.SAW.id);
+            skipOutOfRangeThisFrame = true; // activation falls through to .nosaw04x
         } else {
             // .here04: Apply velocity and animate
             applyVelocity();
@@ -410,9 +438,10 @@ public class Sonic1SawObjectInstance extends AbstractObjectInstance
         // SpeedToPos: obX += obVelX (16.16 fixed point, but S1 uses 16.8 subpixel)
         // In practice for this object, velX is whole pixels at 8-bit subpixel scale.
         // $600 = 6.0 pixels per frame
-        subPixelX += velX;
-        x += subPixelX >> 8;
-        subPixelX &= 0xFF;
+        motion.x = x;
+        motion.xVel = velX;
+        SubpixelMotion.moveX(motion);
+        x = motion.x;
     }
 
     /**
@@ -476,9 +505,46 @@ public class Sonic1SawObjectInstance extends AbstractObjectInstance
 
     @Override
     public boolean isPersistent() {
-        // out_of_range.s uses saw_origX for distance check.
-        // Ground saws update origX as they move, so they persist until far off screen.
-        return !isDestroyed();
+        // ROM Saw_Action ends with `out_of_range.s .delete, saw_origX(a0)`
+        // (docs/s1disasm/_incObj/6A SBZ Saws and Pizza Cutters.asm:39): the saw
+        // deletes when its ORIGIN anchor (saw_origX) leaves the camera window.
+        // Let the shared counter-based out_of_range unload run (against the
+        // saw_origX reference returned by getOutOfRangeReferenceX()); a blanket
+        // persistent=true kept off-screen saws alive that ROM had unloaded,
+        // shifting later slot occupancy (SBZ2 trace f239: two saws @0298,@02A0
+        // sat ~239px left of camera but the engine retained them, pushing rings
+        // down two slots).
+        //
+        // EXCEPT: a dormant ground saw that ran `addq.l #4,sp` this frame
+        // (X-fail or activation) skipped its out_of_range check entirely, so it
+        // must NOT unload this frame even if saw_origX is off-window. The flag is
+        // set during update() and consumed here in the post-execute unload pass.
+        return skipOutOfRangeThisFrame;
+    }
+
+    /**
+     * ROM out_of_range tests {@code saw_origX} (objoff_3A), not the live
+     * {@code obX} — {@code out_of_range.s .delete, saw_origX(a0)}
+     * (docs/s1disasm/_incObj/6A SBZ Saws and Pizza Cutters.asm:39). Ground saws
+     * update {@code saw_origX} to the moved position each frame (lines 338/400
+     * = ROM {@code move.w obX(a0),saw_origX(a0)}), while oscillating pizza
+     * cutters keep it at the spawn origin, so {@code origX} is the correct
+     * reference for both.
+     */
+    @Override
+    public int getOutOfRangeReferenceX() {
+        return origX;
+    }
+
+    /**
+     * ROM checks {@code out_of_range} at the END of {@code Saw_Action}
+     * (line 39), AFTER the type subroutine has run (and, for ground saws,
+     * updated {@code saw_origX}). Run the unload post-execute so the check sees
+     * the same anchor ROM does.
+     */
+    @Override
+    public boolean checksOutOfRangeAfterRoutine() {
+        return true;
     }
 
     // ---- Debug Rendering ----

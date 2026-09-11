@@ -1,5 +1,6 @@
 package com.openggf.level.objects;
 
+import com.openggf.tests.ObjectGuardSourceScanner;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -54,9 +55,11 @@ class TestConstructionContextGuard {
     private static final Pattern NEW_OBJECT = Pattern.compile(
             "\\bnew\\s+([A-Z][\\w.]*(?:ObjectInstance|Instance|Fireball))\\s*\\(");
 
-    // Matches: setConstructionContext( or spawnChild( (which sets context internally)
-    private static final Pattern SET_CONTEXT = Pattern.compile("\\b(?:setConstructionContext|spawnChild)\\(");
-    private static final Pattern CLEAR_CONTEXT = Pattern.compile("\\b(?:clearConstructionContext|spawnChild)\\(");
+    // Matches: setConstructionContext( or spawn*Child( (which sets context internally)
+    private static final Pattern SET_CONTEXT =
+            Pattern.compile("\\b(?:setConstructionContext|spawnChild|spawnFreeChild)\\(");
+    private static final Pattern CLEAR_CONTEXT =
+            Pattern.compile("\\b(?:clearConstructionContext|spawnChild|spawnFreeChild)\\(");
 
     // Matches constructor declaration: [access] ClassName(
     private static final Pattern CONSTRUCTOR_DECL = Pattern.compile(
@@ -71,7 +74,7 @@ class TestConstructionContextGuard {
     void runtimeChildCreation_mustSetConstructionContext() throws IOException {
         Path srcMain = findSourceRoot();
         if (srcMain == null) {
-            return;
+            fail("could not locate src/main/java for guard scan");
         }
 
         // Phase 1: Find all object classes whose constructors call services()
@@ -186,11 +189,7 @@ class TestConstructionContextGuard {
     private void findUnsafeNewCallSites(Path srcRoot, Set<String> servicesInConstructor,
                                          List<String> violations) throws IOException {
         // Object packages: scan object-extending files for child creation
-        String[] objectPackages = {
-                "com/openggf/game/sonic1/objects",
-                "com/openggf/game/sonic2/objects",
-                "com/openggf/game/sonic3k/objects"
-        };
+        String[] objectPackages = ObjectGuardSourceScanner.GAME_OBJECT_PACKAGE_PATHS;
 
         for (String pkg : objectPackages) {
             Path pkgDir = srcRoot.resolve(pkg);
@@ -393,11 +392,8 @@ class TestConstructionContextGuard {
     }
 
     private Path findSourceRoot() {
-        Path cwd = Path.of(System.getProperty("user.dir"));
-        Path srcMain = cwd.resolve("src/main/java");
-        if (Files.isDirectory(srcMain)) return srcMain;
-        srcMain = cwd.getParent().resolve("src/main/java");
-        if (Files.isDirectory(srcMain)) return srcMain;
-        return null;
+        return ObjectGuardSourceScanner.findSourceRoot();
     }
 }
+
+

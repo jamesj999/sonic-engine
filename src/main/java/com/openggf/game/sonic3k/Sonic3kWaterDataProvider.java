@@ -156,14 +156,7 @@ public class Sonic3kWaterDataProvider implements WaterDataProvider {
                         + zoneId * Sonic3kConstants.PAL_WATER_KNUX_ENTRY_SIZE;
                 byte[] knuxColors = rom.readBytes(knuxPatchAddr,
                         Sonic3kConstants.PAL_WATER_KNUX_ENTRY_SIZE);
-                // Patch colors 2, 3, 4 of line 0 (byte offset 4 = color index 2, 2 bytes/color)
-                for (int c = 0; c < 3; c++) {
-                    int colorIndex = 2 + c;
-                    byte[] colorBytes = new byte[2];
-                    colorBytes[0] = knuxColors[c * 2];
-                    colorBytes[1] = knuxColors[c * 2 + 1];
-                    palettes[0].colors[colorIndex].fromSegaFormat(colorBytes, 0);
-                }
+                applyKnucklesWaterPatch(palettes[0], knuxColors);
             }
 
             return palettes;
@@ -172,6 +165,13 @@ public class Sonic3kWaterDataProvider implements WaterDataProvider {
                     "Failed to load S3K underwater palette for zone %d act %d (palId 0x%02X): %s",
                     zoneId, actId, paletteId, e.getMessage()));
             return null;
+        }
+    }
+
+    private static void applyKnucklesWaterPatch(Palette paletteLine, byte[] knuxColors) {
+        // Patch colors 2, 3, 4 of line 0 (byte offset 4 = color index 2, 2 bytes/color).
+        for (int c = 0; c < 3; c++) {
+            paletteLine.getColor(2 + c).fromSegaFormat(knuxColors, c * 2);
         }
     }
 
@@ -240,5 +240,15 @@ public class Sonic3kWaterDataProvider implements WaterDataProvider {
         }
 
         return null;
+    }
+
+    @Override
+    public int getUnderwaterSuperPaletteCycleAddress(int zoneId, int actId) {
+        // SuperHyper_PalCycle_SonicApply (sonic3k.asm:4671-4677): AIZ and ICZ use the
+        // green-tinted underwater table, every other water zone the blue-tinted one.
+        if (zoneId == Sonic3kZoneIds.ZONE_AIZ || zoneId == Sonic3kZoneIds.ZONE_ICZ) {
+            return Sonic3kConstants.PAL_CYCLE_SUPER_SONIC_UNDERWATER_AIZ_ICZ_ADDR;
+        }
+        return Sonic3kConstants.PAL_CYCLE_SUPER_SONIC_UNDERWATER_HCZ_CNZ_LBZ_ADDR;
     }
 }

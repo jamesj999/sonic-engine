@@ -7,7 +7,11 @@ import com.openggf.game.PlayableEntity;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 
+import com.openggf.level.objects.ObjectPlayerParticipationPolicy;
+import com.openggf.level.objects.ObjectPlayerQuery;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -15,7 +19,7 @@ import java.util.List;
 
 /**
  * Crawlton (0x9E) - Snake badnik from MCZ (Mystic Cave Zone).
- * Based on disassembly Obj9E (s2.asm:74749-74925).
+ * Based on disassembly Obj9E (s2.asm:75213-75385).
  *
  * Behavior:
  * - Hides in wall, detects player within range
@@ -28,31 +32,40 @@ import java.util.List;
  * persist between frames and accumulate velocity offsets during the lunge.
  * We simulate this by tracking persistent segment positions in arrays.
  */
-public class CrawltonBadnikInstance extends AbstractBadnikInstance {
-    // Collision from Obj9E_SubObjData (s2.asm:74920): collision_flags = $0B
+public class CrawltonBadnikInstance extends AbstractBadnikInstance implements RewindRecreatable {
+
+    // ROM Obj9E_Init allocates a second SST slot for the multi-sprite body child
+    // (see reserveMultiSpriteChildSlot). Tracked so it is allocated exactly once.
+    private boolean childSlotReserved;
+    // Collision from Obj9E_SubObjData (s2.asm:75380): collision_flags = $0B
     private static final int COLLISION_SIZE_INDEX = 0x0B;
 
-    // Detection range: add $80 to distance, check < $100 (s2.asm:74779-74784)
+    // Detection range: add $80 to distance, check < $100 (s2.asm:75240-75245)
     private static final int DETECTION_OFFSET = 0x80;
     private static final int DETECTION_RANGE = 0x100;
 
     // Timer values from disassembly
-    private static final int INITIAL_DELAY_FRAMES = 0x10;  // objoff_3A = $10 (s2.asm:74791)
-    private static final int LUNGE_DURATION = 0x1C;         // objoff_3A = $1C (s2.asm:74816)
-    private static final int REVERSE_PAUSE = 0x20;           // objoff_3A = $20 (s2.asm:74828)
+    private static final int INITIAL_DELAY_FRAMES = 0x10;  // objoff_3A = $10 (s2.asm:75252)
+    private static final int LUNGE_DURATION = 0x1C;         // objoff_3A = $1C (s2.asm:75277)
+    private static final int REVERSE_PAUSE = 0x20;           // objoff_3A = $20 (s2.asm:75289)
 
-    // Number of trailing body segments (s2.asm:74899: mainspr_childsprites = 7)
+    // Number of trailing body segments (s2.asm:75360: mainspr_childsprites = 7)
     private static final int NUM_BODY_SEGMENTS = 7;
 
     // Render priority from Obj9E_SubObjData: priority 4
     private static final int RENDER_PRIORITY = 4;
 
+    // Obj_GetOrientationToPlayer compares Sonic and Tails by horizontal distance
+    // in native S2 mode (s2.asm:72755-72796).
+    private static final ObjectPlayerParticipationPolicy TARGET_PARTICIPATION =
+            ObjectPlayerParticipationPolicy.NATIVE_P1_P2;
+
     // Body segment trailing: d1 starts at $18, each segment threshold decreases by 4
-    // Segment trails when parent timer < d1 for that segment (s2.asm:74866-74878)
+    // Segment trails when parent timer < d1 for that segment (s2.asm:75327-75342)
     private static final int TRAIL_START_THRESHOLD = 0x18;
     private static final int TRAIL_STEP = 4;
 
-    // State machine states matching routine indices (s2.asm:74759-74765)
+    // State machine states matching routine indices (s2.asm:75220-75226)
     private enum State {
         DETECT_PLAYER,  // Routine 2: Check player distance
         INITIAL_DELAY,  // Routine 4: Pre-lunge delay
@@ -83,7 +96,7 @@ public class CrawltonBadnikInstance extends AbstractBadnikInstance {
         this.timer = 0;
         this.nextRoutine = 0;
 
-        // Initialize all body segments at head position (s2.asm:74910-74912)
+        // Initialize all body segments at head position (s2.asm:75370-75375)
         for (int i = 0; i < NUM_BODY_SEGMENTS; i++) {
             segX[i] = currentX;
             segY[i] = currentY;
@@ -91,8 +104,56 @@ public class CrawltonBadnikInstance extends AbstractBadnikInstance {
     }
 
     @Override
-    protected void updateMovement(int frameCounter, PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
+    public CrawltonBadnikInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new CrawltonBadnikInstance(ctx.spawn());
+    }
+
+
+    /**
+     * Reserves the SST slot ROM {@code Obj9E_Init} consumes for Crawlton's
+     * multi-sprite body child.
+     *
+     * <p>ROM (docs/s2disasm/s2.asm:75439-75468): {@code Obj9E_Init} falls into
+     * {@code loc_37F74}, which calls {@code AllocateObject} and, on success,
+     * writes {@code ObjID_Crawlton} into that slot with
+     * {@code render_flags.multi_sprite} set, routine ($3B) = $A and seven
+     * sub-sprites. The child is display-only: its routine {@code loc_37EFC}
+     * only mirrors the parent's position/flip and calls {@code DisplaySprite3}
+     * (docs/s2disasm/s2.asm:75399-75437). It deletes itself once its
+     * {@code parent} slot no longer holds a Crawlton.
+     *
+     * <p>This engine instance draws the body segments itself, so only the slot
+     * needs modelling -- but it must be modelled, because every later
+     * {@code FindFreeObj} allocation in the level lands one slot lower without
+     * it, which changes execution order in the ascending {@code ExecuteObjects}
+     * walk.
+     *
+     * <p>{@code AllocateObject} is {@code FindFreeObj} (lowest free dynamic
+     * slot), not {@code AllocateObjectAfterCurrent}, so this uses
+     * {@code allocateChildSlots}. Allocation happens on the first movement
+     * update because ROM runs {@code Obj9E_Init} inside {@code ExecuteObjects},
+     * after {@code ObjPosLoad} placed the parent. A full object RAM yields no
+     * slot, matching the ROM's {@code bne.s +} allocation-failure branch.
+     */
+    private void reserveMultiSpriteChildSlot() {
+        if (childSlotReserved) {
+            return;
+        }
+        if (spawn == null) {
+            return;
+        }
+        var svc = tryServices();
+        if (svc == null || svc.objectManager() == null) {
+            return;
+        }
+        childSlotReserved = true;
+        svc.objectManager().allocateChildSlots(spawn, 1);
+    }
+
+    @Override
+    protected void updateMovement(int vIntRunCount, PlayableEntity playerEntity) {
+        reserveMultiSpriteChildSlot();
+        AbstractPlayableSprite player = playerEntity instanceof AbstractPlayableSprite playable ? playable : null;
         switch (state) {
             case DETECT_PLAYER -> updateDetection(player);
             case INITIAL_DELAY -> updateInitialDelay();
@@ -103,18 +164,22 @@ public class CrawltonBadnikInstance extends AbstractBadnikInstance {
     }
 
     /**
-     * Routine 2 (s2.asm:74775-74805): Detect player within 128px range, calculate lunge velocity.
+     * Routine 2 (s2.asm:75236-75266): Detect player within 128px range, calculate lunge velocity.
      */
     private void updateDetection(AbstractPlayableSprite player) {
         if (player == null) {
             return;
         }
+        PlayableEntity target = selectTarget(player);
+        if (target == null) {
+            return;
+        }
 
-        // Obj_GetOrientationToPlayer: d2 = obj - player (s2.asm:72299-72300)
-        int d2 = currentX - player.getCentreX();
-        int d3 = currentY - player.getCentreY();
+        // Obj_GetOrientationToPlayer: d2/d3 = obj - closest native player (s2.asm:72755-72796)
+        int d2 = currentX - target.getCentreX();
+        int d3 = currentY - target.getCentreY();
 
-        // Range check (s2.asm:74779-74784): add $80, check unsigned < $100
+        // Range check (s2.asm:75240-75245): add $80, check unsigned < $100
         // This is equivalent to checking |distance| < $80 (128 pixels)
         int checkX = (d2 + DETECTION_OFFSET) & 0xFFFF;
         if (checkX >= DETECTION_RANGE) {
@@ -125,18 +190,18 @@ public class CrawltonBadnikInstance extends AbstractBadnikInstance {
             return;
         }
 
-        // Player in range - transition to initial delay (s2.asm:74789-74804)
+        // Player in range - transition to initial delay (s2.asm:75250-75266)
         state = State.INITIAL_DELAY;
         timer = INITIAL_DELAY_FRAMES;
 
-        // Set facing (s2.asm:74792-74795): clear x_flip, then set if player is right (d0 != 0).
+        // Set facing (s2.asm:75253-75256): clear x_flip, then set if player is right (d0 != 0).
         // Obj_GetOrientationToPlayer: d0 = 0 when d2 >= 0 (player LEFT), d0 = 2 when d2 < 0 (player RIGHT).
         // Art faces LEFT by default; x_flip mirrors it to face RIGHT.
         // x_flip set → player is RIGHT → art flipped to face right toward player.
         boolean xFlip = (d2 < 0);  // Player is to the right
         facingLeft = !xFlip;
 
-        // Calculate velocity toward player (s2.asm:74797-74804)
+        // Calculate velocity toward player (s2.asm:75258-75265)
         // d4 = d2 (signed distance, overwritten at line 74777)
         // neg.w d4 → d4 = player_x - obj_x (direction toward player)
         // lsl.w #3 → scale by 8
@@ -256,7 +321,7 @@ public class CrawltonBadnikInstance extends AbstractBadnikInstance {
     }
 
     @Override
-    protected void updateAnimation(int frameCounter) {
+    protected void updateAnimation(int vIntRunCount) {
         // Head uses frame 0 (from SubObjData init via LoadSubObject)
         // Body segments use frame 2 (s2.asm:74912: move.w #2,(a2)+)
         animFrame = 0;
@@ -270,6 +335,12 @@ public class CrawltonBadnikInstance extends AbstractBadnikInstance {
     @Override
     public int getPriorityBucket() {
         return RenderPriority.clamp(RENDER_PRIORITY);
+    }
+
+    private PlayableEntity selectTarget(AbstractPlayableSprite fallbackPlayer) {
+        ObjectPlayerQuery.NearestPlayerX nearest =
+                services().playerQuery().nearestByRomX(TARGET_PARTICIPATION, currentX);
+        return nearest.player() != null ? nearest.player() : fallbackPlayer;
     }
 
     @Override

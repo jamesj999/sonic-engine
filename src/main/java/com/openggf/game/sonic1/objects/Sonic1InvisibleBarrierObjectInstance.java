@@ -4,12 +4,10 @@ import com.openggf.debug.DebugRenderContext;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
-import com.openggf.level.objects.SolidContact;
-import com.openggf.level.objects.SolidObjectListener;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
-import com.openggf.sprites.playable.AbstractPlayableSprite;
-import com.openggf.game.PlayableEntity;
+import com.openggf.level.objects.SolidRoutineProfile;
 
 import java.util.List;
 
@@ -42,18 +40,19 @@ import java.util.List;
  * Reference: docs/s1disasm/_incObj/71 Invisible Barriers.asm
  */
 public class Sonic1InvisibleBarrierObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SpawnRewindRecreatable {
 
     // From disassembly: addi.w #$B,d1 (padding added to obActWid before SolidObject71 call)
     private static final int WIDTH_PADDING = 0x0B;
 
-    private final int halfWidth;
-    private final int height;
+    private int subtype;
+    private int halfWidth;
+    private int height;
 
     public Sonic1InvisibleBarrierObjectInstance(ObjectSpawn spawn) {
         super(spawn, "InvisibleBarrier");
 
-        int subtype = spawn.subtype();
+        this.subtype = spawn.subtype();
 
         // From disassembly:
         // move.b obSubtype(a0),d0
@@ -90,14 +89,46 @@ public class Sonic1InvisibleBarrierObjectInstance extends AbstractObjectInstance
         int solidHalfWidth = halfWidth + WIDTH_PADDING;
         int airHalfHeight = height;
         int groundHalfHeight = height + 1;
-        return new SolidObjectParams(solidHalfWidth, airHalfHeight, groundHalfHeight);
+        return SolidObjectParams.of(solidHalfWidth, airHalfHeight, groundHalfHeight);
+    }
+
+    /**
+     * The barrier's ROM {@code obActWid}, derived from the subtype's upper nibble.
+     *
+     * <p>{@code Invis_Main} computes it as
+     * {@code ((subtype & $F0) + $10) >> 1} and stores it
+     * (docs/s1disasm/_incObj/71 Invisible Solid Barriers.asm:22-27) -- the same
+     * expression this class already evaluates into {@link #halfWidth} for the
+     * collision width. The byte is anything from 8 to 120 depending on placement
+     * (sbz1 alone places subtypes $70 and $61, giving 64 and 56), so the shared
+     * default of 16 was right only by coincidence for a minority of them.
+     *
+     * <p>Supplied here rather than at {@link #getBalanceWidthPixels()} because
+     * that is the byte's home for a full-solid object: {@code Sonic_Balance}
+     * reads it off the stood-on object
+     * (docs/s1disasm/_incObj/01 Sonic.asm:423) and {@code BuildSprites} uses it
+     * as the horizontal cull bound
+     * (docs/s1disasm/_inc/BuildSprites.asm:49-58). Obj71 only reaches
+     * {@code BuildSprites} in debug mode -- {@code Invis_Solid} gates its own
+     * work on {@code ChkObjectVisible}, which reads {@code obX} and {@code obY}
+     * against the camera and never touches {@code obActWid} ({@code :34-40};
+     * {@code _incObj/sub ChkObjectVisible.asm:9-23}) -- so the cull consumer is
+     * dormant in normal play and the balance consumer is the live one.
+     *
+     * <p>{@code Invis_Solid}'s separately padded
+     * {@code d1 = obActWid + sonic_solid_width} at {@code :43-45} is unchanged.
+     */
+    @Override
+    public int getOnScreenHalfWidth() {
+        return halfWidth;
     }
 
     @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        // No special behavior - standard solid collision handled by ObjectManager.
-        // SolidObject71 handles standing/leaving/side collision identically to SolidObject.
+    public SolidRoutineProfile getSolidRoutineProfile() {
+        // Obj71 calls SolidObject_NoRenderChk: it bypasses the normal render
+        // check and uses S1's BHI right-edge rejection, so exact right-edge
+        // contact is still inside the solid window.
+        return SolidRoutineProfile.fullSolid(false, true, true);
     }
 
     @Override
@@ -108,5 +139,10 @@ public class Sonic1InvisibleBarrierObjectInstance extends AbstractObjectInstance
         int solidHalfWidth = halfWidth + WIDTH_PADDING;
         ctx.drawRect(x, y, solidHalfWidth, height, 0.0f, 1.0f, 1.0f);
         ctx.drawCross(x, y, 3, 0.0f, 1.0f, 1.0f);
+    }
+
+    @Override
+    public String traceDebugDetails() {
+        return String.format("sub=%02X solid=%dx%d", subtype, halfWidth + WIDTH_PADDING, height);
     }
 }

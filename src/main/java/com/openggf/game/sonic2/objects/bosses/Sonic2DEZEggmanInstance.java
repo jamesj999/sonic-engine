@@ -4,8 +4,15 @@ import com.openggf.game.PlayableEntity;
 import com.openggf.game.sonic2.Sonic2ObjectArtKeys;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
+import com.openggf.level.objects.ObjectConstructionContext;
+import com.openggf.level.objects.ObjectPlayerParticipationPolicy;
+import com.openggf.level.objects.ObjectPlayerQuery;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.ObjectInstance;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.SolidExecutionMode;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
@@ -30,7 +37,7 @@ import java.util.List;
  * Animation: Ani_objC5_objC6 anim 0 = speed 5, frames {2, 3, 4} looping.
  * Art: Combined RobotnikUpper + RobotnikRunning + RobotnikLower, mappings ObjC6_MapUnc_3D0EE.
  */
-public class Sonic2DEZEggmanInstance extends AbstractObjectInstance {
+public class Sonic2DEZEggmanInstance extends AbstractObjectInstance implements RewindRecreatable {
 
     // ========================================================================
     // STATE CONSTANTS
@@ -132,7 +139,16 @@ public class Sonic2DEZEggmanInstance extends AbstractObjectInstance {
      * @param spawnY initial Y position (ROM layout: $168)
      */
     public Sonic2DEZEggmanInstance(int spawnX, int spawnY) {
-        super(new ObjectSpawn(spawnX, spawnY, 0xC6, 0xA6, 0, false, 0), "DEZ Eggman");
+        this(new ObjectSpawn(spawnX, spawnY, 0xC6, 0xA6, 0, false, 0));
+    }
+
+    /**
+     * Create ObjC6 from the ROM object layout.
+     */
+    public Sonic2DEZEggmanInstance(ObjectSpawn spawn) {
+        super(spawn, "DEZ Eggman");
+        int spawnX = spawn.x();
+        int spawnY = spawn.y();
         this.currentX = spawnX;
         this.currentY = spawnY;
         this.xFixed = spawnX << 16;
@@ -143,6 +159,12 @@ public class Sonic2DEZEggmanInstance extends AbstractObjectInstance {
         this.currentFrame = FRAME_STANDING;
         this.animFrameIndex = 0;
         this.animTimer = RUNNING_ANIM_SPEED;
+    }
+
+    @Override
+    public Sonic2DEZEggmanInstance recreateForRewind(RewindRecreateContext ctx) {
+        return ObjectConstructionContext.construct(ctx.objectServices(),
+                () -> new Sonic2DEZEggmanInstance(ctx.spawn()));
     }
 
     // ========================================================================
@@ -181,7 +203,7 @@ public class Sonic2DEZEggmanInstance extends AbstractObjectInstance {
     // ========================================================================
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) return;
 
@@ -203,10 +225,7 @@ public class Sonic2DEZEggmanInstance extends AbstractObjectInstance {
         // using ObjC6_MapUnc_3D1DE (construction stripes), priority 1,
         // solid dimensions: half-width=$13, half-height=$20/$20.
         // This blocks the player from running past Eggman.
-        barrierWall = new BarrierWall(WALL_X, WALL_Y);
-        if (services().objectManager() != null) {
-            services().objectManager().addDynamicObject(barrierWall);
-        }
+        barrierWall = spawnChild(() -> new BarrierWall(WALL_X, WALL_Y));
 
         routineSecondary = STATE_WAIT_PLAYER;
         currentFrame = FRAME_STANDING;
@@ -218,12 +237,9 @@ public class Sonic2DEZEggmanInstance extends AbstractObjectInstance {
      * When triggered, show surprised frame and set pause timer.
      */
     private void updateWaitPlayer(AbstractPlayableSprite player) {
-        if (player == null) return;
+        int dx = closestPlayerDeltaX(player);
+        if (dx == Integer.MAX_VALUE) return;
 
-        int dx = currentX - player.getCentreX();
-        // TODO: ROM's Obj_GetOrientationToPlayer considers both players and picks
-        // the closest. When 2P/sidekick support is added, also check the secondary
-        // character and use the smaller |dx|.
         // ROM: addi.w #$5C,d2 / cmpi.w #$B8,d2 / blo.s
         // This checks if (dx + $5C) unsigned < $B8, equivalent to |dx| < $5C
         int shifted = dx + PROXIMITY_RADIUS;
@@ -233,6 +249,20 @@ public class Sonic2DEZEggmanInstance extends AbstractObjectInstance {
             timer = PAUSE_TIMER;
             currentFrame = FRAME_SURPRISED;
         }
+    }
+
+    private int closestPlayerDeltaX(AbstractPlayableSprite updatePlayer) {
+        ObjectPlayerQuery query = services().playerQuery();
+        ObjectPlayerQuery effectiveQuery = new ObjectPlayerQuery(
+                () -> query.mainPlayerOrNull() != null ? query.mainPlayerOrNull() : updatePlayer,
+                query::sidekicks);
+        ObjectPlayerQuery.NearestPlayerX nearest = effectiveQuery.nearestByRomX(
+                ObjectPlayerParticipationPolicy.ALL_ENGINE_PLAYERS,
+                currentX);
+        if (nearest.player() == null) {
+            return updatePlayer != null ? currentX - updatePlayer.getCentreX() : Integer.MAX_VALUE;
+        }
+        return currentX - nearest.player().getCentreX();
     }
 
     /**
@@ -301,9 +331,7 @@ public class Sonic2DEZEggmanInstance extends AbstractObjectInstance {
         puffTimer--;
         if (puffTimer < 0) {
             puffTimer = 0x20;
-            // TODO: ROM spawns exhaust puff child (ObjC6 subtype $AA, frame 5,
-            // x_vel=-$100, y_offset=-$18, timer=$08 [9 frames, bmi at -1],
-            // y_vel=0 with gravity $10/frame)
+            spawnChild(() -> new ExhaustPuff(currentX, currentY - 0x18));
         }
 
         // Apply movement (ObjectMove)
@@ -392,6 +420,101 @@ public class Sonic2DEZEggmanInstance extends AbstractObjectInstance {
     }
 
     // ========================================================================
+    // EXHAUST PUFF INNER CLASS (ObjC6 subtype $AA)
+    // ========================================================================
+
+    /**
+     * Exhaust puff emitted by Eggman during the run to the Death Egg Robot.
+     * ROM: loc_3D00C creates ObjC6 subtype $AA, mapping frame 5,
+     * x_vel=-$100, y_pos-= $18, objoff_2A=$08. ObjC6_State4 decrements the
+     * timer, deletes on BMI, then applies +$10 y velocity before ObjectMove.
+     */
+    static class ExhaustPuff extends AbstractObjectInstance implements RewindRecreatable {
+
+        private static final int FRAME_EXHAUST_PUFF = 5;
+        private static final int INITIAL_X_VEL = -0x100;
+        private static final int INITIAL_Y_VEL = 0;
+        private static final int INITIAL_TIMER = 8;
+
+        private int currentX;
+        private int currentY;
+        private int xFixed;
+        private int yFixed;
+        private int xVel;
+        private int yVel;
+        private int timer;
+        private int currentFrame;
+
+        ExhaustPuff(int x, int y) {
+            super(new ObjectSpawn(x, y, 0xC6, 0xAA, 0, false, 0), "DEZ Eggman Exhaust Puff");
+            this.currentX = x;
+            this.currentY = y;
+            this.xFixed = x << 16;
+            this.yFixed = y << 16;
+            this.xVel = INITIAL_X_VEL;
+            this.yVel = INITIAL_Y_VEL;
+            this.timer = INITIAL_TIMER;
+            this.currentFrame = FRAME_EXHAUST_PUFF;
+        }
+
+        @Override
+        public ExhaustPuff recreateForRewind(RewindRecreateContext ctx) {
+            ObjectSpawn spawn = ctx.spawn();
+            return new ExhaustPuff(spawn.x(), spawn.y());
+        }
+
+        @Override
+        public int getX() {
+            return currentX;
+        }
+
+        @Override
+        public int getY() {
+            return currentY;
+        }
+
+        @Override
+        public boolean isPersistent() {
+            return true;
+        }
+
+        @Override
+        public int getPriorityBucket() {
+            return 5;
+        }
+
+        @Override
+        public void update(int vIntRunCount, PlayableEntity playerEntity) {
+            if (isDestroyed()) return;
+
+            timer--;
+            if (timer < 0) {
+                setDestroyed(true);
+                return;
+            }
+
+            yVel += GRAVITY;
+            xFixed += (xVel << 8);
+            yFixed += (yVel << 8);
+            currentX = xFixed >> 16;
+            currentY = yFixed >> 16;
+        }
+
+        @Override
+        public void appendRenderCommands(List<GLCommand> commands) {
+            if (isDestroyed()) return;
+
+            ObjectRenderManager renderManager = services().renderManager();
+            if (renderManager == null) return;
+
+            PatternSpriteRenderer renderer = renderManager.getRenderer(Sonic2ObjectArtKeys.DEZ_EGGMAN);
+            if (renderer == null || !renderer.isReady()) return;
+
+            renderer.drawFrameIndex(currentFrame, currentX, currentY, false, false);
+        }
+    }
+
+    // ========================================================================
     // BARRIER WALL INNER CLASS (ObjC6 subtype $A8)
     // ========================================================================
 
@@ -407,7 +530,8 @@ public class Sonic2DEZEggmanInstance extends AbstractObjectInstance {
      *           $FA terminator advances to State3).
      * - State3: Clears player pushing flag, deletes itself.
      */
-    static class BarrierWall extends AbstractObjectInstance implements SolidObjectProvider {
+    static class BarrierWall extends AbstractObjectInstance
+            implements SolidObjectProvider, RewindRecreatable {
 
         private static final int WALL_STATE_SOLID = 0;
         private static final int WALL_STATE_OPENING = 2;
@@ -417,14 +541,20 @@ public class Sonic2DEZEggmanInstance extends AbstractObjectInstance {
         private static final int[] OPENING_FRAMES = { 0, 1, 2, 3 };
         private static final int OPENING_ANIM_SPEED = 1;
 
-        private final int wallX;
-        private final int wallY;
+        // Un-final for rewind: GenericFieldCapturer reapplies wallX/wallY
+        // after RewindRecreatable reconstructs from the captured spawn.
+        private int wallX;
+        private int wallY;
         private int wallState;
         private boolean eggmanRunning;
 
         // Opening animation state
         private int openingFrameIndex;
         private int openingAnimTimer;
+
+        BarrierWall() {
+            this(0, 0);
+        }
 
         BarrierWall(int x, int y) {
             super(new ObjectSpawn(x, y, 0xC6, 0xA8, 0, false, 0), "DEZ Barrier Wall");
@@ -434,6 +564,14 @@ public class Sonic2DEZEggmanInstance extends AbstractObjectInstance {
             this.eggmanRunning = false;
             this.openingFrameIndex = 0;
             this.openingAnimTimer = OPENING_ANIM_SPEED;
+        }
+
+        @Override
+        public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+            ObjectSpawn spawn = ctx.spawn();
+            BarrierWall wall = new BarrierWall(spawn.x(), spawn.y());
+            Sonic2DEZEggmanInstance.relinkBarrierWallAfterRewind(ctx, wall);
+            return wall;
         }
 
         /** Called by parent Eggman when he starts running */
@@ -462,7 +600,7 @@ public class Sonic2DEZEggmanInstance extends AbstractObjectInstance {
         }
 
         @Override
-        public void update(int frameCounter, PlayableEntity playerEntity) {
+        public void update(int vIntRunCount, PlayableEntity playerEntity) {
             AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
             if (isDestroyed()) return;
 
@@ -473,9 +611,15 @@ public class Sonic2DEZEggmanInstance extends AbstractObjectInstance {
                         wallState = WALL_STATE_OPENING;
                         openingFrameIndex = 0;
                         openingAnimTimer = OPENING_ANIM_SPEED;
+                    } else {
+                        checkpointAll();
                     }
                 }
                 case WALL_STATE_OPENING -> {
+                    // ROM ObjC6_State3_State2 calls SolidObject before AnimateSprite
+                    // can advance the wall to State3 (docs/s2disasm/s2.asm:82163-82170).
+                    checkpointAll();
+
                     // Play opening animation
                     openingAnimTimer--;
                     if (openingAnimTimer < 0) {
@@ -499,7 +643,12 @@ public class Sonic2DEZEggmanInstance extends AbstractObjectInstance {
 
         @Override
         public SolidObjectParams getSolidParams() {
-            return new SolidObjectParams(WALL_HALF_WIDTH, WALL_HALF_HEIGHT, WALL_HALF_HEIGHT);
+            return SolidObjectParams.of(WALL_HALF_WIDTH, WALL_HALF_HEIGHT, WALL_HALF_HEIGHT);
+        }
+
+        @Override
+        public SolidExecutionMode solidExecutionMode() {
+            return SolidExecutionMode.MANUAL_CHECKPOINT;
         }
 
         @Override
@@ -523,6 +672,18 @@ public class Sonic2DEZEggmanInstance extends AbstractObjectInstance {
                     ? OPENING_FRAMES[Math.min(openingFrameIndex, OPENING_FRAMES.length - 1)]
                     : 0;
             renderer.drawFrameIndex(frame, wallX, wallY, false, false);
+        }
+    }
+
+    private static void relinkBarrierWallAfterRewind(RewindRecreateContext ctx, BarrierWall wall) {
+        if (ctx.objectServices() == null || ctx.objectServices().objectManager() == null) {
+            return;
+        }
+        for (ObjectInstance obj : ctx.objectServices().objectManager().getActiveObjects()) {
+            if (obj instanceof Sonic2DEZEggmanInstance parent) {
+                parent.barrierWall = wall;
+                return;
+            }
         }
     }
 }

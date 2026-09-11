@@ -21,8 +21,18 @@ public class MutableLevel extends AbstractLevel {
     private final BitSet dirtyBlocks;
     private final BitSet dirtyMapCells;
     private final BitSet dirtySolidTiles;
+    private final BitSet modifiedBlocksSinceBaseline;
+    private final BitSet modifiedChunksSinceBaseline;
+    private final BitSet modifiedMapCellsSinceBaseline;
+    private final int[][] baselineBlockStates;
+    private final int[][] baselineChunkStates;
+    private final byte[] baselineMapCellValues;
+    private final int[][] editorSaveBlockStates;
+    private final int[][] editorSaveChunkStates;
+    private final byte[] editorSaveMapCellValues;
     private boolean objectsDirty;
     private boolean ringsDirty;
+    private boolean modifiedSinceLastSave;
 
     // Reverse lookup tables for transitive dirtying
     private final java.util.Map<Integer, Set<Integer>> chunkToBlocks;
@@ -82,6 +92,16 @@ public class MutableLevel extends AbstractLevel {
         this.dirtyMapCells = new BitSet(
                 map.getLayerCount() * map.getWidth() * map.getHeight());
         this.dirtySolidTiles = new BitSet(solidTileCount);
+        this.modifiedBlocksSinceBaseline = new BitSet(blockCount);
+        this.modifiedChunksSinceBaseline = new BitSet(chunkCount);
+        this.modifiedMapCellsSinceBaseline = new BitSet(
+                map.getLayerCount() * map.getWidth() * map.getHeight());
+        this.baselineBlockStates = snapshotBlockStates(blocks);
+        this.baselineChunkStates = snapshotChunkStates(chunks);
+        this.baselineMapCellValues = snapshotMapCellValues(map);
+        this.editorSaveBlockStates = copyStates(baselineBlockStates);
+        this.editorSaveChunkStates = copyStates(baselineChunkStates);
+        this.editorSaveMapCellValues = Arrays.copyOf(baselineMapCellValues, baselineMapCellValues.length);
     }
 
     /**
@@ -176,6 +196,11 @@ public class MutableLevel extends AbstractLevel {
         return sourceLevel.resolveCollisionBlockIndex(blockIndex, mapX, mapY);
     }
 
+    @Override
+    public boolean hasBackgroundCollisionRowAt(int y) {
+        return sourceLevel.hasBackgroundCollisionRowAt(y);
+    }
+
     // ===== Mutation methods (each marks dirty) =====
 
     public void setPattern(int index, Pattern pattern) {
@@ -184,8 +209,12 @@ public class MutableLevel extends AbstractLevel {
     }
 
     public void setPatternDescInChunk(int chunkIndex, int px, int py, PatternDesc desc) {
+        replaceChunkForWrite(chunkIndex, chunks[chunkIndex].saveState());
         chunks[chunkIndex].setPatternDesc(px, py, desc);
         dirtyChunks.set(chunkIndex);
+        editorSaveChunkStates[chunkIndex][py * 2 + px] = desc.get();
+        updateChunkModifiedSinceBaseline(chunkIndex);
+        modifiedSinceLastSave = true;
         // Transitive: dirty all blocks referencing this chunk
         Set<Integer> affectedBlocks = chunkToBlocks.getOrDefault(chunkIndex, Set.of());
         for (int blockIdx : affectedBlocks) {
@@ -195,15 +224,116 @@ public class MutableLevel extends AbstractLevel {
     }
 
     public void setChunkInBlock(int blockIndex, int cx, int cy, ChunkDesc desc) {
+        setChunkInBlockInternal(blockIndex, cx, cy, desc, true);
+    }
+
+    public void setChunkInBlockForRuntimeMutation(int blockIndex, int cx, int cy, ChunkDesc desc) {
+        setChunkInBlockInternal(blockIndex, cx, cy, desc, false);
+    }
+
+    private void setChunkInBlockInternal(int blockIndex, int cx, int cy, ChunkDesc desc, boolean trackEditorSave) {
+        int oldChunkIndex = blocks[blockIndex].getChunkDesc(cx, cy).getChunkIndex();
+        replaceBlockForWrite(blockIndex, blocks[blockIndex].saveState());
         blocks[blockIndex].setChunkDesc(cx, cy, desc);
+        updateChunkToBlocksLookup(blockIndex, oldChunkIndex, desc.getChunkIndex());
         dirtyBlocks.set(blockIndex);
+        if (trackEditorSave) {
+            editorSaveBlockStates[blockIndex][cy * blocks[blockIndex].getGridSide() + cx] = desc.get();
+            updateBlockModifiedSinceBaseline(blockIndex);
+            modifiedSinceLastSave = true;
+        }
         dirtyTransitiveMapCells(blockIndex);
     }
 
+    public void restoreBlockState(int blockIndex, int[] state) {
+        restoreBlockStateInternal(blockIndex, state, true);
+    }
+
+    public void restoreBlockStateForRuntimeMutation(int blockIndex, int[] state) {
+        restoreBlockStateInternal(blockIndex, state, false);
+    }
+
+    private void restoreBlockStateInternal(int blockIndex, int[] state, boolean trackEditorSave) {
+        Block block = blocks[blockIndex];
+        if (state.length != block.saveState().length) {
+            throw new IllegalArgumentException("Invalid block state length for block " + blockIndex);
+        }
+
+        int side = block.getGridSide();
+        for (int i = 0; i < state.length; i++) {
+            int x = i % side;
+            int y = i / side;
+            if (block.getChunkDesc(x, y).get() != state[i]) {
+                setChunkInBlockInternal(blockIndex, x, y, new ChunkDesc(state[i]), false);
+            }
+        }
+        if (trackEditorSave) {
+            editorSaveBlockStates[blockIndex] = Arrays.copyOf(state, state.length);
+            updateBlockModifiedSinceBaseline(blockIndex);
+            modifiedSinceLastSave = true;
+        }
+    }
+
     public void setBlockInMap(int layer, int bx, int by, int blockIndex) {
+        setBlockInMapInternal(layer, bx, by, blockIndex, true);
+    }
+
+    public void setBlockInMapForRuntimeMutation(int layer, int bx, int by, int blockIndex) {
+        setBlockInMapInternal(layer, bx, by, blockIndex, false);
+    }
+
+    /**
+     * Updates layout RAM without scheduling a tilemap rebuild.
+     *
+     * <p>This preserves copy-on-write snapshot isolation and the reverse block-to-map lookup,
+     * while leaving the currently resident VDP-style nametable untouched until its normal
+     * redraw/strip-update owner consumes the changed source cell.
+     */
+    public void setBlockInMapForRuntimeMutationWithoutRedraw(int layer, int bx, int by, int blockIndex) {
+        map.cowEnsureWritable(currentEpoch());
+        int oldBlockIndex = map.getValue(layer, bx, by) & 0xFF;
         map.setValue(layer, bx, by, (byte) blockIndex);
-        int cellIdx = layer * map.getWidth() * map.getHeight() + by * map.getWidth() + bx;
+        int cellIdx = linearizeMapCell(layer, bx, by);
+        updateBlockToMapCellsLookup(cellIdx, oldBlockIndex, blockIndex);
+    }
+
+    private void setBlockInMapInternal(int layer, int bx, int by, int blockIndex, boolean trackEditorSave) {
+        map.cowEnsureWritable(currentEpoch());
+        int oldBlockIndex = map.getValue(layer, bx, by) & 0xFF;
+        map.setValue(layer, bx, by, (byte) blockIndex);
+        int cellIdx = linearizeMapCell(layer, bx, by);
+        updateBlockToMapCellsLookup(cellIdx, oldBlockIndex, blockIndex);
         dirtyMapCells.set(cellIdx);
+        if (trackEditorSave) {
+            editorSaveMapCellValues[cellIdx] = (byte) blockIndex;
+            updateMapCellModifiedSinceBaseline(cellIdx);
+            modifiedSinceLastSave = true;
+        }
+    }
+
+    public void restoreChunkState(int chunkIndex, int[] state) {
+        restoreChunkStateInternal(chunkIndex, state, true);
+    }
+
+    public void restoreChunkStateForRuntimeMutation(int chunkIndex, int[] state) {
+        restoreChunkStateInternal(chunkIndex, state, false);
+    }
+
+    private void restoreChunkStateInternal(int chunkIndex, int[] state, boolean trackEditorSave) {
+        if (!Arrays.equals(chunks[chunkIndex].saveState(), state)) {
+            replaceChunkForWrite(chunkIndex, state);
+            dirtyChunks.set(chunkIndex);
+            Set<Integer> affectedBlocks = chunkToBlocks.getOrDefault(chunkIndex, Set.of());
+            for (int blockIdx : affectedBlocks) {
+                dirtyBlocks.set(blockIdx);
+                dirtyTransitiveMapCells(blockIdx);
+            }
+        }
+        if (trackEditorSave) {
+            editorSaveChunkStates[chunkIndex] = Arrays.copyOf(state, state.length);
+            updateChunkModifiedSinceBaseline(chunkIndex);
+            modifiedSinceLastSave = true;
+        }
     }
 
     public void setSolidTile(int index, SolidTile tile) {
@@ -288,6 +418,42 @@ public class MutableLevel extends AbstractLevel {
         return was;
     }
 
+    public BitSet modifiedBlocksSinceBaseline() {
+        return (BitSet) modifiedBlocksSinceBaseline.clone();
+    }
+
+    public BitSet modifiedChunksSinceBaseline() {
+        return (BitSet) modifiedChunksSinceBaseline.clone();
+    }
+
+    public BitSet modifiedMapCellsSinceBaseline() {
+        return (BitSet) modifiedMapCellsSinceBaseline.clone();
+    }
+
+    public boolean isModifiedSinceLastSave() {
+        return modifiedSinceLastSave;
+    }
+
+    public int[] editorSaveBlockState(int blockIndex) {
+        return Arrays.copyOf(editorSaveBlockStates[blockIndex], editorSaveBlockStates[blockIndex].length);
+    }
+
+    public int[] editorSaveChunkState(int chunkIndex) {
+        return Arrays.copyOf(editorSaveChunkStates[chunkIndex], editorSaveChunkStates[chunkIndex].length);
+    }
+
+    public int editorSaveMapCellValue(int cellIdx) {
+        return Byte.toUnsignedInt(editorSaveMapCellValues[cellIdx]);
+    }
+
+    public void markSaved() {
+        modifiedSinceLastSave = false;
+    }
+
+    public void markModifiedSinceLastSave() {
+        modifiedSinceLastSave = true;
+    }
+
     // ===== Helpers =====
 
     /**
@@ -307,10 +473,96 @@ public class MutableLevel extends AbstractLevel {
         return new int[] { layer, x, y };
     }
 
+    public boolean isChunkReferencedInBlocks(int chunkIndex) {
+        return !chunkToBlocks.getOrDefault(chunkIndex, Set.of()).isEmpty();
+    }
+
+    public boolean isBlockReferencedInMap(int blockIndex) {
+        return !blockToMapCells.getOrDefault(blockIndex, Set.of()).isEmpty();
+    }
+
     private void dirtyTransitiveMapCells(int blockIndex) {
         Set<Integer> cells = blockToMapCells.getOrDefault(blockIndex, Set.of());
         for (int cellIdx : cells) {
             dirtyMapCells.set(cellIdx);
+        }
+    }
+
+    private int linearizeMapCell(int layer, int x, int y) {
+        return layer * map.getWidth() * map.getHeight() + y * map.getWidth() + x;
+    }
+
+    private void updateBlockModifiedSinceBaseline(int blockIndex) {
+        modifiedBlocksSinceBaseline.set(blockIndex,
+                !Arrays.equals(editorSaveBlockStates[blockIndex], baselineBlockStates[blockIndex]));
+    }
+
+    private void updateChunkModifiedSinceBaseline(int chunkIndex) {
+        modifiedChunksSinceBaseline.set(chunkIndex,
+                !Arrays.equals(editorSaveChunkStates[chunkIndex], baselineChunkStates[chunkIndex]));
+    }
+
+    private void updateMapCellModifiedSinceBaseline(int cellIdx) {
+        modifiedMapCellsSinceBaseline.set(cellIdx, editorSaveMapCellValues[cellIdx] != baselineMapCellValues[cellIdx]);
+    }
+
+    private void replaceBlockForWrite(int blockIndex, int[] state) {
+        Block replacement = new Block(blocks[blockIndex].getGridSide());
+        replacement.restoreState(Arrays.copyOf(state, state.length));
+        Block[] newBlocks = blocks.clone();
+        newBlocks[blockIndex] = replacement;
+        replaceBlocks(newBlocks);
+    }
+
+    private void replaceChunkForWrite(int chunkIndex, int[] state) {
+        Chunk replacement = new Chunk();
+        replacement.restoreState(Arrays.copyOf(state, state.length));
+        Chunk[] newChunks = chunks.clone();
+        newChunks[chunkIndex] = replacement;
+        replaceChunks(newChunks);
+    }
+
+    private void updateBlockToMapCellsLookup(int cellIdx, int oldBlockIndex, int newBlockIndex) {
+        if (oldBlockIndex == newBlockIndex) {
+            return;
+        }
+
+        removeLookupMember(blockToMapCells, oldBlockIndex, cellIdx);
+        blockToMapCells.computeIfAbsent(newBlockIndex, ignored -> new HashSet<>()).add(cellIdx);
+    }
+
+    private void updateChunkToBlocksLookup(int blockIndex, int oldChunkIndex, int newChunkIndex) {
+        if (oldChunkIndex == newChunkIndex) {
+            return;
+        }
+
+        if (!blockStillReferencesChunk(blockIndex, oldChunkIndex)) {
+            removeLookupMember(chunkToBlocks, oldChunkIndex, blockIndex);
+        }
+        chunkToBlocks.computeIfAbsent(newChunkIndex, ignored -> new HashSet<>()).add(blockIndex);
+    }
+
+    private boolean blockStillReferencesChunk(int blockIndex, int chunkIndex) {
+        Block block = blocks[blockIndex];
+        int side = block.getGridSide();
+        for (int cy = 0; cy < side; cy++) {
+            for (int cx = 0; cx < side; cx++) {
+                if (block.getChunkDesc(cx, cy).getChunkIndex() == chunkIndex) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static void removeLookupMember(java.util.Map<Integer, Set<Integer>> lookup, int key, int member) {
+        Set<Integer> members = lookup.get(key);
+        if (members == null) {
+            return;
+        }
+        members.remove(member);
+        if (members.isEmpty()) {
+            lookup.remove(key);
         }
     }
 
@@ -350,5 +602,44 @@ public class MutableLevel extends AbstractLevel {
             }
         }
         return result;
+    }
+
+    private static int[][] snapshotBlockStates(Block[] blocks) {
+        int[][] states = new int[blocks.length][];
+        for (int i = 0; i < blocks.length; i++) {
+            states[i] = blocks[i].saveState();
+        }
+        return states;
+    }
+
+    private static int[][] snapshotChunkStates(Chunk[] chunks) {
+        int[][] states = new int[chunks.length][];
+        for (int i = 0; i < chunks.length; i++) {
+            states[i] = chunks[i].saveState();
+        }
+        return states;
+    }
+
+    private static int[][] copyStates(int[][] states) {
+        int[][] copy = new int[states.length][];
+        for (int i = 0; i < states.length; i++) {
+            copy[i] = Arrays.copyOf(states[i], states[i].length);
+        }
+        return copy;
+    }
+
+    private byte[] snapshotMapCellValues(Map levelMap) {
+        int layers = levelMap.getLayerCount();
+        int w = levelMap.getWidth();
+        int h = levelMap.getHeight();
+        byte[] values = new byte[layers * w * h];
+        for (int layer = 0; layer < layers; layer++) {
+            for (int y = 0; y < h; y++) {
+                for (int x = 0; x < w; x++) {
+                    values[linearizeMapCell(layer, x, y)] = levelMap.getValue(layer, x, y);
+                }
+            }
+        }
+        return values;
     }
 }

@@ -8,6 +8,8 @@ import com.openggf.game.PlayableEntity;
 import com.openggf.level.objects.DestructionEffects.DestructionConfig;
 import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
+import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.ObjectTerrainUtils;
 import com.openggf.physics.TerrainCheckResult;
@@ -43,7 +45,7 @@ import java.util.List;
  *   <li>4 (A_Newt_Fires): frames 0,1,1,2,1,1,0 at speed $13 with afRoutine - firing</li>
  * </ul>
  */
-public class Sonic1NewtronBadnikInstance extends AbstractBadnikInstance {
+public class Sonic1NewtronBadnikInstance extends AbstractBadnikInstance implements SpawnRewindRecreatable {
 
     // From disassembly: obColType values used during different phases
     private static final int COLLISION_SIZE_FALLING = 0x0C;
@@ -97,11 +99,11 @@ public class Sonic1NewtronBadnikInstance extends AbstractBadnikInstance {
     private static final int STATE_SPEED = 3;
     private static final int STATE_TYPE01 = 4;
 
-    private final boolean isType1;         // true if subtype != 0 (missile-firing variant)
+    private boolean isType1;               // true if subtype != 0 (missile-firing variant)
     private int secondaryState;
     private int fallVelocity;              // obVelY during falling phase
-    private int xSubpixel;                 // Fractional X for SpeedToPos
-    private int ySubpixel;                 // Fractional Y for ObjectFall
+    /** Subpixel accumulators (xSub / ySub) for ROM-accurate 16:8 fixed-point integration. */
+    private final SubpixelMotion.State motion = new SubpixelMotion.State(0, 0, 0, 0, 0, 0);
     private int collisionSizeIndex;        // Current collision type (changes between phases)
     private boolean collisionEnabled;      // obColType set after appearing
 
@@ -123,8 +125,6 @@ public class Sonic1NewtronBadnikInstance extends AbstractBadnikInstance {
         this.isType1 = spawn.subtype() != 0;
         this.secondaryState = STATE_CHECK_DISTANCE;
         this.fallVelocity = 0;
-        this.xSubpixel = 0;
-        this.ySubpixel = 0;
         this.collisionSizeIndex = COLLISION_SIZE_FALLING;
         this.collisionEnabled = false;
 
@@ -138,7 +138,7 @@ public class Sonic1NewtronBadnikInstance extends AbstractBadnikInstance {
     }
 
     @Override
-    protected void updateMovement(int frameCounter, PlayableEntity playerEntity) {
+    protected void updateMovement(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         switch (secondaryState) {
             case STATE_CHECK_DISTANCE -> updateCheckDistance(player);
@@ -226,11 +226,13 @@ public class Sonic1NewtronBadnikInstance extends AbstractBadnikInstance {
         // during the falling phase; collision type $D is only set upon landing.
 
         // ObjectFall: apply velocity to position, then add gravity
-        int yPos24 = (currentY << 8) | (ySubpixel & 0xFF);
-        yPos24 += fallVelocity;
-        currentY = yPos24 >> 8;
-        ySubpixel = yPos24 & 0xFF;
-        fallVelocity += GRAVITY;
+        motion.x = currentX;
+        motion.y = currentY;
+        motion.xVel = 0;
+        motion.yVel = fallVelocity;
+        SubpixelMotion.moveSprite(motion, GRAVITY);
+        currentY = motion.y;
+        fallVelocity = motion.yVel;
 
         // ObjFloorDist: check floor from feet
         TerrainCheckResult floorResult = ObjectTerrainUtils.checkFloorDist(currentX, currentY, Y_RADIUS);
@@ -272,10 +274,10 @@ public class Sonic1NewtronBadnikInstance extends AbstractBadnikInstance {
      */
     private void updateMatchFloor() {
         // SpeedToPos: apply velocity with subpixel precision
-        int xPos24 = (currentX << 8) | (xSubpixel & 0xFF);
-        xPos24 += xVelocity;
-        currentX = xPos24 >> 8;
-        xSubpixel = xPos24 & 0xFF;
+        motion.x = currentX;
+        motion.xVel = xVelocity;
+        SubpixelMotion.moveX(motion);
+        currentX = motion.x;
 
         // ObjFloorDist
         TerrainCheckResult floorResult = ObjectTerrainUtils.checkFloorDist(currentX, currentY, Y_RADIUS);
@@ -301,10 +303,10 @@ public class Sonic1NewtronBadnikInstance extends AbstractBadnikInstance {
      */
     private void updateSpeed() {
         // SpeedToPos: apply velocity with subpixel precision
-        int xPos24 = (currentX << 8) | (xSubpixel & 0xFF);
-        xPos24 += xVelocity;
-        currentX = xPos24 >> 8;
-        xSubpixel = xPos24 & 0xFF;
+        motion.x = currentX;
+        motion.xVel = xVelocity;
+        SubpixelMotion.moveX(motion);
+        currentX = motion.x;
     }
 
     /**
@@ -359,13 +361,15 @@ public class Sonic1NewtronBadnikInstance extends AbstractBadnikInstance {
         int missileX = currentX + xOffset;
         int missileY = currentY + MISSILE_Y_OFFSET;
 
-        Sonic1NewtronMissileInstance missile = new Sonic1NewtronMissileInstance(
-                missileX, missileY, missileXVel, facingLeft);
-        services().objectManager().addDynamicObject(missile);
+        final int fMissileX = missileX;
+        final int fMissileY = missileY;
+        final int fMissileXVel = missileXVel;
+        spawnFreeChild(() -> new Sonic1NewtronMissileInstance(
+                fMissileX, fMissileY, fMissileXVel, facingLeft));
     }
 
     @Override
-    protected void updateAnimation(int frameCounter) {
+    protected void updateAnimation(int vIntRunCount) {
         animTickCounter++;
 
         int speed = getAnimSpeed();
@@ -458,8 +462,11 @@ public class Sonic1NewtronBadnikInstance extends AbstractBadnikInstance {
 
     @Override
     public boolean isPersistent() {
-        // RememberState: persists while on screen
-        return !isDestroyed() && isOnScreenX(160);
+        // Newt_Action ends at RememberState, whose out_of_range macro deletes the
+        // object once its chunk-aligned X leaves the [camera-128, camera-128+0x280]
+        // window (docs/s1disasm/_incObj/42 Badnik - Newtron.asm:38 ->
+        // _incObj/sub RememberState.asm:9 -> Macros.asm:278-295).
+        return !isDestroyed() && isInRange();
     }
 
     @Override

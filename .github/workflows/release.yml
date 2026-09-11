@@ -10,11 +10,36 @@ on:
   workflow_dispatch:
 
 jobs:
-  test:
+  policy:
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate branch policy
+        if: github.event_name == 'pull_request'
+        run: bash .githooks/validate-policy.sh ci-pr "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" "${{ github.base_ref }}" "${{ github.head_ref }}"
+
+      - name: Validate branch policy (push)
+        if: github.event_name == 'push' && github.event.deleted == false
+        run: bash .githooks/validate-policy.sh ci-push "${{ github.event.before }}" "${{ github.sha }}" "${{ github.ref_name }}"
+
+  test:
+    runs-on: [self-hosted, release-fixtures]
+    env:
+      SONIC1_ROM_PATH: ${{ vars.SONIC1_ROM_PATH }}
+      SONIC2_ROM_PATH: ${{ vars.SONIC2_ROM_PATH }}
+      S3K_ROM_PATH: ${{ vars.S3K_ROM_PATH }}
+      LUA_BIN: lua5.4
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+        with:
+          fetch-depth: 0
 
       - name: Set up Java 21
         uses: actions/setup-java@v4
@@ -23,8 +48,129 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
+      - name: Verify Lua 5.4
+        shell: bash
+        run: |
+          command -v "$LUA_BIN"
+          "$LUA_BIN" -e 'assert(_VERSION == "Lua 5.4")'
+
+      - name: Verify trace replay ROM paths
+        shell: bash
+        run: |
+          missing=0
+          for var in SONIC1_ROM_PATH SONIC2_ROM_PATH S3K_ROM_PATH; do
+            value="${!var:-}"
+            if [ -z "$value" ]; then
+              echo "::error ::$var must point to a release-validation ROM fixture."
+              missing=1
+            elif [ ! -f "$value" ]; then
+              echo "::error ::$var points to '$value', but that file does not exist."
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Verify release gate tools and graphics capability
+        shell: bash
+        run: |
+          test -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}"
+          mkdir -p target/release-evidence
+          python3 -m unittest discover -s tools/testing -p 'test_*release*.py'
+          python3 -m unittest discover -s tools/testing -p 'test_classify_surefire_skips.py'
+
       - name: Run tests
-        run: mvn test -B
+        id: release-default-tests
+        shell: bash
+        run: |
+          mvn -Dmse=off test -B \
+            -Dopenggf.test.gl.native=true \
+            -Dsonic1.rom.path="${SONIC1_ROM_PATH}" \
+            -Dsonic2.rom.path="${SONIC2_ROM_PATH}" \
+            -Ds3k.rom.path="${S3K_ROM_PATH}"
+
+      - name: Assert default test skip classification
+        shell: bash
+        run: |
+          python3 tools/testing/classify_surefire_skips.py --reports target/surefire-reports \
+            --policy tools/testing/release-skip-policy.json \
+            --capabilities gl=true,s2_bk2=false,s3k_observations=false,s1_bizhawk_reference=false,audio_reference_files=false \
+            --check-evidence --root . --json target/release-evidence/default-skips.json
+          cp -R target/surefire-reports target/release-evidence/default-reports
+
+      - name: Run structural guards in a fresh JVM
+        id: release-guard-tests
+        shell: bash
+        run: mvn -Dmse=off -Pguards test -B
+
+      - name: Prepare reviewed trace baseline
+        shell: bash
+        run: |
+          baseline_sha=$(cat tools/testing/release-trace-baseline.txt)
+          [[ "$baseline_sha" =~ ^[0-9a-f]{40}$ ]]
+          git merge-base --is-ancestor "$baseline_sha" HEAD
+          baseline_tree="$RUNNER_TEMP/openggf-release-baseline-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git worktree add --detach "$baseline_tree" "$baseline_sha"
+          echo "RELEASE_BASELINE_TREE=$baseline_tree" >> "$GITHUB_ENV"
+          echo "RELEASE_BASELINE_SHA=$baseline_sha" >> "$GITHUB_ENV"
+          cp -R target/surefire-reports target/release-evidence/guard-reports
+          rm -rf target/surefire-reports target/trace-reports
+
+      - name: Run trace replay policy tests
+        id: release-trace-tests
+        shell: bash
+        run: |
+          helper="$PWD/tools/testing/compare_release_traces.py"
+          candidate_tree="$PWD"
+          for tree in "$RELEASE_BASELINE_TREE" "$candidate_tree"; do
+            cd "$tree"
+            python3 "$helper" begin --tree "$tree" --output target/release-evidence/trace-start.json
+            # Assertion exit 1 is evidence. Collection rejects errors/crashes and
+            # incomplete runs; comparison decides whether known debt is unchanged.
+            set +e
+            mvn -Dmse=off test -Ptrace-replay -B \
+              -Dsonic1.rom.path="${SONIC1_ROM_PATH}" \
+              -Dsonic2.rom.path="${SONIC2_ROM_PATH}" \
+              -Ds3k.rom.path="${S3K_ROM_PATH}" > target/release-evidence/trace.log 2>&1
+            trace_exit=$?
+            set -e
+            echo "$trace_exit" > target/release-evidence/trace-exit.txt
+            tail -80 target/release-evidence/trace.log
+            python3 "$helper" collect --tree "$tree" \
+              --start target/release-evidence/trace-start.json --log target/release-evidence/trace.log \
+              --exit-code "$trace_exit" --output target/release-evidence/trace.json
+          done
+
+      - name: Assert trace replay coverage and unchanged known debt
+        shell: bash
+        run: |
+          python3 tools/testing/assert_release_trace_coverage.py
+          python3 tools/testing/compare_release_traces.py compare \
+            --baseline "$RELEASE_BASELINE_TREE/target/release-evidence/trace.json" \
+            --candidate target/release-evidence/trace.json \
+            --expected-baseline "$RELEASE_BASELINE_SHA" --expected-candidate "$(git rev-parse HEAD)"
+
+      - name: Preserve baseline evidence
+        if: always() && env.RELEASE_BASELINE_TREE != ''
+        shell: bash
+        run: |
+          if [ -d "$RELEASE_BASELINE_TREE/target/release-evidence" ]; then
+            cp -R "$RELEASE_BASELINE_TREE/target/release-evidence" target/release-evidence/baseline
+          fi
+
+      - name: Upload release validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-validation-evidence
+          path: |
+            target/release-evidence/
+            target/surefire-reports/
+            target/trace-reports/
+
+      - name: Remove validation baseline worktree
+        if: always() && env.RELEASE_BASELINE_TREE != ''
+        shell: bash
+        run: git worktree remove --force "$RELEASE_BASELINE_TREE"
 
   build:
     needs: test
@@ -53,46 +199,283 @@ jobs:
           cache: maven
 
       - name: Build native image
-        run: mvn package -Pnative -DskipTests -B
+        id: native-build
+        shell: bash
+        run: mvn -Dmse=off package -Pnative -DskipTests -B
 
       - name: Package (Windows)
         if: matrix.platform == 'windows'
         shell: pwsh
+        env:
+          BUILD_ROOT: target
+          DISTRIBUTION_ROOT: target
         run: |
-          New-Item -ItemType Directory -Force -Path dist/OpenGGF
-          Copy-Item "target/OpenGGF.exe" "dist/OpenGGF/"
-          Copy-Item "target/native-libs/*.dll" "dist/OpenGGF/"
-          Compress-Archive -Path "dist/OpenGGF" -DestinationPath "dist/OpenGGF-windows.zip"
-          Remove-Item -Recurse -Force "dist/OpenGGF"
+          New-Item -ItemType Directory -Force -Path "$env:DISTRIBUTION_ROOT/OpenGGF"
+          Copy-Item "$env:BUILD_ROOT/OpenGGF.exe" "$env:DISTRIBUTION_ROOT/OpenGGF/"
+          Copy-Item "$env:BUILD_ROOT/config.yaml" "$env:DISTRIBUTION_ROOT/OpenGGF/"
+          Copy-Item "$env:BUILD_ROOT/native-libs/*.dll" "$env:DISTRIBUTION_ROOT/OpenGGF/"
+          Copy-Item LICENSE, NOTICE.md, CREDITS.md "$env:DISTRIBUTION_ROOT/OpenGGF/"
+          Copy-Item -Recurse LICENSES "$env:DISTRIBUTION_ROOT/OpenGGF/LICENSES"
+          Compress-Archive -Path "$env:DISTRIBUTION_ROOT/OpenGGF" -DestinationPath "$env:DISTRIBUTION_ROOT/OpenGGF-windows.zip"
+          Remove-Item -Recurse -Force "$env:DISTRIBUTION_ROOT/OpenGGF"
 
       - name: Package (macOS)
         if: matrix.platform == 'macos'
+        env:
+          BUILD_ROOT: target
+          DISTRIBUTION_ROOT: target
         run: |
-          mkdir -p dist
-          bash src/packaging/assemble-macos-app.sh target/OpenGGF dist
-          cd dist
-          zip -r OpenGGF-macos.zip OpenGGF.app
-          rm -rf OpenGGF.app
+          mkdir -p "$DISTRIBUTION_ROOT"
+          bash src/packaging/assemble-macos-app.sh "$BUILD_ROOT/OpenGGF" "$DISTRIBUTION_ROOT"
+          cp LICENSE NOTICE.md CREDITS.md "$DISTRIBUTION_ROOT/"
+          cp -R LICENSES "$DISTRIBUTION_ROOT/LICENSES"
+          cd "$DISTRIBUTION_ROOT"
+          zip -r OpenGGF-macos.zip OpenGGF.app config.yaml LICENSE LICENSES NOTICE.md CREDITS.md
+          rm -rf OpenGGF.app LICENSES
 
       - name: Package (Linux)
         if: matrix.platform == 'linux'
+        env:
+          BUILD_ROOT: target
+          DISTRIBUTION_ROOT: target
         run: |
-          mkdir -p dist/OpenGGF
-          cp target/OpenGGF dist/OpenGGF/
-          cp target/native-libs/*.so dist/OpenGGF/
-          tar -czvf dist/OpenGGF-linux.tar.gz -C dist OpenGGF
-          rm -rf dist/OpenGGF
+          mkdir -p "$DISTRIBUTION_ROOT/OpenGGF"
+          cp "$BUILD_ROOT/OpenGGF" "$DISTRIBUTION_ROOT/OpenGGF/"
+          cp "$BUILD_ROOT/config.yaml" "$DISTRIBUTION_ROOT/OpenGGF/"
+          cp "$BUILD_ROOT"/native-libs/*.so "$DISTRIBUTION_ROOT/OpenGGF/"
+          cp LICENSE NOTICE.md CREDITS.md "$DISTRIBUTION_ROOT/OpenGGF/"
+          cp -R LICENSES "$DISTRIBUTION_ROOT/OpenGGF/LICENSES"
+          tar -czvf "$DISTRIBUTION_ROOT/OpenGGF-linux.tar.gz" -C "$DISTRIBUTION_ROOT" OpenGGF
+          rm -rf "$DISTRIBUTION_ROOT/OpenGGF"
+
+      - name: Smoke validate packaged artifact
+        shell: bash
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          BUILD_ROOT: target
+          ARTIFACT_ROOT: target
+          DISTRIBUTION_ROOT: target
+        run: |
+          if command -v python3 >/dev/null 2>&1; then
+            PYTHON=python3
+          else
+            PYTHON=python
+          fi
+          "$PYTHON" - <<'PY'
+          import re
+          import stat
+          import sys
+          import tarfile
+          import zipfile
+          from pathlib import Path
+          import os
+
+          platform = os.environ["PLATFORM"]
+          build_root = Path(os.environ["BUILD_ROOT"])
+          artifact_root = Path(os.environ["ARTIFACT_ROOT"])
+          distribution_root = Path(os.environ["DISTRIBUTION_ROOT"])
+
+          def fail(message):
+              print(f"::error ::{message}", file=sys.stderr)
+              sys.exit(1)
+
+          pom = Path("pom.xml").read_text(encoding="utf-8")
+          match = re.search(r"<version>([^<]+)</version>", pom)
+          if not match:
+              fail("Could not read project version from pom.xml")
+          version = match.group(1)
+
+          macos_version_match = re.match(r"^(\d+)(?:\.(\d+))?(?:\.(\d+))?", version)
+          if not macos_version_match:
+              fail(f"Could not derive a numeric macOS bundle version from {version}")
+          macos_version = ".".join(
+              part or "0" for part in macos_version_match.groups())
+
+          # NOTICE.md: the GPL-3 / LGPL-2.1 texts and notices accompany every copy.
+          LICENCE_FILES = {"LICENSE", "LICENSES/LGPL-2.1.txt", "NOTICE.md", "CREDITS.md"}
+          LICENCE_FILES_IN_JAR = {f"META-INF/openggf/{name}" for name in LICENCE_FILES}
+
+          jar = artifact_root / f"OpenGGF-{version}-jar-with-dependencies.jar"
+          if not jar.is_file():
+              fail(f"Missing packaged JVM jar: {jar}")
+          with zipfile.ZipFile(jar) as archive:
+              try:
+                  manifest = archive.read("META-INF/MANIFEST.MF").decode("utf-8", errors="replace")
+              except KeyError:
+                  fail(f"{jar} is missing META-INF/MANIFEST.MF")
+          if "Main-Class: com.openggf.Engine" not in manifest:
+              fail(f"{jar} manifest does not bootstrap com.openggf.Engine")
+          with zipfile.ZipFile(jar) as archive:
+              jar_names = set(archive.namelist())
+          missing_notices = sorted(LICENCE_FILES_IN_JAR - jar_names)
+          if missing_notices:
+              fail(f"{jar} is missing licence notices: {', '.join(missing_notices)}")
+          stale_manifest_terms = ["jogl", "gluegen", "joal", "jocl"]
+          stale_terms = [term for term in stale_manifest_terms if term in manifest.lower()]
+          if stale_terms:
+              fail(f"{jar} manifest contains obsolete dependency metadata: {', '.join(stale_terms)}")
+
+          if platform == "windows":
+              archive_path = distribution_root / "OpenGGF-windows.zip"
+              if not archive_path.is_file():
+                  fail(f"Missing Windows archive: {archive_path}")
+              with zipfile.ZipFile(archive_path) as archive:
+                  names = set(archive.namelist())
+              required = {"OpenGGF/OpenGGF.exe", "OpenGGF/config.yaml"} | {f"OpenGGF/{name}" for name in LICENCE_FILES}
+              missing = sorted(required - names)
+              if missing:
+                  fail(f"{archive_path} is missing required entries: {', '.join(missing)}")
+              if not any(name.startswith("OpenGGF/") and name.endswith(".dll") for name in names):
+                  fail(f"{archive_path} does not include packaged LWJGL .dll libraries")
+          elif platform == "macos":
+              archive_path = distribution_root / "OpenGGF-macos.zip"
+              if not archive_path.is_file():
+                  fail(f"Missing macOS archive: {archive_path}")
+              with zipfile.ZipFile(archive_path) as archive:
+                  names = set(archive.namelist())
+                  required = {
+                      "OpenGGF.app/Contents/Info.plist",
+                      "OpenGGF.app/Contents/MacOS/OpenGGF",
+                      "OpenGGF.app/Contents/MacOS/OpenGGF.bin",
+                      "config.yaml",
+                  } | LICENCE_FILES
+                  missing = sorted(required - names)
+                  if missing:
+                      fail(f"{archive_path} is missing required entries: {', '.join(missing)}")
+                  info_plist = archive.read("OpenGGF.app/Contents/Info.plist").decode(
+                      "utf-8", errors="replace")
+                  for executable in ("OpenGGF.app/Contents/MacOS/OpenGGF",
+                                     "OpenGGF.app/Contents/MacOS/OpenGGF.bin"):
+                      mode = archive.getinfo(executable).external_attr >> 16
+                      if mode and (mode & stat.S_IXUSR) == 0:
+                          fail(f"{archive_path} entry is not executable: {executable}")
+              for key in ("CFBundleVersion", "CFBundleShortVersionString"):
+                  pattern = rf"<key>\s*{re.escape(key)}\s*</key>\s*<string>\s*{re.escape(macos_version)}\s*</string>"
+                  if not re.search(pattern, info_plist, re.DOTALL):
+                      fail(f"{archive_path} {key} does not match numeric macOS version {macos_version} derived from Maven version {version}")
+          elif platform == "linux":
+              archive_path = distribution_root / "OpenGGF-linux.tar.gz"
+              if not archive_path.is_file():
+                  fail(f"Missing Linux archive: {archive_path}")
+              with tarfile.open(archive_path, "r:gz") as archive:
+                  members = {member.name: member for member in archive.getmembers()}
+              required = {"OpenGGF/OpenGGF", "OpenGGF/config.yaml"} | {f"OpenGGF/{name}" for name in LICENCE_FILES}
+              missing = sorted(required - set(members))
+              if missing:
+                  fail(f"{archive_path} is missing required entries: {', '.join(missing)}")
+              if (members["OpenGGF/OpenGGF"].mode & stat.S_IXUSR) == 0:
+                  fail(f"{archive_path} OpenGGF/OpenGGF is not executable")
+              if not any(name.startswith("OpenGGF/") and name.endswith(".so") for name in members):
+                  fail(f"{archive_path} does not include packaged LWJGL .so libraries")
+          else:
+              fail(f"Unknown release platform: {platform}")
+
+          print(f"Smoke validated {platform} release artifact for version {version}")
+          PY
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: openggf-${{ matrix.platform }}
-          path: dist/*
+          path: |
+            target/OpenGGF-windows.zip
+            target/OpenGGF-macos.zip
+            target/OpenGGF-linux.tar.gz
+          if-no-files-found: error
+          retention-days: 30
+
+  universal-jar:
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build universal JVM jar
+        id: universal-jar-build
+        shell: bash
+        run: mvn -Dmse=off package -Puniversal-jar -DskipTests -B
+
+      - name: Smoke validate universal JVM jar
+        shell: bash
+        env:
+          ARTIFACT_ROOT: target
+          DISTRIBUTION_ROOT: target
+        run: |
+          python3 - <<'PY'
+          import re
+          import os
+          import sys
+          import zipfile
+          from pathlib import Path
+
+          def fail(message):
+              print(f"::error ::{message}", file=sys.stderr)
+              sys.exit(1)
+
+          pom = Path("pom.xml").read_text(encoding="utf-8")
+          match = re.search(r"<version>([^<]+)</version>", pom)
+          if not match:
+              fail("Could not read project version from pom.xml")
+          version = match.group(1)
+
+          artifact_root = Path(os.environ["ARTIFACT_ROOT"])
+          distribution_root = Path(os.environ["DISTRIBUTION_ROOT"])
+          jar = artifact_root / f"OpenGGF-{version}-jar-with-dependencies.jar"
+          if not jar.is_file():
+              fail(f"Missing packaged universal JVM jar: {jar}")
+          with zipfile.ZipFile(jar) as archive:
+              names = set(archive.namelist())
+              try:
+                  manifest = archive.read("META-INF/MANIFEST.MF").decode("utf-8", errors="replace")
+              except KeyError:
+                  fail(f"{jar} is missing META-INF/MANIFEST.MF")
+          if "Main-Class: com.openggf.Engine" not in manifest:
+              fail(f"{jar} manifest does not bootstrap com.openggf.Engine")
+          licence_files = {"LICENSE", "LICENSES/LGPL-2.1.txt", "NOTICE.md", "CREDITS.md"}
+          missing_notices = sorted(f"META-INF/openggf/{name}" for name in licence_files
+                                   if f"META-INF/openggf/{name}" not in names)
+          if missing_notices:
+              fail(f"{jar} is missing licence notices: {', '.join(missing_notices)}")
+
+          required_native_payloads = {
+              "natives-linux": ("linux/x64/", ".so"),
+              "natives-linux-arm32": ("linux/arm32/", ".so"),
+              "natives-linux-arm64": ("linux/arm64/", ".so"),
+              "natives-windows": ("windows/x64/", ".dll"),
+              "natives-windows-arm64": ("windows/arm64/", ".dll"),
+              "natives-windows-x86": ("windows/x86/", ".dll"),
+              "natives-macos": ("macos/x64/", ".dylib"),
+              "natives-macos-arm64": ("macos/arm64/", ".dylib"),
+          }
+          for classifier, (prefix, suffix) in required_native_payloads.items():
+              if not any(name.startswith(prefix) and name.endswith(suffix) for name in names):
+                  fail(f"{jar} is missing LWJGL {classifier} payload entries under {prefix} ending in {suffix}")
+
+          distribution_root.mkdir(parents=True, exist_ok=True)
+          stable_jar = distribution_root / "OpenGGF-universal.jar"
+          stable_jar.write_bytes(jar.read_bytes())
+          print(f"Smoke validated universal JVM jar for version {version}: {stable_jar}")
+          PY
+
+      - name: Upload universal JVM jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: openggf-universal-jar
+          path: target/OpenGGF-universal.jar
           retention-days: 30
 
   release:
-    needs: build
-    if: github.event_name == 'push'
+    needs: [build, universal-jar]
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -107,10 +490,37 @@ jobs:
           VERSION=$(grep -m1 '<version>' pom.xml | sed 's/.*<version>\(.*\)<\/version>.*/\1/')
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Download all artifacts
+      - name: Check release tag does not already exist
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}" >/dev/null 2>&1; then
+            echo "::error ::Release tag v${VERSION} already exists. Bump pom.xml or delete the stale tag before publishing."
+            exit 1
+          fi
+
+      - name: Download Windows distribution
         uses: actions/download-artifact@v4
         with:
-          path: artifacts
+          name: openggf-windows
+          path: artifacts/openggf-windows
+
+      - name: Download macOS distribution
+        uses: actions/download-artifact@v4
+        with:
+          name: openggf-macos
+          path: artifacts/openggf-macos
+
+      - name: Download Linux distribution
+        uses: actions/download-artifact@v4
+        with:
+          name: openggf-linux
+          path: artifacts/openggf-linux
+
+      - name: Download universal JVM jar
+        uses: actions/download-artifact@v4
+        with:
+          name: openggf-universal-jar
+          path: artifacts/openggf-universal-jar
 
       - name: Display artifacts
         run: ls -R artifacts
@@ -122,7 +532,11 @@ jobs:
           name: v${{ steps.version.outputs.version }}
           draft: false
           generate_release_notes: true
+          fail_on_unmatched_files: true
           files: |
-            artifacts/**/*
+            artifacts/openggf-windows/OpenGGF-windows.zip
+            artifacts/openggf-macos/OpenGGF-macos.zip
+            artifacts/openggf-linux/OpenGGF-linux.tar.gz
+            artifacts/openggf-universal-jar/OpenGGF-universal.jar
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

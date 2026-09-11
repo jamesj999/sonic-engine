@@ -35,6 +35,30 @@ class Sonic1EndingEvents extends Sonic1ZoneEvents {
         endingSonicSpawned = false;
     }
 
+    boolean isBootstrapApplied()  { return bootstrapApplied; }
+    boolean isEndingSonicSpawned() { return endingSonicSpawned; }
+    void setBootstrapApplied(boolean v)   { bootstrapApplied   = v; }
+    void setEndingSonicSpawned(boolean v) { endingSonicSpawned = v; }
+
+    /**
+     * The ending sequence has its own main loop: {@code End_MainLoop}
+     * (docs/s1disasm/sonic.asm:3662-3680) runs ExecuteObjects, DeformLayers,
+     * BuildSprites, ObjPosLoad, PaletteCycle, OscillateNumDo and
+     * SynchroAnimate, and stops there — unlike {@code Level_MainLoop}
+     * (docs/s1disasm/sonic.asm:3035) it never calls {@code SignpostArtLoad}.
+     * <p>
+     * That matters here because the ending's right camera boundary is only
+     * $500 (LevelSizeArray "good ending", docs/s1disasm/_inc/LevelSizeArray.asm:50)
+     * while Sonic starts at X=$620 with the camera already pinned to $500, so
+     * SignpostArtLoad's {@code v_limitright2-$100} test would pass on the very
+     * first frame and lock the left boundary to $400. Sonic runs left, hits
+     * that boundary at $410 and the cutscene never reaches its X&lt;$90 handoff.
+     */
+    @Override
+    boolean runsLevelMainLoopTail() {
+        return false;
+    }
+
     @Override
     void update(int act) {
         AbstractPlayableSprite player = camera().getFocusedSprite();

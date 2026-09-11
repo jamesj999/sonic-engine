@@ -9,6 +9,9 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.ObjectPlayerParticipationPolicy;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
@@ -21,7 +24,7 @@ import java.util.List;
  * Moves horizontally, pauses, and throws a drill once when the player is near.
  * Based on disassembly Obj92.
  */
-public class SpikerBadnikInstance extends AbstractBadnikInstance {
+public class SpikerBadnikInstance extends AbstractBadnikInstance implements RewindRecreatable {
     private static final int COLLISION_SIZE_INDEX = 0x12; // From Obj92_SubObjData
 
     private static final int MOVE_TIMER_INIT = 0x40;   // objoff_2A = $40
@@ -51,7 +54,7 @@ public class SpikerBadnikInstance extends AbstractBadnikInstance {
     private boolean animateThisFrame;
     private boolean xFlipFlag;
     private final AnimationTimer anim = new AnimationTimer(9, 2);
-    private final boolean yFlipFlag;
+    private boolean yFlipFlag;
 
     public SpikerBadnikInstance(ObjectSpawn spawn) {
         super(spawn, "Spiker", Sonic2BadnikConfig.DESTRUCTION);
@@ -75,7 +78,12 @@ public class SpikerBadnikInstance extends AbstractBadnikInstance {
     }
 
     @Override
-    protected void updateMovement(int frameCounter, PlayableEntity playerEntity) {
+    public SpikerBadnikInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new SpikerBadnikInstance(ctx.spawn());
+    }
+
+    @Override
+    protected void updateMovement(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         animateThisFrame = false;
 
@@ -136,12 +144,13 @@ public class SpikerBadnikInstance extends AbstractBadnikInstance {
     }
 
     private boolean checkForThrow(AbstractPlayableSprite player) {
-        if (hasThrown || player == null || !isOnScreenX()) {
+        AbstractPlayableSprite target = closestNativePlayer(player);
+        if (hasThrown || target == null || !isOnScreenX()) {
             return false;
         }
 
-        int dx = currentX - player.getCentreX();
-        int dy = currentY - player.getCentreY();
+        int dx = currentX - target.getCentreX();
+        int dy = currentY - target.getCentreY();
 
         int adjustedDx = dx + DETECT_RANGE_X;
         if (adjustedDx < 0 || adjustedDx >= (DETECT_RANGE_X * 2)) {
@@ -159,6 +168,18 @@ public class SpikerBadnikInstance extends AbstractBadnikInstance {
         return true;
     }
 
+    private AbstractPlayableSprite closestNativePlayer(AbstractPlayableSprite fallbackPlayer) {
+        var svc = tryServices();
+        if (svc == null) {
+            return fallbackPlayer;
+        }
+        var nearest = svc.playerQuery().nearestByRomX(
+                ObjectPlayerParticipationPolicy.NATIVE_P1_P2, currentX);
+        return nearest != null && nearest.player() instanceof AbstractPlayableSprite sprite
+                ? sprite
+                : fallbackPlayer;
+    }
+
     private void spawnDrill() {
         int renderFlags = spawn.renderFlags();
         renderFlags = (renderFlags & ~0x01) | (xFlipFlag ? 0x01 : 0);
@@ -170,17 +191,16 @@ public class SpikerBadnikInstance extends AbstractBadnikInstance {
                 renderFlags,
                 false,
                 spawn.rawYWord());
-        SpikerDrillObjectInstance drill = new SpikerDrillObjectInstance(
+        spawnFreeChild(() -> new SpikerDrillObjectInstance(
                 drillSpawn,
                 currentX,
                 currentY,
                 xFlipFlag,
-                yFlipFlag);
-        services().objectManager().addDynamicObject(drill);
+                yFlipFlag));
     }
 
     @Override
-    protected void updateAnimation(int frameCounter) {
+    protected void updateAnimation(int vIntRunCount) {
         if (!animateThisFrame) {
             return;
         }

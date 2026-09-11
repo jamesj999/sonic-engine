@@ -56,15 +56,6 @@ public class DisassemblySearchResult {
         return filePath != null;
     }
 
-    /**
-     * Whether this result has an associated binclude file path.
-     * Label-only results (Offs_*, PLC_*) return false.
-     * @deprecated Use {@link #hasFile()} instead.
-     */
-    public boolean hasBinclude() {
-        return hasFile();
-    }
-
     @Override
     public String toString() {
         String fileName = filePath != null ? getFileName() : "(label-only)";

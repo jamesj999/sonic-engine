@@ -1,6 +1,7 @@
 package com.openggf.game.sonic2.events;
 
 import com.openggf.game.sonic2.audio.Sonic2Music;
+import com.openggf.game.sonic2.constants.Sonic2Constants;
 import com.openggf.game.sonic2.constants.Sonic2ObjectIds;
 import com.openggf.game.sonic2.objects.bosses.Sonic2MTZBossInstance;
 import com.openggf.game.GameServices;
@@ -31,6 +32,7 @@ public class Sonic2MTZEvents extends Sonic2ZoneEvents {
 
     @Override
     public void update(int act, int frameCounter) {
+        retryPendingPlc();
         if (act < 2) {
             // Acts 1 & 2 (act 0, 1): No dynamic events
             // ROM: LevEvents_MTZ just rts
@@ -81,7 +83,7 @@ public class Sonic2MTZEvents extends Sonic2ZoneEvents {
                     // ROM: move.b #7,(Current_Boss_ID).w
                     gameState().setCurrentBossId(MTZ_BOSS_ID);
                     // ROM: moveq #PLCID_MtzBoss,d0 / jsr (LoadPLC).l
-                    // PLC loading handled by art system
+                    requestSonic2Plc(Sonic2Constants.PLC_MTZ_BOSS);
                 }
             }
             case 6 -> {
@@ -89,7 +91,12 @@ public class Sonic2MTZEvents extends Sonic2ZoneEvents {
                 // ROM: cmpi.w #$400,(Camera_Y_pos).w / blo.s +
                 //      move.w #$400,(Camera_Min_Y_pos).w
                 if (camera().getY() >= 0x400) {
+                    // ROM LevEvents_MTZ3_Routine4 (s2.asm:20537-20540):
+                    //   cmpi.w #$400,(Camera_Y_pos).w / blo.s +
+                    //   move.w #$400,(Camera_Min_Y_pos).w
+                    //   move.w #$400,(Tails_Min_Y_pos).w
                     camera().setMinY((short) 0x400);
+                    setSidekickBounds(null, null, 0x400, null);
                 }
                 // ROM: addq.b #1,(Boss_spawn_delay).w
                 //      cmpi.b #$5A,(Boss_spawn_delay).w / blo.s ++
@@ -103,15 +110,14 @@ public class Sonic2MTZEvents extends Sonic2ZoneEvents {
                 }
             }
             case 8 -> {
-                // Routine 8 (s2.asm:20553-20556): Prevent backtracking during boss fight
-                // ROM: move.w (Camera_X_pos).w,(Camera_Min_X_pos).w
-                //      move.w (Camera_Max_X_pos).w,(Tails_Max_X_pos).w
-                //      move.w (Camera_X_pos).w,(Tails_Min_X_pos).w
-                short cameraX = camera().getX();
-                if (cameraX > camera().getMinX()) {
-                    camera().setMinX(cameraX);
-                }
-                syncSidekickBoundsToCamera();
+                // ROM LevEvents_MTZ3_Routine5 (s2.asm:20542-20544):
+                //   move.w (Camera_X_pos).w,(Camera_Min_X_pos).w
+                //   rts
+                // A single, UNCONDITIONAL write of Camera_Min_X_pos = Camera_X_pos.
+                // There is no guard (min-X may follow the camera back) and no Tails
+                // bound write in this routine. During the boss the camera is pinned at
+                // $2AB0 (locked in Routine2), so in real play this is effectively a no-op.
+                camera().setMinX(camera().getX());
             }
             default -> {
                 // No more routines
@@ -124,8 +130,15 @@ public class Sonic2MTZEvents extends Sonic2ZoneEvents {
      * ROM: AllocateObject -> ObjID_MTZBoss at init position
      */
     private void spawnMTZBoss() {
+        var objectManager = levelManager() != null ? levelManager().getObjectManager() : null;
+        if (objectManager == null) {
+            return;
+        }
         ObjectSpawn bossSpawn = new ObjectSpawn(
                 0x2B50, 0x380, Sonic2ObjectIds.MTZ_BOSS, 0, 0, false, 0);
-        spawnObject(() -> new Sonic2MTZBossInstance(bossSpawn));
+        // ROM Obj54 is already the current SST object before Obj54_Init allocates
+        // the laser shooter and Obj53 orb parent (docs/s2disasm/s2.asm:67224-67240).
+        objectManager.createDynamicObjectWithReservedSlot(
+                () -> new Sonic2MTZBossInstance(bossSpawn));
     }
 }

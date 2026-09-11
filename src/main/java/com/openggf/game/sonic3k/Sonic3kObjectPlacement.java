@@ -47,6 +47,9 @@ public class Sonic3kObjectPlacement {
             return List.of();
         }
 
-        return CommonPlacementParser.parseObjectRecords(rom, listAddr);
+        // ROM Load_Sprites groups the list by 0x80 X-chunk, then scans each
+        // chunk in its authored record order. The placement controller applies
+        // the chunk grouping; retain the source order for FindFreeObj slots.
+        return CommonPlacementParser.parseObjectRecords(rom, listAddr, false);
     }
 }

@@ -1,0 +1,2 @@
+{"event":"hardware_work_completed","raw_frame":5151,"boundary":"pre_main_loop","kind":"kos_decompression_queue","ordinal":531,"submission_fingerprint":"sha256:431c53c11b4b57f8c95fa05b1c96203319679d8178e20dee424a3a3787fb9493"}
+{"event":"hardware_work_completed","raw_frame":5152,"boundary":"post_objects","kind":"kos_module_queue","ordinal":366,"submission_fingerprint":"sha256:329c7e3b4beba0cc8851941785c42b8252fafecaab787197bf3fcf1001b9520c"}

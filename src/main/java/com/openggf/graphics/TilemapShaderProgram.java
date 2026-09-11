@@ -18,6 +18,8 @@ public class TilemapShaderProgram extends ShaderProgram {
     private int underwaterPaletteLocation = -1;
     private int tilemapWidthLocation = -1;
     private int tilemapHeightLocation = -1;
+    private int tilemapRingBaseXLocation = -1;
+    private int tilemapRingBaseYLocation = -1;
     private int atlasWidthLocation = -1;
     private int atlasHeightLocation = -1;
     private int lookupSizeLocation = -1;
@@ -38,10 +40,14 @@ public class TilemapShaderProgram extends ShaderProgram {
     private int perLineScrollLocation = -1;
     private int vScrollColumnTextureLocation = -1;
     private int perColumnVScrollLocation = -1;
+    private int vScrollColumnCountLocation = -1;
     private int screenHeightLocation = -1;
+    private int perLineScrollSampleYOffsetPxLocation = -1;
     private int vdpWrapWidthLocation = -1;
     private int vdpWrapHeightLocation = -1;
     private int nametableBaseLocation = -1;
+    private int upperBandWrapHeightPxLocation = -1;
+    private int upperBandWrapWidthTilesLocation = -1;
     private int frameCounterLocation = -1;
     private int shimmerStyleLocation = -1;
 
@@ -60,6 +66,8 @@ public class TilemapShaderProgram extends ShaderProgram {
         underwaterPaletteLocation = glGetUniformLocation(programId, "UnderwaterPalette");
         tilemapWidthLocation = glGetUniformLocation(programId, "TilemapWidth");
         tilemapHeightLocation = glGetUniformLocation(programId, "TilemapHeight");
+        tilemapRingBaseXLocation = glGetUniformLocation(programId, "TilemapRingBaseX");
+        tilemapRingBaseYLocation = glGetUniformLocation(programId, "TilemapRingBaseY");
         atlasWidthLocation = glGetUniformLocation(programId, "AtlasWidth");
         atlasHeightLocation = glGetUniformLocation(programId, "AtlasHeight");
         lookupSizeLocation = glGetUniformLocation(programId, "LookupSize");
@@ -80,10 +88,14 @@ public class TilemapShaderProgram extends ShaderProgram {
         perLineScrollLocation = glGetUniformLocation(programId, "PerLineScroll");
         vScrollColumnTextureLocation = glGetUniformLocation(programId, "VScrollColumnTexture");
         perColumnVScrollLocation = glGetUniformLocation(programId, "PerColumnVScroll");
+        vScrollColumnCountLocation = glGetUniformLocation(programId, "VScrollColumnCount");
         screenHeightLocation = glGetUniformLocation(programId, "ScreenHeight");
+        perLineScrollSampleYOffsetPxLocation = glGetUniformLocation(programId, "PerLineScrollSampleYOffsetPx");
         vdpWrapWidthLocation = glGetUniformLocation(programId, "VDPWrapWidth");
         vdpWrapHeightLocation = glGetUniformLocation(programId, "VDPWrapHeight");
         nametableBaseLocation = glGetUniformLocation(programId, "NametableBase");
+        upperBandWrapHeightPxLocation = glGetUniformLocation(programId, "UpperBandWrapHeightPx");
+        upperBandWrapWidthTilesLocation = glGetUniformLocation(programId, "UpperBandWrapWidthTiles");
         frameCounterLocation = glGetUniformLocation(programId, "FrameCounter");
         shimmerStyleLocation = glGetUniformLocation(programId, "ShimmerStyle");
     }
@@ -113,6 +125,25 @@ public class TilemapShaderProgram extends ShaderProgram {
         }
         if (tilemapHeightLocation >= 0) {
             glUniform1f(tilemapHeightLocation, heightTiles);
+        }
+    }
+
+    /** @deprecated use {@link #setTilemapRingBase(float, float)}. */
+    @Deprecated
+    public void setTilemapRingBase(float baseXTiles) {
+        setTilemapRingBase(baseXTiles, 0.0f);
+    }
+
+    public void setTilemapRingBase(float baseXTiles, float baseYTiles) {
+        applyTilemapRingBaseUniforms(baseXTiles, baseYTiles);
+    }
+
+    protected void applyTilemapRingBaseUniforms(float baseXTiles, float baseYTiles) {
+        if (tilemapRingBaseXLocation >= 0) {
+            glUniform1f(tilemapRingBaseXLocation, baseXTiles);
+        }
+        if (tilemapRingBaseYLocation >= 0) {
+            glUniform1f(tilemapRingBaseYLocation, baseYTiles);
         }
     }
 
@@ -206,9 +237,21 @@ public class TilemapShaderProgram extends ShaderProgram {
         }
     }
 
+    public void setVScrollColumnCount(float count) {
+        if (vScrollColumnCountLocation >= 0) {
+            glUniform1f(vScrollColumnCountLocation, count);
+        }
+    }
+
     public void setScreenHeight(float height) {
         if (screenHeightLocation >= 0) {
             glUniform1f(screenHeightLocation, height);
+        }
+    }
+
+    public void setPerLineScrollSampleYOffsetPx(float offsetPx) {
+        if (perLineScrollSampleYOffsetPxLocation >= 0) {
+            glUniform1f(perLineScrollSampleYOffsetPxLocation, offsetPx);
         }
     }
 
@@ -231,6 +274,15 @@ public class TilemapShaderProgram extends ShaderProgram {
     public void setNametableBase(float base) {
         if (nametableBaseLocation >= 0) {
             glUniform1f(nametableBaseLocation, base);
+        }
+    }
+
+    public void setUpperBandWrap(float heightPx, float widthTiles) {
+        if (upperBandWrapHeightPxLocation >= 0) {
+            glUniform1f(upperBandWrapHeightPxLocation, heightPx);
+        }
+        if (upperBandWrapWidthTilesLocation >= 0) {
+            glUniform1f(upperBandWrapWidthTilesLocation, widthTiles);
         }
     }
 

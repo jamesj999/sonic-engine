@@ -165,6 +165,33 @@ public enum CanonicalAnimation {
     /** Tails flying animation. */
     FLY,
 
+    /** Tails flying under player control. */
+    TAILS_FLY,
+
+    /** Tails ascending during flight. */
+    TAILS_FLY_ASCEND,
+
+    /** Tails flying while carrying another player. */
+    TAILS_FLY_CARRY,
+
+    /** Tails ascending while carrying another player. */
+    TAILS_FLY_CARRY_ASCEND,
+
+    /** Tails' tired flight animation. */
+    TAILS_FLY_TIRED,
+
+    /** Tails swimming underwater. */
+    TAILS_SWIM,
+
+    /** Tails ascending while swimming. */
+    TAILS_SWIM_ASCEND,
+
+    /** Tails swimming while carrying another player. */
+    TAILS_SWIM_CARRY,
+
+    /** Tails' tired swimming animation. */
+    TAILS_SWIM_TIRED,
+
     // -------------------------------------------------------------------------
     // S3K animations (introduced in Sonic 3&K)
     // -------------------------------------------------------------------------
@@ -192,6 +219,13 @@ public enum CanonicalAnimation {
 
     /** Glide wall-slide (Knuckles, S3K). */
     GLIDE_SLIDE,
+
+    /** S3K: Sonic's animation while being carried by Tails.
+     *  ROM reference: sub_1459E writes anim high-byte 0x22 on the carried Sonic.
+     *  SpriteAnimationProfile lookup may not define a mapping yet — callers
+     *  must tolerate a -1 return from SpriteAnimationSet.getAnimIdFor(...).
+     */
+    TAILS_CARRIED,
 
     // -------------------------------------------------------------------------
     // Super Sonic

@@ -35,19 +35,24 @@ public class Sonic2TrackAnimator {
     private int currentSegmentIndex;
     private int currentFrameInSegment;
     private int frameDelayCounter;
+    /** ROM RAM byte {@code SS_player_anim_frame_timer} ($FFDB21). */
+    private int playerAnimFrameTimer;
     private int currentSegmentType;
     private boolean currentSegmentFlipped;
 
-    // Original game uses speedFactor = 12 ($C0000 >> 16), giving index 6 -> 5 frames per track step.
-    // At 60fps this is 12 track frames/sec.
+    // The ROM's current factor starts at zero. SpecialStage writes 12 to
+    // SS_New_Speed_Factor, then the first Vint_S2SS promotes it to the current
+    // factor (s2.asm:6640, 960-975).
     //
     // Previous investigation found bugs where:
     // 1. drawingIndex was calculated incorrectly using segment frame instead of per-frame counter
     // 2. Depth decrement was incorrectly scaled by speedFactor
     //
-    // With those bugs fixed, ROM-accurate speedFactor=12 should now work correctly.
+    // With those bugs fixed, the manager promotes speedFactor=12 at the modeled
+    // pre-roll boundary.
     // Objects approach at ~48 depth/second regardless of speed factor.
-    private int speedFactor = 12;
+    private int speedFactor = 0;
+    private boolean speedChangePending;
 
     private boolean stageComplete = false;
 
@@ -75,10 +80,12 @@ public class Sonic2TrackAnimator {
         currentSegmentIndex = 0;
         currentFrameInSegment = 0;
         frameDelayCounter = 0;
+        playerAnimFrameTimer = 0;
         stageComplete = false;
-        // Reset speed factor to ROM-accurate initial value
-        // Original game uses 0xC (12) from SS_New_Speed_Factor ($C0000)
-        speedFactor = 12;
+        // SS_Cur_Speed_Factor remains zero until Vint_S2SS promotes the new
+        // factor written by SpecialStage (s2.asm:6640, 960-975).
+        speedFactor = 0;
+        speedChangePending = false;
         resetOrientation();
 
         if (layoutLength > 0) {
@@ -111,6 +118,9 @@ public class Sonic2TrackAnimator {
         currentSegmentIndex = 0;
         currentFrameInSegment = 0;
         frameDelayCounter = 0;
+        playerAnimFrameTimer = 0;
+        speedFactor = 0;
+        speedChangePending = false;
         stageComplete = false;
         resetOrientation();
 
@@ -120,24 +130,35 @@ public class Sonic2TrackAnimator {
     }
 
     /**
-     * Updates the animation state for one frame.
-     * Returns true if the track frame changed.
+     * Runs the ROM's VInt-owned {@code SSRun_Animation_Timers} countdown without
+     * advancing the track frame. The frame advances only when the later
+     * {@code SSTrack_Draw} call observes drawing index zero
+     * (s2.asm:837-876,960-982,7026-7091).
      */
-    public boolean update() {
-        if (stageComplete || layoutLength == 0) {
-            return false;
+    public void tickVintTimer() {
+        if (speedChangePending) {
+            frameDelayCounter = 0;
+            playerAnimFrameTimer = (getRomFrameDuration() - 1) & 0xFF;
+            speedChangePending = false;
+            return;
         }
 
         frameDelayCounter++;
-
-        int duration = getFrameDuration();
-
-        if (frameDelayCounter >= duration) {
+        if (frameDelayCounter >= getFrameDuration()) {
             frameDelayCounter = 0;
-            return advanceFrame();
+            playerAnimFrameTimer = (getRomFrameDuration() - 1) & 0xFF;
         }
+    }
 
-        return false;
+    /**
+     * Models the animation-frame side effect at the start of
+     * {@code SSTrack_Draw}. Non-zero drawing slices continue the same frame.
+     */
+    public boolean drawTrackFrame(int drawingIndex) {
+        if (stageComplete || layoutLength == 0 || drawingIndex != 0) {
+            return false;
+        }
+        return advanceFrame();
     }
 
     /**
@@ -317,23 +338,28 @@ public class Sonic2TrackAnimator {
      * This is used for track animation timing.
      */
     private int getFrameDuration() {
+        return Math.max(1, getRomFrameDuration());
+    }
+
+    private int getRomFrameDuration() {
         int index = (speedFactor >> 1) & 0x7;
         if (index < Sonic2SpecialStageConstants.ANIM_BASE_DURATIONS.length) {
-            return Math.max(1, Sonic2SpecialStageConstants.ANIM_BASE_DURATIONS[index]);
+            return Sonic2SpecialStageConstants.ANIM_BASE_DURATIONS[index];
         }
         return 15;
     }
 
     /**
      * Gets the player animation frame timer value.
-     * This is SS_player_anim_frame_timer from the original game.
-     * The player animation uses this value divided by 2.
+     * This is the stored {@code SS_player_anim_frame_timer} RAM byte. On track
+     * timer expiry the ROM reloads the base duration into both timer bytes and
+     * decrements this byte once; on non-expiry ticks it returns this value plus
+     * one in {@code d1} without storing it (s2.asm:960-982). Player animation
+     * uses the stored value divided by two (s2.asm:69610-69612).
      * @return The current player animation timer value
      */
     public int getPlayerAnimFrameTimer() {
-        // In the original game, this decrements each frame from the base duration.
-        // For simplicity, return the base duration - 1 (matching line 69975: subq.b #1)
-        return getFrameDuration() - 1;
+        return playerAnimFrameTimer;
     }
 
     /**
@@ -341,11 +367,52 @@ public class Sonic2TrackAnimator {
      * Higher values = faster animation.
      */
     public void setSpeedFactor(int speedFactor) {
-        this.speedFactor = Math.max(0, Math.min(14, speedFactor));
+        int clamped = Math.max(0, Math.min(14, speedFactor));
+        if (this.speedFactor != clamped) {
+            this.speedFactor = clamped;
+            speedChangePending = true;
+        }
     }
 
     public int getSpeedFactor() {
         return speedFactor;
+    }
+
+    public int getFrameDelayCounter() {
+        return frameDelayCounter;
+    }
+
+    Sonic2SpecialStageSnapshot.TrackAnimatorSnapshot captureRewindSnapshot() {
+        return new Sonic2SpecialStageSnapshot.TrackAnimatorSnapshot(
+                stageLayout,
+                layoutLength,
+                currentSegmentIndex,
+                currentFrameInSegment,
+                frameDelayCounter,
+                playerAnimFrameTimer,
+                currentSegmentType,
+                currentSegmentFlipped,
+                speedFactor,
+                speedChangePending,
+                stageComplete,
+                orientationFlipped,
+                lastOrientationFrame);
+    }
+
+    void restoreRewindSnapshot(Sonic2SpecialStageSnapshot.TrackAnimatorSnapshot snapshot) {
+        stageLayout = Sonic2SpecialStageSnapshot.cloneByteArray(snapshot.stageLayout());
+        layoutLength = snapshot.layoutLength();
+        currentSegmentIndex = snapshot.currentSegmentIndex();
+        currentFrameInSegment = snapshot.currentFrameInSegment();
+        frameDelayCounter = snapshot.frameDelayCounter();
+        playerAnimFrameTimer = snapshot.playerAnimFrameTimer();
+        currentSegmentType = snapshot.currentSegmentType();
+        currentSegmentFlipped = snapshot.currentSegmentFlipped();
+        speedFactor = snapshot.speedFactor();
+        speedChangePending = snapshot.speedChangePending();
+        stageComplete = snapshot.stageComplete();
+        orientationFlipped = snapshot.orientationFlipped();
+        lastOrientationFrame = snapshot.lastOrientationFrame();
     }
 
     public int getCurrentSegmentIndex() {

@@ -11,7 +11,8 @@ import java.util.Map;
  * Sparse ID range requires HashMap-based lookup.
  */
 public enum Sonic2Music {
-    CONTINUE(0x00, "Continue"),
+    // ContinueScreen / zMusIDPtr_Continue (s2.constants.asm:860), not the empty mailbox byte.
+    CONTINUE(0x9C, "Continue"),
     CASINO_NIGHT_2P(0x80, "Casino Night Zone (2P)"),
     EMERALD_HILL(0x81, "Emerald Hill Zone"),
     METROPOLIS(0x82, "Metropolis Zone"),
@@ -37,7 +38,9 @@ public enum Sonic2Music {
     ACT_CLEAR(0x97, "Stage Clear"),
     INVINCIBILITY(0x99, "Invincibility"),
     HIDDEN_PALACE(0x9B, "Hidden Palace Zone"),
-    EXTRA_LIFE(0xB5, "1-Up"),
+    // zMusIDPtr_ExtraLife / MusID_ExtraLife in the shipped REV01 table
+    // (s2.constants.asm:856); 0xB5 is the distinct right-ring SFX.
+    EXTRA_LIFE(0x98, "1-Up"),
     GAME_OVER(0xB8, "Game Over"),
     GOT_EMERALD(0xBA, "Got an Emerald"),
     CREDITS(0xBD, "Credits"),

@@ -1,6 +1,7 @@
 package com.openggf.tests;
 
-import com.openggf.game.RuntimeManager;
+import com.openggf.game.session.SessionManager;
+import com.openggf.game.GameServices;
 import com.openggf.game.sonic3k.objects.HCZSnakeBlocksObjectInstance;
 import com.openggf.game.sonic3k.objects.Sonic3kObjectRegistry;
 import com.openggf.level.objects.ObjectInstance;
@@ -33,12 +34,12 @@ class TestS3kHczSnakeBlocksObject {
 
     @BeforeEach
     void setUp() {
-        RuntimeManager.createGameplay();
+        TestEnvironment.activeGameplayMode();
     }
 
     @AfterEach
     void tearDown() {
-        RuntimeManager.destroyCurrent();
+        SessionManager.clear();
     }
 
     @Test
@@ -46,6 +47,14 @@ class TestS3kHczSnakeBlocksObject {
         ObjectInstance instance = new Sonic3kObjectRegistry().create(
                 new ObjectSpawn(0x1200, 0x0600, OBJECT_ID, 0x00, 0x00, false, 0));
         assertInstanceOf(HCZSnakeBlocksObjectInstance.class, instance);
+    }
+
+    @Test
+    void continuedRideUsesPostMoveXAsItsZeroDeltaCarryReference() {
+        HCZSnakeBlocksObjectInstance instance = createInstance(0x00, 0x00);
+
+        assertFalse(instance.carriesRiderOnHorizontalMove(null),
+                "Obj67 loads its post-movement x_pos into d4 before SolidObjectFull");
     }
 
     @Test
@@ -102,8 +111,8 @@ class TestS3kHczSnakeBlocksObject {
     void despawnsWhenBasePositionMovesPastCameraCullRange() {
         HCZSnakeBlocksObjectInstance instance = new HCZSnakeBlocksObjectInstance(
                 new ObjectSpawn(0x1400, 0x0600, OBJECT_ID, 0x00, 0x00, false, 0));
-        instance.setServices(new DefaultObjectServices(RuntimeManager.getCurrent()));
-        RuntimeManager.getCurrent().getCamera().setX((short) 0);
+        instance.setServices(TestEnvironment.objectServices());
+        GameServices.camera().setX((short) 0);
         instance.update(0, null);
         assertTrue(instance.isDestroyed());
     }
@@ -112,8 +121,8 @@ class TestS3kHczSnakeBlocksObject {
     void despawnsWhenCameraIsFarAheadOfObject() {
         HCZSnakeBlocksObjectInstance instance = new HCZSnakeBlocksObjectInstance(
                 new ObjectSpawn(0x0100, 0x0600, OBJECT_ID, 0x00, 0x00, false, 0));
-        instance.setServices(new DefaultObjectServices(RuntimeManager.getCurrent()));
-        RuntimeManager.getCurrent().getCamera().setX((short) 0x1400);
+        instance.setServices(TestEnvironment.objectServices());
+        GameServices.camera().setX((short) 0x1400);
         instance.update(0, null);
         assertTrue(instance.isDestroyed(), "Should despawn when camera is far ahead");
     }
@@ -121,7 +130,7 @@ class TestS3kHczSnakeBlocksObject {
     @Test
     void doesNotDespawnWhenCameraIsWithinCoarseBackWindow() {
         HCZSnakeBlocksObjectInstance instance = createInstance(0x00, 0x00);
-        RuntimeManager.getCurrent().getCamera().setX((short) 0x0180);
+        GameServices.camera().setX((short) 0x0180);
         instance.update(0, null);
         assertFalse(instance.isDestroyed());
     }
@@ -129,7 +138,7 @@ class TestS3kHczSnakeBlocksObject {
     @Test
     void despawnsOnceCameraMovesOneChunkPastBaseXPlus128() {
         HCZSnakeBlocksObjectInstance instance = createInstance(0x00, 0x00);
-        RuntimeManager.getCurrent().getCamera().setX((short) 0x0200);
+        GameServices.camera().setX((short) 0x0200);
         instance.update(0, null);
         assertTrue(instance.isDestroyed(),
                 "Camera coarse-back should advance to 0x0180 here, putting the base X behind the allowed window");
@@ -179,8 +188,9 @@ class TestS3kHczSnakeBlocksObject {
     private HCZSnakeBlocksObjectInstance createInstance(int subtype, int renderFlags) {
         HCZSnakeBlocksObjectInstance instance = new HCZSnakeBlocksObjectInstance(
                 new ObjectSpawn(BASE_X, BASE_Y, OBJECT_ID, subtype, renderFlags, false, 0));
-        instance.setServices(new DefaultObjectServices(RuntimeManager.getCurrent()));
-        RuntimeManager.getCurrent().getCamera().setX((short) 0);
+        instance.setServices(TestEnvironment.objectServices());
+        GameServices.camera().setX((short) 0);
         return instance;
     }
 }
+

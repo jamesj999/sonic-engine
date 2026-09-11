@@ -9,6 +9,8 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -20,7 +22,7 @@ import java.util.List;
  * ROM Reference: s2.asm Obj5D (ROUTINE_PIPE, ROUTINE_PIPE_PUMP, ROUTINE_PIPE_RETRACT)
  * Extends down from the boss, pumps, then retracts.
  */
-public class CPZBossPipe extends AbstractObjectInstance {
+public class CPZBossPipe extends AbstractObjectInstance implements RewindRecreatable {
 
     private static final int SUB_WAIT = 0;
     private static final int SUB_EXTEND = 2;
@@ -74,7 +76,13 @@ public class CPZBossPipe extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        Sonic2CPZBossInstance boss = CpzBossRewindLinks.nearestBoss(ctx);
+        return boss == null ? null : new CPZBossPipe(ctx.spawn(), boss);
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) {
             return;
@@ -214,8 +222,16 @@ public class CPZBossPipe extends AbstractObjectInstance {
             return;
         }
 
+        beginRetractFromPump();
+    }
+
+    void beginRetractFromPump() {
+        // Obj5D_Pipe_Pump_4 switches the control segment to Obj5D_Pipe_Retract
+        // with Obj5D_y_offset = $B*8 before deleting the pump head (s2.asm:62208).
         routine = ROUTINE_RETRACT;
+        routineSecondary = SUB_RETRACT;
         yOffset = 0x58;
+        retractFlag = false;
     }
 
     private void updateRetract() {
@@ -225,6 +241,34 @@ public class CPZBossPipe extends AbstractObjectInstance {
         }
 
         if (!retractFlag) {
+            // FixBugs = 0 (docs/s2disasm/s2.asm:27 `fixBugs = 0`): the shipped ROM
+            // takes the `else` arm of Obj5D_Pipe_Retract_ChkID
+            // (docs/s2disasm/s2.asm:62244-62253), which borrows d7 -- RunObjects'
+            // OWN object-loop counter -- as a scratch register for the id compare:
+            //
+            //     moveq   #0,d7
+            //     move.b  #ObjID_CPZBoss,d7
+            //     cmp.b   id(a1),d7
+            //
+            // The disassembly's own comment says so: "'d7' should not be used
+            // here. This causes the 'RunObjects' routine to either run too few
+            // objects or too many objects, causing all sorts of errors." The
+            // fixBugs arm uses `cmpi.b #ObjID_CPZBoss,id(a1)` instead and leaves
+            // d7 alone, so under it none of this happens. The engine models the
+            // shipped arm, because the traces record shipped-ROM behaviour.
+            //
+            // The value left in the counter is the boss's own object id --
+            // ObjID_CPZBoss = $5D = 93 (docs/s2disasm/s2.constants.asm, the Obj5D
+            // pointer-table entry at docs/s2disasm/s2.asm:30009). It is a number
+            // that happens to be lying in the compare, not a duration: nothing
+            // here is tuned or measured.
+            //
+            // The search is only reached while Obj5D_flag is clear; once the
+            // retract finishes, loc_2DFD8 sets it and the entry test at
+            // docs/s2disasm/s2.asm:62220-62221 jumps past the search -- and so
+            // past this write -- on every later frame.
+            services().objectManager().overrideRemainingObjectLoopSlots(
+                    this, Sonic2ObjectIds.CPZ_BOSS);
             // Signal segments to retract one by one
             for (int i = segments.size() - 1; i >= 0; i--) {
                 CPZBossPipeSegment seg = segments.get(i);
@@ -278,8 +322,17 @@ public class CPZBossPipe extends AbstractObjectInstance {
             return;
         }
         ObjectSpawn segSpawn = new ObjectSpawn(x, y, Sonic2ObjectIds.CPZ_BOSS, 0, renderFlags, false, 0);
-        CPZBossPipeSegment segment = new CPZBossPipeSegment(segSpawn, mainBoss, this, offset);
-        services().objectManager().addDynamicObject(segment);
+        CPZBossPipeSegment segment = spawnChild(() -> new CPZBossPipeSegment(segSpawn, mainBoss, this, offset));
+        segments.add(segment);
+    }
+
+    /**
+     * Re-appends a rewind-recreated segment to this pipe's segment list. The list is a
+     * final identity collection (structural rewind state rebuilt by its owner, not captured
+     * through the identity table), so each recreated {@link CPZBossPipeSegment} relinks
+     * itself here during restore — keeping the retract sequence driven off a populated list.
+     */
+    void reregisterRestoredSegment(CPZBossPipeSegment segment) {
         segments.add(segment);
     }
 
@@ -288,8 +341,7 @@ public class CPZBossPipe extends AbstractObjectInstance {
             return;
         }
         ObjectSpawn pumpSpawn = new ObjectSpawn(x, y, Sonic2ObjectIds.CPZ_BOSS, 0, renderFlags, false, 0);
-        CPZBossPipePump pump = new CPZBossPipePump(pumpSpawn, mainBoss, this);
-        services().objectManager().addDynamicObject(pump);
+        spawnChild(() -> new CPZBossPipePump(pumpSpawn, mainBoss, this));
     }
 
     private void spawnDripper() {
@@ -297,8 +349,7 @@ public class CPZBossPipe extends AbstractObjectInstance {
             return;
         }
         ObjectSpawn dripperSpawn = new ObjectSpawn(x, y, Sonic2ObjectIds.CPZ_BOSS, 0, renderFlags, false, 0);
-        CPZBossDripper dripper = new CPZBossDripper(dripperSpawn, mainBoss, this);
-        services().objectManager().addDynamicObject(dripper);
+        spawnChild(() -> new CPZBossDripper(dripperSpawn, mainBoss, this));
     }
 
     private void spawnFallingPart() {
@@ -307,8 +358,7 @@ public class CPZBossPipe extends AbstractObjectInstance {
         }
         var motion = randomPipeMotion();
         ObjectSpawn partSpawn = new ObjectSpawn(x, y + yOffset, Sonic2ObjectIds.CPZ_BOSS, 0, renderFlags, false, 0);
-        CPZBossFallingPart part = new CPZBossFallingPart(partSpawn, 1, motion.xVel(), motion.timer());
-        services().objectManager().addDynamicObject(part);
+        spawnChild(() -> new CPZBossFallingPart(partSpawn, 1, motion.xVel(), motion.timer()));
     }
 
     private Sonic2Rng.PipeShardMotion randomPipeMotion() {

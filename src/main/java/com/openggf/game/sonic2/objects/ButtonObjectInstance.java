@@ -9,7 +9,10 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SolidContact;
+import com.openggf.level.objects.SolidExecutionMode;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
@@ -42,7 +45,7 @@ import java.util.List;
  * </ul>
  */
 public class ButtonObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
 
     // ROM: move.w #$1B,d1 - solid object half-width
     private static final int HALF_WIDTH = 0x1B;
@@ -67,21 +70,18 @@ public class ButtonObjectInstance extends AbstractObjectInstance
     private static final int FRAME_PRESSED = 1;
 
     // Subtype-derived state
-    private final int switchId;    // subtype & 0x0F: index into ButtonVine_Trigger array
-    private final int triggerBit;  // 0 or 7: which bit to set/clear in the trigger byte
+    private int switchId;    // subtype & 0x0F: index into ButtonVine_Trigger array
+    private int triggerBit;  // 0 or 7: which bit to set/clear in the trigger byte
 
     // Adjusted Y position (after init offset)
-    private final int adjustedY;
-
-    // Standing detection via SolidObjectListener callback
-    private boolean contactStanding;
+    private int adjustedY;
 
     // Current mapping frame (0=unpressed, 1=pressed)
     private int mappingFrame = FRAME_UNPRESSED;
 
     // Solid collision params (constant)
     private static final SolidObjectParams SOLID_PARAMS =
-            new SolidObjectParams(HALF_WIDTH, AIR_HALF_HEIGHT, GROUND_HALF_HEIGHT);
+            SolidObjectParams.of(HALF_WIDTH, AIR_HALF_HEIGHT, GROUND_HALF_HEIGHT);
 
     public ButtonObjectInstance(ObjectSpawn spawn) {
         super(spawn, "Button");
@@ -97,17 +97,43 @@ public class ButtonObjectInstance extends AbstractObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public ButtonObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new ButtonObjectInstance(ctx.spawn());
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
+
+        // ROM Obj47_Main (s2.asm:50826-50827) gates the ENTIRE button routine
+        // behind the render_flags.on_screen bit:
+        //   _btst #render_flags.on_screen,render_flags(a0)
+        //   _beq.s BranchTo_JmpTo12_MarkObjGone   ; off-screen -> MarkObjGone, return
+        // When the button is off-screen the ROM runs NEITHER the SolidObject
+        // standing check NOR the bclr/bset on ButtonVine_Trigger -- it leaves the
+        // shared trigger byte untouched. This matters whenever two buttons share a
+        // switch id: a far off-screen unpressed button must NOT clear the trigger
+        // bit that an on-screen pressed button (or a latched consumer) is relying
+        // on. MTZ1 has Obj47 buttons at x=0x06CC (switch 0) and x=0x0858 (switch 0);
+        // without this gate the off-screen 0x0858 button's bclr clobbered switch 0
+        // every frame, so the MTZ_LONG_PLATFORM (subtype-7 button retract) never saw
+        // the press and stayed extended, dropping Sonic through the floor it should
+        // have landed on (mtz1 trace f863 air/rolling/y divergence).
+        // isWithinSolidContactBounds() mirrors the ROM Render_Sprites render_flags
+        // bit-7 bounding-box test for this object's width_pixels.
+        if (!isWithinSolidContactBounds()) {
+            return;
+        }
+
         // ROM: move.b #0,mapping_frame(a0) - reset to unpressed each frame
         mappingFrame = FRAME_UNPRESSED;
 
-        // Determine if any player is currently standing on this button.
-        // ROM: move.b status(a0),d0 / andi.b #standing_mask,d0 / bne.s +
-        // The onSolidContact callback sets contactStanding when contact.standing() is true.
-        // We read and clear the flag each frame in update().
-        boolean standing = contactStanding;
-        contactStanding = false;
+        // ROM Obj47_Main calls SolidObject before it reads status(a0)'s standing
+        // bits and writes ButtonVine_Trigger (s2.asm:50885-50913). The engine's
+        // automatic solid checkpoint runs after update(), so this object resolves
+        // its checkpoint manually here to make same-frame trigger consumers such
+        // as Obj65 see the ROM trigger timing.
+        boolean standing = hasStandingContact(checkpointAll());
 
         if (!standing) {
             // ROM: bclr d3,(a3) - clear the trigger bit when nobody is standing
@@ -146,16 +172,26 @@ public class ButtonObjectInstance extends AbstractObjectInstance
         return SOLID_PARAMS;
     }
 
+    @Override
+    public SolidExecutionMode solidExecutionMode() {
+        return SolidExecutionMode.MANUAL_CHECKPOINT;
+    }
+
+    @Override
+    public boolean usesInclusiveRightEdge() {
+        // Obj47 calls the standard S2 SolidObject helper with d1=$1B. Its
+        // unsigned BHI range check accepts relX == 2*d1 as an exact-edge
+        // grounded side contact.
+        return true;
+    }
+
     // ========================================================================================
     // SolidObjectListener
     // ========================================================================================
 
     @Override
     public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        if (contact.standing()) {
-            contactStanding = true;
-        }
+        // Manual checkpoints drive current-frame press state from update().
     }
 
     // ========================================================================================

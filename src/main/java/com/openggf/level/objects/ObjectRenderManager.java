@@ -3,6 +3,7 @@ package com.openggf.level.objects;
 import com.openggf.game.ObjectArtProvider;
 import com.openggf.graphics.GraphicsManager;
 import com.openggf.level.Pattern;
+import com.openggf.level.objects.art.ObjectArtBundle;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.animation.SpriteAnimationSet;
 
@@ -40,6 +41,10 @@ public class ObjectRenderManager {
 
     public int ensurePatternsCached(GraphicsManager graphicsManager, int basePatternIndex) {
         return provider.ensurePatternsCached(graphicsManager, basePatternIndex);
+    }
+
+    public int getRegularPatternCount() {
+        return provider.getRegularPatternCount();
     }
 
     public boolean isReady() {
@@ -85,6 +90,10 @@ public class ObjectRenderManager {
      */
     public List<String> getRendererKeys() {
         return provider.getRendererKeys();
+    }
+
+    public ObjectArtBundle getArtBundle() {
+        return provider.getArtBundle();
     }
 
     // Convenience methods for backward compatibility

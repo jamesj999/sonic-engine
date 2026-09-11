@@ -5,6 +5,8 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 
 import java.util.List;
@@ -26,10 +28,15 @@ import java.util.List;
  * </ul>
  * No collision/physics (pure scenery).
  */
-public class BridgeStakeObjectInstance extends AbstractObjectInstance {
+public class BridgeStakeObjectInstance extends AbstractObjectInstance implements RewindRecreatable {
 
     public BridgeStakeObjectInstance(ObjectSpawn spawn, String name) {
         super(spawn, name);
+    }
+
+    @Override
+    public BridgeStakeObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new BridgeStakeObjectInstance(ctx.spawn(), getName());
     }
 
     @Override
@@ -56,8 +63,9 @@ public class BridgeStakeObjectInstance extends AbstractObjectInstance {
                 renderer = renderManager.getRenderer(Sonic2ObjectArtKeys.HTZ_LIFT);
                 frame = 1;
             }
-            case 7, 8 -> {  // Ground edge (uses level art - skip for now)
-                return;  // TODO: Implement level art rendering
+            case 7, 8 -> {  // Ground edge level-art stand-in until direct level-art mappings are available
+                renderer = renderManager.getBridgeRenderer();
+                frame = 1;
             }
             default -> {  // EHZ bridge stake (subtype 2) and others
                 renderer = renderManager.getBridgeRenderer();
@@ -74,4 +82,3 @@ public class BridgeStakeObjectInstance extends AbstractObjectInstance {
         renderer.drawFrameIndex(frame, spawn.x(), spawn.y(), hFlip, vFlip);
     }
 }
-

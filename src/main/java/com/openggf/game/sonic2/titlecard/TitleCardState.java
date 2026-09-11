@@ -5,7 +5,7 @@ package com.openggf.game.sonic2.titlecard;
  *
  * <p>The exit sequence follows the original Sonic 2 cascading order:
  * <pre>
- * SLIDE_IN → DISPLAY → EXIT_LEFT_SWOOSH → EXIT_BOTTOM_BAR → EXIT_BACKGROUND → TEXT_WAIT → TEXT_EXIT → COMPLETE
+ * SLIDE_IN → DISPLAY → ZONE_TILE_UPLOAD → EXIT_LEFT_SWOOSH → EXIT_BOTTOM_BAR → EXIT_BACKGROUND → TEXT_WAIT → TEXT_EXIT → COMPLETE
  * </pre>
  *
  * <p>This creates the distinctive effect where background elements exit first,
@@ -18,6 +18,12 @@ public enum TitleCardState {
 
     /** All elements are at target positions, displaying for a set duration */
     DISPLAY,
+
+    /**
+     * LoadZoneTiles is uploading the zone's 8x8 art (docs/s2disasm/s2.asm:4938, 6471-6524).
+     * The card is still up; the ROM spends one VBlank per {@code $1000}-byte DMA chunk.
+     */
+    ZONE_TILE_UPLOAD,
 
     /** Left swoosh (red stripes) is sliding out - first to exit */
     EXIT_LEFT_SWOOSH,

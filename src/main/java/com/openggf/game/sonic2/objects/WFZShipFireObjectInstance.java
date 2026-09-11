@@ -1,12 +1,15 @@
 package com.openggf.game.sonic2.objects;
 
 import com.openggf.debug.DebugRenderContext;
+import com.openggf.game.sonic2.Sonic2LevelEventManager;
 import com.openggf.game.sonic2.Sonic2ObjectArtKeys;
 import com.openggf.game.PlayableEntity;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -39,7 +42,7 @@ import java.util.List;
  * <p>
  * <b>Disassembly Reference:</b> s2.asm lines 79894-79932 (ObjBC)
  */
-public class WFZShipFireObjectInstance extends AbstractObjectInstance {
+public class WFZShipFireObjectInstance extends AbstractObjectInstance implements RewindRecreatable {
 
     /**
      * BG X offset threshold at which the ship fire is deleted.
@@ -48,19 +51,21 @@ public class WFZShipFireObjectInstance extends AbstractObjectInstance {
     private static final int BG_X_OFFSET_DELETE_THRESHOLD = 0x380;
 
     /** Initial X position saved during init (ROM: objoff_2C). */
-    private final int initialX;
+    private int initialX;
 
     /** Current computed X position (initialX + Camera_BG_X_offset). */
     private int currentX;
 
     /** Current Y position (constant, from spawn). */
-    private final int currentY;
+    private int currentY;
 
     /**
      * Flicker toggle - alternates each frame to create flickering effect.
      * ROM: bchg #0,objoff_2A(a0) / beq.w return_37A48 (skip display when 0)
      */
     private boolean flickerVisible = true;
+    private boolean renderThisFrame;
+    private boolean initialized;
 
     public WFZShipFireObjectInstance(ObjectSpawn spawn) {
         super(spawn, "WFZShipFire");
@@ -68,6 +73,11 @@ public class WFZShipFireObjectInstance extends AbstractObjectInstance {
         this.initialX = spawn.x();
         this.currentX = spawn.x();
         this.currentY = spawn.y();
+    }
+
+    @Override
+    public WFZShipFireObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new WFZShipFireObjectInstance(ctx.spawn());
     }
 
     @Override
@@ -87,12 +97,26 @@ public class WFZShipFireObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public boolean isPersistent() {
+        // ObjBC has no MarkObjGone; its BG offset check owns deletion.
+        return true;
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
+        if (!initialized) {
+            // ROM ObjBC_Init runs LoadSubObject, saves objoff_2C, then rts.
+            // ObjBC_Main's BG offset and flicker logic starts on the next frame.
+            initialized = true;
+            renderThisFrame = false;
+            return;
+        }
+
         // ROM: ObjBC_Main (s2.asm line 79915)
         // move.w objoff_2C(a0),d0          ; d0 = initial X
         // move.w (Camera_BG_X_offset).w,d1 ; d1 = BG scroll offset
-        int bgXOffset = services().parallaxManager().getCameraBgXOffset();
+        int bgXOffset = getWfzBgXOffset();
 
         // cmpi.w #$380,d1 / bhs.w JmpTo65_DeleteObject
         // Delete when BG offset has scrolled too far (ship off-screen)
@@ -109,6 +133,7 @@ public class WFZShipFireObjectInstance extends AbstractObjectInstance {
         // Toggle flicker bit each frame. When result is 0 (beq), skip display.
         // When result is 1, fall through to DisplaySprite.
         flickerVisible = !flickerVisible;
+        renderThisFrame = flickerVisible;
     }
 
     @Override
@@ -116,7 +141,7 @@ public class WFZShipFireObjectInstance extends AbstractObjectInstance {
         // Only render on frames where the flicker toggle is active
         // ROM: bchg #0,objoff_2A(a0) / beq.w return_37A48 (skip when 0)
         // jmpto JmpTo45_DisplaySprite (display when 1)
-        if (!flickerVisible) {
+        if (!renderThisFrame) {
             return;
         }
 
@@ -129,12 +154,19 @@ public class WFZShipFireObjectInstance extends AbstractObjectInstance {
 
     @Override
     public void appendDebugRenderCommands(DebugRenderContext ctx) {
-        int bgXOffset = services().parallaxManager().getCameraBgXOffset();
+        int bgXOffset = getWfzBgXOffset();
         ctx.drawCross(currentX, currentY, 4, 1.0f, 0.5f, 0.0f);
         ctx.drawWorldLabel(currentX, currentY, -1,
                 String.format("BC fire bgX=%d %s",
                         bgXOffset,
                         flickerVisible ? "VIS" : "HID"),
                 DebugColor.ORANGE);
+    }
+
+    private int getWfzBgXOffset() {
+        if (services().levelEventProvider() instanceof Sonic2LevelEventManager events) {
+            return events.getWfzEvents().getBgXOffset();
+        }
+        return services().parallaxManager() != null ? services().parallaxManager().getCameraBgXOffset() : 0;
     }
 }

@@ -4,6 +4,8 @@ import com.openggf.game.PlayableEntity;
 import com.openggf.game.sonic1.audio.Sonic1Music;
 
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.physics.TrigLookupTable;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -22,7 +24,7 @@ import com.openggf.sprites.playable.AbstractPlayableSprite;
  *
  * Face and flame are rendered as overlays on the ship (not separate object instances).
  */
-public class Sonic1GHZBossInstance extends AbstractS1EggmanBossInstance {
+public class Sonic1GHZBossInstance extends AbstractS1EggmanBossInstance implements RewindRecreatable {
 
     // State machine constants (routineSecondary values, matching ROM's even-numbered index)
     private static final int STATE_DESCENT = 0;
@@ -64,6 +66,11 @@ public class Sonic1GHZBossInstance extends AbstractS1EggmanBossInstance {
     }
 
     @Override
+    public Sonic1GHZBossInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new Sonic1GHZBossInstance(ctx.spawn());
+    }
+
+    @Override
     protected void initializeBossState() {
         state.routineSecondary = STATE_DESCENT;
         state.xVel = 0;
@@ -97,6 +104,28 @@ public class Sonic1GHZBossInstance extends AbstractS1EggmanBossInstance {
     }
 
     @Override
+    protected boolean defeatDeferralAppliesToThisBoss() {
+        // ROM: the killing hit sets obStatus bit 7; the boss only acts on it when its
+        // own routine reaches BGHZ_ShipUpdate, where BGHZ_Defeated does
+        //   move.b #8,ob2ndRout(a0)   ; select BGHZ_Explode
+        //   move.w #$B3,BGHZ_BossGenericTimer(a0)
+        //   rts
+        // (docs/s1disasm/_incObj/3D, 48 Boss - GHZ Main and Wrecking Ball.asm:140-145).
+        // BGHZ_Defeated returns WITHOUT falling through to BGHZ_Explode, so the newly
+        // selected secondary routine — and its first `subq.w #1,BGHZ_BossGenericTimer`
+        // (asm:224) — is not dispatched until the next frame (BGHZ_ShipMain re-reads
+        // ob2ndRout at the top, asm:67-69). The engine selects the defeat routine during
+        // the touch-response pass that runs before this object's own update(), so without
+        // this one-frame deferral updateDefeatWait() decrements the $B3 timer on the same
+        // frame the routine changed. ROM holds the timer at $B3 for exactly one frame
+        // (trace f8295 off3c hi=$B3, first decrement f8296 -> $B2) before the explode
+        // countdown begins. The deferral restores that settle frame, which propagates
+        // through ascent (BGHZ_Recover) to BGHZ_Escape so the `addq.w #2,(v_limitright2)`
+        // camera scroll starts on the correct frame (trace f8570, not f8569).
+        return true;
+    }
+
+    @Override
     protected void onHitTaken(int remainingHits) {
         // ROM: sfx_HitBoss is played by BossHitHandler
         // Face shows hit animation
@@ -111,14 +140,14 @@ public class Sonic1GHZBossInstance extends AbstractS1EggmanBossInstance {
     }
 
     @Override
-    protected void updateBossLogic(int frameCounter, PlayableEntity playerEntity) {
+    protected void updateBossLogic(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         switch (state.routineSecondary) {
             case STATE_DESCENT -> updateDescent();
             case STATE_APPROACH -> updateApproach();
             case STATE_COMBAT_MOVE -> updateCombatMove();
             case STATE_COMBAT_REVERSE -> updateCombatReverse();
-            case STATE_DEFEAT_WAIT -> updateDefeatWait(frameCounter);
+            case STATE_DEFEAT_WAIT -> updateDefeatWait(vIntRunCount);
             case STATE_ASCENT -> updateAscent();
             case STATE_ESCAPE -> updateEscape();
         }
@@ -208,7 +237,7 @@ public class Sonic1GHZBossInstance extends AbstractS1EggmanBossInstance {
 
     // === State 8: DEFEAT_WAIT ===
     // ROM: loc_1797A
-    private void updateDefeatWait(int frameCounter) {
+    private void updateDefeatWait(int vIntRunCount) {
         timer--;
         if (timer < 0) {
             // Timer expired — start ascent
@@ -222,7 +251,7 @@ public class Sonic1GHZBossInstance extends AbstractS1EggmanBossInstance {
             services().gameState().setCurrentBossId(0);
         } else {
             // Spawn explosions every 8 frames (BossDefeated)
-            if ((frameCounter & 7) == 0) {
+            if ((vIntRunCount & 7) == 0) {
                 spawnDefeatExplosion();
             }
         }
@@ -338,10 +367,21 @@ public class Sonic1GHZBossInstance extends AbstractS1EggmanBossInstance {
         if (wreckingBall != null) {
             return; // Already spawned
         }
-        wreckingBall = new GHZBossWreckingBall(this);
-        childComponents.add(wreckingBall);
         if (services().objectManager() != null) {
-            services().objectManager().addDynamicObject(wreckingBall);
+            wreckingBall = spawnFreeChild(() -> new GHZBossWreckingBall(this));
+        } else {
+            wreckingBall = new GHZBossWreckingBall(this);
+        }
+        childComponents.add(wreckingBall);
+    }
+
+    void adoptWreckingBallForRewind(GHZBossWreckingBall ball) {
+        wreckingBall = ball;
+        childComponents.removeIf(component ->
+                component instanceof GHZBossWreckingBall existing
+                        && (existing != ball || existing.isDestroyed()));
+        if (ball != null && !childComponents.contains(ball)) {
+            childComponents.add(ball);
         }
     }
 

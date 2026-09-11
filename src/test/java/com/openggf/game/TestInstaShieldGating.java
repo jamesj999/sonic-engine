@@ -1,5 +1,7 @@
 package com.openggf.game;
 
+import com.openggf.game.rules.GameRules;
+
 import com.openggf.game.sonic2.Sonic2GameModule;
 import com.openggf.game.ShieldType;
 import com.openggf.tests.TestablePlayableSprite;
@@ -26,27 +28,27 @@ class TestInstaShieldGating {
     }
 
     @Test
-    void instaShieldEnabledInS3KFeatureSet() {
-        assertTrue(PhysicsFeatureSet.SONIC_3K.instaShieldEnabled(),
+    void instaShieldEnabledInS3KRules() {
+        assertTrue(GameRules.SONIC_3K.playerCapability().instaShieldEnabled(),
                 "S3K should have instaShieldEnabled");
     }
 
     @Test
-    void instaShieldDisabledInS1FeatureSet() {
-        assertFalse(PhysicsFeatureSet.SONIC_1.instaShieldEnabled(),
+    void instaShieldDisabledInS1Rules() {
+        assertFalse(GameRules.SONIC_1.playerCapability().instaShieldEnabled(),
                 "S1 should not have instaShieldEnabled");
     }
 
     @Test
-    void instaShieldDisabledInS2FeatureSet() {
-        assertFalse(PhysicsFeatureSet.SONIC_2.instaShieldEnabled(),
+    void instaShieldDisabledInS2Rules() {
+        assertFalse(GameRules.SONIC_2.playerCapability().instaShieldEnabled(),
                 "S2 should not have instaShieldEnabled");
     }
 
     @Test
     void instaShieldBlockedWhenShieldEquipped() {
         TestablePlayableSprite sprite = new TestablePlayableSprite("test", (short) 100, (short) 100);
-        sprite.setPhysicsFeatureSetForTest(PhysicsFeatureSet.SONIC_3K);
+        sprite.setGameRulesForTest(GameRules.SONIC_3K);
         sprite.setShieldStateForTest(true, ShieldType.BASIC);
         assertEquals(ShieldType.BASIC, sprite.getShieldType());
     }
@@ -54,7 +56,7 @@ class TestInstaShieldGating {
     @Test
     void instaShieldBlockedWhenElementalShieldEquipped() {
         TestablePlayableSprite sprite = new TestablePlayableSprite("test", (short) 100, (short) 100);
-        sprite.setPhysicsFeatureSetForTest(PhysicsFeatureSet.SONIC_3K);
+        sprite.setGameRulesForTest(GameRules.SONIC_3K);
         sprite.setShieldStateForTest(true, ShieldType.FIRE);
         assertEquals(ShieldType.FIRE, sprite.getShieldType());
     }
@@ -62,7 +64,7 @@ class TestInstaShieldGating {
     @Test
     void instaShieldBlockedWhenDoubleJumpFlagNonZero() {
         TestablePlayableSprite sprite = new TestablePlayableSprite("test", (short) 100, (short) 100);
-        sprite.setPhysicsFeatureSetForTest(PhysicsFeatureSet.SONIC_3K);
+        sprite.setGameRulesForTest(GameRules.SONIC_3K);
         sprite.setDoubleJumpFlag(1);
         assertEquals(1, sprite.getDoubleJumpFlag(),
                 "doubleJumpFlag should be 1 (already attacking)");
@@ -75,3 +77,5 @@ class TestInstaShieldGating {
         assertEquals(2, sprite.getDoubleJumpFlag());
     }
 }
+
+

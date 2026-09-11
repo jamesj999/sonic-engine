@@ -34,6 +34,14 @@ public interface GameObjectProfile {
     Set<Integer> getImplementedIds();
 
     /**
+     * Optional Markdown note emitted under the generated header, describing what
+     * "implemented" certifies for this game. {@code null} emits nothing.
+     */
+    default String coverageNote() {
+        return null;
+    }
+
+    /**
      * Implemented IDs for a specific level. Games with zone-set-dependent
      * object tables (e.g. S3K) override this to avoid false positives
      * when the same ID maps to different objects per zone set.

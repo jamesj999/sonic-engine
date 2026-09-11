@@ -7,8 +7,12 @@ import com.openggf.game.TitleCardProvider;
 import com.openggf.game.titlecard.TitleCardElement;
 import com.openggf.game.titlecard.TitleCardMappings;
 import com.openggf.game.sonic1.constants.Sonic1Constants;
+import com.openggf.game.sonic1.resources.Sonic1PlcService;
+import com.openggf.game.session.SessionManager;
 import com.openggf.graphics.GLCommand;
+import com.openggf.graphics.PaletteFadePresentation;
 import com.openggf.graphics.GraphicsManager;
+import com.openggf.graphics.PatternAtlasRange;
 import com.openggf.graphics.TitleCardSpriteRenderer;
 import com.openggf.level.Pattern;
 import com.openggf.util.PatternDecompressor;
@@ -22,20 +26,24 @@ import java.util.logging.Logger;
  *
  * <p>Sonic 1 title cards are simpler than Sonic 2: 4 sprite elements
  * (zone name, "ZONE", act number, oval decoration) slide in from off-screen
- * over a black background, hold for 60 frames, then slide out at double speed.
- * No background planes (blue/yellow/red) are used.
+ * over a black background, hold until the level's queued art has finished
+ * decompressing, then slide out at double speed. No background planes
+ * (blue/yellow/red) are used.
  *
  * <p>From the disassembly (Object 34 - "34 Title Cards.asm"):
  * <ul>
  *   <li>Routine 0 (Card_CheckSBZ3): Initialize 4 elements with ConData positions</li>
  *   <li>Routine 2 (Card_ChkPos): Slide to card_mainX at 16px/frame</li>
- *   <li>Routine 4 (Card_Wait): Wait 60 frames, then slide to card_finalX at 32px/frame</li>
+ *   <li>Routine 4/6 (Card_Wait): Wait obTimeFrame (60) frames, then slide to
+ *       card_finalX at 32px/frame. Nothing reaches this routine until after
+ *       Level_TtlCardLoop has exited and the level has faded in, so the 60
+ *       frames are spent inside Level_MainLoop with gameplay running.</li>
  * </ul>
  *
  * <p>In the original game, the title card loop (Level_TtlCardLoop) runs until
- * the ACT element reaches its target, then level loading continues. The elements
- * continue running in the background during level load, eventually sliding out
- * and being deleted.
+ * every element has reached its target <em>and</em> v_plc_buffer is empty, then
+ * level loading continues. The elements continue running in the background
+ * during level load, eventually sliding out and being deleted.
  *
  * <p>State machine:
  * <pre>
@@ -50,17 +58,42 @@ public class Sonic1TitleCardManager implements TitleCardProvider {
 
     private static Sonic1TitleCardManager instance;
 
-    /** Display hold duration: 60 frames (~1 second at 60fps), matching obTimeFrame in disassembly */
-    private static final int DISPLAY_HOLD_DURATION = 60;
-
     /** Pattern base ID for S1 title card art (high to avoid conflicts with S2's 0x40000) */
-    private static final int PATTERN_BASE = 0x50000;
+    private static final int PATTERN_BASE = PatternAtlasRange.MENU_AND_DATA_SELECT.base();
 
+    /** Native game width (320-pixel frame everything is authored for). */
     private static final int SCREEN_WIDTH = 320;
     private static final int SCREEN_HEIGHT = 224;
 
-    /** Duration of PalFadeIn_Alt: palette fades from black to full color over 22 frames */
-    private static final int PALETTE_FADE_FRAMES = 22;
+    /**
+     * Returns the configured viewport width in game pixels.
+     * At native 320 equals SCREEN_WIDTH exactly (xOffset == 0 — byte-identical).
+     */
+    private int viewportWidth() {
+        try {
+            int w = GameServices.graphics().getProjectionWidth();
+            return w > 0 ? w : SCREEN_WIDTH;
+        } catch (Exception ignored) {
+            return SCREEN_WIDTH;
+        }
+    }
+
+    /**
+     * Horizontal offset to centre the 320-wide title-card composition in the
+     * configured viewport.  Zero at native 320 — byte-identical.
+     */
+    private int xOffset() {
+        return (viewportWidth() - SCREEN_WIDTH) / 2;
+    }
+
+    /**
+     * Duration of PalFadeIn_Alt: 22 VBlank periods ({@code move.w #22-1,d4}), each
+     * transferring the palette built so far and then running FadeIn_AddColor once
+     * over palette lines 1-3 ({@code move.w #$202F,(v_pfade_start).w},
+     * docs/s1disasm/sonic.asm:2965-2966). Line 0 (Sonic, HUD, title card) was
+     * loaded directly with PalLoad and never fades.
+     */
+    static final int PALETTE_FADE_FRAMES = PaletteFadePresentation.ROM_FADE_FRAMES;
 
     // Current state
     private Sonic1TitleCardState state = Sonic1TitleCardState.COMPLETE;
@@ -78,7 +111,7 @@ public class Sonic1TitleCardManager implements TitleCardProvider {
     private boolean artLoaded = false;
     private boolean artCached = false;
 
-    private Sonic1TitleCardManager() {}
+    public Sonic1TitleCardManager() {}
 
     public static synchronized Sonic1TitleCardManager getInstance() {
         if (instance == null) {
@@ -161,6 +194,15 @@ public class Sonic1TitleCardManager implements TitleCardProvider {
                 conData[6], conData[7],
                 Sonic1TitleCardMappings.Y_OVAL,
                 0, 0x40));
+
+        // Extend each element's off-screen entry/exit endpoint so the elements
+        // slide fully on/off a wider-than-320 viewport. Zero at native 320 —
+        // byte-identical. Without this, the centred (xOffset-shifted) elements
+        // do not fully leave the screen at widescreen widths.
+        int edgeMargin = Math.max(0, viewportWidth() - SCREEN_WIDTH);
+        for (TitleCardElement element : elements) {
+            element.setEdgeMargin(edgeMargin);
+        }
     }
 
     private void loadArt() {
@@ -189,12 +231,11 @@ public class Sonic1TitleCardManager implements TitleCardProvider {
     }
 
 
-    private void ensureArtCached() {
+    private void ensureArtCached(GraphicsManager graphicsManager) {
         if (artCached || !artLoaded || patterns == null) {
             return;
         }
 
-        GraphicsManager graphicsManager = GraphicsManager.getInstance();
         if (graphicsManager == null) {
             return;
         }
@@ -219,6 +260,50 @@ public class Sonic1TitleCardManager implements TitleCardProvider {
             case SLIDE_OUT -> updateSlideOut();
             case COMPLETE -> {}
         }
+        applyPaletteFadePresentation();
+    }
+
+    /**
+     * FadeIn_AddColor passes visible on the frame drawn after this update, or -1
+     * when the level palette is not fading. Each PalFadeIn_Alt iteration waits for
+     * VBlank (transferring the palette built so far) before applying the next
+     * step, so the N-th fade frame shows N-1 steps: the first is black on lines
+     * 1-3 and the 22nd shows all 21 steps, which is the full palette. The frame
+     * that leaves DISPLAY (timer 0) is black as well and is still covered by the
+     * card's black plane in {@link #draw}; without both the level flashes for one
+     * frame between the card and the fade.
+     */
+    static int paletteFadeStepsAt(Sonic1TitleCardState state, int stateTimer) {
+        if (state != Sonic1TitleCardState.SLIDE_OUT || stateTimer >= PALETTE_FADE_FRAMES) {
+            return -1;
+        }
+        // stateTimer 0 is the frame that left DISPLAY: the card's black plane is
+        // no longer drawn, so lines 1-3 must already read black (the ROM's
+        // Level_Delay VBlanks transfer black lines before PalFadeIn_Alt starts).
+        return Math.max(0, stateTimer - 1);
+    }
+
+    private void applyPaletteFadePresentation() {
+        GraphicsManager graphicsManager = graphicsOrNull();
+        if (graphicsManager == null) {
+            return;
+        }
+        int steps = paletteFadeStepsAt(state, stateTimer);
+        if (steps < 0) {
+            graphicsManager.clearPaletteFadePresentation();
+            return;
+        }
+        graphicsManager.setPaletteFadePresentation(
+                PaletteFadePresentation.Mode.FROM_BLACK, steps, PaletteFadePresentation.LINES_1_TO_3);
+    }
+
+    private static GraphicsManager graphicsOrNull() {
+        try {
+            return GameServices.graphics();
+        } catch (RuntimeException ignored) {
+            // Focused tests drive the state machine without an engine session.
+            return null;
+        }
     }
 
     private void updateSlideIn() {
@@ -233,18 +318,46 @@ public class Sonic1TitleCardManager implements TitleCardProvider {
     }
 
     private void updateDisplay() {
-        if (stateTimer >= DISPLAY_HOLD_DURATION) {
+        if (!plcQueueBusy()) {
             state = Sonic1TitleCardState.SLIDE_OUT;
             stateTimer = 0;
         }
     }
 
     /**
+     * S1's locked title-card loop holds until the level's queued PLCs finish
+     * decompressing as well as until the elements arrive: {@code
+     * Level_TtlCardLoop} ("stay on them until PLCs have finished") re-loops
+     * while {@code v_plc_buffer} is non-empty (docs/s1disasm/sonic.asm:
+     * 2814-2842). The card's length is therefore the queued art's drain time,
+     * not a constant.
+     *
+     * <p>Element arrival plus an empty queue is the loop's <em>whole</em> exit
+     * condition; there is no minimum hold. The ROM's {@code
+     * move.w #1*60,obTimeFrame(a1)} belongs to {@code Card_Wait}, routine 4/6
+     * (docs/s1disasm/_incObj/34 Title Cards.asm:74,118-122), which the routine
+     * bump at docs/s1disasm/sonic.asm:2971-2974 only reaches after the loop,
+     * the four {@code Level_Delay} frames and {@code PalFadeIn_Alt} — i.e.
+     * inside {@code Level_MainLoop} with gameplay already running. Gating the
+     * pre-release loop on it made the level start late whenever the queued art
+     * drained faster than the slide-in plus 60 frames.
+     */
+    private boolean plcQueueBusy() {
+        if (SessionManager.getCurrentWorldSession() == null) {
+            return false;
+        }
+        Sonic1PlcService plcService =
+                GameServices.module().getGameService(Sonic1PlcService.class);
+        return plcService != null && plcService.isBusy();
+    }
+
+    /**
      * SLIDE_OUT has two phases:
      * <ol>
-     *   <li>Fade phase (frames 0–21): PalFadeIn_Alt fades the black RECTI from
-     *       opaque to transparent over 22 frames, revealing the level. Elements
-     *       remain stationary.</li>
+     *   <li>Fade phase (frames 1–22, after the covered release frame 0):
+     *       PalFadeIn_Alt fades palette lines 1-3 in from black (blue, then green,
+     *       then red) over 22 frames, revealing the level; see
+     *       {@link #paletteFadeStepsAt}. Elements remain stationary.</li>
      *   <li>Exit phase (frame 22+): Elements slide back to their start positions
      *       at 32 px/frame, matching Card_ChkPos2 in the disassembly.</li>
      * </ol>
@@ -272,32 +385,39 @@ public class Sonic1TitleCardManager implements TitleCardProvider {
         }
     }
 
+    // Card_ChangeArt's explosion/animal AddPLC pair is ROM object lifecycle, not
+    // presentation: it runs from the fixed title-card slot under ExecuteObjects
+    // after Level_StartGame regardless of whether the sprites are drawn
+    // (docs/s1disasm/sonic.asm:2969-2995,
+    // docs/s1disasm/_incObj/34 Title Cards.asm:122-168). It is owned by
+    // Sonic1FixedTitleCardManager so a headless load submits it on the same
+    // logical frame as a presented one.
+
     @Override
     public void draw() {
-        ensureArtCached();
-
-        GraphicsManager graphicsManager = GraphicsManager.getInstance();
+        GraphicsManager graphicsManager = GameServices.graphics();
+        ensureArtCached(graphicsManager);
         if (graphicsManager == null) {
             return;
         }
 
-        // Black background that hides the level during SLIDE_IN and DISPLAY.
-        // During SLIDE_OUT, alpha fades from 1.0 to 0.0 over PALETTE_FADE_FRAMES
-        // to match PalFadeIn_Alt (22 frames) from the S1 disassembly.
-        if (state != Sonic1TitleCardState.COMPLETE) {
-            float bgAlpha = 1.0f;
-            if (state == Sonic1TitleCardState.SLIDE_OUT) {
-                float progress = Math.min(1.0f, stateTimer / (float) PALETTE_FADE_FRAMES);
-                bgAlpha = 1.0f - progress;
-            }
-
-            if (bgAlpha > 0f) {
-                graphicsManager.registerCommand(new GLCommand(
-                        GLCommand.CommandType.RECTI, -1,
-                        GLCommand.BlendType.ONE_MINUS_SRC_ALPHA,
-                        0.0f, 0.0f, 0.0f, bgAlpha,
-                        0, 0, SCREEN_WIDTH, SCREEN_HEIGHT));
-            }
+        // Black background that hides the level during SLIDE_IN and DISPLAY: in
+        // Level_TtlCardLoop the level art is still decompressing, lines 1-3 of CRAM
+        // hold black and no level object or HUD exists yet. The frame that leaves
+        // DISPLAY (SLIDE_OUT, timer 0) is the release iteration: the engine rebuilds
+        // the foreground tilemap and the background plane still holds the last
+        // pre-fade composite, so it stays covered too, matching the black planes the
+        // ROM's Level_Delay VBlanks show. From the next frame on the level is drawn
+        // and its palette fades in through the CRAM upload path
+        // (applyPaletteFadePresentation), so no overlay is drawn over it.
+        if (state == Sonic1TitleCardState.SLIDE_IN || state == Sonic1TitleCardState.DISPLAY
+                || (state == Sonic1TitleCardState.SLIDE_OUT && stateTimer == 0)) {
+            // Span the full viewport so no level bleeds through on wider screens.
+            // viewportWidth()==SCREEN_WIDTH at native 320 — byte-identical.
+            graphicsManager.registerCommand(new GLCommand(
+                    GLCommand.CommandType.RECTI, -1,
+                    0.0f, 0.0f, 0.0f,
+                    0, 0, viewportWidth(), SCREEN_HEIGHT));
         }
 
         // Render sprite elements in reverse order: VDP sprite priority means earlier
@@ -327,7 +447,9 @@ public class Sonic1TitleCardManager implements TitleCardProvider {
         }
 
         TitleCardMappings.SpritePiece[] pieces = Sonic1TitleCardMappings.getFrame(frameIndex);
-        int centerX = element.getCurrentX();
+        // xOffset() centres the 320-wide composition in the viewport.
+        // At native 320 xOffset()==0 — byte-identical.
+        int centerX = element.getCurrentX() + xOffset();
         int centerY = element.getY();
 
         // Render pieces in reverse order so that earlier pieces (higher VDP sprite
@@ -379,7 +501,26 @@ public class Sonic1TitleCardManager implements TitleCardProvider {
     }
 
     @Override
+    public boolean shouldRunLevelObjectsDuringLockedPhase() {
+        return false;
+    }
+
+    @Override
+    public int levelObjectPreludePassesAtRelease() {
+        return 1;
+    }
+
+    @Override
+    public boolean shouldRunPlayerPreludeAtRelease() {
+        return true;
+    }
+
+    @Override
     public void reset() {
+        GraphicsManager graphicsManager = graphicsOrNull();
+        if (graphicsManager != null) {
+            graphicsManager.clearPaletteFadePresentation();
+        }
         state = Sonic1TitleCardState.COMPLETE;
         stateTimer = 0;
         elements.clear();

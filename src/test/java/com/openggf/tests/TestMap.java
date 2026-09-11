@@ -1,9 +1,9 @@
 package com.openggf.tests;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import com.openggf.level.Map;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class TestMap {
     @Test
@@ -16,15 +16,17 @@ public class TestMap {
         assertEquals(7, map.getValue(1, 2, 1));
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void testInvalidLayer() {
         Map map = new Map(1, 2, 2);
-        map.getValue(5, 1, 1);
+        assertThrows(IllegalArgumentException.class, () -> map.getValue(5, 1, 1));
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void testInvalidCoords() {
         Map map = new Map(1, 2, 2);
-        map.getValue(0, 3, 1);
+        assertThrows(IllegalArgumentException.class, () -> map.getValue(0, 3, 1));
     }
 }
+
+

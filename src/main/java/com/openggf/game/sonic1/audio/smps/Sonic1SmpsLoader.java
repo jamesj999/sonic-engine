@@ -9,8 +9,8 @@ import com.openggf.audio.smps.AbstractSmpsLoader;
 import com.openggf.audio.smps.DacData;
 import com.openggf.audio.smps.Sonic1SmpsData;
 import com.openggf.data.Rom;
-import com.openggf.tools.DcmDecoder;
-import com.openggf.tools.KosinskiReader;
+import com.openggf.data.compression.DcmDecoder;
+import com.openggf.data.compression.KosinskiReader;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -43,15 +43,22 @@ public class Sonic1SmpsLoader extends AbstractSmpsLoader {
     private static final int MAX_BLOB_SIZE = 0x4000; // 16 KB safety limit
 
     private byte[][] psgEnvelopes;
+    private byte[] zeroAddressVoiceBank;
 
     public Sonic1SmpsLoader(Rom rom) {
         super(rom);
+        try {
+            zeroAddressVoiceBank = rom.readBytes(0, 0x100);
+        } catch (IOException error) {
+            throw new IllegalStateException(
+                    "cannot read the S1 ROM vector area", error);
+        }
         loadPsgEnvelopes();
     }
 
     @Override
     protected boolean isValidSfxId(int id) {
-        return (id >= Sonic1Sfx.ID_BASE && id <= Sonic1Sfx.ID_MAX)
+        return (id >= Sonic1Sfx.ID_BASE && id <= Sonic1Sfx.NORMAL_ID_MAX)
                 || (id >= Sonic1SmpsConstants.SPECIAL_SFX_ID_BASE
                     && id < Sonic1SmpsConstants.SPECIAL_SFX_ID_BASE + Sonic1SmpsConstants.SPECIAL_SFX_COUNT);
     }
@@ -97,7 +104,15 @@ public class Sonic1SmpsLoader extends AbstractSmpsLoader {
 
     @Override
     public AbstractSmpsData loadSfx(int sfxId) {
-        if (sfxId < Sonic1Sfx.ID_BASE || sfxId > Sonic1Sfx.ID_MAX) {
+        // Normal-table upper bound is Sonic1Sfx.NORMAL_ID_MAX (0xCF), NOT
+        // ID_MAX (0xD0): ROM's PlaySoundID dispatches the normal and special
+        // SFX pointer tables as disjoint ranges (see NORMAL_ID_MAX's javadoc).
+        // Using ID_MAX here previously let 0xD0 fall through to the normal
+        // table -- it only "worked" because this ROM's SFX_PTR_TABLE_ADDR +
+        // SFX_COUNT*4 happens to equal SPECIAL_SFX_PTR_TABLE_ADDR by
+        // coincidence, reading the same pointer via a less-precise fallback
+        // blob-size calculation than the special path uses.
+        if (sfxId < Sonic1Sfx.ID_BASE || sfxId > Sonic1Sfx.NORMAL_ID_MAX) {
             // Check special SFX range
             if (sfxId >= Sonic1SmpsConstants.SPECIAL_SFX_ID_BASE
                     && sfxId < Sonic1SmpsConstants.SPECIAL_SFX_ID_BASE + Sonic1SmpsConstants.SPECIAL_SFX_COUNT) {
@@ -130,6 +145,7 @@ public class Sonic1SmpsLoader extends AbstractSmpsLoader {
 
             Sonic1SfxData data = new Sonic1SfxData(raw, 0);
             data.setPsgEnvelopes(psgEnvelopes);
+            data.setZeroAddressVoiceBank(zeroAddressVoiceBank);
             data.setId(sfxId);
             sfxCache.put(sfxId, data);
             return data;
@@ -265,6 +281,7 @@ public class Sonic1SmpsLoader extends AbstractSmpsLoader {
 
             Sonic1SfxData data = new Sonic1SfxData(raw, 0);
             data.setPsgEnvelopes(psgEnvelopes);
+            data.setZeroAddressVoiceBank(zeroAddressVoiceBank);
             data.setId(sfxId);
             sfxCache.put(sfxId, data);
             return data;

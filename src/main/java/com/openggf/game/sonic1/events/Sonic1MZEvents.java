@@ -24,6 +24,7 @@ class Sonic1MZEvents extends Sonic1ZoneEvents {
 
     @Override
     void update(int act) {
+        retryPendingPlc();
         switch (act) {
             case 0 -> updateAct1();
             case 1 -> updateAct2();
@@ -258,6 +259,7 @@ class Sonic1MZEvents extends Sonic1ZoneEvents {
 
         // ROM: bgm_Boss — play boss music
         audio().playMusic(Sonic1Music.BOSS.id);
+        requestSonic1Plc(17);
 
         // f_lockscreen = 1.
         // ROM: f_lockscreen limits Sonic's movement range (01 Sonic.asm:824-834) but

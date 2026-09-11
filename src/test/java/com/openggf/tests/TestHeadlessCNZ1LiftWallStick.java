@@ -1,15 +1,13 @@
 package com.openggf.tests;
 
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Regression test for CNZ1 wall sticking while riding lifts.
@@ -20,7 +18,7 @@ import static org.junit.Assert.*;
  * (absDistX <= absDistY) at platform edges near walls, clearing isOnObject
  * each alternating frame.
  * <p>
- * ROM reference: s2.asm:34806 — SolidObject checks btst d6,status(a0) and
+ * ROM reference: s2.asm:34806 â€” SolidObject checks btst d6,status(a0) and
  * branches to MvSonicOnPtfm (carrying only) when already standing, skipping
  * overlap re-evaluation.
  */
@@ -36,23 +34,21 @@ public class TestHeadlessCNZ1LiftWallStick {
 
     private static final int SETTLE_FRAMES = 30;
     private static final int HOLD_LEFT_FRAMES = 40;
-
-    @ClassRule public static RequiresRomRule romRule = new RequiresRomRule();
     private static SharedLevel sharedLevel;
 
-    @BeforeClass
+    @BeforeAll
     public static void loadLevel() throws Exception {
         sharedLevel = SharedLevel.load(SonicGame.SONIC_2, ZONE_CNZ, ACT_1);
     }
 
-    @AfterClass
+    @AfterAll
     public static void cleanup() {
         if (sharedLevel != null) sharedLevel.dispose();
     }
 
     private HeadlessTestFixture fixture;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         fixture = HeadlessTestFixture.builder()
                 .withSharedLevel(sharedLevel)
@@ -105,9 +101,10 @@ public class TestHeadlessCNZ1LiftWallStick {
         // The riding state should not oscillate rapidly. A few transitions are
         // acceptable (e.g., initial landing, walking off edge), but rapid
         // on/off toggling (>4 transitions in 40 frames) indicates the bug.
-        assertTrue("isOnObject() oscillated " + oscillationCount + " times in "
-                + HOLD_LEFT_FRAMES + " frames — riding state is unstable near wall. "
-                + "Expected <= 4 transitions.",
-                oscillationCount <= 4);
+        assertTrue(oscillationCount <= 4, "isOnObject() oscillated " + oscillationCount + " times in "
+                + HOLD_LEFT_FRAMES + " frames â€” riding state is unstable near wall. "
+                + "Expected <= 4 transitions.");
     }
 }
+
+

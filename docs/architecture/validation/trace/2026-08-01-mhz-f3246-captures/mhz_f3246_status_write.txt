@@ -1,0 +1,29 @@
+f=3240 lfc=0CA9 STATUS_WRITE(bus) pc=01148E value=00 prev=?? x=0F77 y=078B xvel=068B yvel=FD4F gvel=070E ang=F2 status=00 rtn=02 movelock=0000 stick=00
+f=3240 lfc=0CA9 ANGLEPOS_IN x=0F7E y=0788 xvel=06BA yvel=FD99 gvel=0726 ang=F2 status=00 rtn=02 movelock=0000 stick=00
+f=3240 lfc=0CA9 SLOPEREPEL_IN x=0F7E y=0787 xvel=06BA yvel=FD99 gvel=0726 ang=F2 status=00 rtn=02 movelock=0000 stick=00
+f=3241 lfc=0CAA STATUS_WRITE(bus) pc=01148E value=00 prev=00 x=0F7E y=0787 xvel=06BA yvel=FD99 gvel=071B ang=F2 status=00 rtn=02 movelock=0000 stick=00
+f=3241 lfc=0CAA ANGLEPOS_IN x=0F85 y=0785 xvel=06C7 yvel=FD94 gvel=0733 ang=F2 status=00 rtn=02 movelock=0000 stick=00
+f=3241 lfc=0CAA SLOPEREPEL_IN x=0F85 y=0784 xvel=06C7 yvel=FD94 gvel=0733 ang=F2 status=00 rtn=02 movelock=0000 stick=00
+f=3242 lfc=0CAB STATUS_WRITE(bus) pc=01148E value=00 prev=00 x=0F85 y=0784 xvel=06C7 yvel=FD94 gvel=0728 ang=F2 status=00 rtn=02 movelock=0000 stick=00
+f=3242 lfc=0CAB ANGLEPOS_IN x=0F8C y=0781 xvel=06D3 yvel=FD90 gvel=0740 ang=F2 status=00 rtn=02 movelock=0000 stick=00
+f=3242 lfc=0CAB SLOPEREPEL_IN x=0F8C y=0781 xvel=06D3 yvel=FD90 gvel=0740 ang=F4 status=00 rtn=02 movelock=0000 stick=00
+f=3243 lfc=0CAC STATUS_WRITE(bus) pc=01148E value=00 prev=00 x=0F8C y=0781 xvel=06D3 yvel=FD90 gvel=0736 ang=F4 status=00 rtn=02 movelock=0000 stick=00
+f=3243 lfc=0CAC ANGLEPOS_IN x=0F93 y=077F xvel=06F6 yvel=FDE3 gvel=074E ang=F4 status=00 rtn=02 movelock=0000 stick=00
+f=3243 lfc=0CAC SLOPEREPEL_IN x=0F93 y=077E xvel=06F6 yvel=FDE3 gvel=074E ang=F4 status=00 rtn=02 movelock=0000 stick=00
+f=3244 lfc=0CAD STATUS_WRITE(bus) pc=01148E value=00 prev=00 x=0F93 y=077E xvel=06F6 yvel=FDE3 gvel=0744 ang=F4 status=00 rtn=02 movelock=0000 stick=00
+f=3244 lfc=0CAD ANGLEPOS_IN x=0F9A y=077C xvel=0703 yvel=FDDF gvel=075C ang=F4 status=00 rtn=02 movelock=0000 stick=00
+f=3244 lfc=0CAD SLOPEREPEL_IN x=0F9A y=077C xvel=0703 yvel=FDDF gvel=075C ang=F4 status=00 rtn=02 movelock=0000 stick=00
+f=3245 lfc=0CAE STATUS_WRITE(bus) pc=01148E value=00 prev=00 x=0F9A y=077C xvel=0703 yvel=FDDF gvel=0752 ang=F4 status=00 rtn=02 movelock=0000 stick=00
+f=3245 lfc=0CAE ANGLEPOS_IN x=0FA1 y=077A xvel=0711 yvel=FDDB gvel=076A ang=F4 status=00 rtn=02 movelock=0000 stick=00
+f=3245 lfc=0CAE SLOPEREPEL_IN x=0FA1 y=0779 xvel=0711 yvel=FDDB gvel=076A ang=F6 status=00 rtn=02 movelock=0000 stick=00
+f=3246 lfc=0CAF STATUS_WRITE(bus) pc=01148E value=00 prev=00 x=0FA1 y=0779 xvel=0711 yvel=FDDB gvel=0762 ang=F6 status=00 rtn=02 movelock=0000 stick=00
+f=3246 lfc=0CAF ANGLEPOS_IN x=0FA8 y=0777 xvel=073E yvel=FE30 gvel=077A ang=F6 status=00 rtn=02 movelock=0000 stick=00
+f=3246 lfc=0CAF SLOPEREPEL_IN x=0FA8 y=0777 xvel=073E yvel=FE30 gvel=077A ang=F8 status=00 rtn=02 movelock=0000 stick=00
+f=3246 lfc=0CAF STATUS_WRITE(bus) pc=08D732 value=00 prev=00 x=0FA8 y=0777 xvel=073E yvel=FE30 gvel=077A ang=F8 status=00 rtn=02 movelock=0000 stick=00
+f=3247 lfc=0CB0 STATUS_WRITE(bus) pc=011690 value=02 prev=00 x=0FA8 y=0777 xvel=073E yvel=FE30 gvel=077A ang=F8 status=02 rtn=02 movelock=0000 stick=00
+f=3248 lfc=0CB1 STATUS_WRITE(bus) pc=011690 value=02 prev=02 x=0FAF y=0775 xvel=0733 yvel=FE68 gvel=077A ang=FA status=02 rtn=02 movelock=0000 stick=00
+f=3249 lfc=0CB2 STATUS_WRITE(bus) pc=011690 value=02 prev=02 x=0FB6 y=0774 xvel=0728 yvel=FEA0 gvel=077A ang=FC status=02 rtn=02 movelock=0000 stick=00
+f=3250 lfc=0CB3 STATUS_WRITE(bus) pc=011690 value=02 prev=02 x=0FBD y=0772 xvel=071E yvel=FED8 gvel=077A ang=FE status=02 rtn=02 movelock=0000 stick=00
+f=3251 lfc=0CB4 STATUS_WRITE(bus) pc=011690 value=02 prev=02 x=0FC5 y=0771 xvel=0714 yvel=FF10 gvel=077A ang=00 status=02 rtn=02 movelock=0000 stick=00
+f=3252 lfc=0CB5 STATUS_WRITE(bus) pc=011690 value=02 prev=02 x=0FCC y=0770 xvel=070A yvel=FF48 gvel=077A ang=00 status=02 rtn=02 movelock=0000 stick=00
+f=3256 done=1

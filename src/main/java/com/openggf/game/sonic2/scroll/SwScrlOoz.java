@@ -2,6 +2,7 @@ package com.openggf.game.sonic2.scroll;
 
 import com.openggf.level.scroll.AbstractZoneScrollHandler;
 import com.openggf.level.scroll.M68KMath;
+import com.openggf.level.scroll.compose.ScrollEffectComposer;
 
 import java.util.Arrays;
 
@@ -35,15 +36,20 @@ public class SwScrlOoz extends AbstractZoneScrollHandler {
 
     private final ParallaxTables tables;
 
-    // Persistent heat-haze phase counter (TempArray_LayerDef equivalent)
-    // In the original, this is stored as a word in TempArray_LayerDef
+    // Heat-haze phase counter (TempArray_LayerDef equivalent), decrements once
+    // every 8 frames. Derived from the frame counter each update() rather than a
+    // running per-call decrement, so held-rewind re-derivation reproduces the
+    // exact phase instead of drifting off the update-call count. The value is
+    // heatHazePhaseBase minus the count of qualifying frames since the anchor.
     private int heatHazePhaseCounter;
-
-    // Last frame counter used for phase update detection
-    private int lastFrameForPhaseUpdate = -1;
+    private int heatHazePhaseBase;
+    private int phaseAnchorFrame;
+    private boolean phaseAnchored;
 
     // Pre-allocated buffer for per-scanline BG scroll values (bottom-to-top order)
     private final short[] bgScrollValues = new short[M68KMath.VISIBLE_LINES];
+
+    private final ScrollEffectComposer composer = new ScrollEffectComposer();
 
     // Camera_BG_X_pos tracking (16.16 fixed-point for subpixel accuracy)
     // Initialized to 0 by InitCam_OOZ, updated each frame at 1/4 FG speed
@@ -104,6 +110,7 @@ public class SwScrlOoz extends AbstractZoneScrollHandler {
                        int actId) {
 
         resetScrollTracking();
+        composer.reset();
 
         // ==================== Step 1: Initialize if needed ====================
         if (!initialized) {
@@ -124,7 +131,7 @@ public class SwScrlOoz extends AbstractZoneScrollHandler {
         int cameraBgXPos = (int) (bgXPos >> 16);
 
         // Set vertical scroll factor
-        vscrollFactorBG = (short) cameraBgYPos;
+        composer.setVscrollFactorBG((short) cameraBgYPos);
 
         // ==================== Step 3: Update heat-haze phase ====================
         // Phase decrements every 8 frames: when (Vint_runcount + 3) & 7 == 0
@@ -196,9 +203,13 @@ public class SwScrlOoz extends AbstractZoneScrollHandler {
             int fromBottom = M68KMath.VISIBLE_LINES - 1 - screenLine;
             short bgScroll = (fromBottom < bgScrollValues.length) ? bgScrollValues[fromBottom] : bgxFull;
 
-            horizScrollBuf[screenLine] = M68KMath.packScrollWords(fgScroll, bgScroll);
-            trackOffset(fgScroll, bgScroll);
+            composer.writePackedScrollWord(screenLine, fgScroll, bgScroll);
         }
+
+        composer.copyPackedScrollWordsTo(horizScrollBuf);
+        vscrollFactorBG = composer.getVscrollFactorBG();
+        minScrollOffset = composer.getMinScrollOffset();
+        maxScrollOffset = composer.getMaxScrollOffset();
     }
 
     /**
@@ -321,14 +332,18 @@ public class SwScrlOoz extends AbstractZoneScrollHandler {
      * @param frameCounter Current frame number (Vint_runcount equivalent)
      */
     private void updateHeatHazePhase(int frameCounter) {
-        // Check if we're on an update frame
-        if (((frameCounter + 3) & 7) == 0) {
-            // Only update once per qualifying frame
-            if (frameCounter != lastFrameForPhaseUpdate) {
-                heatHazePhaseCounter--;
-                lastFrameForPhaseUpdate = frameCounter;
-            }
+        if (!phaseAnchored) {
+            // Anchor one frame back so the first sampled frame can itself trigger
+            // a decrement, matching the original per-frame decrement timing.
+            phaseAnchorFrame = frameCounter - 1;
+            phaseAnchored = true;
         }
+        // Count qualifying frames ((frameCounter + 3) & 7 == 0, i.e. ≡ 5 mod 8)
+        // strictly after the anchor through the current frame. Pure function of
+        // the frame counter, so it is idempotent and rewind-safe.
+        int decrements = Math.floorDiv(frameCounter - 5, 8)
+                - Math.floorDiv(phaseAnchorFrame - 5, 8);
+        heatHazePhaseCounter = heatHazePhaseBase - decrements;
     }
 
     // ==================== Test Access Methods ====================
@@ -344,14 +359,17 @@ public class SwScrlOoz extends AbstractZoneScrollHandler {
      * Set the heat-haze phase counter for testing.
      */
     public void setHeatHazePhaseCounter(int counter) {
+        this.heatHazePhaseBase = counter;
         this.heatHazePhaseCounter = counter;
+        this.phaseAnchored = false;
     }
 
     /**
      * Reset the phase update tracking (for testing).
      */
     public void resetPhaseTracking() {
-        this.lastFrameForPhaseUpdate = -1;
+        this.heatHazePhaseBase = this.heatHazePhaseCounter;
+        this.phaseAnchored = false;
     }
 
     /**

@@ -1,13 +1,14 @@
 package com.openggf.camera;
 
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import com.openggf.sprites.Sprite;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 import com.openggf.game.GameServices;
+import com.openggf.game.rules.GameRules;
 import com.openggf.tests.TestEnvironment;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 /**
@@ -19,7 +20,7 @@ public class TestCamera {
     private Camera camera;
     private AbstractPlayableSprite mockSprite;
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         // Reset all singletons for test isolation
         TestEnvironment.resetAll();
@@ -56,22 +57,23 @@ public class TestCamera {
 
         camera.setFocusedSprite(newSprite);
 
-        assertEquals("Camera X should match sprite X", 500, camera.getX());
-        assertEquals("Camera Y should match sprite Y", 300, camera.getY());
+        assertEquals(500, camera.getX(), "Camera X should match sprite X");
+        assertEquals(300, camera.getY(), "Camera Y should match sprite Y");
     }
 
     @Test
     public void testForceUpdateCentersPlayerOnScreen() {
-        // Force update should position camera so player appears at screen position (152, 96)
+        // Force update should match ROM's level-load camera placement: sprite at
+        // screen-x=160 (right edge of 144-160 horizontal scroll deadzone) and
+        // screen-y=96, per s1disasm _inc/LevelSizeLoad & BgScrollSpeed.asm:111,124,
+        // s2.asm:14787,14798, sonic3k.asm:38241.
         when(mockSprite.getCentreX()).thenReturn((short) 1000);
         when(mockSprite.getCentreY()).thenReturn((short) 500);
 
         camera.updatePosition(true);
 
-        // Camera position = sprite centre - screen offset
-        // Screen offset for "look at" point is (152, 96)
-        assertEquals("Force update should center player horizontally", 1000 - 152, camera.getX());
-        assertEquals("Force update should center player vertically", 500 - 96, camera.getY());
+        assertEquals(1000 - 160, camera.getX(), "Force update should center player horizontally");
+        assertEquals(500 - 96, camera.getY(), "Force update should center player vertically");
     }
 
     // ==================== Horizontal Following Tests ====================
@@ -84,8 +86,19 @@ public class TestCamera {
 
         camera.updatePosition();
 
-        assertTrue("Camera should move right when player exceeds right threshold",
-                camera.getX() > 0);
+        assertTrue(camera.getX() > 0, "Camera should move right when player exceeds right threshold");
+    }
+
+    @Test
+    public void scrollLockPreservesPendingHorizontalHistoryDelay() {
+        camera.setHorizScrollDelay(32);
+
+        camera.setScrollLocked(true);
+        camera.updatePosition();
+        camera.setScrollLocked(false);
+
+        assertEquals(32, camera.getHorizScrollDelay(),
+                "ROM Scroll_lock skips MoveCameraX without clearing H_scroll_frame_offset");
     }
 
     @Test
@@ -96,8 +109,7 @@ public class TestCamera {
 
         camera.updatePosition();
 
-        assertTrue("Camera should move left when player is below left threshold",
-                camera.getX() < 200);
+        assertTrue(camera.getX() < 200, "Camera should move left when player is below left threshold");
     }
 
     @Test
@@ -109,8 +121,7 @@ public class TestCamera {
         short initialX = camera.getX();
         camera.updatePosition();
 
-        assertEquals("Camera should not move horizontally when player is in deadzone",
-                initialX, camera.getX());
+        assertEquals(initialX, camera.getX(), "Camera should not move horizontally when player is in deadzone");
     }
 
     @Test
@@ -121,8 +132,7 @@ public class TestCamera {
 
         camera.updatePosition();
 
-        assertEquals("Camera horizontal movement should be capped at 16px",
-                16, camera.getX());
+        assertEquals(16, camera.getX(), "Camera horizontal movement should be capped at 16px");
     }
 
     // ==================== Vertical Following Tests ====================
@@ -135,8 +145,7 @@ public class TestCamera {
 
         camera.updatePosition();
 
-        assertTrue("Camera should follow player vertically when in air",
-                camera.getY() > 0);
+        assertTrue(camera.getY() > 0, "Camera should follow player vertically when in air");
     }
 
     @Test
@@ -148,8 +157,7 @@ public class TestCamera {
 
         camera.updatePosition();
 
-        assertTrue("Camera should follow player vertically when on ground",
-                camera.getY() > 0);
+        assertTrue(camera.getY() > 0, "Camera should follow player vertically when on ground");
     }
 
     @Test
@@ -164,8 +172,7 @@ public class TestCamera {
         camera.updatePosition();
 
         // With high inertia (>= 0x800), tolerance is 16 instead of 6
-        assertTrue("Camera should move faster vertically when player has high ground speed",
-                camera.getY() >= 16);
+        assertTrue(camera.getY() >= 16, "Camera should move faster vertically when player has high ground speed");
     }
 
     @Test
@@ -180,8 +187,7 @@ public class TestCamera {
         camera.updatePosition();
 
         // With non-default bias, tolerance is capped at 2px regardless of inertia
-        assertEquals("Camera should use slow scroll (2px) when bias is not default",
-                2, camera.getY());
+        assertEquals(2, camera.getY(), "Camera should use slow scroll (2px) when bias is not default");
     }
 
     @Test
@@ -195,8 +201,27 @@ public class TestCamera {
         camera.updatePosition();
 
         // With low inertia and default bias, tolerance is 6px
-        assertEquals("Camera should use medium scroll (6px) when inertia is low",
-                6, camera.getY());
+        assertEquals(6, camera.getY(), "Camera should use medium scroll (6px) when inertia is low");
+    }
+
+    @Test
+    public void testFastVerticalScrollRequestUsesFastCapForOneFrame() {
+        // S3K moving platforms set Fast_V_scroll_flag so grounded camera follow uses
+        // the fast vertical cap even when Sonic's own ground speed is low.
+        when(mockSprite.getAir()).thenReturn(false);
+        when(mockSprite.getGSpeed()).thenReturn((short) 0);
+        camera.setFastScrollCap(24);
+        camera.setY((short) 0);
+        when(mockSprite.getCentreY()).thenReturn((short) 200);
+
+        camera.requestFastVerticalScroll();
+        camera.updatePosition();
+
+        assertEquals(24, camera.getY(), "Camera should use the requested fast vertical cap");
+
+        camera.updatePosition();
+
+        assertEquals(30, camera.getY(), "Fast vertical scroll request should not persist to the next frame");
     }
 
     // ==================== Boundary Tests ====================
@@ -208,7 +233,7 @@ public class TestCamera {
 
         camera.updatePosition();
 
-        assertTrue("Camera X should not go below 0", camera.getX() >= 0);
+        assertTrue(camera.getX() >= 0, "Camera X should not go below 0");
     }
 
     @Test
@@ -218,7 +243,7 @@ public class TestCamera {
 
         camera.updatePosition();
 
-        assertTrue("Camera Y should not go below 0", camera.getY() >= 0);
+        assertTrue(camera.getY() >= 0, "Camera Y should not go below 0");
     }
 
     @Test
@@ -229,19 +254,19 @@ public class TestCamera {
 
         camera.updatePosition();
 
-        assertTrue("Camera X should not exceed maxX", camera.getX() <= 1000);
+        assertTrue(camera.getX() <= 1000, "Camera X should not exceed maxX");
     }
 
     @Test
     public void testWrappedHorizontalBoundsDoNotForceBackwardClamp() {
         camera.setMinX((short) 146);
         camera.setMaxX((short) 106); // Wrapped range (ObjB2 SCZ writes Camera_X - $40)
-        when(mockSprite.getCentreX()).thenReturn((short) 304); // Forced target X = 152
+        when(mockSprite.getCentreX()).thenReturn((short) 312); // Forced target X = 312 - 160 = 152
         when(mockSprite.getCentreY()).thenReturn((short) 200);
 
         camera.updatePosition(true);
 
-        assertEquals("Wrapped bounds should not clamp to max when max < min", 152, camera.getX());
+        assertEquals(152, camera.getX(), "Wrapped bounds should not clamp to max when max < min");
     }
 
     @Test
@@ -252,7 +277,7 @@ public class TestCamera {
 
         camera.updatePosition();
 
-        assertTrue("Camera Y should not exceed maxY", camera.getY() <= 500);
+        assertTrue(camera.getY() <= 500, "Camera Y should not exceed maxY");
     }
 
     // ==================== Freeze/Unfreeze Tests (Spindash) ====================
@@ -267,8 +292,8 @@ public class TestCamera {
         when(mockSprite.getCentreY()).thenReturn((short) 500);
         camera.updatePosition();
 
-        assertEquals("Frozen camera should not move X", initialX, camera.getX());
-        assertEquals("Frozen camera should not move Y", initialY, camera.getY());
+        assertEquals(initialX, camera.getX(), "Frozen camera should not move X");
+        assertEquals(initialY, camera.getY(), "Frozen camera should not move Y");
     }
 
     @Test
@@ -281,18 +306,18 @@ public class TestCamera {
         camera.updatePosition();
 
         // Camera should now be able to move
-        assertFalse("Camera should not be frozen after setFrozen(false)", camera.getFrozen());
+        assertFalse(camera.getFrozen(), "Camera should not be frozen after setFrozen(false)");
     }
 
     @Test
     public void testFreezeStateAccessors() {
-        assertFalse("Camera should not be frozen initially", camera.getFrozen());
+        assertFalse(camera.getFrozen(), "Camera should not be frozen initially");
 
         camera.setFrozen(true);
-        assertTrue("Camera should be frozen after setFrozen(true)", camera.getFrozen());
+        assertTrue(camera.getFrozen(), "Camera should be frozen after setFrozen(true)");
 
         camera.setFrozen(false);
-        assertFalse("Camera should not be frozen after setFrozen(false)", camera.getFrozen());
+        assertFalse(camera.getFrozen(), "Camera should not be frozen after setFrozen(false)");
     }
 
     // ==================== isOnScreen Tests ====================
@@ -306,8 +331,7 @@ public class TestCamera {
         when(visibleSprite.getX()).thenReturn((short) 100);
         when(visibleSprite.getY()).thenReturn((short) 100);
 
-        assertTrue("Sprite within camera bounds should be on screen",
-                camera.isOnScreen(visibleSprite));
+        assertTrue(camera.isOnScreen(visibleSprite), "Sprite within camera bounds should be on screen");
     }
 
     @Test
@@ -319,8 +343,7 @@ public class TestCamera {
         when(offscreenSprite.getX()).thenReturn((short) 100);
         when(offscreenSprite.getY()).thenReturn((short) 100);
 
-        assertFalse("Sprite left of camera should not be on screen",
-                camera.isOnScreen(offscreenSprite));
+        assertFalse(camera.isOnScreen(offscreenSprite), "Sprite left of camera should not be on screen");
     }
 
     @Test
@@ -335,8 +358,58 @@ public class TestCamera {
 
         // This depends on screen width - sprite at 400 with camera at 0 and width 320 is off screen
         // The isOnScreen check is: spriteX <= x + width, so 400 <= 0 + 320 is false
-        assertFalse("Sprite right of camera should not be on screen",
-                camera.isOnScreen(offscreenSprite));
+        assertFalse(camera.isOnScreen(offscreenSprite), "Sprite right of camera should not be on screen");
+    }
+
+    @Test
+    public void testWrappedPlayableRenderFlagVisibilityUsesRelativeYMask() {
+        camera.setX((short) 0x0840);
+        camera.setY((short) 0x07DE);
+        camera.setVerticalWrapEnabled(true, 0x0800);
+        when(mockSprite.getRenderCentreX()).thenReturn((short) 0x08B7);
+        when(mockSprite.getRenderCentreY()).thenReturn((short) 0x0051);
+        when(mockSprite.getRenderFlagWidthPixels()).thenReturn(0x18);
+
+        assertTrue(camera.isVisibleForRenderFlag(mockSprite),
+                "S2 BuildSprites_ApproxYCheck masks relative Y with $7FF before the 32px render-flag band");
+    }
+
+    @Test
+    public void testPlayableRenderFlagVisibilityUsesCameraCopyShake() {
+        camera.setX((short) 0x18DC);
+        camera.setY((short) 0x053D);
+        camera.setShakeOffsets(2, 3);
+        when(mockSprite.getRenderCentreX()).thenReturn((short) 0x1987);
+        when(mockSprite.getRenderCentreY()).thenReturn((short) 0x063F);
+        when(mockSprite.getRenderFlagWidthPixels()).thenReturn(0x18);
+
+        assertTrue(camera.isVisibleForRenderFlag(mockSprite),
+                "BuildSprites subtracts Camera_Y_pos_copy, so screen shake can keep a sprite on-screen at the bottom edge");
+    }
+
+    @Test
+    public void renderCopyRemainsPublishedWhenEventMovesPhysicalCamera() {
+        camera.setY((short) 0x0668);
+        camera.captureRenderCopy();
+        camera.setYAfterRenderCopy((short) 0x0666);
+
+        assertEquals(0x0666, camera.getY() & 0xFFFF);
+        assertEquals(0x0668, camera.getYWithShake() & 0xFFFF,
+                "ROM event camera motion must not rewrite Camera_Y_pos_copy");
+    }
+
+    @Test
+    public void testPlayableRenderFlagVisibilityUsesGameRules() {
+        camera.setX((short) 0);
+        camera.setY((short) 100);
+        when(mockSprite.getGameRules()).thenReturn(null);
+        when(mockSprite.getGameRules()).thenReturn(GameRules.SONIC_3K);
+        when(mockSprite.getRenderCentreX()).thenReturn((short) 160);
+        when(mockSprite.getRenderCentreY()).thenReturn((short) 72);
+        when(mockSprite.getRenderFlagWidthPixels()).thenReturn(0x18);
+
+        assertFalse(camera.isVisibleForRenderFlag(mockSprite),
+                "S3K legacy camera rules should use the 24px render margin when GameRules are absent");
     }
 
     // ==================== Increment Tests ====================
@@ -345,19 +418,19 @@ public class TestCamera {
     public void testIncrementX() {
         camera.setX((short) 100);
         camera.incrementX((short) 50);
-        assertEquals("incrementX should add to current X", 150, camera.getX());
+        assertEquals(150, camera.getX(), "incrementX should add to current X");
 
         camera.incrementX((short) -30);
-        assertEquals("incrementX should subtract when negative", 120, camera.getX());
+        assertEquals(120, camera.getX(), "incrementX should subtract when negative");
     }
 
     @Test
     public void testIncrementY() {
         camera.setY((short) 100);
         camera.incrementY((short) 50);
-        assertEquals("incrementY should add to current Y", 150, camera.getY());
+        assertEquals(150, camera.getY(), "incrementY should add to current Y");
 
         camera.incrementY((short) -30);
-        assertEquals("incrementY should subtract when negative", 120, camera.getY());
+        assertEquals(120, camera.getY(), "incrementY should subtract when negative");
     }
 }

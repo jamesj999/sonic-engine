@@ -1,32 +1,26 @@
 package com.openggf.tests;
 
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import com.openggf.data.RomByteReader;
 import com.openggf.game.sonic2.Sonic2RingPlacement;
 import com.openggf.game.sonic2.ZoneAct;
 import com.openggf.level.rings.RingSpawn;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
 
 import java.io.IOException;
 import java.util.List;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 @RequiresRom(SonicGame.SONIC_2)
 public class Sonic2RingPlacementTest {
-
-    @Rule
-    public RequiresRomRule romRule = new RequiresRomRule();
-
     private RomByteReader reader;
 
-    @Before
+    @BeforeEach
     public void setUp() throws IOException {
-        reader = RomByteReader.fromRom(romRule.rom());
+        reader = RomByteReader.fromRom(com.openggf.tests.TestEnvironment.currentRom());
     }
 
     @Test
@@ -67,3 +61,5 @@ public class Sonic2RingPlacementTest {
         fail(String.format("Expected ring at 0x%04X,0x%04X", x, y));
     }
 }
+
+

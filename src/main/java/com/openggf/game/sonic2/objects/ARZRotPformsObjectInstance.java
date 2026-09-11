@@ -1,17 +1,23 @@
 package com.openggf.game.sonic2.objects;
 
+import com.openggf.debug.DebugRenderContext;
 import com.openggf.game.sonic2.S2SpriteDataLoader;
 import com.openggf.game.PlayableEntity;
+import com.openggf.game.rewind.RewindTransient;
 import com.openggf.game.sonic2.constants.Sonic2Constants;
-import com.openggf.debug.DebugRenderContext;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.GraphicsManager;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.PatternDesc;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.MultiPieceSolidProvider;
+import com.openggf.level.objects.ObjectLifetimeOps;
+import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SolidContact;
+import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.render.SpriteMappingFrame;
@@ -31,7 +37,7 @@ import java.util.logging.Logger;
  * connected by chain links. The platforms provide top-solid collision surfaces
  * that the player can stand on and ride.
  * <p>
- * <b>Disassembly Reference:</b> s2.asm lines 56894-57127 (Obj83 code)
+ * <b>Disassembly Reference:</b> s2.asm lines 57379-57625 (Obj83 code)
  * <p>
  * <b>Subtype encoding:</b>
  * <ul>
@@ -58,7 +64,7 @@ import java.util.logging.Logger;
  * </ul>
  */
 public class ARZRotPformsObjectInstance extends AbstractObjectInstance
-        implements MultiPieceSolidProvider, SolidObjectListener {
+        implements MultiPieceSolidProvider, SolidObjectListener, RewindRecreatable {
 
     private static final Logger LOGGER = Logger.getLogger(ARZRotPformsObjectInstance.class.getName());
 
@@ -76,19 +82,19 @@ public class ARZRotPformsObjectInstance extends AbstractObjectInstance
 
     // Collision parameters (shared by all platforms)
     private static final SolidObjectParams PLATFORM_PARAMS =
-            new SolidObjectParams(PLATFORM_HALF_WIDTH, PLATFORM_TOP_HEIGHT, PLATFORM_BOTTOM_HEIGHT);
+            SolidObjectParams.of(PLATFORM_HALF_WIDTH, PLATFORM_TOP_HEIGHT, PLATFORM_BOTTOM_HEIGHT);
 
     // Static mapping data
     private static final LazyMappingHolder MAPPINGS = new LazyMappingHolder();
 
     // Position state
-    private final int initialX;
-    private final int initialY;
+    private int initialX;
+    private int initialY;
 
     // Angle is stored as 16-bit word, only high byte used for sine lookup (68000 big-endian behavior)
     // This allows fractional rotation where speed is effectively speed/256 per frame
     private int angleWord;
-    private final int speed;
+    private int speed;
 
     // Platform positions (world coordinates)
     private final int[] platformX = new int[NUM_PLATFORMS];
@@ -97,6 +103,14 @@ public class ARZRotPformsObjectInstance extends AbstractObjectInstance
     // Chain link positions (world coordinates)
     private final int[] chainX = new int[TOTAL_CHAIN_LINKS];
     private final int[] chainY = new int[TOTAL_CHAIN_LINKS];
+
+    private boolean slotChildrenSpawned;
+    @RewindTransient(reason = "structural Obj83 child slot link is recreated from the child's spawn and parent lookup")
+    private Obj83SlotChild chainSlotChild;
+    @RewindTransient(reason = "structural Obj83 child slot link is recreated from the child's spawn and parent lookup")
+    private Obj83SlotChild platform2SlotChild;
+    @RewindTransient(reason = "structural Obj83 child slot link is recreated from the child's spawn and parent lookup")
+    private Obj83SlotChild platform3SlotChild;
 
     public ARZRotPformsObjectInstance(ObjectSpawn spawn, String name) {
         super(spawn, name);
@@ -137,21 +151,39 @@ public class ARZRotPformsObjectInstance extends AbstractObjectInstance
     }
 
     @Override
+    public ARZRotPformsObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new ARZRotPformsObjectInstance(ctx.spawn(), getName());
+    }
+
+    @Override
+    protected void recreateConstructionChildrenForRewind() {
+        ensureSlotChildrenSpawned();
+    }
+
+    @Override
     public int getX() {
-        return initialX;
+        return platformX[0];
     }
 
     @Override
     public int getY() {
-        return initialY;
+        return platformY[0];
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public int getOutOfRangeReferenceX() {
+        return initialX;
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) {
+            expireSlotChildren();
             return;
         }
+
+        ensureSlotChildrenSpawned();
 
         // Update rotation angle (16-bit accumulation)
         // Disassembly line 56997: add.w d0,angle(a0)
@@ -159,6 +191,80 @@ public class ARZRotPformsObjectInstance extends AbstractObjectInstance
 
         // Recalculate all positions
         updatePositions();
+    }
+
+    private void ensureSlotChildrenSpawned() {
+        if (slotChildrenSpawned) {
+            return;
+        }
+
+        // ROM Obj83_Init allocates three Obj83 child SST entries after the
+        // parent: a chain multisprite object, then platform 2 and platform 3
+        // (docs/s2disasm/s2.asm:57437-57466). The parent keeps the consolidated
+        // renderer/collision model; these children preserve the ROM slot pressure
+        // that later FindFreeObj calls observe.
+        chainSlotChild = spawnChild(() -> new Obj83SlotChild(
+                buildChildSpawn(getChainSlotX(), getChainSlotY()), this, ChildKind.CHAIN));
+        platform2SlotChild = spawnChild(() -> new Obj83SlotChild(
+                buildChildSpawn(platformX[1], platformY[1]), this, ChildKind.PLATFORM_2));
+        platform3SlotChild = spawnChild(() -> new Obj83SlotChild(
+                buildChildSpawn(platformX[2], platformY[2]), this, ChildKind.PLATFORM_3));
+        slotChildrenSpawned = true;
+    }
+
+    private ObjectSpawn buildChildSpawn(int x, int y) {
+        return new ObjectSpawn(
+                x,
+                y,
+                spawn.objectId(),
+                spawn.subtype(),
+                spawn.renderFlags(),
+                false,
+                spawn.rawYWord());
+    }
+
+    private int getChainSlotX() {
+        // ROM Obj83 writes the first chain-link coordinate to the child object;
+        // the remaining links are subsprites on that child (s2.asm:57515-57522).
+        return chainX[0];
+    }
+
+    private int getChainSlotY() {
+        return chainY[0];
+    }
+
+    private void attachSlotChildForRewind(Obj83SlotChild child) {
+        if (child == null) {
+            return;
+        }
+        switch (child.kind) {
+            case CHAIN -> chainSlotChild = child;
+            case PLATFORM_2 -> platform2SlotChild = child;
+            case PLATFORM_3 -> platform3SlotChild = child;
+        }
+        slotChildrenSpawned = chainSlotChild != null
+                && platform2SlotChild != null
+                && platform3SlotChild != null;
+    }
+
+    private void expireSlotChildren() {
+        expireSlotChild(chainSlotChild);
+        expireSlotChild(platform2SlotChild);
+        expireSlotChild(platform3SlotChild);
+        chainSlotChild = null;
+        platform2SlotChild = null;
+        platform3SlotChild = null;
+    }
+
+    private static void expireSlotChild(Obj83SlotChild child) {
+        if (child != null && !child.isDestroyed()) {
+            ObjectLifetimeOps.expireDynamic(child);
+        }
+    }
+
+    @Override
+    public void onUnload() {
+        expireSlotChildren();
     }
 
     /**
@@ -238,7 +344,10 @@ public class ARZRotPformsObjectInstance extends AbstractObjectInstance
 
     @Override
     public int getPieceCount() {
-        return NUM_PLATFORMS;
+        // The parent Obj83 calls PlatformObject only for platform 1; platforms
+        // 2 and 3 are separate routine-4 child objects (s2.asm:57570-57576,
+        // 57612-57619).
+        return 1;
     }
 
     @Override
@@ -276,6 +385,12 @@ public class ARZRotPformsObjectInstance extends AbstractObjectInstance
     public boolean isSolidFor(PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         return !isDestroyed();
+    }
+
+    @Override
+    public boolean usesGroundHalfHeightForTopSolidContact() {
+        // Obj83 passes d3=9 to PlatformObject (docs/s2disasm/s2.asm:57573-57576).
+        return true;
     }
 
     @Override
@@ -379,6 +494,126 @@ public class ARZRotPformsObjectInstance extends AbstractObjectInstance
         for (int i = 0; i < TOTAL_CHAIN_LINKS; i++) {
             ctx.drawLine(chainX[i] - 2, chainY[i], chainX[i] + 2, chainY[i], 0.0f, 1.0f, 1.0f);
             ctx.drawLine(chainX[i], chainY[i] - 2, chainX[i], chainY[i] + 2, 0.0f, 1.0f, 1.0f);
+        }
+    }
+
+    private enum ChildKind {
+        CHAIN,
+        PLATFORM_2,
+        PLATFORM_3
+    }
+
+    private static final class Obj83SlotChild extends AbstractObjectInstance
+            implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
+        @RewindTransient(reason = "structural Obj83 parent link is restored by parent lookup")
+        private final ARZRotPformsObjectInstance parent;
+        @RewindTransient(reason = "Obj83 child role is constructor metadata preserved by recreateForRewind")
+        private final ChildKind kind;
+
+        private Obj83SlotChild(ObjectSpawn spawn, ARZRotPformsObjectInstance parent, ChildKind kind) {
+            super(spawn, "ARZRotPformsSlotChild");
+            this.parent = parent;
+            this.kind = kind;
+        }
+
+        @Override
+        public Obj83SlotChild recreateForRewind(RewindRecreateContext ctx) {
+            ARZRotPformsObjectInstance restoredParent = nearestParentForRewind(ctx);
+            if (restoredParent == null) {
+                return null;
+            }
+            Obj83SlotChild child = new Obj83SlotChild(ctx.spawn(), restoredParent, kind);
+            restoredParent.attachSlotChildForRewind(child);
+            return child;
+        }
+
+        @Override
+        public int getX() {
+            return switch (kind) {
+                case CHAIN -> parent.getChainSlotX();
+                case PLATFORM_2 -> parent.platformX[1];
+                case PLATFORM_3 -> parent.platformX[2];
+            };
+        }
+
+        @Override
+        public int getY() {
+            return switch (kind) {
+                case CHAIN -> parent.getChainSlotY();
+                case PLATFORM_2 -> parent.platformY[1];
+                case PLATFORM_3 -> parent.platformY[2];
+            };
+        }
+
+        @Override
+        public void update(int vIntRunCount, PlayableEntity playerEntity) {
+            if (parent.isDestroyed()) {
+                ObjectLifetimeOps.expireDynamic(this);
+            }
+        }
+
+        @Override
+        public SolidObjectParams getSolidParams() {
+            return PLATFORM_PARAMS;
+        }
+
+        @Override
+        public boolean isTopSolidOnly() {
+            return true;
+        }
+
+        @Override
+        public boolean isSolidFor(PlayableEntity playerEntity) {
+            return kind != ChildKind.CHAIN && !parent.isDestroyed();
+        }
+
+        @Override
+        public boolean usesGroundHalfHeightForTopSolidContact() {
+            // Routine-4 platform children pass d3=9 to PlatformObject
+            // (docs/s2disasm/s2.asm:57613-57619).
+            return true;
+        }
+
+        @Override
+        public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
+            // ROM routine-4 Obj83 children only run PlatformObject and update last_x_pos.
+        }
+
+        @Override
+        public boolean usesCustomOutOfRangeCheck() {
+            return true;
+        }
+
+        @Override
+        public boolean isCustomOutOfRange(int cameraX) {
+            return parent.isDestroyed();
+        }
+
+        @Override
+        public void appendRenderCommands(List<GLCommand> commands) {
+            // Slot-pressure child only; the parent renders the full Obj83 assembly.
+        }
+
+        private static ARZRotPformsObjectInstance nearestParentForRewind(RewindRecreateContext ctx) {
+            ObjectManager manager = ctx.objectManager();
+            if (manager == null && ctx.objectServices() != null) {
+                manager = ctx.objectServices().objectManager();
+            }
+            if (manager == null) {
+                return null;
+            }
+            return manager.getActiveObjects().stream()
+                    .filter(ARZRotPformsObjectInstance.class::isInstance)
+                    .map(ARZRotPformsObjectInstance.class::cast)
+                    .filter(parent -> !parent.isDestroyed())
+                    .min((a, b) -> Integer.compare(
+                            distanceFromChildSpawn(a, ctx.spawn()),
+                            distanceFromChildSpawn(b, ctx.spawn())))
+                    .orElse(null);
+        }
+
+        private static int distanceFromChildSpawn(ARZRotPformsObjectInstance parent, ObjectSpawn spawn) {
+            return Math.abs(parent.initialX - spawn.x()) + Math.abs(parent.initialY - spawn.y());
         }
     }
 

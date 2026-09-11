@@ -1,7 +1,7 @@
 package com.openggf.game.sonic3k;
 
-import org.junit.Test;
-import static org.junit.Assert.assertEquals;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class TestSonic3kLoadProfileSelection {
 
@@ -32,3 +32,5 @@ public class TestSonic3kLoadProfileSelection {
         assertEquals(3, index);
     }
 }
+
+

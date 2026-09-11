@@ -1,8 +1,10 @@
 package com.openggf.game;
 
+import com.openggf.game.rules.GameRules;
+
 /**
  * Per-game physics provider interface.
- * Returns character-specific physics profiles, modifier rules, and feature flags.
+ * Returns character-specific physics profiles, modifier rules, and typed per-game rules.
  *
  * <p>Implementations are game-specific (S1, S2, S3K) and accessed via
  * {@link GameModule#getPhysicsProvider()}.
@@ -40,10 +42,5 @@ public interface PhysicsProvider {
      */
     PhysicsModifiers getModifiers();
 
-    /**
-     * Returns the feature set (spindash availability, etc.) for this game.
-     *
-     * @return the physics feature set
-     */
-    PhysicsFeatureSet getFeatureSet();
+    GameRules getRules();
 }

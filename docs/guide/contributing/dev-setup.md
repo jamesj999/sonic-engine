@@ -17,14 +17,41 @@ includes IntelliJ project files. Any IDE with Maven support will work.
 ## Clone and Build
 
 ```bash
-git clone https://github.com/jamesj999/sonic-engine.git
-cd sonic-engine
+git clone https://github.com/OpenGGF/OpenGGF.git
+cd OpenGGF
+tools/testing/install-hooks.sh
 mvn package
 ```
 
-The build produces an executable OpenGGF JAR with all dependencies at:
+The pinned Sonic Retro disassemblies are optional development references. The engine,
+Maven build, and ordinary tests do not require them. Contributors doing disassembly-backed
+parity research can initialize the exact reference revisions after cloning:
+
+```bash
+git submodule update --init docs/s1disasm docs/s2disasm docs/skdisasm
 ```
-target/OpenGGF-0.5.20260411-jar-with-dependencies.jar
+
+Trace recording and analysis are also optional. Those workflows use the exact
+TraceChaser release pinned by OpenGGF and the verified official BizHawk 2.11
+installation documented there:
+
+```bash
+git submodule update --init --recursive tools/tracechaser
+tools/tracechaser-bootstrap.sh --check
+```
+
+The submodule never initializes itself and normal builds do not require it.
+Compatibility launchers resolve each command through
+`tools/tracechaser-bootstrap.sh --require <relative-path>` before execution.
+That resolver derives the expected commit from the gitlink and refuses a dirty
+checkout, symbolic-link or non-directory path component, or a target that
+resolves outside the pinned checkout. Status 2 means uninitialized, status 3
+means the wrong commit, and status 4 means an unsafe or missing path.
+
+The executable OpenGGF JAR with all dependencies is written to the current
+worktree's Maven output tree:
+```
+target/OpenGGF-0.6.prerelease-jar-with-dependencies.jar
 ```
 
 Maven Silent Extension (MSE) is configured via `.mvn/extensions.xml`. By default, Maven
@@ -34,27 +61,56 @@ output is reduced. Use `-Dmse=off` when you need full Maven logs.
 
 Place ROM files in the project root directory (next to `pom.xml`):
 
-| Game | Filename | Revision |
-|------|----------|----------|
-| Sonic 1 | `Sonic The Hedgehog (W) (REV01) [!].gen` | World, REV01 |
-| Sonic 2 | `Sonic The Hedgehog 2 (W) (REV01) [!].gen` | World, REV01 |
-| Sonic 3&K | `Sonic and Knuckles & Sonic 3 (W) [!].gen` | World, lock-on |
+| Game | Filename | Expected revision and hash |
+|------|----------|----------------------------|
+| Sonic 1 | `s1.gen` | World, REV01; CRC32 `AFE05EEE`; SHA-1 `69E102855D4389C3FD1A8F3DC7D193F8EEE5FE5B` |
+| Sonic 2 | `s2.gen` | World, REV01; CRC32 `7B905383`; SHA-1 `8BCA5DCEF1AF3E00098666FD892DC1C2A76333F9` |
+| Sonic 3&K | `s3k.gen` | World, lock-on; CRC32 `63522553`; SHA-1 `CFBF98C36C776677290A872547AC47C53D2761D6` |
 
-ROM files are gitignored. Tests that require ROM data skip gracefully when files are
-absent, so you can build and run most tests without any ROMs.
+ROM files are gitignored. Test classes annotated `@RequiresRom` are disabled (reported as
+skipped) when their ROM cannot be found, so you can build and run most tests without any
+ROMs. Two classes are stricter: `TestS2CompleteRunStateDecoder` and
+`TestS3kCompleteRunStateDecoder` throw unless the matching property is set explicitly.
 
-For S3K-specific tests, the ROM path can also be passed as a system property:
+ROM paths are passed per game as system properties -- note the S3K property is
+`s3k.rom.path`, not `sonic3k.rom.path`:
+
 ```bash
-mvn test -Ds3k.rom.path="Sonic and Knuckles & Sonic 3 (W) [!].gen"
+mvn -Dmse=off test -Dsonic1.rom.path=/abs/path/s1.gen \
+    -Dsonic2.rom.path=/abs/path/s2.gen -Ds3k.rom.path=/abs/path/s3k.gen
 ```
+
+Use **absolute** paths. From a git worktree (or any directory that is not the repository
+root) a relative path resolves against the Surefire fork's working directory, the ROM is not
+found, and every ROM-gated class is silently skipped and reported green.
 
 ## Run the Engine
 
+Build and run a distributable jar with the launcher for your platform:
+
 ```bash
-java -jar target/OpenGGF-0.5.20260411-jar-with-dependencies.jar
+# Linux
+./run.sh
+
+# Windows
+run.cmd
 ```
 
-On Windows, you can also use the included `run.cmd`.
+The normal launchers build into the current worktree's `target/` directory and
+launch the exact fat jar produced by that package, even when an older jar is
+still present. They resolve their own script directory, so they can be invoked
+from outside the worktree; the generated artifact manifest keeps the Maven
+`project.build.finalName` setting authoritative. Run Maven from the worktree
+root when invoking it directly so its repository-local JVM configuration also
+keeps Maven-side temporary files inside `target/`.
+
+For faster iteration, `dev.sh` (Linux) and `dev.cmd` (Windows) compile only
+changed sources and run directly from `target/classes`. The first offline
+development launch may require `run.sh` or `run.cmd` to populate Maven's local
+dependency cache.
+
+Linux developers can launch a RenderDoc capture with `scripts/run_renderdoc.sh` when
+`renderdoccmd` is installed and available on `PATH`.
 
 The engine will open a window showing the master title screen. Select a game with the
 arrow keys and press Space. If a ROM file is missing, you will see an error message.
@@ -72,24 +128,24 @@ mvn test -Dtest=TestCollisionLogic
 mvn test -Dtest=TestCollisionLogic#testSlopeAngle
 ```
 
-Tests are configured for parallel execution across 8 JVM forks. ROM-dependent tests
-(marked with `@RequiresRom` or equivalent guards) skip automatically when ROMs are
-absent.
+Tests run across 4 JVM forks by default (`surefire.forkCount` in `pom.xml`; the CI profile
+drops to 1). Override with `-Dsurefire.forkCount=N`. ROM-dependent tests are gated as
+described under "ROM files" above.
 
 ## Project Structure
 
 ```
-sonic-engine/
+OpenGGF/
   pom.xml                    -- Maven build file
-  config.json                -- Runtime configuration (gitignored if custom)
+  config.yaml                -- Runtime configuration (gitignored if custom)
   src/
     main/java/com/openggf/   -- Engine source code
     main/resources/           -- Bundled default config, shaders
     test/java/com/openggf/   -- Test source code
   docs/
-    s1disasm/                -- Sonic 1 disassembly (untracked, local reference)
-    s2disasm/                -- Sonic 2 disassembly (untracked, local reference)
-    skdisasm/                -- Sonic 3&K disassembly (untracked, local reference)
+    s1disasm/                -- Sonic 1 disassembly (Sonic Retro submodule)
+    s2disasm/                -- Sonic 2 disassembly (Sonic Retro submodule)
+    skdisasm/                -- Sonic 3&K disassembly (Sonic Retro submodule)
     guide/                   -- This user guide
   tools/                     -- External reference tools
 ```
@@ -101,14 +157,20 @@ For a deeper look at the source layout, see [Architecture](architecture.md).
 The engine supports ahead-of-time compilation via GraalVM native image. This produces
 a standalone binary that starts faster and does not require a JVM installation.
 
-To build a native image, you need GraalVM 21+ with the `native-image` tool installed.
-The build is configured in `pom.xml` under the `native` profile:
+To build a native image, you need GraalVM 21 with the `native-image` tool installed
+and selected as Maven's JDK. The build is configured in `pom.xml` under the `native`
+profile:
 
 ```bash
-mvn package -Pnative
+export JAVA_HOME=/path/to/graalvm-21
+export PATH="$JAVA_HOME/bin:$PATH"
+mvn -Dmse=off -Pnative -DskipTests package -B
 ```
 
-Native image metadata is maintained in `src/main/resources/META-INF/native-image/`.
+On macOS this produces `target/OpenGGF.app` as well as the direct
+`target/OpenGGF` executable. Put `config.yaml` and the user-supplied ROM files
+beside the app before launching it. Native image metadata is maintained in
+`src/main/resources/META-INF/native-image/`.
 
 ## Next Steps
 

@@ -3,14 +3,16 @@ package com.openggf.game.sonic3k.objects;
 import com.openggf.game.BonusStageType;
 import com.openggf.game.PlayableEntity;
 import com.openggf.game.CheckpointState;
+import com.openggf.game.sonic3k.Sonic3kObjectArtProvider;
 import com.openggf.game.sonic3k.audio.Sonic3kSfx;
+import com.openggf.game.sonic3k.constants.Sonic3kConstants;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
-import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -55,7 +57,8 @@ import java.util.logging.Logger;
  *   <li>Frame 4: Pole + blue ball (active/visited)</li>
  * </ul>
  */
-public class Sonic3kStarPostObjectInstance extends AbstractObjectInstance {
+public class Sonic3kStarPostObjectInstance extends AbstractObjectInstance
+        implements SpawnRewindRecreatable {
     private static final Logger LOGGER = Logger.getLogger(Sonic3kStarPostObjectInstance.class.getName());
 
     // Activation zone dimensions (ROM: dx + 8 < $10, dy + $40 < $68)
@@ -76,26 +79,40 @@ public class Sonic3kStarPostObjectInstance extends AbstractObjectInstance {
      * <p>
      * Each variant maps to a different bonus stage and loads different star art:
      * <ul>
-     *   <li>YELLOW (Stars3, remainder=0) → Gumball Machine ($1500)</li>
+     *   <li>RED (Stars3, remainder=0) → Slot Machine ($1500)</li>
      *   <li>BLUE (Stars1, remainder=1) → Glowing Spheres ($1400)</li>
-     *   <li>RED (Stars2, remainder=2) → Slot Machine ($1300, S3K only)</li>
+     *   <li>YELLOW (Stars2, remainder=2) → Gumball Machine ($1300, S3K only)</li>
      * </ul>
      */
     public enum BonusStarVariant {
-        YELLOW(1.0f, 1.0f, 0.3f, BonusStageType.GUMBALL, ObjectArtKeys.CHECKPOINT_STAR_YELLOW),
-        BLUE(0.3f, 0.5f, 1.0f, BonusStageType.GLOWING_SPHERE, ObjectArtKeys.CHECKPOINT_STAR_BLUE),
-        RED(1.0f, 0.3f, 0.3f, BonusStageType.SLOT_MACHINE, ObjectArtKeys.CHECKPOINT_STAR_RED);
+        YELLOW(1.0f, 1.0f, 0.3f, BonusStageType.GUMBALL,
+                ObjectArtKeys.CHECKPOINT_STAR_YELLOW,
+                Sonic3kConstants.ART_KOSM_STARPOST_STARS2_ADDR),
+        BLUE(0.3f, 0.5f, 1.0f, BonusStageType.GLOWING_SPHERE,
+                ObjectArtKeys.CHECKPOINT_STAR_BLUE,
+                Sonic3kConstants.ART_KOSM_STARPOST_STARS1_ADDR),
+        RED(1.0f, 0.3f, 0.3f, BonusStageType.SLOT_MACHINE,
+                ObjectArtKeys.CHECKPOINT_STAR_RED,
+                Sonic3kConstants.ART_KOSM_STARPOST_STARS3_ADDR);
 
         public final float r, g, b;
         public final BonusStageType bonusStageType;
         public final String artKey;
+        public final int artSourceAddress;
 
-        BonusStarVariant(float r, float g, float b, BonusStageType bonusStageType, String artKey) {
+        BonusStarVariant(
+                float r,
+                float g,
+                float b,
+                BonusStageType bonusStageType,
+                String artKey,
+                int artSourceAddress) {
             this.r = r;
             this.g = g;
             this.b = b;
             this.bonusStageType = bonusStageType;
             this.artKey = artKey;
+            this.artSourceAddress = artSourceAddress;
         }
     }
 
@@ -140,8 +157,8 @@ public class Sonic3kStarPostObjectInstance extends AbstractObjectInstance {
     private static final int FRAME_HEAD = 3;      // Head alone
     private static final int FRAME_BLUE_BALL = 4; // Pole + blue ball
 
-    private final int checkpointIndex;
-    private final boolean cameraLockFlag;
+    private int checkpointIndex;
+    private boolean cameraLockFlag;
     private int animId;
     private int mappingFrame;
     private int animTimer;
@@ -167,10 +184,15 @@ public class Sonic3kStarPostObjectInstance extends AbstractObjectInstance {
             return;
         }
         initialized = true;
-        // Init routine (loc_2CFC0):
-        // Check respawn table and compare subtype against Last_star_post_hit
+        // Init routine (loc_2CFC0): a star post is already-activated when its
+        // respawn bit is set (btst #0,(a2), sonic3k.asm:61582) OR
+        // Last_star_post_hit >= subtype (:61588). The engine folds both into the
+        // persistent activation MARK (getStarPostActivationMark), which equals the
+        // checkpoint index in normal play but survives a bonus entry's zeroing of
+        // Last_star_post_hit -- so a return-from-bonus star post the player is
+        // repositioned onto stays used instead of re-triggering.
         var checkpointState = services().checkpointState();
-        if (checkpointState != null && checkpointState.getLastCheckpointIndex() >= this.checkpointIndex) {
+        if (checkpointState != null && checkpointState.getStarPostActivationMark() >= this.checkpointIndex) {
             // loc_2D008: already activated - set anim 2 (spinning)
             this.activated = true;
             this.animId = ANIM_SPINNING;
@@ -179,7 +201,7 @@ public class Sonic3kStarPostObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         ensureInitialized();
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // loc_2D012: main routine - check collision if not activated
@@ -201,8 +223,9 @@ public class Sonic3kStarPostObjectInstance extends AbstractObjectInstance {
         }
 
         // ROM: cmp.b d2,d1 / bhs.w loc_2D0EA
-        // If last checkpoint >= this one, set to spinning if not already
-        if (checkpointState.getLastCheckpointIndex() >= this.checkpointIndex) {
+        // If already activated (persistent mark >= this subtype; see ensureInitialized),
+        // set to spinning if not already -- never re-run the touch/save.
+        if (checkpointState.getStarPostActivationMark() >= this.checkpointIndex) {
             // loc_2D0EA: tst.b anim(a0) / bne.s locret / move.b #2,anim(a0)
             if (!activated) {
                 activated = true;
@@ -252,7 +275,6 @@ public class Sonic3kStarPostObjectInstance extends AbstractObjectInstance {
     private void activate(AbstractPlayableSprite player, CheckpointState checkpointState) {
         activated = true;
         starActive = true;
-
         // 1. ROM: moveq #signextendB(sfx_Starpost),d0 / jsr (Play_SFX).l
         try {
             services().playSfx(Sonic3kSfx.STARPOST.id);
@@ -287,9 +309,8 @@ public class Sonic3kStarPostObjectInstance extends AbstractObjectInstance {
      * ROM: AllocateObject, set routine=6, center at (x, y-0x14), mapping_frame=2, lifetime=0x20.
      */
     private void spawnStarChild() {
-        ObjectManager objectManager = services().objectManager();
-        if (objectManager != null) {
-            objectManager.addDynamicObject(new Sonic3kStarPostStarChild(this));
+        if (services().objectManager() != null) {
+            spawnChild(() -> new Sonic3kStarPostStarChild(this));
         }
     }
 
@@ -298,14 +319,6 @@ public class Sonic3kStarPostObjectInstance extends AbstractObjectInstance {
      * S3K requires 20 rings (not 50 like S2).
      */
     private boolean shouldSpawnBonusStars(AbstractPlayableSprite player) {
-        var checkpointState = services().checkpointState();
-        if (checkpointState instanceof CheckpointState cs && cs.isUsedForSpecialStage()) {
-            return false;
-        }
-        int emeralds = services().gameState().getEmeraldCount();
-        if (emeralds >= 7) {
-            return false;
-        }
         int rings = player.getRingCount();
         return rings >= BONUS_STAR_RING_THRESHOLD;
     }
@@ -316,8 +329,7 @@ public class Sonic3kStarPostObjectInstance extends AbstractObjectInstance {
      * Star art variant is determined by ring count formula (loc_2D436).
      */
     private void spawnBonusStars(int ringCount) {
-        ObjectManager objectManager = services().objectManager();
-        if (objectManager == null) {
+        if (services().objectManager() == null) {
             return;
         }
         BonusStarVariant variant = computeBonusStarVariant(ringCount);
@@ -326,8 +338,13 @@ public class Sonic3kStarPostObjectInstance extends AbstractObjectInstance {
         // ROM: moveq #4-1,d1 / moveq #0,d2 / ... / addi.w #$40,d2 / dbf d1,...
         for (int i = 0; i < 4; i++) {
             int angleOffset = i * 0x40;
-            objectManager.addDynamicObject(
-                    new Sonic3kStarPostBonusStarChild(this, angleOffset, variant));
+            spawnChild(() -> new Sonic3kStarPostBonusStarChild(this, angleOffset, variant));
+        }
+        ObjectRenderManager renderManager = services().renderManager();
+        if (renderManager != null
+                && renderManager.getArtProvider()
+                instanceof Sonic3kObjectArtProvider provider) {
+            provider.queueStarPostBonusArt(variant.artSourceAddress);
         }
     }
 

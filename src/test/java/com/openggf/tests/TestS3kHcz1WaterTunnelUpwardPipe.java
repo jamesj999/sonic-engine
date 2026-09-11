@@ -5,17 +5,17 @@ import com.openggf.configuration.SonicConfiguration;
 import com.openggf.configuration.SonicConfigurationService;
 import com.openggf.game.GameServices;
 import com.openggf.game.sonic3k.constants.Sonic3kZoneIds;
+import com.openggf.game.timing.HardwareServiceBoundary;
+import com.openggf.game.timing.HardwareWorkKind;
 import com.openggf.sprites.playable.Sonic;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * Headless regression for HCZ Act 1 upward water tunnel pipe.
@@ -27,14 +27,11 @@ import static org.junit.Assert.fail;
  */
 @RequiresRom(SonicGame.SONIC_3K)
 public class TestS3kHcz1WaterTunnelUpwardPipe {
-
-    @ClassRule
-    public static RequiresRomRule romRule = new RequiresRomRule();
-
     private static final short START_X = 12107;
     private static final short START_Y = 1715;
     private static final int TARGET_Y = 1100;
     private static final int MAX_FRAMES = 180;
+    private static final int INITIAL_ART_DRAIN_LIMIT = 4096;
 
     private static Object oldSkipIntros, oldMainCharacter, oldSidekickCharacter;
     private static SharedLevel sharedLevel;
@@ -42,7 +39,7 @@ public class TestS3kHcz1WaterTunnelUpwardPipe {
     private HeadlessTestFixture fixture;
     private Sonic sprite;
 
-    @BeforeClass
+    @BeforeAll
     public static void loadLevel() throws Exception {
         SonicConfigurationService config = SonicConfigurationService.getInstance();
         oldSkipIntros = config.getConfigValue(SonicConfiguration.S3K_SKIP_INTROS);
@@ -54,7 +51,7 @@ public class TestS3kHcz1WaterTunnelUpwardPipe {
         sharedLevel = SharedLevel.load(SonicGame.SONIC_3K, Sonic3kZoneIds.ZONE_HCZ, 0);
     }
 
-    @AfterClass
+    @AfterAll
     public static void cleanup() {
         SonicConfigurationService config = SonicConfigurationService.getInstance();
         config.setConfigValue(SonicConfiguration.S3K_SKIP_INTROS,
@@ -66,18 +63,34 @@ public class TestS3kHcz1WaterTunnelUpwardPipe {
         if (sharedLevel != null) sharedLevel.dispose();
     }
 
-    @Before
+    @BeforeEach
     public void setUp() {
         fixture = HeadlessTestFixture.builder()
                 .withSharedLevel(sharedLevel)
                 .build();
+        drainInitialRuntimeArt();
         sprite = (Sonic) fixture.sprite();
+
+        // This fixture teleports directly to a late HCZ route window. In normal
+        // play the horizontal geysers in that window have already run their
+        // y-guard and retired before Sonic reaches the upward pipe. Dispatch
+        // that guard once at the route camera before entering the pipe so the
+        // synthetic teleport does not enqueue four historical geyser archives
+        // alongside the vertical archive on one frame.
+        Camera camera = fixture.camera();
+        sprite.setX(START_X);
+        sprite.setY(START_Y);
+        camera.updatePosition(true);
+        camera.setFrozen(true);
+        sprite.setCentreY((short) 0x400);
+        GameServices.level().getObjectManager().reset(camera.getX());
+        fixture.stepFrame(false, false, false, false, false);
 
         sprite.setX(START_X);
         sprite.setY(START_Y);
         sprite.setXSpeed((short) 0);
         sprite.setYSpeed((short) 0);
-        // Do NOT zero gSpeed — ROM tunnel handler doesn't touch ground_vel.
+        // Do NOT zero gSpeed â€” ROM tunnel handler doesn't touch ground_vel.
         // The twisting loop's flipped-entry detection needs gSpeed < 0.
         sprite.setGSpeed((short) 0);
         sprite.setAngle((byte) 0);
@@ -88,9 +101,27 @@ public class TestS3kHcz1WaterTunnelUpwardPipe {
         sprite.setObjectControlled(false);
         sprite.setForcedAnimationId(-1);
 
-        Camera camera = fixture.camera();
+        camera.setFrozen(false);
         camera.updatePosition(true);
-        GameServices.level().getObjectManager().reset(camera.getX());
+    }
+
+    private static void drainInitialRuntimeArt() {
+        int frames = 0;
+        while (GameServices.hardwareTiming()
+                .incompleteCount(HardwareWorkKind.KOS_MODULE_QUEUE) > 0
+                && frames++ < INITIAL_ART_DRAIN_LIMIT) {
+            serviceArtBoundary(HardwareServiceBoundary.PRE_MAIN_LOOP);
+            serviceArtBoundary(HardwareServiceBoundary.POST_OBJECTS);
+        }
+        if (GameServices.hardwareTiming()
+                .incompleteCount(HardwareWorkKind.KOS_MODULE_QUEUE) != 0) {
+            fail("Initial HCZ runtime art did not drain within "
+                    + INITIAL_ART_DRAIN_LIMIT + " hardware frames");
+        }
+    }
+
+    private static void serviceArtBoundary(HardwareServiceBoundary boundary) {
+        HardwareBoundaryPump.service(boundary);
     }
 
     /**

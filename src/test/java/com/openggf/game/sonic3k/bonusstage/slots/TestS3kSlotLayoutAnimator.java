@@ -85,3 +85,5 @@ class TestS3kSlotLayoutAnimator {
         assertFalse(animator.queueRingSparkle(layout, 100));
     }
 }
+
+

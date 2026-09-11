@@ -1,9 +1,9 @@
 package com.openggf.game.sonic2.objects;
 import com.openggf.level.objects.InvincibilityStarsObjectInstance;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class TestInvincibilityStarsObjectInstance {
     @Test
@@ -28,3 +28,5 @@ public class TestInvincibilityStarsObjectInstance {
         assertEquals(6, InvincibilityStarsObjectInstance.s1FramesBehindForStar(0, -1));
     }
 }
+
+

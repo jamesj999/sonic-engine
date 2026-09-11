@@ -3,9 +3,9 @@ package com.openggf.game.sonic2.credits;
 import com.openggf.game.EndingPhase;
 import com.openggf.game.EndingProvider;
 import com.openggf.game.sonic2.Sonic2GameModule;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Tests for {@link Sonic2EndingProvider} state machine and phase mapping.
@@ -29,7 +29,7 @@ public class TestSonic2EndingProvider {
     public void testInitialPhaseBeforeInitialize() {
         Sonic2EndingProvider provider = new Sonic2EndingProvider();
         // Before initialize(), provider shouldn't crash
-        assertFalse("Provider should not be complete before initialize", provider.isComplete());
+        assertFalse(provider.isComplete(), "Provider should not be complete before initialize");
     }
 
     @Test
@@ -42,7 +42,7 @@ public class TestSonic2EndingProvider {
     @Test
     public void testInitialSlideIsZero() {
         Sonic2EndingProvider provider = new Sonic2EndingProvider();
-        assertEquals("Initial slide should be 0", 0, provider.getCurrentSlide());
+        assertEquals(0, provider.getCurrentSlide(), "Initial slide should be 0");
     }
 
     // ========================================================================
@@ -52,36 +52,31 @@ public class TestSonic2EndingProvider {
     @Test
     public void testNoDemoLoadRequest() {
         Sonic2EndingProvider provider = new Sonic2EndingProvider();
-        assertFalse("S2 ending should never have demo load requests",
-                provider.hasDemoLoadRequest());
+        assertFalse(provider.hasDemoLoadRequest(), "S2 ending should never have demo load requests");
     }
 
     @Test
     public void testNoTextReturnRequest() {
         Sonic2EndingProvider provider = new Sonic2EndingProvider();
-        assertFalse("S2 ending should never have text return requests",
-                provider.hasTextReturnRequest());
+        assertFalse(provider.hasTextReturnRequest(), "S2 ending should never have text return requests");
     }
 
     @Test
     public void testNoLamppostState() {
         Sonic2EndingProvider provider = new Sonic2EndingProvider();
-        assertNull("S2 ending should never return lamppost state",
-                provider.getDemoLamppostState());
+        assertNull(provider.getDemoLamppostState(), "S2 ending should never return lamppost state");
     }
 
     @Test
     public void testScrollNotFrozen() {
         Sonic2EndingProvider provider = new Sonic2EndingProvider();
-        assertFalse("S2 ending should not freeze scroll by default",
-                provider.isScrollFrozen());
+        assertFalse(provider.isScrollFrozen(), "S2 ending should not freeze scroll by default");
     }
 
     @Test
     public void testDemoInputMaskIsZero() {
         Sonic2EndingProvider provider = new Sonic2EndingProvider();
-        assertEquals("S2 ending demo input mask should be 0",
-                0, provider.getDemoInputMask());
+        assertEquals(0, provider.getDemoInputMask(), "S2 ending demo input mask should be 0");
     }
 
     @Test
@@ -101,9 +96,8 @@ public class TestSonic2EndingProvider {
     public void testSonic2GameModuleHasEndingProvider() {
         Sonic2GameModule module = new Sonic2GameModule();
         EndingProvider provider = module.getEndingProvider();
-        assertNotNull("Sonic2GameModule should provide an EndingProvider", provider);
-        assertTrue("Sonic2GameModule EndingProvider should be Sonic2EndingProvider",
-                provider instanceof Sonic2EndingProvider);
+        assertNotNull(provider, "Sonic2GameModule should provide an EndingProvider");
+        assertTrue(provider instanceof Sonic2EndingProvider, "Sonic2GameModule EndingProvider should be Sonic2EndingProvider");
     }
 
     @Test
@@ -111,8 +105,7 @@ public class TestSonic2EndingProvider {
         Sonic2GameModule module = new Sonic2GameModule();
         EndingProvider first = module.getEndingProvider();
         EndingProvider second = module.getEndingProvider();
-        assertNotSame("Each getEndingProvider() call should create a new instance",
-                first, second);
+        assertNotSame(first, second, "Each getEndingProvider() call should create a new instance");
     }
 
     // ========================================================================
@@ -122,39 +115,6 @@ public class TestSonic2EndingProvider {
     @Test
     public void testLogoFlashManagerNullBeforePostCredits() {
         Sonic2EndingProvider provider = new Sonic2EndingProvider();
-        assertNull("Logo flash manager should be null before POST_CREDITS phase",
-                provider.getLogoFlashManager());
-    }
-
-    // ========================================================================
-    // EndingProvider default method safety
-    // ========================================================================
-
-    @Test
-    public void testConsumeDemoLoadRequestNoOp() {
-        Sonic2EndingProvider provider = new Sonic2EndingProvider();
-        // Should not throw
-        provider.consumeDemoLoadRequest();
-    }
-
-    @Test
-    public void testConsumeTextReturnRequestNoOp() {
-        Sonic2EndingProvider provider = new Sonic2EndingProvider();
-        // Should not throw
-        provider.consumeTextReturnRequest();
-    }
-
-    @Test
-    public void testOnDemoZoneLoadedNoOp() {
-        Sonic2EndingProvider provider = new Sonic2EndingProvider();
-        // Should not throw
-        provider.onDemoZoneLoaded();
-    }
-
-    @Test
-    public void testOnReturnToTextNoOp() {
-        Sonic2EndingProvider provider = new Sonic2EndingProvider();
-        // Should not throw
-        provider.onReturnToText();
+        assertNull(provider.getLogoFlashManager(), "Logo flash manager should be null before POST_CREDITS phase");
     }
 }

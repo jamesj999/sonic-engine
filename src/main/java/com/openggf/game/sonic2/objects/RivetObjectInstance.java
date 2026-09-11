@@ -3,16 +3,19 @@ import com.openggf.game.PlayableEntity;
 import com.openggf.level.objects.ExplosionObjectInstance;
 
 import com.openggf.debug.DebugRenderContext;
+import com.openggf.game.mutation.MutationEffects;
 import com.openggf.game.sonic2.Sonic2ObjectArtKeys;
+import com.openggf.game.sonic2.constants.Sonic2AnimationIds;
+import com.openggf.game.sonic2.constants.Sonic2AudioConstants;
 import com.openggf.game.sonic2.constants.Sonic2ObjectIds;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
-import com.openggf.level.Level;
-import com.openggf.level.Map;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
@@ -66,7 +69,7 @@ import java.util.logging.Logger;
  * </ol>
  */
 public class RivetObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
 
     private static final Logger LOGGER = Logger.getLogger(RivetObjectInstance.class.getName());
 
@@ -108,8 +111,8 @@ public class RivetObjectInstance extends AbstractObjectInstance
     private boolean busted;
 
     // Tracks the player's animation state each frame (ROM: objoff_30)
-    // ROM stores MainCharacter+anim here to check rolling state
-    private boolean playerWasRolling;
+    private int cachedMainAnimationId;
+    private transient AbstractPlayableSprite lastNativeMainPlayer;
 
     public RivetObjectInstance(ObjectSpawn spawn, String name) {
         super(spawn, name);
@@ -117,18 +120,21 @@ public class RivetObjectInstance extends AbstractObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
+    public RivetObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new RivetObjectInstance(ctx.spawn(), getName());
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         if (busted) {
             return;
         }
 
         // ROM: ObjC2_Main (s2.asm line 80588)
         // move.b (MainCharacter+anim).w,objoff_30(a0)
-        // Store player's rolling state each frame for checking in onSolidContact
-        if (player != null) {
-            playerWasRolling = player.getRolling();
-        }
+        AbstractPlayableSprite player = nativeMainPlayer(playerEntity);
+        lastNativeMainPlayer = player;
+        cachedMainAnimationId = player != null ? player.getAnimationId() : 0;
     }
 
     // ========================================================================
@@ -163,14 +169,31 @@ public class RivetObjectInstance extends AbstractObjectInstance
             return;
         }
 
+        // ROM ObjC2 only checks MainCharacter and has no Sidekick branch.
+        PlayableEntity nativeMain = services().playerQuery().mainPlayerOrNull();
+        if (nativeMain == null) {
+            nativeMain = lastNativeMainPlayer;
+        }
+        if (nativeMain != player) {
+            return;
+        }
+
         // ROM: ObjC2_Bust (s2.asm line 80600)
         // cmpi.b #2,objoff_30(a0) - check if player was rolling (anim == 2)
         // bne.s + (skip if not rolling)
-        if (!playerWasRolling && !player.getRolling()) {
+        if (cachedMainAnimationId != Sonic2AnimationIds.ROLL.id()) {
             return;
         }
 
         bustRivet(player);
+    }
+
+    private AbstractPlayableSprite nativeMainPlayer(PlayableEntity updatePlayer) {
+        PlayableEntity main = services().playerQuery().mainPlayerOrNull();
+        if (main instanceof AbstractPlayableSprite sprite) {
+            return sprite;
+        }
+        return updatePlayer instanceof AbstractPlayableSprite sprite ? sprite : null;
     }
 
     /**
@@ -188,6 +211,13 @@ public class RivetObjectInstance extends AbstractObjectInstance
 
         // ROM: bset #status.player.in_air,(MainCharacter+status).w (s2.asm line 80607)
         // ROM: bclr #status.player.on_object,(MainCharacter+status).w (s2.asm line 80608)
+        // clearRidingObject drops the engine's riding-state link; without it the
+        // solid-contact latch re-seats the player as grounded/on-object every frame
+        // and he never falls. Mirror the ROM bclr by clearing onObject + air after.
+        ObjectManager objectManager = services().objectManager();
+        if (objectManager != null) {
+            objectManager.clearRidingObject(player);
+        }
         player.setAir(true);
         player.setOnObject(false);
 
@@ -218,31 +248,30 @@ public class RivetObjectInstance extends AbstractObjectInstance
      * </pre>
      */
     private void modifyLevelLayout() {
-        Level level = services().currentLevel();
-        if (level == null) {
-            return;
-        }
-        Map map = level.getMap();
-        if (map == null) {
-            return;
-        }
-
-        try {
-            // Write row 0 blocks (Level_Layout+$850): 6 blocks starting at FG x=80, y=8
-            for (int i = 0; i < LAYOUT_ROW_0_BLOCKS.length; i++) {
-                map.setValue(0, LAYOUT_ROW_0_X + i, LAYOUT_ROW_0_Y, LAYOUT_ROW_0_BLOCKS[i]);
+        // ROM: move.l #$8A707172,(a1)+ / move.w #$7374,(a1)+ (row 0, Level_Layout+$850)
+        //      move.l #$6E787978,(a1)+ / move.w #$787A,(a1)+ (row 1, Level_Layout+$950)
+        // ROM: move.b #1,(Screen_redraw_flag).w — pipeline publishes redraw effects automatically.
+        services().zoneLayoutMutationPipeline().queue(context -> {
+            try {
+                MutationEffects effects = MutationEffects.NONE;
+                // Write row 0 blocks (Level_Layout+$850): 6 blocks starting at FG x=80, y=8
+                for (int i = 0; i < LAYOUT_ROW_0_BLOCKS.length; i++) {
+                    effects = context.surface().setBlockInMap(0,
+                            LAYOUT_ROW_0_X + i, LAYOUT_ROW_0_Y,
+                            LAYOUT_ROW_0_BLOCKS[i] & 0xFF);
+                }
+                // Write row 1 blocks (Level_Layout+$950): 6 blocks starting at FG x=80, y=9
+                for (int i = 0; i < LAYOUT_ROW_1_BLOCKS.length; i++) {
+                    effects = context.surface().setBlockInMap(0,
+                            LAYOUT_ROW_1_X + i, LAYOUT_ROW_1_Y,
+                            LAYOUT_ROW_1_BLOCKS[i] & 0xFF);
+                }
+                return effects;
+            } catch (IllegalArgumentException e) {
+                LOGGER.warning("Rivet layout modification failed: " + e.getMessage());
+                return MutationEffects.NONE;
             }
-
-            // Write row 1 blocks (Level_Layout+$950): 6 blocks starting at FG x=80, y=9
-            for (int i = 0; i < LAYOUT_ROW_1_BLOCKS.length; i++) {
-                map.setValue(0, LAYOUT_ROW_1_X + i, LAYOUT_ROW_1_Y, LAYOUT_ROW_1_BLOCKS[i]);
-            }
-
-            // ROM: move.b #1,(Screen_redraw_flag).w (s2.asm line 80615)
-            services().invalidateForegroundTilemap();
-        } catch (IllegalArgumentException e) {
-            LOGGER.warning("Rivet layout modification failed: " + e.getMessage());
-        }
+        });
     }
 
     /**
@@ -257,9 +286,11 @@ public class RivetObjectInstance extends AbstractObjectInstance
             return;
         }
 
-        ExplosionObjectInstance explosion = new ExplosionObjectInstance(
-                Sonic2ObjectIds.EXPLOSION, spawn.x(), spawn.y(), renderManager);
-        objectManager.addDynamicObject(explosion);
+        // ROM transforms the rivet into Obj27, whose init plays SndID_Explosion
+        // ($C1; s2.asm:46728). Pass the SFX so the spawned explosion is not silent.
+        spawnFreeChild(() -> new ExplosionObjectInstance(
+                Sonic2ObjectIds.EXPLOSION, spawn.x(), spawn.y(), renderManager,
+                Sonic2AudioConstants.SFX_EXPLOSION));
     }
 
     // ========================================================================
@@ -298,5 +329,11 @@ public class RivetObjectInstance extends AbstractObjectInstance
     public int getPriorityBucket() {
         // ROM: SubObjData priority = 4
         return RenderPriority.clamp(4);
+    }
+
+    @Override
+    public boolean isHighPriority() {
+        // ROM: make_art_tile(ArtTile_ArtNem_WfzSwitch,1,1)
+        return true;
     }
 }

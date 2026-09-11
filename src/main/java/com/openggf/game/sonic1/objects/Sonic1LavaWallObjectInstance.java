@@ -1,17 +1,23 @@
 package com.openggf.game.sonic1.objects;
 import com.openggf.game.PlayableEntity;
 
-import com.openggf.camera.Camera;
 import com.openggf.debug.DebugRenderContext;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
+import com.openggf.level.objects.ObjectLifetimeOps;
+import com.openggf.level.objects.ObjectInstance;
+import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.ObjectServices;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
+import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
@@ -45,10 +51,10 @@ import java.util.List;
  * <p>
  * <b>Touch collision:</b> obColType=$94 (HURT category $80 | size index $14).
  * <p>
- * Reference: docs/s1disasm/_incObj/4E Wall of Lava.asm
+ * Reference: docs/s1disasm/_incObj/4E MZ Wall of Lava.asm
  */
 public class Sonic1LavaWallObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, TouchResponseProvider {
+        implements SolidObjectProvider, SolidObjectListener, TouchResponseProvider, RewindRecreatable {
 
     // ========================================================================
     // Role enum
@@ -146,9 +152,6 @@ public class Sonic1LavaWallObjectInstance extends AbstractObjectInstance
     /** Trailing piece mapping frame index. From: move.b #4,obFrame(a1). */
     private static final int TRAIL_FRAME = 4;
 
-    /** Out-of-range distance (ROM: 128+320+192 for wide out_of_range check). */
-    private static final int OUT_OF_RANGE_DISTANCE = 128 + 320 + 192;
-
     /** Debug color (deep orange-red for lava). */
     private static final DebugColor DEBUG_COLOR = new DebugColor(255, 80, 0);
 
@@ -156,19 +159,19 @@ public class Sonic1LavaWallObjectInstance extends AbstractObjectInstance
     // Instance State
     // ========================================================================
 
-    private final Role role;
+    private Role role;
 
     /** Current X position (updated during movement). */
     private int currentX;
 
     /** Current Y position (constant for this object). */
-    private final int currentY;
+    private int currentY;
 
     /** X velocity in subpixels (signed 16-bit). */
     private int velX;
 
-    /** X subpixel accumulator for SpeedToPos. */
-    private int xSubpixel;
+    /** Subpixel accumulators (xSub / ySub) for ROM-accurate 16.16 SpeedToPos integration. */
+    private final SubpixelMotion.State motion = new SubpixelMotion.State(0, 0, 0, 0, 0, 0);
 
     /**
      * Flag to start wall moving (lwall_flag = objoff_36).
@@ -193,6 +196,9 @@ public class Sonic1LavaWallObjectInstance extends AbstractObjectInstance
 
     /** Whether the trailing child has been spawned (prevents double-spawn). */
     private boolean childSpawned;
+
+    /** True when routine 8 was reached from Obj4E's out_of_range tail. */
+    private boolean respawnableDelete;
 
     // ========================================================================
     // Constructors
@@ -224,19 +230,60 @@ public class Sonic1LavaWallObjectInstance extends AbstractObjectInstance
         this.displayFrame = TRAIL_FRAME;
     }
 
+    @Override
+    public Sonic1LavaWallObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        Sonic1LavaWallObjectInstance restoredMain = restoredMainForTrail(ctx);
+        if (restoredMain != null) {
+            return new Sonic1LavaWallObjectInstance(ctx.spawn(), restoredMain);
+        }
+        return new Sonic1LavaWallObjectInstance(ctx.spawn());
+    }
+
+    private static Sonic1LavaWallObjectInstance restoredMainForTrail(RewindRecreateContext ctx) {
+        if (ctx == null || ctx.spawn() == null) {
+            return null;
+        }
+        ObjectManager objectManager = ctx.objectManager();
+        if (objectManager == null) {
+            ObjectServices services = ctx.objectServices();
+            objectManager = services != null ? services.objectManager() : null;
+        }
+        if (objectManager == null) {
+            return null;
+        }
+        int expectedMainX = ctx.spawn().x() + TRAIL_X_OFFSET;
+        int expectedY = ctx.spawn().y();
+        for (ObjectInstance object : objectManager.getActiveObjects()) {
+            if (object instanceof Sonic1LavaWallObjectInstance wall
+                    && !wall.isDestroyed()
+                    && wall.role == Role.MAIN
+                    && wall.currentX == expectedMainX
+                    && wall.currentY == expectedY) {
+                return wall;
+            }
+        }
+        return null;
+    }
+
     // ========================================================================
     // Update Logic
     // ========================================================================
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         switch (routine) {
             case 0 -> updateInit();
             case 4 -> updateProximityCheck(player);
             case 2 -> updateSolidMoving(player);
             case 6 -> updateTrail();
-            case 8 -> setDestroyed(true);
+            case 8 -> {
+                if (respawnableDelete) {
+                    setDestroyedByOffscreen();
+                } else {
+                    setDestroyed(true);
+                }
+            }
         }
     }
 
@@ -250,19 +297,16 @@ public class Sonic1LavaWallObjectInstance extends AbstractObjectInstance
         if (!childSpawned) {
             childSpawned = true;
             if (services().objectManager() != null) {
-                ObjectSpawn trailSpawn = new ObjectSpawn(
-                        currentX - TRAIL_X_OFFSET, currentY,
-                        0x4E, spawn.subtype(), 0, false, 0);
-                Sonic1LavaWallObjectInstance trail = new Sonic1LavaWallObjectInstance(trailSpawn, this);
-                // ROM: FindNextFreeObj allocates slot after parent
-                int mySlot = getSlotIndex();
-                if (mySlot >= 0) {
-                    int childSlot = services().objectManager().allocateSlotAfter(mySlot);
-                    if (childSlot >= 0) {
-                        trail.setSlotIndex(childSlot);
-                    }
-                }
-                services().objectManager().addDynamicObject(trail);
+                final int mySlot = getSlotIndex();
+                spawnFreeChild(() -> {
+                    ObjectSpawn trailSpawn = new ObjectSpawn(
+                            currentX - TRAIL_X_OFFSET, currentY,
+                            0x4E, spawn.subtype(), 0, false, 0);
+                    Sonic1LavaWallObjectInstance trail = new Sonic1LavaWallObjectInstance(trailSpawn, this);
+                    // ROM: FindNextFreeObj allocates slot after parent
+                    ObjectLifetimeOps.assignFindNextFreeChildSlot(services().objectManager(), trail, mySlot);
+                    return trail;
+                });
             }
         }
         // addq.b #4,obRoutine(a0) -> routine 0 + 4 = 4
@@ -357,16 +401,17 @@ public class Sonic1LavaWallObjectInstance extends AbstractObjectInstance
         }
         displayFrame = ANIM_FRAMES[animFrameIndex];
 
-        // SpeedToPos: only if player is alive (routine < 4)
+        // ROM: cmpi.b #4,(v_player+obRoutine) / bhs skips SpeedToPos for both
+        // hurt (routine 4) and death (routine 6+), not death alone.
         // cmpi.b #4,(v_player+obRoutine).w / bhs.s .rangechk
-        boolean playerAlive = (player != null && !player.getDead());
-        if (playerAlive && velX != 0) {
+        boolean playerAllowsMovement = player != null && !player.isHurt() && !player.getDead();
+        if (playerAllowsMovement && velX != 0) {
             applySpeedToPosX();
         }
 
         // Out-of-range check: only when NOT moving (lwall_flag == 0)
         if (!moveFlag) {
-            if (!isWithinOutOfRangeWindow(currentX)) {
+            if (!isInRangeAt(currentX)) {
                 handleOutOfRange();
             }
         }
@@ -392,7 +437,7 @@ public class Sonic1LavaWallObjectInstance extends AbstractObjectInstance
     }
 
     /**
-     * Handle going out of range: clear respawn flag and mark for deletion.
+     * Handle going out of range: mark routine 8 as an off-screen delete.
      * <pre>
      * .chkgone:
      *   lea    (v_objstate).w,a2
@@ -401,10 +446,17 @@ public class Sonic1LavaWallObjectInstance extends AbstractObjectInstance
      *   bclr   #7,2(a2,d0.w)
      *   move.b #8,obRoutine(a0)
      * </pre>
+     * The respawn-table bit is cleared in this routine, before the routine-8
+     * {@code DeleteObject} tail runs. The placement layer keeps the spawn
+     * dormant until the cursor reprocesses it so the immediate {@code bclr}
+     * does not materialize a second object while this SST slot is still alive.
      */
     private void handleOutOfRange() {
+        if (services().objectManager() != null) {
+            services().objectManager().clearSpawnCounterActiveBitAndMarkDormant(spawn);
+        }
+        respawnableDelete = true;
         routine = 8;
-        setDestroyed(true);
     }
 
     /**
@@ -414,26 +466,13 @@ public class Sonic1LavaWallObjectInstance extends AbstractObjectInstance
      * </pre>
      */
     private void applySpeedToPosX() {
-        int xPos32 = (currentX << 16) | (xSubpixel & 0xFFFF);
-        int vel32 = (int) (short) velX;
-        xPos32 += vel32 << 8;
-        currentX = xPos32 >> 16;
-        xSubpixel = xPos32 & 0xFFFF;
-    }
-
-    /**
-     * ROM out_of_range macro: round both X positions to $80 boundaries
-     * and compare distance against 128+320+192.
-     */
-    private boolean isWithinOutOfRangeWindow(int objectX) {
-        Camera camera = services().camera();
-        if (camera == null) {
-            return true;
-        }
-        int objRounded = objectX & 0xFF80;
-        int camRounded = (camera.getX() - 128) & 0xFF80;
-        int distance = (objRounded - camRounded) & 0xFFFF;
-        return distance <= OUT_OF_RANGE_DISTANCE;
+        // SpeedToPos (X-only, 16.16 fixed-point). Use the helper directly so unused Y
+        // accumulator state is left untouched.
+        int xVel32 = (int) (short) velX;
+        int x32 = (currentX << 16) | (motion.xSub & 0xFFFF);
+        x32 += xVel32 << 8;
+        currentX = x32 >> 16;
+        motion.xSub = x32 & 0xFFFF;
     }
 
     // ========================================================================
@@ -442,7 +481,17 @@ public class Sonic1LavaWallObjectInstance extends AbstractObjectInstance
 
     @Override
     public SolidObjectParams getSolidParams() {
-        return new SolidObjectParams(SOLID_HALF_WIDTH, SOLID_AIR_HALF_HEIGHT, SOLID_GROUND_HALF_HEIGHT);
+        return SolidObjectParams.of(SOLID_HALF_WIDTH, SOLID_AIR_HALF_HEIGHT, SOLID_GROUND_HALF_HEIGHT);
+    }
+
+    @Override
+    public boolean usesPreUpdatePositionForSolidContact(PlayableEntity player) {
+        // LWall_Solid calls SolidObject before SpeedToPos. The engine updates
+        // objects before its shared solid-contact checkpoint, so contact must
+        // sample the saved pre-update position to preserve that ROM ordering.
+        // This matters while the advancing wall presses Sonic against another
+        // solid: using the post-move X pushes him one pixel ahead of the wall.
+        return role == Role.MAIN;
     }
 
     @Override
@@ -525,11 +574,16 @@ public class Sonic1LavaWallObjectInstance extends AbstractObjectInstance
         if (isDestroyed()) {
             return false;
         }
-        // When moving (moveFlag set), always persistent (ROM: tst.b lwall_flag / bne.s .moving)
-        if (moveFlag || (role == Role.TRAIL && mainWall != null && mainWall.moveFlag)) {
-            return true;
+        if (role == Role.TRAIL) {
+            // docs/s1disasm/_incObj/4E MZ Wall of Lava.asm:127-133:
+            // LWall_Move only follows the parent and displays; it does not run
+            // out_of_range independently. It deletes only when parent routine 8
+            // is observed.
+            return mainWall != null && !mainWall.isDestroyed() && mainWall.routine != 8;
         }
-        return isWithinOutOfRangeWindow(currentX);
+        // LWall_Solid owns the out_of_range tail itself (lines 100-123) so the
+        // main slot can set routine 8 before the trail observes it.
+        return true;
     }
 
     // ========================================================================

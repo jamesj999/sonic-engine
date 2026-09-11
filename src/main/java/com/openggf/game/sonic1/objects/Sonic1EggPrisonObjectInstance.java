@@ -1,11 +1,11 @@
 package com.openggf.game.sonic1.objects;
 
+import com.openggf.audio.GameMusic;
+import com.openggf.game.sonic1.resources.Sonic1PlcService;
 import com.openggf.camera.Camera;
 import com.openggf.debug.DebugRenderContext;
-import com.openggf.game.sonic1.audio.Sonic1Music;
 import com.openggf.game.PlayableEntity;
 import com.openggf.game.sonic1.audio.Sonic1Sfx;
-import com.openggf.level.objects.EggPrisonAnimalInstance;
 import com.openggf.level.objects.ExplosionObjectInstance;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
@@ -13,6 +13,7 @@ import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
@@ -36,14 +37,15 @@ import java.util.logging.Logger;
  *   <li>IDLE - Solid body, waiting for button trigger (Pri_BodyMain, routine 2)</li>
  *   <li>EXPLODING - Spawning explosion particles, 60 frames (Pri_Explosion, routine $A)</li>
  *   <li>ANIMAL_SPAWN - Initial burst of 8 + continuous spawning, 150 frames (Pri_Animals, routine $C)</li>
- *   <li>END_ACT - Waiting for all animals to leave, then GotThroughAct (Pri_EndAct, routine $E)</li>
+ *   <li>END_ACT - Checking for all animals to leave, then GotThroughAct (Pri_EndAct, routine $E)</li>
  * </ol>
  */
 public class Sonic1EggPrisonObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider {
+        implements SolidObjectProvider, SpawnRewindRecreatable {
     private static final Logger LOGGER = Logger.getLogger(Sonic1EggPrisonObjectInstance.class.getName());
 
-    // === Solid collision from Pri_BodyMain: d1=$2B, d2=$18, d3=$18 ===
+    // === Native width and SolidObject collision from Pri_Var/Pri_BodyMain ===
+    private static final int BODY_ACTIVE_WIDTH = 0x20; // obActWid, read by Sonic_Move
     private static final int BODY_HALF_WIDTH = 0x2B;   // 43 pixels
     private static final int BODY_HALF_HEIGHT = 0x18;   // 24 pixels
 
@@ -71,10 +73,8 @@ public class Sonic1EggPrisonObjectInstance extends AbstractObjectInstance
     private static final int SPAWN_PHASE_DURATION = 150;
     // From disassembly: move.w #$C,objoff_36(a1) — animal delay
     private static final int SPAWN_ANIMAL_DELAY = 0xC;
-
-    // === End-act phase ===
-    // From disassembly: move.w #180,obTimeFrame(a0)
-    private static final int END_ACT_WAIT = 180;
+    // From Pri_SpawnAnimals: addi.w #32,obY(a0)
+    private static final int ANIMAL_SPAWN_Y_OFFSET = 32;
 
     // === Explosion random spread ===
     // ROM: move.b d0,d1 / lsr.b #2,d1 / subi.w #$20,d1 → X range [-32, +31]
@@ -84,6 +84,12 @@ public class Sonic1EggPrisonObjectInstance extends AbstractObjectInstance
     private static final int FRAME_CAPSULE = 0;
     private static final int FRAME_BROKEN = 2;
     private static final int FRAME_BLANK = 6;
+
+    // Released S1 Pri_EndAct starts at native slot 1 and uses
+    // ((128 - 1) / 2) - 1 as DBF's counter: 63 iterations, slots 1..63.
+    // Dynamic objects begin at slot 32, so animals in slots 64..127 are
+    // accidentally invisible to the completion scan.
+    private static final int RELEASED_END_ACT_LAST_SCANNED_SLOT = 63;
 
     // === State machine ===
     private enum State {
@@ -96,9 +102,16 @@ public class Sonic1EggPrisonObjectInstance extends AbstractObjectInstance
 
     private State state = State.IDLE;
     private int timer;
+    private int buttonTriggerVIntRunCount = -1;
     private int currentFrame = FRAME_CAPSULE;
     private boolean buttonTriggered;
     private boolean resultsTriggered;
+
+    // ROM obX/obY of the object that actually drives Pri_Explosion /
+    // Pri_SpawnAnimals / Pri_Animals -- the depressed SWITCH, not the body.
+    // See onButtonTriggered(int,int).
+    private int spawnerX;
+    private int spawnerY;
 
     // Button sub-object
     private Sonic1EggPrisonButtonObjectInstance buttonObject;
@@ -123,10 +136,40 @@ public class Sonic1EggPrisonObjectInstance extends AbstractObjectInstance
      * Corresponds to Pri_Switched first-time trigger path.
      */
     public void onButtonTriggered() {
+        onButtonTriggered(spawn.x(), spawn.y());
+    }
+
+    /**
+     * ROM Pri_Switch is the SWITCH object's own routine: it does
+     * {@code addq.w #8,obY(a0)} and then advances its OWN obRoutine to $A
+     * (Pri_Explosion), $C (Pri_Animals) and $E (Pri_EndAct)
+     * (docs/s1disasm/_incObj/3E Prison Capsule.asm:88-115). Every
+     * {@code obX(a0)}/{@code obY(a0)} that Pri_Explosion, Pri_SpawnAnimals and
+     * Pri_Animals read to place explosions and animals is therefore the
+     * DEPRESSED SWITCH's position, not the capsule body's. The engine splits the
+     * one ROM slot into a body and a button instance, so the button hands its
+     * post-depression origin over here when it fires.
+     *
+     * @param spawnerX the switch's {@code obX}
+     * @param spawnerY the switch's {@code obY} after {@code addq.w #8,obY(a0)}
+     */
+    void onButtonTriggered(int spawnerX, int spawnerY) {
         if (buttonTriggered) {
             return;
         }
         buttonTriggered = true;
+        this.spawnerX = spawnerX;
+        this.spawnerY = spawnerY;
+        // ROM Pri_Switch only writes routine=$A/obTimeFrame=60 and returns; the
+        // first Pri_Explosion pass is always the FRAME AFTER the trigger,
+        // regardless of where the body sits in object RAM
+        // (docs/s1disasm/_incObj/3E Prison Capsule.asm:88-115). The engine runs
+        // the explosion phase on the body object, so when the body's slot
+        // executes after the button's in the same frame it would otherwise
+        // tick the 60-frame timer once on the trigger frame, ending the phase
+        // a frame early and shifting the whole animal window.
+        ObjectManager triggerObjectManager = services().objectManager();
+        buttonTriggerVIntRunCount = triggerObjectManager != null ? triggerObjectManager.getVblaCounter() : -1;
 
         LOGGER.info("S1 EggPrison triggered at X=" + spawn.x());
 
@@ -136,18 +179,19 @@ public class Sonic1EggPrisonObjectInstance extends AbstractObjectInstance
             levelGamestate.pauseTimer();
         }
 
-        // Lock the camera at the current position so it stays on the prison
-        // while Sonic runs off the right side of the screen.
-        // ROM: clr.b (f_lockscreen).w — in the ROM this clears the scroll lock,
-        // but the camera stays put because v_limitleft2 = v_limitright2.
+        // ROM: Pri_Switch (3E Prison Capsule.asm:97) only does clr.b (f_lockscreen).w
+        // here — it does NOT touch v_limitleft2/v_limitright2. The camera keeps
+        // scrolling to v_limitright2, which each act-3 boss's escape routine already
+        // expanded to boss_*_end via addq.w #2,(v_limitright2). Locking the camera to
+        // its current X here froze it ~10px short of v_limitright2 in LZ3, where the
+        // player lands on the switch (un-roll) before the camera has finished
+        // scrolling to the boundary (boss_lz_end=$2031), diverging camera_x by 1px
+        // and growing. The Signpost screen-lock (v_limitleft2 = v_limitright2) is a
+        // separate end-of-act path that the act-3 boss zones never run, so the camera
+        // must remain free to reach v_limitright2.
         Camera camera = services().camera();
-        if (camera != null) {
-            if (camera.getFrozen()) {
-                camera.setFrozen(false);
-            }
-            // Lock camera horizontally at current position
-            camera.setMinX(camera.getX());
-            camera.setMaxX(camera.getX());
+        if (camera != null && camera.getFrozen()) {
+            camera.setFrozen(false);
         }
 
         // Clear boss fight state so doLevelBoundary allows Sonic to exceed
@@ -155,6 +199,10 @@ public class Sonic1EggPrisonObjectInstance extends AbstractObjectInstance
         // This is needed even if the boss was never "defeated" (e.g. LZ boss
         // just escapes without being hit 8 times).
         services().gameState().setCurrentBossId(0);
+        // ROM: clr.b (f_lockscreen).w (s1disasm/_incObj/3E Prison Capsule.asm:97)
+        // — release the persistent screen lock that Sonic_LevelBound consumes for
+        // its +64 right-boundary extension gate.
+        services().gameState().setScreenLocked(false);
 
         // ROM: move.b #1,(f_lockctrl).w — lock player controls
         // ROM: move.w #(btnR<<8),(v_jpadhold2).w — force right input
@@ -169,7 +217,7 @@ public class Sonic1EggPrisonObjectInstance extends AbstractObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (player == null) {
             return;
@@ -178,8 +226,12 @@ public class Sonic1EggPrisonObjectInstance extends AbstractObjectInstance
 
         switch (state) {
             case IDLE -> updateIdle();
-            case EXPLODING -> updateExploding(frameCounter);
-            case ANIMAL_SPAWN -> updateAnimalSpawn(frameCounter);
+            case EXPLODING -> {
+                if (vIntRunCount != buttonTriggerVIntRunCount) {
+                    updateExploding(vIntRunCount);
+                }
+            }
+            case ANIMAL_SPAWN -> updateAnimalSpawn(vIntRunCount);
             case END_ACT -> updateEndAct(player);
             case COMPLETE -> { /* Nothing — results screen active */ }
         }
@@ -204,9 +256,9 @@ public class Sonic1EggPrisonObjectInstance extends AbstractObjectInstance
      * ROM: Spawn one explosion every 8 frames with random offset.
      * After timer expires, spawn initial animal burst.
      */
-    private void updateExploding(int frameCounter) {
+    private void updateExploding(int vIntRunCount) {
         // ROM: move.b (v_vbla_byte).w,d0 / andi.b #7,d0 / bne.s .skip
-        if ((frameCounter & 7) == 0) {
+        if ((vIntRunCount & 7) == 0) {
             spawnExplosion();
         }
 
@@ -217,7 +269,13 @@ public class Sonic1EggPrisonObjectInstance extends AbstractObjectInstance
             currentFrame = FRAME_BROKEN;
 
             // ROM: move.b #$C,obRoutine(a0) — switch to animal spawning
-            // ROM: move.b #6,obFrame(a0) — blank frame for explosion sub-object
+            // ROM: move.b #6,obFrame(a0) — blank frame for explosion sub-object.
+            // The switch/explosion driver is the SAME ROM object slot as the
+            // button, so this is the button going invisible for the rest of
+            // the act (3E Prison Capsule.asm:134-137) — not a destroy.
+            if (buttonObject != null) {
+                buttonObject.goBlank();
+            }
             spawnInitialAnimals();
             state = State.ANIMAL_SPAWN;
             timer = SPAWN_PHASE_DURATION;
@@ -228,16 +286,15 @@ public class Sonic1EggPrisonObjectInstance extends AbstractObjectInstance
      * Pri_Animals (routine $C): Continuous random animal spawning.
      * ROM: Every 8 frames, spawn one animal at random X offset.
      */
-    private void updateAnimalSpawn(int frameCounter) {
+    private void updateAnimalSpawn(int vIntRunCount) {
         // ROM: move.b (v_vbla_byte).w,d0 / andi.b #7,d0 / bne.s .skip
-        if ((frameCounter & 7) == 0) {
+        if ((vIntRunCount & 7) == 0) {
             spawnRandomAnimal();
         }
 
         timer--;
         if (timer <= 0) {
             state = State.END_ACT;
-            timer = END_ACT_WAIT;
         }
     }
 
@@ -246,12 +303,9 @@ public class Sonic1EggPrisonObjectInstance extends AbstractObjectInstance
      * ROM: Loops through object RAM looking for id_Animals (0x28).
      */
     private void updateEndAct(AbstractPlayableSprite player) {
-        if (timer > 0) {
-            timer--;
-            return;
-        }
-
-        // After wait, check every frame if animals are gone
+        // The released-game Pri_EndAct scans immediately. Its apparent
+        // `move.w #3*60,obTimeFrame(a0)` predecessor is guarded by FixBugs=0
+        // and is explicitly unused: Pri_EndAct never reads obTimeFrame.
         if (!areAnimalsPresent()) {
             triggerGotThroughAct(player);
         }
@@ -263,24 +317,25 @@ public class Sonic1EggPrisonObjectInstance extends AbstractObjectInstance
      */
     private void spawnExplosion() {
         ObjectManager objectManager = services().objectManager();
-        ObjectRenderManager renderManager = services().renderManager();
+        final ObjectRenderManager renderManager = services().renderManager();
         if (objectManager == null || renderManager == null) {
             return;
         }
 
-        int baseX = spawn.x();
-        int baseY = spawn.y();
+        // ROM: move.w obX(a0),obX(a1) / move.w obY(a0),obY(a1) -- a0 is the
+        // depressed switch (3E Prison Capsule.asm:118-120).
+        final int baseX = spawnerX;
+        final int baseY = spawnerY;
 
         // ROM: move.b d0,d1 / lsr.b #2,d1 / subi.w #$20,d1 → X offset [-32, +31]
         int random = services().rng().nextWord();
-        int xOff = ((random & 0xFF) >>> 2) - EXPLOSION_X_RANGE;
+        final int xOff = ((random & 0xFF) >>> 2) - EXPLOSION_X_RANGE;
         // ROM: lsr.w #8,d0 / lsr.b #3,d0 → Y offset [0, 31]
-        int yOff = ((random >>> 8) & 0xFF) >>> 3;
+        final int yOff = ((random >>> 8) & 0xFF) >>> 3;
 
         // ROM: Explosion object 0x3F plays sfx_Bomb on init
-        ExplosionObjectInstance explosion = new ExplosionObjectInstance(
-                0x3F, baseX + xOff, baseY + yOff, renderManager, Sonic1Sfx.BOSS_EXPLOSION.id);
-        objectManager.addDynamicObject(explosion);
+        spawnFreeChild(() -> new ExplosionObjectInstance(
+                0x3F, baseX + xOff, baseY + yOff, renderManager, Sonic1Sfx.BOSS_EXPLOSION.id));
     }
 
     /**
@@ -288,23 +343,34 @@ public class Sonic1EggPrisonObjectInstance extends AbstractObjectInstance
      * ROM: Pri_Explosion .makeanimal loop — d6=7, d5=$9A, d4=-$1C
      */
     private void spawnInitialAnimals() {
-        ObjectManager objectManager = services().objectManager();
-        if (objectManager == null) {
+        if (services().objectManager() == null) {
             return;
         }
 
-        int baseX = spawn.x();
-        int baseY = spawn.y();
+        // ROM Pri_SpawnAnimals: addi.w #32,obY(a0) -- "load all animals 32px
+        // below explosions" (3E Prison Capsule.asm:138). This is a permanent
+        // write to the spawner's own obY, so Pri_Animals' later per-8-frame
+        // spawns use the shifted origin too.
+        spawnerY += ANIMAL_SPAWN_Y_OFFSET;
+
+        final int baseX = spawnerX;
+        final int baseY = spawnerY;
         int xOffset = INITIAL_ANIMAL_X_OFFSET_START;
         int delay = INITIAL_ANIMAL_DELAY_BASE;
 
         for (int i = 0; i < INITIAL_ANIMAL_COUNT; i++) {
-            ObjectSpawn animalSpawn = new ObjectSpawn(
-                    baseX + xOffset, baseY,
-                    0x28, 0, 0, false, 0);
-            EggPrisonAnimalInstance animal = new EggPrisonAnimalInstance(
-                    animalSpawn, delay, services().rng().nextBits(1));
-            objectManager.addDynamicObject(animal);
+            final int fXOffset = xOffset;
+            final int fDelay = delay;
+            // Pri_SpawnAnimals only writes obX/obY/animal_prisondelay into the new
+            // slot; it draws no random number. The animal's OWN Anml_FromEnemy init
+            // calls RandomNumber on its first execution frame
+            // (3E Prison Capsule.asm:152-160; 28, 29 Animals and Points.asm:171-176).
+            spawnFreeChild(() -> {
+                ObjectSpawn animalSpawn = new ObjectSpawn(
+                        baseX + fXOffset, baseY,
+                        0x28, 0, 0, false, 0);
+                return new Sonic1AnimalsObjectInstance(animalSpawn, 0, fDelay);
+            });
 
             xOffset += INITIAL_ANIMAL_X_OFFSET_STEP;
             delay -= INITIAL_ANIMAL_DELAY_STEP;
@@ -316,32 +382,39 @@ public class Sonic1EggPrisonObjectInstance extends AbstractObjectInstance
      * ROM: Pri_Animals random spawn — andi.w #$1F,d0 / subq.w #6,d0
      */
     private void spawnRandomAnimal() {
-        ObjectManager objectManager = services().objectManager();
-        if (objectManager == null) {
+        if (services().objectManager() == null) {
             return;
         }
 
-        int baseX = spawn.x();
-        int baseY = spawn.y();
+        // Pri_Animals reuses the spawner's obX/obY, which Pri_SpawnAnimals
+        // already pushed 32px down (3E Prison Capsule.asm:138,170-172).
+        final int baseX = spawnerX;
+        final int baseY = spawnerY;
 
         // ROM: jsr (RandomNumber).l / andi.w #$1F,d0 / subq.w #6,d0
+        // Exactly one RandomNumber call here; the animal's own init draws again
+        // (3E Prison Capsule.asm:174-181).
         int random = services().rng().nextWord();
         int randomOffset = (random & 0x1F) - 6;
-        // ROM: tst.w d1 / bpl.s + / neg.w d0
-        if ((random & 0x8000) != 0) {
+        // ROM: tst.w d1 / bpl.s .setX / neg.w d0 — d1 holds the NEW seed after
+        // RandomNumber, so the sign test reads bit 15 of the updated seed's low
+        // word, not of the returned d0 (3E Prison Capsule.asm:180-185;
+        // _incObj/sub RandomNumber.asm).
+        if ((services().rng().getSeed() & 0x8000) != 0) {
             randomOffset = -randomOffset;
         }
+        final int fOffset = randomOffset;
 
-        ObjectSpawn animalSpawn = new ObjectSpawn(
-                baseX + randomOffset, baseY,
-                0x28, 0, 0, false, 0);
-        EggPrisonAnimalInstance animal = new EggPrisonAnimalInstance(
-                animalSpawn, SPAWN_ANIMAL_DELAY, services().rng().nextBits(1));
-        objectManager.addDynamicObject(animal);
+        spawnFreeChild(() -> {
+            ObjectSpawn animalSpawn = new ObjectSpawn(
+                    baseX + fOffset, baseY,
+                    0x28, 0, 0, false, 0);
+            return new Sonic1AnimalsObjectInstance(animalSpawn, 0, SPAWN_ANIMAL_DELAY);
+        });
     }
 
     /**
-     * Checks if any EggPrisonAnimalInstance objects remain active.
+     * Checks if any Sonic1AnimalsObjectInstance objects remain active.
      * ROM: Pri_EndAct loop through object RAM for id_Animals.
      */
     private boolean areAnimalsPresent() {
@@ -351,11 +424,17 @@ public class Sonic1EggPrisonObjectInstance extends AbstractObjectInstance
         }
 
         for (var obj : objectManager.getActiveObjects()) {
-            if (obj instanceof EggPrisonAnimalInstance && !obj.isDestroyed()) {
+            if (obj instanceof Sonic1AnimalsObjectInstance animal
+                    && !obj.isDestroyed()
+                    && releasedEndActScansSlot(animal.getSlotIndex())) {
                 return true;
             }
         }
         return false;
+    }
+
+    static boolean releasedEndActScansSlot(int slotIndex) {
+        return slotIndex >= 1 && slotIndex <= RELEASED_END_ACT_LAST_SCANNED_SLOT;
     }
 
     /**
@@ -366,6 +445,27 @@ public class Sonic1EggPrisonObjectInstance extends AbstractObjectInstance
         if (resultsTriggered) {
             return;
         }
+        var levelGamestate = services().levelGamestate();
+        final int elapsedSeconds = levelGamestate != null ? levelGamestate.getElapsedSeconds() : 0;
+        final int ringCount = player.getRingCount();
+        final int actNumber = services().currentAct() + 1;
+        Sonic1FixedEndCardSlot.ClaimResult claim = Sonic1FixedEndCardSlot.claim(
+                services(),
+                new Sonic1FixedEndCardSlot.ResultsData(
+                        elapsedSeconds, ringCount, actNumber, false));
+        Sonic1ResultsScreenObjectInstance card = claim.requireCard();
+        if (claim.state() == Sonic1FixedEndCardSlot.ClaimState.EXISTING_COMMITTED) {
+            resultsTriggered = true;
+            state = State.COMPLETE;
+            if (buttonObject != null) {
+                buttonObject.detachFromParent();
+            }
+            return;
+        }
+        if (!queueResultsPlc()) {
+            return;
+        }
+        card.markResultsPlcCommitted();
         resultsTriggered = true;
         state = State.COMPLETE;
 
@@ -376,22 +476,9 @@ public class Sonic1EggPrisonObjectInstance extends AbstractObjectInstance
 
         // ROM: move.w #bgm_GotThrough,d0; jsr (QueueSound2).l
         try {
-            services().playMusic(Sonic1Music.GOT_THROUGH.id);
+            services().playMusic(GameMusic.ACT_CLEAR);
         } catch (Exception e) {
             LOGGER.warning("Failed to play stage clear music: " + e.getMessage());
-        }
-
-        // Spawn results screen
-        var levelGamestate = services().levelGamestate();
-        int elapsedSeconds = levelGamestate != null ? levelGamestate.getElapsedSeconds() : 0;
-        int ringCount = player.getRingCount();
-        int actNumber = services().currentAct() + 1;
-
-        Sonic1ResultsScreenObjectInstance resultsScreen = new Sonic1ResultsScreenObjectInstance(
-                elapsedSeconds, ringCount, actNumber);
-        ObjectManager objectManager = services().objectManager();
-        if (objectManager != null) {
-            objectManager.addDynamicObject(resultsScreen);
         }
 
         // Detach button (keep it alive for visual during results)
@@ -400,11 +487,30 @@ public class Sonic1EggPrisonObjectInstance extends AbstractObjectInstance
         }
     }
 
+    private boolean queueResultsPlc() {
+        try {
+            Sonic1PlcService plc = services().gameModule().getGameService(Sonic1PlcService.class);
+            if (plc != null) plc.replaceQueued(16);
+            return true;
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
     // === SolidObjectProvider ===
 
     @Override
     public SolidObjectParams getSolidParams() {
-        return new SolidObjectParams(BODY_HALF_WIDTH, BODY_HALF_HEIGHT, BODY_HALF_HEIGHT);
+        return SolidObjectParams.of(BODY_HALF_WIDTH, BODY_HALF_HEIGHT, BODY_HALF_HEIGHT);
+    }
+
+    @Override
+    public int getBalanceWidthPixels() {
+        // Pri_Var stores obActWid=$20 for the capsule body. Pri_BodyMain adds
+        // Sonic's $B solid width only when it passes d1=$2B to SolidObject;
+        // Sonic_Move later reads the unchanged obActWid byte for balancing.
+        // docs/s1disasm/_incObj/3E Prison Capsule.asm:31,69
+        return BODY_ACTIVE_WIDTH;
     }
 
     @Override

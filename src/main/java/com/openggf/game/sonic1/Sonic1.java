@@ -245,7 +245,9 @@ public class Sonic1 extends Game implements PlayerSpriteArtProvider, AnimatedPat
 
     @Override
     public int[] getBackgroundScroll(int levelIdx, int cameraX, int cameraY) {
-        // Stub - BG scroll not yet implemented for Sonic 1
+        // Compatibility implementation only. Runtime S1 parallax is owned by
+        // Sonic1ScrollHandlerProvider handlers and is restored through
+        // ParallaxManager; LevelFrameRuntimeUpdater does not query this API.
         return new int[]{0, 0};
     }
 

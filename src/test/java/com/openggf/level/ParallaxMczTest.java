@@ -1,28 +1,22 @@
 package com.openggf.level;
 
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import com.openggf.camera.Camera;
 import com.openggf.game.GameServices;
 import com.openggf.data.Rom;
 import com.openggf.game.sonic2.scroll.ParallaxTables;
 import com.openggf.game.sonic2.scroll.Sonic2ZoneConstants;
-import com.openggf.tests.rules.RequiresGameModule;
-import com.openggf.tests.rules.RequiresRomRule;
+import com.openggf.tests.rules.RequiresRom;
 import com.openggf.tests.rules.SonicGame;
 
 import java.io.IOException;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-@RequiresGameModule(SonicGame.SONIC_2)
+@RequiresRom(SonicGame.SONIC_2)
 public class ParallaxMczTest {
-
-    @Rule
-    public RequiresRomRule romRule = new RequiresRomRule();
-
     private ParallaxManager parallaxManager;
     private MockRom mockRom;
 
@@ -41,7 +35,7 @@ public class ParallaxMczTest {
             230
     };
 
-    @Before
+    @BeforeEach
     public void setUp() {
         GameServices.camera().resetState();
         parallaxManager = new ParallaxManager();
@@ -53,12 +47,12 @@ public class ParallaxMczTest {
     public void testTableLoad() {
         // Verify that the parallax manager loaded successfully by checking that
         // it can produce a non-null scroll handler after loading MCZ data
-        assertNotNull("ParallaxManager should be constructed after load", parallaxManager);
+        assertNotNull(parallaxManager, "ParallaxManager should be constructed after load");
         // Verify that calculations work (load must have succeeded for update to produce valid output)
         Camera cam = GameServices.camera();
         setCamera(cam, 0, 960);
         parallaxManager.update(Sonic2ZoneConstants.ZONE_MCZ, 0, cam, 0, 0);
-        assertNotNull("hScroll should be non-null after update", parallaxManager.getHScroll());
+        assertNotNull(parallaxManager.getHScroll(), "hScroll should be non-null after update");
     }
 
     @Test
@@ -178,8 +172,8 @@ public class ParallaxMczTest {
             int val = hScroll[line];
             short fg = (short) (val >> 16);
             short bg = (short) (val & 0xFFFF);
-            assertEquals("Line " + line + " FG", (short) expectedFg, fg);
-            assertEquals("Line " + line + " BG", (short) (expectedFg + expectedBgOffset), bg);
+            assertEquals((short) expectedFg, fg, "Line " + line + " FG");
+            assertEquals((short) (expectedFg + expectedBgOffset), bg, "Line " + line + " BG");
         }
     }
 
@@ -208,3 +202,6 @@ public class ParallaxMczTest {
         }
     }
 }
+
+
+

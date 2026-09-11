@@ -1,10 +1,10 @@
 package com.openggf.tests;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import com.openggf.level.Block;
 import com.openggf.level.LevelConstants;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class TestBlock {
     @Test
@@ -23,9 +23,11 @@ public class TestBlock {
         }
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void testInvalidCoords() {
         Block block = new Block();
-        block.getChunkDesc(8, 0);
+        assertThrows(IllegalArgumentException.class, () -> block.getChunkDesc(8, 0));
     }
 }
+
+

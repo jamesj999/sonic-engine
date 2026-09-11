@@ -1,6 +1,7 @@
 package com.openggf.game.sonic1.objects;
 
 import com.openggf.debug.DebugRenderContext;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
@@ -36,7 +37,7 @@ import java.util.List;
  * <p>
  * Reference: docs/s1disasm/_incObj/12 Light.asm
  */
-public class Sonic1SpinningLightObjectInstance extends AbstractObjectInstance {
+public class Sonic1SpinningLightObjectInstance extends AbstractObjectInstance implements SpawnRewindRecreatable {
 
     // From disassembly: move.b #6,obPriority(a0)
     private static final int PRIORITY = 6;
@@ -61,7 +62,7 @@ public class Sonic1SpinningLightObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // Light_Animate: subq.b #1,obTimeFrame(a0) / bpl.s .chkdel
         frameTimer--;

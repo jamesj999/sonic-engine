@@ -83,3 +83,5 @@ class TestS3kSlotMachineRenderer {
         assertEquals(0.0f, S3kSlotMachineRenderer.paletteLineForTest());
     }
 }
+
+

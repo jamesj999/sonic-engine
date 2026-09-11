@@ -2,15 +2,14 @@ package com.openggf.sprites;
 
 import org.apache.commons.lang3.StringUtils;
 import com.openggf.configuration.SonicConfigurationService;
+import com.openggf.game.session.EngineServices;
 import com.openggf.graphics.GraphicsManager;
 import com.openggf.physics.Direction;
 import com.openggf.physics.Sensor;
 
 public abstract class AbstractSprite implements Sprite {
-	protected final SonicConfigurationService configService = SonicConfigurationService
-			.getInstance();
-	protected final GraphicsManager graphicsManager = GraphicsManager
-			.getInstance();
+	protected final SonicConfigurationService configService = EngineServices.current().configuration();
+	protected final GraphicsManager graphicsManager = EngineServices.current().graphics();
 
 	protected String code;
 
@@ -73,6 +72,24 @@ public abstract class AbstractSprite implements Sprite {
 	public void setCentreY(short y) {
 		this.yPixel = (short) (y - (height / 2));
 		this.ySubpixel = (short) 0;
+	}
+
+	/**
+	 * Sets the ROM centre X while preserving the current subpixel fraction.
+	 * Mirrors a 68000 {@code move.w} to {@code x_pos}, which does not touch
+	 * the low 16-bit subpixel field.
+	 */
+	public void setCentreXPreserveSubpixel(short x) {
+		this.xPixel = (short) (x - (width / 2));
+	}
+
+	/**
+	 * Sets the ROM centre Y while preserving the current subpixel fraction.
+	 * Mirrors a 68000 {@code move.w} to {@code y_pos}, which does not touch
+	 * the low 16-bit subpixel field.
+	 */
+	public void setCentreYPreserveSubpixel(short y) {
+		this.yPixel = (short) (y - (height / 2));
 	}
 
 	public final short getX() {
@@ -212,6 +229,15 @@ public abstract class AbstractSprite implements Sprite {
 	/** Returns the full 16-bit subpixel value (for diagnostic comparison). */
 	public int getYSubpixelRaw() {
 		return ySubpixel & 0xFFFF;
+	}
+
+	/**
+	 * Restores the full 16-bit subpixel fraction directly.
+	 * Used by trace/bootstrap code that needs ROM-accurate sprite state hydration.
+	 */
+	public void setSubpixelRaw(int xSubpixel, int ySubpixel) {
+		this.xSubpixel = (short) xSubpixel;
+		this.ySubpixel = (short) ySubpixel;
 	}
 
 	public Sensor[] getPushSensors() {

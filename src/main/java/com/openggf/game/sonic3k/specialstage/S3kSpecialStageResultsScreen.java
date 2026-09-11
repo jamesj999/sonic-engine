@@ -1,15 +1,17 @@
 package com.openggf.game.sonic3k.specialstage;
 
+import com.openggf.audio.GameMusic;
 import com.openggf.data.RomByteReader;
+import com.openggf.data.PaletteLoader;
 import com.openggf.game.GameServices;
 import com.openggf.game.PlayerCharacter;
 import com.openggf.game.ResultsScreen;
 import com.openggf.game.sonic3k.Sonic3kObjectArt;
-import com.openggf.game.sonic3k.audio.Sonic3kMusic;
 import com.openggf.game.sonic3k.audio.Sonic3kSfx;
 import com.openggf.game.sonic3k.constants.Sonic3kConstants;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.GraphicsManager;
+import com.openggf.graphics.PatternAtlasRange;
 import com.openggf.level.Palette;
 import com.openggf.level.Pattern;
 import com.openggf.level.objects.ObjectSpriteSheet;
@@ -19,6 +21,7 @@ import com.openggf.level.render.SpriteMappingFrame;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
@@ -70,7 +73,7 @@ public class S3kSpecialStageResultsScreen implements ResultsScreen {
     private static final int VDP_OFFSET = 128;
 
     // ---- Pattern caching ----
-    private static final int PATTERN_BASE = 0x70000;  // High ID to avoid conflicts with level results
+    private static final int PATTERN_BASE = PatternAtlasRange.SPECIAL_STAGE_RESULTS.base();
 
     // ---- Digit rendering (shared with LevResults_DisplayScore) ----
     private static final int[] DIVISORS = {1000000, 100000, 10000, 1000, 100, 10, 1};
@@ -114,6 +117,7 @@ public class S3kSpecialStageResultsScreen implements ResultsScreen {
     private final List<ResultsElement> phase1Elements = new ArrayList<>();
     private final List<ResultsElement> phase2Elements = new ArrayList<>();
     private final List<CleanupSlider> cleanupSliders = new ArrayList<>();
+    private final com.openggf.level.PatternDesc reusablePatternDesc = new com.openggf.level.PatternDesc();
 
     // ---- Continue icon ----
     private boolean showContinueIcon;
@@ -211,7 +215,7 @@ public class S3kSpecialStageResultsScreen implements ResultsScreen {
             // Still in pre-tally wait
             if (!musicPlayed && countdown == MUSIC_TRIGGER_COUNTER) {
                 musicPlayed = true;
-                playMusic(Sonic3kMusic.ACT_CLEAR.id);
+                playMusic(GameMusic.ACT_CLEAR);
             }
             return;
         }
@@ -338,6 +342,55 @@ public class S3kSpecialStageResultsScreen implements ResultsScreen {
     @Override
     public boolean isComplete() {
         return complete;
+    }
+
+    // ================================================================
+    // Test accessors (package-private) — expose tally/visibility outputs
+    // computed by the constructor and update() state machine so unit tests
+    // can validate them without rendering or reflection.
+    // ================================================================
+
+    /** Current ring-bonus countdown value (rings x 10 at construction). */
+    int ringBonusForTest() {
+        return ringBonus;
+    }
+
+    /** Current time-bonus countdown value (5000 if perfect at construction, else 0). */
+    int timeBonusForTest() {
+        return timeBonus;
+    }
+
+    /** Phase-1 element index of the continue-prompt label (loc_2EBxx element 5). */
+    private static final int CONTINUE_LABEL_INDEX = 5;
+    /** Phase-1 element index of the failure message (loc_2EAC8 element 13). */
+    private static final int FAIL_MESSAGE_INDEX = 13;
+    /** Phase-1 element index of the character name (loc_2EAD8 element 14). */
+    private static final int CHAR_NAME_INDEX = 14;
+    /** Phase-1 element index of the "SUPER SONIC" label (loc_2EBCC element 18). */
+    private static final int SUPER_TEXT_INDEX = 18;
+
+    /** Whether the continue-prompt label is visible (rings &gt;= continue threshold). */
+    boolean continueLabelVisibleForTest() {
+        return phase1ElementVisible(CONTINUE_LABEL_INDEX);
+    }
+
+    /** Whether the failure message is visible (no emerald earned). */
+    boolean failMessageVisibleForTest() {
+        return phase1ElementVisible(FAIL_MESSAGE_INDEX);
+    }
+
+    /** Whether the character-name label is visible (emerald earned). */
+    boolean charNameVisibleForTest() {
+        return phase1ElementVisible(CHAR_NAME_INDEX);
+    }
+
+    /** Whether the "SUPER SONIC" label is visible (emerald earned + all 7). */
+    boolean superTextVisibleForTest() {
+        return phase1ElementVisible(SUPER_TEXT_INDEX);
+    }
+
+    private boolean phase1ElementVisible(int index) {
+        return index >= 0 && index < phase1Elements.size() && phase1Elements.get(index).visible;
     }
 
     // ================================================================
@@ -675,7 +728,7 @@ public class S3kSpecialStageResultsScreen implements ResultsScreen {
         writeScoreValue(combinedPatterns, scoreDigitStart, score, sourceDigitPatterns);
 
         if (artCached && renderer != null) {
-            GraphicsManager graphicsManager = GraphicsManager.getInstance();
+            GraphicsManager graphicsManager = GameServices.graphics();
             if (graphicsManager != null) {
                 renderer.updatePatternRange(graphicsManager, scoreDigitStart, SCORE_DIGIT_TILE_COUNT);
             }
@@ -708,7 +761,7 @@ public class S3kSpecialStageResultsScreen implements ResultsScreen {
         if (frameIndex < 0 || frameIndex >= spriteSheet.getFrameCount()) return;
         var frame = spriteSheet.getFrame(frameIndex);
         if (frame == null) return;
-        var gm = GraphicsManager.getInstance();
+        var gm = GameServices.graphics();
         if (gm == null) return;
 
         for (var piece : frame.pieces()) {
@@ -733,7 +786,7 @@ public class S3kSpecialStageResultsScreen implements ResultsScreen {
                     if (pieceVFlip) descIndex |= 0x1000;
                     descIndex |= (palIdx & 0x3) << 13;
 
-                    com.openggf.level.PatternDesc desc = new com.openggf.level.PatternDesc(descIndex);
+                    com.openggf.level.PatternDesc desc = configureReusablePatternDesc(descIndex);
                     gm.renderPatternWithId(patternId, desc, drawX, drawY);
                 }
             }
@@ -745,7 +798,7 @@ public class S3kSpecialStageResultsScreen implements ResultsScreen {
         if (frameIndex < 0 || frameIndex >= spriteSheet.getFrameCount()) return;
         var frame = spriteSheet.getFrame(frameIndex);
         if (frame == null) return;
-        var gm = GraphicsManager.getInstance();
+        var gm = GameServices.graphics();
         if (gm == null) return;
 
         for (var piece : frame.pieces()) {
@@ -770,7 +823,7 @@ public class S3kSpecialStageResultsScreen implements ResultsScreen {
                     if (pieceVFlip) descIndex |= 0x1000;
                     descIndex |= (palIdx & 0x3) << 13;
 
-                    com.openggf.level.PatternDesc desc = new com.openggf.level.PatternDesc(descIndex);
+                    com.openggf.level.PatternDesc desc = configureReusablePatternDesc(descIndex);
                     gm.renderPatternWithId(patternId, desc, drawX, drawY);
                 }
             }
@@ -779,7 +832,7 @@ public class S3kSpecialStageResultsScreen implements ResultsScreen {
 
     private void renderMappingPiece(com.openggf.level.render.SpriteMappingPiece piece,
                                     int worldX, int worldY, int tileOffset, int paletteOverride) {
-        var gm = GraphicsManager.getInstance();
+        var gm = GameServices.graphics();
         if (gm == null) return;
 
         int widthTiles = piece.widthTiles();
@@ -803,10 +856,15 @@ public class S3kSpecialStageResultsScreen implements ResultsScreen {
                 if (pieceVFlip) descIndex |= 0x1000;
                 descIndex |= (palIdx & 0x3) << 13;
 
-                com.openggf.level.PatternDesc desc = new com.openggf.level.PatternDesc(descIndex);
+                com.openggf.level.PatternDesc desc = configureReusablePatternDesc(descIndex);
                 gm.renderPatternWithId(patternId, desc, drawX, drawY);
             }
         }
+    }
+
+    com.openggf.level.PatternDesc configureReusablePatternDesc(int descIndex) {
+        reusablePatternDesc.set(descIndex);
+        return reusablePatternDesc;
     }
 
     private void ensurePatternSlots(Pattern[] patterns, int startIndex, int count) {
@@ -901,25 +959,7 @@ public class S3kSpecialStageResultsScreen implements ResultsScreen {
     private void loadPalette(com.openggf.data.Rom rom) {
         try {
             byte[] paletteData = rom.readBytes(Sonic3kConstants.PAL_RESULTS_ADDR, 128);
-
-            resultsPalettes = new Palette[4];
-            for (int line = 0; line < 4; line++) {
-                resultsPalettes[line] = new Palette();
-                int offset = line * 32; // 32 bytes per line (16 colors x 2 bytes)
-                for (int c = 0; c < 16; c++) {
-                    int byteOffset = offset + (c * 2);
-                    if (byteOffset + 1 < paletteData.length) {
-                        // Big-endian Genesis color: ----BBB0GGG0RRR0
-                        int genesisColor = ((paletteData[byteOffset] & 0xFF) << 8) |
-                                (paletteData[byteOffset + 1] & 0xFF);
-                        int r = ((genesisColor >> 1) & 0x7) * 36;
-                        int g = ((genesisColor >> 5) & 0x7) * 36;
-                        int b = ((genesisColor >> 9) & 0x7) * 36;
-                        resultsPalettes[line].setColor(c,
-                                new Palette.Color((byte) r, (byte) g, (byte) b));
-                    }
-                }
-            }
+            resultsPalettes = PaletteLoader.fromBytes(paletteData);
             paletteLoaded = true;
         } catch (Exception e) {
             LOG.warning("Failed to load SS results palette: " + e.getMessage());
@@ -933,7 +973,7 @@ public class S3kSpecialStageResultsScreen implements ResultsScreen {
      */
     private void ensureArtCached() {
         if (artCached) return;
-        GraphicsManager gm = GraphicsManager.getInstance();
+        GraphicsManager gm = GameServices.graphics();
         if (gm == null) return;
 
         // Cache patterns
@@ -943,11 +983,7 @@ public class S3kSpecialStageResultsScreen implements ResultsScreen {
 
         // Cache palettes (ROM line 63110: Pal_Results → all 4 palette lines)
         if (paletteLoaded && resultsPalettes != null) {
-            for (int i = 0; i < resultsPalettes.length; i++) {
-                if (resultsPalettes[i] != null) {
-                    gm.cachePaletteTexture(resultsPalettes[i], i);
-                }
-            }
+            Sonic3kSpecialStagePaletteUploader.cacheAll(gm, resultsPalettes);
         }
 
         artCached = true;
@@ -958,15 +994,27 @@ public class S3kSpecialStageResultsScreen implements ResultsScreen {
     // ================================================================
 
     private void fadeOutMusic() {
-        try { GameServices.audio().fadeOutMusic(); } catch (Exception e) { /* ignore */ }
+        try {
+            GameServices.audio().fadeOutMusic();
+        } catch (Exception e) {
+            LOG.log(Level.WARNING, "Failed to fade out music for S3K special-stage results", e);
+        }
     }
 
-    private void playMusic(int id) {
-        try { GameServices.audio().playMusic(id); } catch (Exception e) { /* ignore */ }
+    private void playMusic(GameMusic music) {
+        try {
+            GameServices.audio().playMusic(music);
+        } catch (Exception e) {
+            LOG.log(Level.WARNING, "Failed to play S3K special-stage results music " + music, e);
+        }
     }
 
     private void playSfx(int id) {
-        try { GameServices.audio().playSfx(id); } catch (Exception e) { /* ignore */ }
+        try {
+            GameServices.audio().playSfx(id);
+        } catch (Exception e) {
+            LOG.log(Level.WARNING, "Failed to play S3K special-stage results SFX " + id, e);
+        }
     }
 
     // ================================================================

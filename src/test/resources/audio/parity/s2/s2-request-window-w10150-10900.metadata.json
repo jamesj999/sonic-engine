@@ -1,0 +1,83 @@
+{
+  "schema": "openggf.s2-request-oracle-audio-raw-fixture.v1",
+  "payload": "s2-request-window-w10150-10900.raw-v2.jsonl.gz",
+  "payload_schema": "openggf.s2-oracle-audio-raw.v2",
+  "source_schema": "openggf.s2-complete-run-audio-raw.v4",
+  "request_transfer_schema": "openggf.s2-preconsumption-request-transfer.v2",
+  "game": "s2",
+  "rom": {
+    "name": "Sonic 2 World REV01",
+    "sha1": "8bca5dcef1af3e00098666fd892dc1c2a76333f9",
+    "crc32": "7b905383"
+  },
+  "movie": {
+    "name": "sonic-2-sonic-tails-complete-emeralds.bk2",
+    "path": "src/test/resources/traces/s2/runs/s2-sonic-tails-complete-emeralds/sonic-2-sonic-tails-complete-emeralds.bk2",
+    "sha256": "e850798f882b8c580aad148bc97cb50f260cae1d336dd649fe2f4dfae6796aa5",
+    "rows": 259590
+  },
+  "window": {
+    "first_row": 10150,
+    "exclusive_end": 10900,
+    "rows": 750,
+    "source_first_row": 10150,
+    "source_exclusive_end": 10900,
+    "request_transfers": 27,
+    "request_pc": {
+      "sfx": "0x10d6",
+      "music": "0x10c0"
+    },
+    "request_opcode": {
+      "sfx": "13801009",
+      "music": "13400008"
+    },
+    "notes": "The same EHZ-reload window as the raw-v1 driver-oracle fixture, carrying in addition the ordered pre-consumption request_transfers inventory observed before ROM PC 0x10D6 executes move.b D0,$09(A1,D1.w). Recaptured for the two-site observer: every transfer now carries an explicit site, and the music site observes the store at loc_10C0 (docs/s2disasm/s2.asm:1302-1304), which move.b D0,$09(A1,D1.w) at 0x10D6 never reaches. The capture is bounded to this window, so source_first_row and source_exclusive_end are the window's own bounds.",
+    "request_transfers_by_site": {
+      "sfx": 25,
+      "music": 2
+    }
+  },
+  "digests": {
+    "payload_gz_sha256": "1d675c69d46f955eb0b69558b8b24efa3e323ffb278c10b6d936e8a1642f515f",
+    "payload_raw_sha256": "aba57c7e3de464c26c0a9caa2bc0327638c6db58e6967bb39c91982795d1773e",
+    "payload_raw_bytes": 87062562,
+    "payload_raw_lines": 753
+  },
+  "capture": {
+    "tracechaser_commit": "4fb6d0802cc6ad27f07dd845a1b98ea84d2c7b0e",
+    "duplicate_capture_gate": "not applicable to this recapture: the payload is comparison-only reference data, republished from a single deterministic bounded capture whose attestation and capability digests are pinned here and in S2PublishedRequestWindows.",
+    "capture_paths": [
+      "<agent-scratch>/regen-w1/s2-request-window.oracle-raw-v2.jsonl"
+    ],
+    "capture_paths_note": "Two distinct absent external paths under a session scratch root, outside the repository; recorded for provenance, not as a re-runnable location.",
+    "observer_identity_sha256": "95188e3c2cbb433188bce06e995d497afd290246ee6123da6f0060a5463893e7",
+    "service_manifest_sha256": "ef8f8103c38d70e41cb09cb29751f56815a0401709dc509071aa514d614813a0",
+    "extractor_capability_sha256": "6b1e255f0da5f97613ba4e324c864bda0f42a60b48f515b94babc0e4758ebea3",
+    "extractor_capability": {
+      "schema": "openggf.s2-request-aware-raw-v3-capability.v1",
+      "producer": "s2-complete-audio-request-candidate",
+      "harness_executable_sha256": "ff32ccd094c9b848da3c0b8ad7ff2ac1c451154be2b6fbceae3200b4fcb7f00e",
+      "candidate_manifest_sha256": "858ee7905edd1d31ebf0aa0a71213382354ec735267dad556831ac5dac0b5e52",
+      "candidate_patch_sha256": "2e1d1e59175f7e544558088bae48c4f45ee78401dbf808a494182c2575767a0b",
+      "candidate_recipe_sha256": "50efba4fdcf4d3787ceb42192e15b16e614823b117feeb8c30590f1db0c855a6",
+      "candidate_profile_sha256": "2589688946774b5a8977d16b969ec72e510eca4069bf3e8a61c3fde66d2a0212",
+      "request_count": 27,
+      "request_sha256": "24b84f8e62627d9051bb942775440110574c1b88801331de3ee82354fd30cd92",
+      "terminal_state_sha256": "5927aa9054613b1500bda7d395439c971d8b72270c218854991de2caf8d71ff3",
+      "cutoff_frontier_sha256": "dc613dfdc403132d1dd100ccfa1d7f6d22bddc439a17e1afa93e92714be49453",
+      "marker_event_count": 25
+    },
+    "source_attestation": {
+      "schema": "openggf.s2-request-aware-raw-v3-attestation.v1",
+      "raw_sha256": "f96bd91037e7527a2829eb3801caf9bdb29323367f34e227e0c674b2653f7768",
+      "raw_byte_count": 87077833,
+      "status_count": 1,
+      "fault_count": 0,
+      "overflow_count": 0,
+      "authority_id": "s2-request-candidate-unbound"
+    }
+  },
+  "production_bound": false,
+  "production_bound_meaning": "The payload's own metadata line carries production_bound:false and that value is preserved verbatim. Publication under Task 8A's final bullet installs the reviewed capture as a committed comparison reference; it does not bind it to a production producer. The candidate reader stays package-private and CLI-unreachable, S2RequestAwareCandidateComparator remains a disposable test-only comparator, and request equality stays REFERENCE_LIMITATION until an independent authenticated OpenGGF producer observes equivalent source-owned evidence. Nothing here hydrates engine state: this fixture is comparison-only, MEASUREMENT_ONLY at the gate.",
+  "notes": "Human approval for publication was granted on 2026-09-03 after the duplicate-capture gate was met (two independent captures, identical SHA-256). Gate: TestS2RequestAwareOracleRawStream#realCandidateAndBk2DrivenDriverStateCompare, which defaults to this payload and still honours -Ds2.request.candidate.path as an override."
+}

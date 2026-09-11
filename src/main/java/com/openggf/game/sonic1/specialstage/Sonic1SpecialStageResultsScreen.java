@@ -2,23 +2,26 @@ package com.openggf.game.sonic1.specialstage;
 
 import com.openggf.camera.Camera;
 import com.openggf.data.Rom;
+import com.openggf.data.RomByteReader;
 import com.openggf.data.RomManager;
 import com.openggf.game.GameServices;
 import com.openggf.game.ResultsScreen;
+import com.openggf.game.sonic1.S1SpriteDataLoader;
+import com.openggf.game.sonic1.Sonic1ResultsMappingLoader;
 import com.openggf.game.sonic1.audio.Sonic1Sfx;
 import com.openggf.game.sonic1.constants.Sonic1Constants;
+import com.openggf.game.sonic1.resources.Sonic1PlcService;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.GraphicsManager;
+import com.openggf.graphics.PatternAtlasRange;
 import com.openggf.level.Palette;
 import com.openggf.level.Pattern;
 import com.openggf.level.objects.ObjectSpriteSheet;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.level.render.SpriteMappingFrame;
-import com.openggf.level.render.SpriteMappingPiece;
 import com.openggf.util.PatternDecompressor;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.logging.Logger;
@@ -52,13 +55,45 @@ public final class Sonic1SpecialStageResultsScreen implements ResultsScreen {
     private static final int STATE_PRE_TALLY_DELAY = 1;
     private static final int STATE_RING_TALLY = 2;
     private static final int STATE_POST_TALLY_DELAY = 3;
+    private static final int STATE_CONTINUE_JINGLE = 4;
+    private static final int STATE_CONTINUE_DELAY = 5;
+    /**
+     * {@code SSR_Exit} (routine $A on the plain path, $12 after a continue --
+     * "_incObj/7E, 7F Special Stage Results and Chaos Emeralds.asm":156-158).
+     * The wait that precedes it only advances {@code obRoutine}; the exit body
+     * is a routine of its own, so the card runs one more whole
+     * {@code SS_NormalExit} iteration -- {@code ExecuteObjects} reaching
+     * {@code SSR_Exit}, which sets {@code f_restart} -- before that loop's
+     * {@code tst.w (f_restart).w} can see it (sonic.asm:3401-3412).
+     */
+    private static final int STATE_EXIT = 6;
     private static final int SLIDE_SPEED_PIXELS_PER_FRAME = 16;
     private static final int PRE_TALLY_DELAY_FRAMES = 180;
     private static final int POST_TALLY_DELAY_FRAMES = 180;
+    /**
+     * ROM {@code SSR_RingBonus.finished}
+     * ("_incObj/7E, 7F Special Stage Results and Chaos Emeralds.asm":143-151):
+     * with {@code ss_continue_rings} or more rings the card does NOT take the
+     * plain three-second exit wait. {@code SSR_Wait} counts one second,
+     * {@code SSR_Continue} spends a frame of its own on the jingle and the
+     * mini-Sonic element, and {@code SSR_Wait} then counts six more seconds --
+     * 421 frames where the ordinary path spends 180.
+     * <p>
+     * The recorded bridge confirms each boundary. Its aux stream shows the
+     * card's root object appearing on frame 67, the remaining FIVE elements
+     * (four plus the continue tally, {@code SSR_Loop}'s {@code addq.w #1,d1})
+     * on frame 85, and the emerald object that {@code SSR_Move.reachedXTarget}
+     * spawns on frame 121: an 18-frame {@code SSR_ChkPLC} and a 36-frame
+     * slide, which with these waits accounts for all 800 rows.
+     */
+    private static final int CONTINUE_RINGS = 50;
+    private static final int PRE_CONTINUE_DELAY_FRAMES = 60;
+    private static final int CONTINUE_JINGLE_FRAMES = 1;
+    private static final int POST_CONTINUE_DELAY_FRAMES = 360;
     private static final int TALLY_DECREMENT = 10;
     private static final int TALLY_TICK_INTERVAL = 4;
 
-    // Map_SSR frame indices (matching createResultsScreenMappings() below).
+    // Composite results-frame indices from Sonic1ResultsMappingLoader.
     private static final int FRAME_SCORE = 2;
     private static final int FRAME_RING_BONUS = 4;
     private static final int FRAME_OVAL = 5;
@@ -102,8 +137,8 @@ public final class Sonic1SpecialStageResultsScreen implements ResultsScreen {
             (Sonic1Constants.VRAM_RESULTS_HUD_TEXT + 0x1A) - Sonic1Constants.VRAM_RESULTS_BASE;
 
     // GPU cache base IDs (avoids collision with level 0x20000, SS 0x10000, HUD 0x28000).
-    private static final int PATTERN_BASE = 0x40000;
-    private static final int EMERALD_PATTERN_BASE = 0x41000;
+    private static final int PATTERN_BASE = PatternAtlasRange.TITLE_CARDS.base();
+    private static final int EMERALD_PATTERN_BASE = PatternAtlasRange.TITLE_CARDS.base() + 0x1000;
 
     // Score digit copy constants (matching Sonic1ObjectArtProvider).
     private static final int RESULTS_SCORE_DIGIT_PAIR_COUNT = 8;
@@ -120,10 +155,14 @@ public final class Sonic1SpecialStageResultsScreen implements ResultsScreen {
     private final Scenario scenario;
     private final int stageIndex;
 
+    private final int ringsCollected;
     private int state = STATE_SLIDE_IN;
+    private boolean continueAwarded;
     private int stateTimer;
     private int totalFrames;
     private boolean complete;
+    /** True once SSR_ChkPLC has completed its routine-0 readiness poll. */
+    private boolean plcReadinessPassed;
     private int frameCounter;
 
     private int textX;
@@ -149,7 +188,8 @@ public final class Sonic1SpecialStageResultsScreen implements ResultsScreen {
     public Sonic1SpecialStageResultsScreen(int ringsCollected, boolean gotEmerald,
             int stageIndex, int totalEmeraldCount) {
         this.stageIndex = stageIndex;
-        this.ringBonus = Math.max(0, ringsCollected) * 10;
+        this.ringsCollected = Math.max(0, ringsCollected);
+        this.ringBonus = this.ringsCollected * 10;
         if (!gotEmerald) {
             this.scenario = Scenario.FAILED_TO_GET_EMERALD;
             this.textX = TEXT_START_X;
@@ -172,6 +212,14 @@ public final class Sonic1SpecialStageResultsScreen implements ResultsScreen {
             return;
         }
 
+        if (!plcReadinessPassed) {
+            Sonic1PlcService plcService = GameServices.module().getGameService(Sonic1PlcService.class);
+            if (plcService != null && plcService.isBusy()) {
+                return;
+            }
+            plcReadinessPassed = true;
+        }
+
         totalFrames++;
         stateTimer++;
 
@@ -180,6 +228,9 @@ public final class Sonic1SpecialStageResultsScreen implements ResultsScreen {
             case STATE_PRE_TALLY_DELAY -> updatePreTallyDelay();
             case STATE_RING_TALLY -> updateRingTally();
             case STATE_POST_TALLY_DELAY -> updatePostTallyDelay();
+            case STATE_CONTINUE_JINGLE -> updateContinueJingle();
+            case STATE_CONTINUE_DELAY -> updateContinueDelay();
+            case STATE_EXIT -> complete = true;
             default -> complete = true;
         }
     }
@@ -222,14 +273,69 @@ public final class Sonic1SpecialStageResultsScreen implements ResultsScreen {
     }
 
     private void updatePostTallyDelay() {
-        if (stateTimer >= POST_TALLY_DELAY_FRAMES) {
-            complete = true;
+        if (stateTimer < postTallyDelayFrames()) {
+            return;
+        }
+        if (ringsCollected < CONTINUE_RINGS) {
+            // SSR_Wait routine 8 advances to routine $A, SSR_Exit.
+            state = STATE_EXIT;
+            stateTimer = 0;
+            return;
+        }
+        state = STATE_CONTINUE_JINGLE;
+        stateTimer = 0;
+    }
+
+    /** One second before the continue jingle, three seconds without one. */
+    private int postTallyDelayFrames() {
+        return ringsCollected >= CONTINUE_RINGS
+                ? PRE_CONTINUE_DELAY_FRAMES : POST_TALLY_DELAY_FRAMES;
+    }
+
+    /**
+     * {@code SSR_Continue}, which owns a frame of its own before the six-second
+     * wait it arms. The continue itself was already awarded inside the stage
+     * ("_incObj/09 Sonic in Special Stage.asm":638), so this owns only the
+     * jingle, the mini-Sonic element, and that frame.
+     */
+    private void updateContinueJingle() {
+        if (stateTimer < CONTINUE_JINGLE_FRAMES) {
+            return;
+        }
+        continueAwarded = true;
+        playContinueSound();
+        state = STATE_CONTINUE_DELAY;
+        stateTimer = 0;
+    }
+
+    private void updateContinueDelay() {
+        if (stateTimer >= POST_CONTINUE_DELAY_FRAMES) {
+            // SSR_Wait routine $10 advances to routine $12, SSR_Exit.
+            state = STATE_EXIT;
+            stateTimer = 0;
+        }
+    }
+
+    /** True once the continue jingle has played, for the mini-Sonic element. */
+    public boolean isContinueAwarded() {
+        return continueAwarded;
+    }
+
+    private void playContinueSound() {
+        try {
+            GameServices.audio().playSfx(Sonic1Sfx.GOT_CONTINUE.id);
+        } catch (RuntimeException e) {
+            // Audio failure must not stall the card's timing.
         }
     }
 
     @Override
     public boolean isComplete() {
-        return complete;
+        // The special-stage mode loop exits only once Obj7E has completed and
+        // the final PLC poll sees an empty FIFO. This is deliberately separate
+        // from SSR_ChkPLC: later work must not freeze the running card.
+        Sonic1PlcService plcService = GameServices.module().getGameService(Sonic1PlcService.class);
+        return complete && (plcService == null || !plcService.isBusy());
     }
 
     @Override
@@ -263,7 +369,7 @@ public final class Sonic1SpecialStageResultsScreen implements ResultsScreen {
 
         appendEmeraldIndicators(commands, camera);
 
-        GraphicsManager graphicsManager = GraphicsManager.getInstance();
+        GraphicsManager graphicsManager = GameServices.graphics();
         if (graphicsManager != null) {
             graphicsManager.flushPatternBatch();
         }
@@ -340,7 +446,7 @@ public final class Sonic1SpecialStageResultsScreen implements ResultsScreen {
             }
 
             // Create results sprite sheet and renderer
-            List<SpriteMappingFrame> mappings = createResultsScreenMappings();
+            List<SpriteMappingFrame> mappings = Sonic1ResultsMappingLoader.load(RomByteReader.fromRom(rom));
             ObjectSpriteSheet sheet = new ObjectSpriteSheet(combinedPatterns, mappings, 0, 1);
             resultsRenderer = new PatternSpriteRenderer(sheet);
 
@@ -365,21 +471,14 @@ public final class Sonic1SpecialStageResultsScreen implements ResultsScreen {
             return;
         }
 
-        // Map_SSRC: each frame is a single 2x2 spritePiece(-8, -8, 2, 2, tile, pal)
-        List<SpriteMappingFrame> frames = new ArrayList<>();
-        frames.add(new SpriteMappingFrame(List.of(
-                new SpriteMappingPiece(-8, -8, 2, 2, 4, false, false, 1))));  // 0: Blue
-        frames.add(new SpriteMappingFrame(List.of(
-                new SpriteMappingPiece(-8, -8, 2, 2, 0, false, false, 0))));  // 1: Yellow
-        frames.add(new SpriteMappingFrame(List.of(
-                new SpriteMappingPiece(-8, -8, 2, 2, 4, false, false, 2))));  // 2: Pink
-        frames.add(new SpriteMappingFrame(List.of(
-                new SpriteMappingPiece(-8, -8, 2, 2, 4, false, false, 3))));  // 3: Green
-        frames.add(new SpriteMappingFrame(List.of(
-                new SpriteMappingPiece(-8, -8, 2, 2, 8, false, false, 1))));  // 4: Orange
-        frames.add(new SpriteMappingFrame(List.of(
-                new SpriteMappingPiece(-8, -8, 2, 2, 12, false, false, 1)))); // 5: Purple
-        frames.add(new SpriteMappingFrame(List.of()));                         // 6: Blank (flash)
+        List<SpriteMappingFrame> frames;
+        try {
+            frames = S1SpriteDataLoader.loadMappingFrames(
+                    RomByteReader.fromRom(rom), Sonic1Constants.MAP_SS_RESULT_EMERALDS_ADDR);
+        } catch (IOException e) {
+            LOGGER.warning("Failed to load SS results emerald mappings: " + e.getMessage());
+            return;
+        }
 
         ObjectSpriteSheet sheet = new ObjectSpriteSheet(emeraldPatterns, frames, 0, 1);
         emeraldRenderer = new PatternSpriteRenderer(sheet);
@@ -403,7 +502,7 @@ public final class Sonic1SpecialStageResultsScreen implements ResultsScreen {
             return;
         }
 
-        GraphicsManager graphicsManager = GraphicsManager.getInstance();
+        GraphicsManager graphicsManager = GameServices.graphics();
         if (graphicsManager == null) {
             return;
         }
@@ -514,7 +613,7 @@ public final class Sonic1SpecialStageResultsScreen implements ResultsScreen {
             writeScoreValue(combinedPatterns, score, sourceDigitPatterns);
         }
 
-        GraphicsManager graphicsManager = GraphicsManager.getInstance();
+        GraphicsManager graphicsManager = GameServices.graphics();
         if (graphicsManager != null) {
             resultsRenderer.updatePatternRange(graphicsManager, ringDigitStart,
                     Sonic1Constants.S1_RESULTS_BONUS_DIGIT_GROUP_TILES);
@@ -692,165 +791,6 @@ public final class Sonic1SpecialStageResultsScreen implements ResultsScreen {
             LOGGER.warning("Failed to load " + name + " patterns: " + e.getMessage());
             return new Pattern[0];
         }
-    }
-
-    // ===== Mapping frames (duplicated from Sonic1ObjectArtProvider) =====
-
-    /**
-     * Creates sprite mappings for the results screen from Map_Got in the disassembly.
-     * All tile IDs from the disassembly are relative to ArtTile_Title_Card ($580).
-     * We add RESULTS_TILE_ADJUST (0x10) to convert to composite array indices.
-     */
-    private static List<SpriteMappingFrame> createResultsScreenMappings() {
-        final int T = Sonic1Constants.RESULTS_TILE_ADJUST; // 0x10
-        List<SpriteMappingFrame> frames = new ArrayList<>();
-
-        // Frame 0: "SONIC HAS"
-        frames.add(new SpriteMappingFrame(List.of(
-                new SpriteMappingPiece(-0x48, -8, 2, 2, 0x3E + T, false, false, 0, false),
-                new SpriteMappingPiece(-0x38, -8, 2, 2, 0x32 + T, false, false, 0, false),
-                new SpriteMappingPiece(-0x28, -8, 2, 2, 0x2E + T, false, false, 0, false),
-                new SpriteMappingPiece(-0x18, -8, 1, 2, 0x20 + T, false, false, 0, false),
-                new SpriteMappingPiece(-0x10, -8, 2, 2, 0x08 + T, false, false, 0, false),
-                new SpriteMappingPiece( 0x10, -8, 2, 2, 0x1C + T, false, false, 0, false),
-                new SpriteMappingPiece( 0x20, -8, 2, 2, 0x00 + T, false, false, 0, false),
-                new SpriteMappingPiece( 0x30, -8, 2, 2, 0x3E + T, false, false, 0, false)
-        )));
-
-        // Frame 1: "PASSED"
-        frames.add(new SpriteMappingFrame(List.of(
-                new SpriteMappingPiece(-0x30, -8, 2, 2, 0x36 + T, false, false, 0, false),
-                new SpriteMappingPiece(-0x20, -8, 2, 2, 0x00 + T, false, false, 0, false),
-                new SpriteMappingPiece(-0x10, -8, 2, 2, 0x3E + T, false, false, 0, false),
-                new SpriteMappingPiece( 0x00, -8, 2, 2, 0x3E + T, false, false, 0, false),
-                new SpriteMappingPiece( 0x10, -8, 2, 2, 0x10 + T, false, false, 0, false),
-                new SpriteMappingPiece( 0x20, -8, 2, 2, 0x0C + T, false, false, 0, false)
-        )));
-
-        // Frame 2: "SCORE" text + score digits
-        frames.add(new SpriteMappingFrame(List.of(
-                new SpriteMappingPiece(-0x50, -8, 4, 2, 0x14A + T, false, false, 0, false),
-                new SpriteMappingPiece(-0x30, -8, 1, 2, 0x162 + T, false, false, 0, false),
-                new SpriteMappingPiece( 0x18, -8, 3, 2, 0x164 + T, false, false, 0, false),
-                new SpriteMappingPiece( 0x30, -8, 4, 2, 0x16A + T, false, false, 0, false)
-        )));
-
-        // Frame 3: "TIME BONUS" + digit area
-        frames.add(new SpriteMappingFrame(List.of(
-                new SpriteMappingPiece(-0x50, -8, 4, 2, 0x15A + T, false, false, 0, false),
-                new SpriteMappingPiece(-0x27, -8, 4, 2, 0x66 + T,  false, false, 0, false),
-                new SpriteMappingPiece(   -7, -8, 1, 2, 0x14A + T, false, false, 0, false),
-                new SpriteMappingPiece( -0xA, -9, 2, 1, 0x6E + T,  false, false, 0, false),
-                new SpriteMappingPiece( -0xA, -1, 2, 1, 0x6E + T,  true,  true,  0, false),
-                new SpriteMappingPiece( 0x28, -8, 4, 2, 0,         false, false, 0, false),
-                new SpriteMappingPiece( 0x48, -8, 1, 2, 0x170 + T, false, false, 0, false)
-        )));
-
-        // Frame 4: "RING BONUS" + digit area
-        frames.add(new SpriteMappingFrame(List.of(
-                new SpriteMappingPiece(-0x50, -8, 4, 2, 0x152 + T, false, false, 0, false),
-                new SpriteMappingPiece(-0x27, -8, 4, 2, 0x66 + T,  false, false, 0, false),
-                new SpriteMappingPiece(   -7, -8, 1, 2, 0x14A + T, false, false, 0, false),
-                new SpriteMappingPiece( -0xA, -9, 2, 1, 0x6E + T,  false, false, 0, false),
-                new SpriteMappingPiece( -0xA, -1, 2, 1, 0x6E + T,  true,  true,  0, false),
-                new SpriteMappingPiece( 0x28, -8, 4, 2, 8,         false, false, 0, false),
-                new SpriteMappingPiece( 0x48, -8, 1, 2, 0x170 + T, false, false, 0, false)
-        )));
-
-        // Frame 5: Oval decoration
-        frames.add(new SpriteMappingFrame(List.of(
-                new SpriteMappingPiece(-0x0C, -0x1C, 4, 1, 0x70 + T, false, false, 0, false),
-                new SpriteMappingPiece( 0x14, -0x1C, 1, 3, 0x74 + T, false, false, 0, false),
-                new SpriteMappingPiece(-0x14, -0x14, 2, 1, 0x77 + T, false, false, 0, false),
-                new SpriteMappingPiece(-0x1C, -0x0C, 2, 2, 0x79 + T, false, false, 0, false),
-                new SpriteMappingPiece(-0x14,  0x14, 4, 1, 0x70 + T, true,  true,  0, false),
-                new SpriteMappingPiece(-0x1C,  0x04, 1, 3, 0x74 + T, true,  true,  0, false),
-                new SpriteMappingPiece( 0x04,  0x0C, 2, 1, 0x77 + T, true,  true,  0, false),
-                new SpriteMappingPiece( 0x0C, -0x04, 2, 2, 0x79 + T, true,  true,  0, false),
-                new SpriteMappingPiece(-0x04, -0x14, 3, 1, 0x7D + T, false, false, 0, false),
-                new SpriteMappingPiece(-0x0C, -0x0C, 4, 1, 0x7C + T, false, false, 0, false),
-                new SpriteMappingPiece(-0x0C, -0x04, 3, 1, 0x7C + T, false, false, 0, false),
-                new SpriteMappingPiece(-0x14,  0x04, 4, 1, 0x7C + T, false, false, 0, false),
-                new SpriteMappingPiece(-0x14,  0x0C, 3, 1, 0x7C + T, false, false, 0, false)
-        )));
-
-        // Frame 6: "ACT 1"
-        frames.add(new SpriteMappingFrame(List.of(
-                new SpriteMappingPiece(-0x14, 0x04, 4, 1, 0x53 + T, false, false, 0, false),
-                new SpriteMappingPiece( 0x0C, -0x0C, 1, 3, 0x57 + T, false, false, 0, false)
-        )));
-
-        // Frame 7: "ACT 2"
-        frames.add(new SpriteMappingFrame(List.of(
-                new SpriteMappingPiece(-0x14, 0x04, 4, 1, 0x53 + T, false, false, 0, false),
-                new SpriteMappingPiece( 0x08, -0x0C, 2, 3, 0x5A + T, false, false, 0, false)
-        )));
-
-        // Frame 8: "ACT 3"
-        frames.add(new SpriteMappingFrame(List.of(
-                new SpriteMappingPiece(-0x14, 0x04, 4, 1, 0x53 + T, false, false, 0, false),
-                new SpriteMappingPiece( 0x08, -0x0C, 2, 3, 0x60 + T, false, false, 0, false)
-        )));
-
-        // Frame 9: SCORE separator dots
-        frames.add(new SpriteMappingFrame(List.of(
-                new SpriteMappingPiece(-0x33, -9, 2, 1, 0x6E + T, false, false, 0, false),
-                new SpriteMappingPiece(-0x33, -1, 2, 1, 0x6E + T, true,  true,  0, false)
-        )));
-
-        // Frame 10: "CHAOS EMERALDS" (Map_SSR frame 0)
-        frames.add(new SpriteMappingFrame(List.of(
-                new SpriteMappingPiece(-0x70, -8, 2, 2, 0x08 + T, false, false, 0, false),
-                new SpriteMappingPiece(-0x60, -8, 2, 2, 0x1C + T, false, false, 0, false),
-                new SpriteMappingPiece(-0x50, -8, 2, 2, 0x00 + T, false, false, 0, false),
-                new SpriteMappingPiece(-0x40, -8, 2, 2, 0x32 + T, false, false, 0, false),
-                new SpriteMappingPiece(-0x30, -8, 2, 2, 0x3E + T, false, false, 0, false),
-                new SpriteMappingPiece(-0x10, -8, 2, 2, 0x10 + T, false, false, 0, false),
-                new SpriteMappingPiece( 0x00, -8, 2, 2, 0x2A + T, false, false, 0, false),
-                new SpriteMappingPiece( 0x10, -8, 2, 2, 0x10 + T, false, false, 0, false),
-                new SpriteMappingPiece( 0x20, -8, 2, 2, 0x3A + T, false, false, 0, false),
-                new SpriteMappingPiece( 0x30, -8, 2, 2, 0x00 + T, false, false, 0, false),
-                new SpriteMappingPiece( 0x40, -8, 2, 2, 0x26 + T, false, false, 0, false),
-                new SpriteMappingPiece( 0x50, -8, 2, 2, 0x0C + T, false, false, 0, false),
-                new SpriteMappingPiece( 0x60, -8, 2, 2, 0x3E + T, false, false, 0, false)
-        )));
-
-        // Frame 11: "SPECIAL STAGE" (Map_SSR frame 7)
-        frames.add(new SpriteMappingFrame(List.of(
-                new SpriteMappingPiece(-0x64, -8, 2, 2, 0x3E + T, false, false, 0, false),
-                new SpriteMappingPiece(-0x54, -8, 2, 2, 0x36 + T, false, false, 0, false),
-                new SpriteMappingPiece(-0x44, -8, 2, 2, 0x10 + T, false, false, 0, false),
-                new SpriteMappingPiece(-0x34, -8, 2, 2, 0x08 + T, false, false, 0, false),
-                new SpriteMappingPiece(-0x24, -8, 1, 2, 0x20 + T, false, false, 0, false),
-                new SpriteMappingPiece(-0x1C, -8, 2, 2, 0x00 + T, false, false, 0, false),
-                new SpriteMappingPiece(-0x0C, -8, 2, 2, 0x26 + T, false, false, 0, false),
-                new SpriteMappingPiece( 0x14, -8, 2, 2, 0x3E + T, false, false, 0, false),
-                new SpriteMappingPiece( 0x24, -8, 2, 2, 0x42 + T, false, false, 0, false),
-                new SpriteMappingPiece( 0x34, -8, 2, 2, 0x00 + T, false, false, 0, false),
-                new SpriteMappingPiece( 0x44, -8, 2, 2, 0x18 + T, false, false, 0, false),
-                new SpriteMappingPiece( 0x54, -8, 2, 2, 0x10 + T, false, false, 0, false)
-        )));
-
-        // Frame 12: "SONIC GOT THEM ALL" (Map_SSR frame 8)
-        frames.add(new SpriteMappingFrame(List.of(
-                new SpriteMappingPiece(-0x78, -8, 2, 2, 0x3E + T, false, false, 0, false),
-                new SpriteMappingPiece(-0x68, -8, 2, 2, 0x32 + T, false, false, 0, false),
-                new SpriteMappingPiece(-0x58, -8, 2, 2, 0x2E + T, false, false, 0, false),
-                new SpriteMappingPiece(-0x48, -8, 1, 2, 0x20 + T, false, false, 0, false),
-                new SpriteMappingPiece(-0x40, -8, 2, 2, 0x08 + T, false, false, 0, false),
-                new SpriteMappingPiece(-0x28, -8, 2, 2, 0x18 + T, false, false, 0, false),
-                new SpriteMappingPiece(-0x18, -8, 2, 2, 0x32 + T, false, false, 0, false),
-                new SpriteMappingPiece(-0x08, -8, 2, 2, 0x42 + T, false, false, 0, false),
-                new SpriteMappingPiece( 0x10, -8, 2, 2, 0x42 + T, false, false, 0, false),
-                new SpriteMappingPiece( 0x20, -8, 2, 2, 0x1C + T, false, false, 0, false),
-                new SpriteMappingPiece( 0x30, -8, 2, 2, 0x10 + T, false, false, 0, false),
-                new SpriteMappingPiece( 0x40, -8, 2, 2, 0x2A + T, false, false, 0, false),
-                new SpriteMappingPiece( 0x58, -8, 2, 2, 0x00 + T, false, false, 0, false),
-                new SpriteMappingPiece( 0x68, -8, 2, 2, 0x26 + T, false, false, 0, false),
-                new SpriteMappingPiece( 0x78, -8, 2, 2, 0x26 + T, false, false, 0, false)
-        )));
-
-        return frames;
     }
 
     // ===== Coordinate / utility helpers =====

@@ -5,10 +5,17 @@ import com.openggf.game.sonic3k.Sonic3kObjectArtKeys;
 import com.openggf.game.sonic3k.audio.Sonic3kSfx;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
-import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.TouchActorContextPolicy;
+import com.openggf.level.objects.TouchAttackBouncePolicy;
+import com.openggf.level.objects.TouchCategoryDecodeMode;
+import com.openggf.level.objects.TouchOverlapStopPolicy;
 import com.openggf.level.objects.TouchResponseProvider;
+import com.openggf.level.objects.TouchResponseProfile;
+import com.openggf.level.objects.TouchShieldDeflectCapability;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.ObjectTerrainUtils;
 import com.openggf.physics.TerrainCheckResult;
@@ -31,9 +38,20 @@ import java.util.logging.Logger;
  * - Angle 8: xVel=0, yVel=$400
  * - Angle $C: xVel=-$300, yVel=$300
  */
-public class AizEndBossBombChild extends AbstractObjectInstance implements TouchResponseProvider {
+public class AizEndBossBombChild extends AbstractObjectInstance
+        implements TouchResponseProvider, RewindRecreatable {
     private static final Logger LOG = Logger.getLogger(AizEndBossBombChild.class.getName());
     private static final int SHIELD_REACTION_FIRE = 1 << 4;
+    private static final TouchResponseProfile TOUCH_RESPONSE_PROFILE = new TouchResponseProfile(
+            TouchCategoryDecodeMode.NORMAL,
+            false,
+            true,
+            false,
+            TouchShieldDeflectCapability.NONE,
+            SHIELD_REACTION_FIRE,
+            TouchAttackBouncePolicy.STANDARD_ENEMY_KILL,
+            TouchActorContextPolicy.MAIN_FULL_SIDEKICK_HURT_ONLY,
+            TouchOverlapStopPolicy.STOP_AFTER_FIRST_OVERLAP_FOR_ALL_ACTORS);
 
     private static final int COLLISION_FLAGS = 0x9A; // Hurts player, size index $1A
     private static final int LIFETIME = 0x9F;        // 159 frames
@@ -52,7 +70,6 @@ public class AizEndBossBombChild extends AbstractObjectInstance implements Touch
             {0x00, 0x18},
             {-0x14, 0x14}
     };
-
     private final AizEndBossInstance boss;
     private int currentX;
     private int currentY;
@@ -89,13 +106,41 @@ public class AizEndBossBombChild extends AbstractObjectInstance implements Touch
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity player) {
+    public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        AizEndBossInstance restoredBoss = AizEndBossRewindLinks.nearestBoss(ctx);
+        if (restoredBoss == null) {
+            return null;
+        }
+        AizEndBossBombChild restored = new AizEndBossBombChild(restoredBoss, 0, 0, 0);
+        AizEndBossRewindLinks.seedCapturedScalars(restored, ctx);
+        return restored;
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity player) {
         if (isDestroyed()) return;
 
         // Play SFX on first frame (deferred from constructor since services aren't injected yet)
         this.frameCounter++;
         if (this.frameCounter == 1) {
             services().playSfx(Sonic3kSfx.PROJECTILE.id);
+            // ROM AIZEndBossBomb_Init (docs/skdisasm/sonic3k.asm:138624-138634)
+            // plays this same sfx_Projectile, installs AIZEndBossBomb_Main as the
+            // object's code pointer and then leaves via
+            // `bra.w AIZEndBossBomb_SetAngleData`, which applies the angle's
+            // position offset and velocities and ends in `rts` (:138876-138893).
+            // It does NOT fall through into AIZEndBossBomb_Main, so the bomb's
+            // MoveSprite2 (:138643) first runs on the pass AFTER the one that
+            // created it. The recording shows exactly that: the object already
+            // reads AIZEndBossBomb_Main on its creation frame -- init ran -- while
+            // its y is unchanged until the following frame.
+            //
+            // Moving here made the bomb one step further down at every frame-start
+            // touch snapshot, which landed its HURT on the sidekick a row early;
+            // the knockback sign then inverted as a consequence, because the ROM's
+            // `cmp.w x_pos(a2),d0 / blo` (:21102-21106) negates on the equal x a
+            // row-early hit produces.
+            return;
         }
         lifetime--;
         if (lifetime <= 0) {
@@ -155,12 +200,10 @@ public class AizEndBossBombChild extends AbstractObjectInstance implements Touch
     }
 
     private void spawnSmoke() {
-        ObjectManager objectManager = services().objectManager();
-        if (objectManager == null) return;
+        if (services().objectManager() == null) return;
 
-        AizEndBossSmokeChild smoke = new AizEndBossSmokeChild(
-                boss, currentX, currentY, xVel != 0);
-        objectManager.addDynamicObject(smoke);
+        spawnFreeChild(() -> new AizEndBossSmokeChild(
+                boss, currentX, currentY, xVel != 0));
     }
 
     @Override
@@ -176,6 +219,16 @@ public class AizEndBossBombChild extends AbstractObjectInstance implements Touch
     @Override
     public int getShieldReactionFlags() {
         return SHIELD_REACTION_FIRE;
+    }
+
+    @Override
+    public TouchResponseProfile getTouchResponseProfile() {
+        return TOUCH_RESPONSE_PROFILE;
+    }
+
+    @Override
+    public TouchResponseProfile getTouchResponseProfile(boolean multiRegionSource) {
+        return TOUCH_RESPONSE_PROFILE;
     }
 
     @Override

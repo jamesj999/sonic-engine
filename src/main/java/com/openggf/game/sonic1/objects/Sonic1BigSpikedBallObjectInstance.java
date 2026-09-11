@@ -8,6 +8,7 @@ import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.TrigLookupTable;
@@ -41,7 +42,7 @@ import java.util.List;
  * <b>Disassembly reference:</b> docs/s1disasm/_incObj/58 Big Spiked Ball.asm
  */
 public class Sonic1BigSpikedBallObjectInstance extends AbstractObjectInstance
-        implements TouchResponseProvider {
+        implements TouchResponseProvider, SpawnRewindRecreatable {
 
     // From disassembly: move.b #$86,obColType(a0) — HURT ($80) + size 6
     private static final int COLLISION_TYPE = 0x86;
@@ -65,17 +66,17 @@ public class Sonic1BigSpikedBallObjectInstance extends AbstractObjectInstance
     private static final int CIRCLE_RADIUS = 0x50;
 
     // Stored original position (bball_origX = objoff_3A, bball_origY = objoff_38)
-    private final int origX;
-    private final int origY;
+    private int origX;
+    private int origY;
 
     // Current position
     private int x;
     private int y;
 
     // Movement configuration from subtype
-    private final int moveType;       // Low nibble bits 0-2: movement type (0-3)
-    private final int speed;          // bball_speed = high nibble << 3
-    private final boolean flipped;    // obStatus bit 0 (from spawn renderFlags)
+    private int moveType;       // Low nibble bits 0-2: movement type (0-3)
+    private int speed;          // bball_speed = high nibble << 3
+    private boolean flipped;    // obStatus bit 0 (from spawn renderFlags)
 
     // Type 3 circular motion angle (bball_radius already fixed at CIRCLE_RADIUS)
     private int angle;                // obAngle: accumulating angle for circular motion
@@ -127,7 +128,7 @@ public class Sonic1BigSpikedBallObjectInstance extends AbstractObjectInstance
         return y;
     }
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) {
             return;
@@ -277,14 +278,7 @@ public class Sonic1BigSpikedBallObjectInstance extends AbstractObjectInstance
     }
 
     private boolean isOrigXOnScreen() {
-        var camera = services().camera();
-        if (camera == null) {
-            return true;
-        }
-        int objRounded = origX & 0xFF80;
-        int camRounded = (camera.getX() - 128) & 0xFF80;
-        int distance = (objRounded - camRounded) & 0xFFFF;
-        return distance <= (128 + 320 + 192);
+        return isInRangeAt(origX);
     }
 
     // ---- Debug rendering ----

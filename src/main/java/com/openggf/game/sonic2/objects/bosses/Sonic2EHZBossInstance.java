@@ -6,10 +6,13 @@ import com.openggf.game.sonic2.Sonic2ObjectArtKeys;
 import com.openggf.game.sonic2.audio.Sonic2Music;
 import com.openggf.game.sonic2.audio.Sonic2Sfx;
 import com.openggf.game.sonic2.constants.Sonic2ObjectIds;
+import com.openggf.game.sonic2.constants.Sonic2Constants;
+import com.openggf.game.sonic2.resources.Sonic2PlcRequests;
 import com.openggf.game.sonic2.objects.EggPrisonObjectInstance;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnConstructionContextRewindRecreatable;
 import com.openggf.level.objects.boss.AbstractBossChild;
 import com.openggf.level.objects.boss.AbstractBossInstance;
 import com.openggf.level.objects.boss.BossChildComponent;
@@ -19,6 +22,7 @@ import com.openggf.physics.TerrainCheckResult;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
 import java.util.List;
+import java.util.function.Supplier;
 
 /**
  * EHZ Act 2 Boss (Object 0x56) - Drill car boss with 6 child components.
@@ -32,7 +36,8 @@ import java.util.List;
  * - SUB8: Idle after fall (12 frames)
  * - SUBA: Flying off sequence (with tertiary sub-states)
  */
-public class Sonic2EHZBossInstance extends AbstractBossInstance {
+public class Sonic2EHZBossInstance extends AbstractBossInstance
+        implements SpawnConstructionContextRewindRecreatable {
 
     // State machine constants
     private static final int SUB0_APPROACH_DIAGONAL = 0x00;
@@ -84,7 +89,26 @@ public class Sonic2EHZBossInstance extends AbstractBossInstance {
     private int wheelYAccumulator;
     private int waitTimer;
     private int defeatTimer;
-    private int currentFrameCounter;
+    private int currentVIntRunCount;
+
+    /**
+     * ROM {@code Obj56_Init} occupies the object's whole first executed frame: it
+     * advances {@code routine(a0)} from 0 to 2, allocates the vehicle top, ground
+     * vehicle, wheels and spike children, sets the main object to
+     * {@code x_pos=$2AF0 / y_pos=$2F8}, and then {@code rts}
+     * (docs/s2disasm/s2.asm:63256-63325). The routine-2 dispatch to
+     * {@code loc_2F262} therefore does not run until the following
+     * {@code RunObjects} pass.
+     *
+     * <p>The engine performs the whole init in the constructor, so without this
+     * flag the boss's first {@code update()} already executes the routine-2
+     * diagonal step and the entire boss — vehicle, wheels and spike — runs one
+     * frame ahead of ROM for the rest of the fight. Measured against
+     * {@code seg7_ehz2}'s {@code object_near} slot-20 stream, the engine's vehicle
+     * X equalled the ROM's next-frame value on every compared row before this was
+     * modelled.
+     */
+    private boolean initRoutineFrameConsumed;
 
     public Sonic2EHZBossInstance(ObjectSpawn spawn) {
         super(spawn, "EHZ Boss");
@@ -119,28 +143,34 @@ public class Sonic2EHZBossInstance extends AbstractBossInstance {
     }
 
     private void spawnChildComponents() {
-        List<AbstractBossChild> spawned = List.of(
-                new EHZBossVehicleTop(this),
-                new EHZBossGroundVehicle(this),
-                new EHZBossPropeller(this),
-                new EHZBossWheel(this, 0, 0x1C, 3),   // Front wheel: +28 (near side - in front of body)
-                new EHZBossWheel(this, 1, -0x0C, 3),  // Front wheel: -12 (near side - in front of body)
-                new EHZBossWheel(this, 2, -0x2C, 5),  // Rear wheel: -44 (far side - behind body)
-                new EHZBossSpike(this)
-        );
+        spawnBossChild(() -> new EHZBossVehicleTop(this));
+        spawnBossChild(() -> new EHZBossGroundVehicle(this));
+        spawnBossChild(() -> new EHZBossPropeller(this));
+        spawnBossChild(() -> new EHZBossWheel(this, 0, 0x1C, 3));  // Front wheel: +28 (near side - in front of body)
+        spawnBossChild(() -> new EHZBossWheel(this, 1, -0x0C, 3)); // Front wheel: -12 (near side - in front of body)
+        spawnBossChild(() -> new EHZBossWheel(this, 2, -0x2C, 5)); // Rear wheel: -44 (far side - behind body)
+        spawnBossChild(() -> new EHZBossSpike(this));
+    }
 
-        for (AbstractBossChild child : spawned) {
-            childComponents.add(child);
-            if (services().objectManager() != null) {
-                services().objectManager().addDynamicObject(child);
-            }
-        }
+    private <T extends AbstractBossChild> T spawnBossChild(Supplier<T> factory) {
+        T child = spawnChild(factory);
+        childComponents.add(child);
+        return child;
     }
 
     @Override
-    protected void updateBossLogic(int frameCounter, PlayableEntity playerEntity) {
+    protected void updateBossLogic(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        currentFrameCounter = frameCounter;
+        currentVIntRunCount = vIntRunCount;
+        if (!initRoutineFrameConsumed) {
+            // ROM: Obj56_Init ends in rts (docs/s2disasm/s2.asm:63325) after
+            // addq.b #2,routine(a0) (:63278), so the first executed frame runs the
+            // init only. The children it allocates sit in higher SST slots and do
+            // still run in that same pass, which is why only the main object's
+            // routine dispatch is withheld here.
+            initRoutineFrameConsumed = true;
+            return;
+        }
         // Run state machine
         switch (state.routineSecondary) {
             case SUB0_APPROACH_DIAGONAL -> updateSub0ApproachDiagonal();
@@ -154,42 +184,47 @@ public class Sonic2EHZBossInstance extends AbstractBossInstance {
 
     // ROM: s2.asm:62922-62934 (loc_2F27C - SUB0: Approaching diagonally)
     private void updateSub0ApproachDiagonal() {
-        // ROM: s2.asm:62926 - subi_.w #1,x_pos(a0)
-        state.x--;
-        // ROM: s2.asm:62927 - addi_.w #1,y_pos(a0)
-        state.y++;
-        syncFixedFromPosition();
-
-        // ROM: s2.asm:62924 - cmpi.w #$29D0,x_pos(a0)
+        // ROM loc_2F27C tests the arrival BEFORE it moves, and the arrival frame
+        // is spent entirely on the snap-and-advance branch (loc_2F29A) with no
+        // diagonal step (docs/s2disasm/s2.asm:63434-63447). Moving first and
+        // testing afterwards folds that frame away and starts the descent one
+        // frame early, which carries all the way to the spike's contact frame.
+        // ROM: s2.asm:63437 - cmpi.w #$29D0,x_pos(a0) / ble.s loc_2F29A
         if (state.x <= INITIAL_X) {
+            // ROM: s2.asm:63444-63445 - move.w #$29D0,x_pos(a0) / addq.b #2,routine_secondary(a0)
             state.x = INITIAL_X;
             syncFixedFromPosition();
             state.routineSecondary = SUB2_DESCEND_VERTICAL;
             state.routineTertiary = 0;
+            return;
         }
+        // ROM: s2.asm:63439 - subi_.w #1,x_pos(a0)
+        state.x--;
+        // ROM: s2.asm:63440 - addi_.w #1,y_pos(a0)
+        state.y++;
+        syncFixedFromPosition();
     }
 
     // ROM: s2.asm:62937-62969 (loc_2F2A8 - SUB2: Descending vertically/waiting)
     private void updateSub2DescendVertical() {
         switch (state.routineTertiary) {
             case 0 -> {
-                // ROM: s2.asm:62948-62959 (loc_2F2BA - Sub2_0: moving down)
-                // ROM: s2.asm:62949 - cmpi.w #$41E,y_pos(a0)
-                // Descending: move 1 pixel down per frame
-                // ROM: s2.asm:62951 - addi_.w #1,y_pos(a0)
+                // ROM loc_2F2BA tests the target height BEFORE it descends, and the
+                // frame that reaches it is spent on loc_2F2CC alone, with no further
+                // step down and no clamp of y_pos (docs/s2disasm/s2.asm:63465-63478).
+                // ROM: s2.asm:63466 - cmpi.w #$41E,y_pos(a0) / bge.s loc_2F2CC
+                if (state.y >= TARGET_Y) {
+                    // ROM: s2.asm:63473 - addq.b #2,objoff_2C(a0)
+                    state.routineTertiary = 2;
+                    // ROM: s2.asm:63475 - move.w #60,objoff_2A(a0)
+                    waitTimer = DESCEND_WAIT_FRAMES;
+                    // ROM: s2.asm:63474 - bset #0,objoff_2D(a0)
+                    setCustomFlag(OBJOFF_FLAGS, getCustomFlag(OBJOFF_FLAGS) | FLAG_GROUNDED);
+                    return;
+                }
+                // ROM: s2.asm:63468 - addi_.w #1,y_pos(a0)
                 state.y++;
                 syncFixedFromPosition();
-
-                if (state.y >= TARGET_Y) {
-                    state.y = TARGET_Y;
-                    syncFixedFromPosition();
-                    // ROM: s2.asm:62956 - addq.b #2,objoff_2C(a0)
-                    state.routineTertiary = 2;
-                    // ROM: s2.asm:62958 - move.w #60,objoff_2A(a0)
-                    waitTimer = DESCEND_WAIT_FRAMES;
-                    // ROM: s2.asm:62957 - bset #0,objoff_2D(a0)
-                    setCustomFlag(OBJOFF_FLAGS, getCustomFlag(OBJOFF_FLAGS) | FLAG_GROUNDED);
-                }
             }
             case 2 -> {
                 // ROM: s2.asm:62962-62969 (loc_2F2E0 - Sub2_2: waiting)
@@ -235,7 +270,7 @@ public class Sonic2EHZBossInstance extends AbstractBossInstance {
             return;
         }
 
-        if ((currentFrameCounter & 7) == 0) {
+        if ((currentVIntRunCount & 7) == 0) {
             spawnDefeatExplosion();
         }
 
@@ -273,8 +308,16 @@ public class Sonic2EHZBossInstance extends AbstractBossInstance {
                 state.routineTertiary = 2;
                 // ROM: s2.asm:63052 - move.w #$32,objoff_2A(a0)
                 waitTimer = 0x32;
-                // Clear boss fight active flag so right boundary expands
-                services().gameState().setCurrentBossId(0);
+                // ROM: Current_Boss_ID is NEVER cleared in Sonic 2. It is written only by
+                // the boss-arena setup routines (`move.b #N,(Current_Boss_ID).w`, ids 1-9)
+                // and read by `tst.b`; docs/s2disasm/s2.asm contains no `clr.b` or
+                // `move.b #0` for it, so it resets only via the level-load RAM clear and
+                // persists to the end of the act. Sonic_Boundary's right-hand test widens
+                // the side boundary by $40 only when it is zero (s2.asm:37243-37251), so
+                // clearing it here let the character run 64px past the ROM's clamp.
+                // Contrast S1, which DOES clear at the Egg Prison
+                // (s1disasm/_incObj/3E Prison Capsule.asm:97), and S3K, which clears
+                // Boss_flag at 31 sites. S2 is the exception.
                 services().playMusic(Sonic2Music.EMERALD_HILL.id);
             }
             case 2 -> {
@@ -282,6 +325,8 @@ public class Sonic2EHZBossInstance extends AbstractBossInstance {
                 // ROM: s2.asm:63061 - subi_.w #1,objoff_2A(a0)
                 waitTimer--;
                 if (waitTimer < 0) {
+                    if (!Sonic2PlcRequests.append(services(), Sonic2Constants.PLC_ANIMALS_EHZ,
+                            Sonic2Constants.PLC_EXPLOSION)) return;
                     state.routineTertiary = 4;
                     // ROM: s2.asm:63063 - bset #2,objoff_2D(a0)
                     setCustomFlag(OBJOFF_FLAGS, getCustomFlag(OBJOFF_FLAGS) | FLAG_FLYING_OFF);
@@ -302,12 +347,28 @@ public class Sonic2EHZBossInstance extends AbstractBossInstance {
 
                 Camera camera = services().camera();
                 if (camera.getMaxX() < CAMERA_MAX_X_TARGET) {
-                    camera.setMaxXTarget((short) (camera.getMaxX() + 2));
+                    // ROM: s2.asm:63596-63599 (loc_2F460) -
+                    //   cmpi.w #$2AB0,(Camera_Max_X_pos).w / bhs.s loc_2F46E
+                    //   addq.w #2,(Camera_Max_X_pos).w
+                    // The ROM adds 2 to the boundary word ITSELF from inside the boss's own
+                    // object pass; Camera_Max_X_pos carries no target/easing indirection here.
+                    // Routing this through setMaxXTarget() instead deferred every +2 step to
+                    // the NEXT frame's boundary easing (Camera.updateBoundaryEasing runs ahead
+                    // of the object pass), leaving the engine's right boundary - and hence
+                    // camera_x - a permanent one-step (2px) behind the ROM for the whole flee.
+                    // Write the boundary immediately, exactly as the ROM does.
+                    camera.setMaxX((short) (camera.getMaxX() + 2));
                 } else if (!isOnScreen()) {
-                    // Don't spawn EggPrison - level already has one at end
-                    // Don't destroy boss - let ground parts persist
-                    // Mark as finished so we stop rendering flying parts
+                    // ROM: s2.asm:63094-63100 (loc_2F46E) - once the camera has eased to
+                    // its target max-X and the flying body is off-screen, the ROM calls
+                    // DeleteObject on the main body (and its top part). Destroying the body
+                    // cascades to the flying children (top, propeller, and the separated
+                    // spike, which the ROM likewise self-deletes once its parent slot is no
+                    // longer the boss). The wrecked ground vehicle is intentionally NOT
+                    // deleted - it persists as debris (see EHZBossGroundVehicle).
+                    // FLAG_FINISHED stops body rendering on this final frame before removal.
                     setCustomFlag(OBJOFF_FLAGS, getCustomFlag(OBJOFF_FLAGS) | FLAG_FINISHED);
+                    setDestroyed(true);
                 }
             }
         }
@@ -327,11 +388,7 @@ public class Sonic2EHZBossInstance extends AbstractBossInstance {
                 return;
             }
         }
-        EHZBossPropeller propeller = new EHZBossPropeller(this);
-        childComponents.add(propeller);
-        if (services().objectManager() != null) {
-            services().objectManager().addDynamicObject(propeller);
-        }
+        spawnBossChild(() -> new EHZBossPropeller(this));
     }
 
     private void spawnEggPrison() {
@@ -371,8 +428,32 @@ public class Sonic2EHZBossInstance extends AbstractBossInstance {
         return false;
     }
 
+    /**
+     * Obj56 is a read-once-at-head dispatcher, so its defeat routine first runs next frame.
+     *
+     * <p>{@code loc_2F262} (docs/s2disasm/s2.asm:63420-63424) reads
+     * {@code routine_secondary(a0)} exactly once into d0 and {@code jmp}s through
+     * {@code off_2F270}; the selected handler never re-reads the field. The defeat write
+     * {@code move.b #6,routine_secondary(a0)} (docs/s2disasm/s2.asm:63665, in
+     * {@code loc_2F4EE}) is reached from {@code loc_2F4A6} (:63632-63636), which
+     * {@code loc_2F304} / Sub4 calls at :63486 - i.e. strictly downstream of that head
+     * read. So the ROM finishes the frame in Sub4 and only dispatches Sub6 on the
+     * following frame.
+     *
+     * <p>The engine runs touch responses before this object's own {@code update()}, so
+     * without the deferral the defeat sub-routine ran on the defeat frame itself. That
+     * pulled the whole defeat chain - and with it the {@code LoadPLC_AnimalExplosion}
+     * submission at {@code loc_2F424} (docs/s2disasm/s2.asm:63579 ->
+     * :21893-21901) - one frame early relative to the ROM.
+     */
+    @Override
+    protected boolean defeatDeferralAppliesToThisBoss() {
+        return true;
+    }
+
     @Override
     protected void onDefeatStarted() {
+        if (!isDefeatEntryPrepared() && !Sonic2PlcRequests.append(services(), Sonic2Constants.PLC_CAPSULE)) return;
         // ROM: s2.asm:63149-63162 (loc_2F4EE - boss defeated)
         // ROM: s2.asm:63152 - move.b #6,routine_secondary(a0)
         state.routineSecondary = SUB6_DEFEATED_FALLING;
@@ -394,6 +475,11 @@ public class Sonic2EHZBossInstance extends AbstractBossInstance {
                 break;
             }
         }
+    }
+
+    @Override
+    protected boolean prepareDefeatEntry() {
+        return Sonic2PlcRequests.append(services(), Sonic2Constants.PLC_CAPSULE);
     }
 
     /**
@@ -447,6 +533,17 @@ public class Sonic2EHZBossInstance extends AbstractBossInstance {
     }
 
     @Override
+    public boolean isPersistent() {
+        // The boss oscillates between BOUNDARY_LEFT/RIGHT inside the locked arena,
+        // travelling past the visible screen edge each pass. It is event-spawned
+        // (not respawn-tracked), so if the generic out-of-range cull unloaded it
+        // — or any of its children (the leading drillcone crosses the threshold
+        // first) — nothing would rebuild the missing parts. Stay active for the
+        // whole fight; child parts inherit this via AbstractBossChild.
+        return true;
+    }
+
+    @Override
     public void appendRenderCommands(List<GLCommand> commands) {
         // Don't render main body if finished/off-screen
         if ((getCustomFlag(OBJOFF_FLAGS) & FLAG_FINISHED) != 0) {
@@ -476,5 +573,10 @@ public class Sonic2EHZBossInstance extends AbstractBossInstance {
     @Override
     protected int getBossExplosionSfxId() {
         return Sonic2Sfx.BOSS_EXPLOSION.id;
+    }
+
+    @Override
+    protected int getBossExplosionObjectId() {
+        return com.openggf.game.sonic2.constants.Sonic2ObjectIds.BOSS_EXPLOSION;
     }
 }

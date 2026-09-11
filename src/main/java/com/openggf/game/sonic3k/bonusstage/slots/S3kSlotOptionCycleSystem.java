@@ -93,7 +93,17 @@ public final class S3kSlotOptionCycleSystem {
 
     private void tickPickTargets(S3kSlotStageState state, int frameCounter, GameRng rng) {
         int reel0Offset = (((frameCounter & 0x07) - 4) + 0x30) & 0xFF;
-        int reel1Offset = ((((Integer.rotateLeft(frameCounter & 0xFF, 4)) & 0x07) - 4) + 0x30) & 0xFF;
+        // ROM sonic3k.asm:99684-99686: move.b (V_int_run_count+3).w,d0 / rol.b
+        // #4,d0 / andi.b #7,d0 -- an 8-bit ROTATE of the low byte, not a plain
+        // shift. java.lang.Integer.rotateLeft operates on the full 32-bit
+        // register: since (frameCounter & 0xFF) only ever populates bits 0-7,
+        // rotating it left by 4 within a 32-bit word never wraps any set bit
+        // back around to the low 3 bits that andi.b #7,d0 then reads, so the
+        // masked low byte's bits 0-2 were always 0 -- reel1Offset was a
+        // frame-invariant constant (0x2C) instead of tracking V_int_run_count.
+        // rotateRight8(value, 4) reproduces rol.b #4 exactly for an 8-bit
+        // operand (a 4-bit rotate is its own inverse on an 8-bit word).
+        int reel1Offset = (((rotateRight8(frameCounter, 4) & 0x07) - 4) + 0x30) & 0xFF;
         int reel2Offset = ((((frameCounter >>> 8) & 0x07) - 4) + 0x30) & 0xFF;
         state.setOptionCycleReelVelocities(reel0Offset, reel1Offset, reel2Offset);
         state.setOptionCycleReelSubstates(0, 0, 0);

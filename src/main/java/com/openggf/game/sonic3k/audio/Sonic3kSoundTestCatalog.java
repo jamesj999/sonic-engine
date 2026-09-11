@@ -9,7 +9,7 @@ import com.openggf.audio.debug.AbstractSoundTestCatalog;
 public final class Sonic3kSoundTestCatalog extends AbstractSoundTestCatalog {
     private static final Sonic3kSoundTestCatalog INSTANCE = new Sonic3kSoundTestCatalog();
 
-    private Sonic3kSoundTestCatalog() {
+    public Sonic3kSoundTestCatalog() {
         super(Sonic3kMusic.titleMap(), Sonic3kSfx.nameMap(),
                 Sonic3kMusic.AIZ1.id, Sonic3kSfx.ID_BASE, Sonic3kSfx.ID_MAX, "Sonic 3&K");
     }

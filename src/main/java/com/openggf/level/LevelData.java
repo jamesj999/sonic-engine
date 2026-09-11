@@ -75,22 +75,46 @@ public enum LevelData {
     S3K_DEATH_EGG_1(0xD6, 0x0030, 0x09AC),
     S3K_DEATH_EGG_2(0xD7, 0x0140, 0x03AC),
     S3K_DOOMSDAY(0xD8, 0x0000, 0x0100),
+    S3K_DOOMSDAY_2(0xD9, 0x0060, 0x058C),
 
-    // S3K competition zones (zone IDs 13-17, not playable in single-player)
-    S3K_AZURE_LAKE(0xDA, 0x0060, 0x0200),
-    S3K_BALLOON_PARK(0xDC, 0x0060, 0x0200),
-    S3K_DESERT_PALACE(0xDE, 0x0060, 0x0200),
-    S3K_CHROME_GADGET(0xE0, 0x0060, 0x0200),
-    S3K_ENDLESS_MINE(0xE2, 0x0060, 0x0200),
+    // S3K zone $0D: the AIZ intro scene (act 0) and the ending scene (act 1).
+    // LevelSizes labels the pair "AIZ Intro (?)" / "Ending scene"
+    // (skdisasm/sonic3k.asm:38106-38107); LevelMusic_Playlist labels the row
+    // "AIZ INTRO & ENDING" (skdisasm/sonic3k.asm:7489); LevelPtrs points both
+    // acts at Layout_SSZ2 (skdisasm/sonic3k.asm:200464-200465).
+    S3K_AIZ_INTRO(0xDA, 0x0060, 0x01EC),
+    S3K_ENDING_SCENE(0xDB, 0x0060, 0x012C),
 
-    // S3K reserved zone 18 (unused in ROM)
-    S3K_RESERVED_18(0xE4, 0x0060, 0x0200),
+    // S3K competition zones (ROM zone IDs 14-18, not playable in single-player)
+    S3K_AZURE_LAKE(0xDC, 0x0430, 0x0194),
+    S3K_AZURE_LAKE_2(0xDD, 0x0030, 0x008C),
+    S3K_BALLOON_PARK(0xDE, 0x0440, 0x0264),
+    S3K_BALLOON_PARK_2(0xDF, 0x0060, 0x012C),
+    S3K_DESERT_PALACE(0xE0, 0x0758, 0x0144),
+    S3K_DESERT_PALACE_2(0xE1, 0x0060, 0x0070),
+    S3K_CHROME_GADGET(0xE2, 0x0454, 0x00B4),
+    S3K_CHROME_GADGET_2(0xE3, 0x0060, 0x0070),
+    S3K_ENDLESS_MINE(0xE4, 0x0430, 0x0194),
+    S3K_ENDLESS_MINE_2(0xE5, 0x0060, 0x0070),
 
     // S3K bonus stages (zone IDs 19-21)
     // Start positions are loaded from ROM at runtime; values here are fallback defaults
     S3K_GUMBALL(0xE6, 0x0100, 0x0120),
+    S3K_GUMBALL_2(0xE7, 0x0060, 0x0070),
     S3K_GLOWING_SPHERE(0xE8, 0x0120, 0x0100),
-    S3K_SLOT_MACHINE(0xEA, 0x0120, 0x0100);
+    S3K_GLOWING_SPHERE_2(0xE9, 0x0060, 0x0070),
+    S3K_SLOT_MACHINE(0xEA, 0x0120, 0x0100),
+    S3K_SLOT_MACHINE_2(0xEB, 0x0060, 0x0070),
+
+    // S3K zone $16: the Lava Reef boss act (act 0, Current_zone_and_act $1600)
+    // and Hidden Palace Zone (act 1, $1601 -- skdisasm/sonic3k.asm:62150);
+    // zone $17: the Death Egg boss act (act 0, $1700) and the Super Emerald
+    // special-stage arena (act 1, $1701 -- skdisasm/sonic3k.asm:4994-4996).
+    // LevelSizes names all four (skdisasm/sonic3k.asm:38140-38143).
+    S3K_LRZ_BOSS(0xEC, 0x0040, 0x0070),
+    S3K_HIDDEN_PALACE(0xED, 0x0030, 0x0AEC),
+    S3K_DEZ_BOSS(0xEE, 0x0060, 0x0070),
+    S3K_SPECIAL_STAGE_ARENA(0xEF, 0x1640, 0x03AC);
 
     private final int levelIndex;
     private final int startXPos;

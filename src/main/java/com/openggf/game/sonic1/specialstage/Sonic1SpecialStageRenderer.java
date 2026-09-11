@@ -388,10 +388,12 @@ public class Sonic1SpecialStageRenderer {
         // Wall palette animation override (SS_WaRiVramSet)
         int palette = info.paletteIndex();
         if (info.mappingType() == Sonic1SpecialStageBlockType.MappingType.WALLS) {
-            int[] gp = Sonic1SpecialStageBlockType.getWallGroupAndPosition(blockId);
-            if (gp != null && gp[1] >= 2) {
-                int animPos = gp[1] - 2; // 0-6 (positions 2-8 map to anim entries 0-6)
-                palette = WALL_PALETTE_ANIM[gp[0]][wallVramAnimFrame + animPos];
+            int wallMetadata = Sonic1SpecialStageBlockType.getWallGroupAndPositionPacked(blockId);
+            int wallPosition = Sonic1SpecialStageBlockType.wallPosition(wallMetadata);
+            if (wallMetadata >= 0 && wallPosition >= 2) {
+                int animPos = wallPosition - 2; // 0-6 (positions 2-8 map to anim entries 0-6)
+                palette = WALL_PALETTE_ANIM[Sonic1SpecialStageBlockType.wallGroup(wallMetadata)]
+                        [wallVramAnimFrame + animPos];
             }
         }
 

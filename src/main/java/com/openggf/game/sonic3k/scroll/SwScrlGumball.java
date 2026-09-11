@@ -1,7 +1,10 @@
 package com.openggf.game.sonic3k.scroll;
 
 import com.openggf.game.sonic3k.objects.GumballMachineObjectInstance;
+import com.openggf.game.GameServices;
+import com.openggf.level.LevelManager;
 import com.openggf.level.scroll.AbstractZoneScrollHandler;
+import com.openggf.level.scroll.compose.ScrollEffectComposer;
 
 import static com.openggf.level.scroll.M68KMath.*;
 
@@ -77,6 +80,8 @@ public class SwScrlGumball extends AbstractZoneScrollHandler {
     private boolean fgColumnsActive;
     private short vscrollFactorFG;
 
+    private final ScrollEffectComposer composer = new ScrollEffectComposer();
+
     @Override
     public void update(int[] horizScrollBuf,
                        int cameraX,
@@ -84,24 +89,28 @@ public class SwScrlGumball extends AbstractZoneScrollHandler {
                        int frameCounter,
                        int actId) {
         resetScrollTracking();
+        composer.reset();
 
         // Standard flat deformation: FG tied to camera, BG at 1/2 vertical speed
         // (ROM Gumball_Deform at s3.asm:76172 sets Camera_Y_pos_BG_copy = cameraY/2).
         short fgScroll = negWord(cameraX);
         short bgScroll = negWord(cameraX);
-        vscrollFactorBG = asrWord(cameraY, 1);
+        composer.setVscrollFactorBG(asrWord(cameraY, 1));
         vscrollFactorFG = (short) cameraY;
 
-        int packed = packScrollWords(fgScroll, bgScroll);
-        trackOffset(fgScroll, bgScroll);
-        for (int line = 0; line < VISIBLE_LINES; line++) {
-            horizScrollBuf[line] = packed;
-        }
+        composer.fillPackedScrollWords(0, VISIBLE_LINES, fgScroll, bgScroll);
+        composer.copyPackedScrollWordsTo(horizScrollBuf);
+        vscrollFactorBG = composer.getVscrollFactorBG();
+        minScrollOffset = composer.getMinScrollOffset();
+        maxScrollOffset = composer.getMaxScrollOffset();
 
         // ROM Gumball_SetUpVScroll: compute machine-tracked strip Y value.
         // d1 = cameraY + $C8 - machineY_saved.  (Use the drifted currentY so
         // the body tiles follow the machine as it sinks when gumballs drop.)
-        GumballMachineObjectInstance machine = GumballMachineObjectInstance.current();
+        LevelManager level = GameServices.levelOrNull();
+        GumballMachineObjectInstance machine = level == null
+                ? null
+                : GumballMachineObjectInstance.current(level.getObjectManager());
         if (machine == null) {
             // Fall back to flat FG VScroll when no machine is present.
             fgColumnsActive = false;

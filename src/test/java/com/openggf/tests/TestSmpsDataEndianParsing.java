@@ -1,10 +1,10 @@
 package com.openggf.tests;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import com.openggf.audio.smps.AbstractSmpsData;
 import com.openggf.audio.smps.Sonic1SmpsData;
 import com.openggf.game.sonic2.audio.smps.Sonic2SmpsData;
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * Verifies SMPS header pointer endian handling switches based on ROM choice.
@@ -34,4 +34,6 @@ public class TestSmpsDataEndianParsing {
     }
 
 }
+
+
 

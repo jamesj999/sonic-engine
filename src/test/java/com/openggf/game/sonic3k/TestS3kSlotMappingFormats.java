@@ -5,29 +5,23 @@ import com.openggf.data.RomByteReader;
 import com.openggf.game.sonic3k.constants.Sonic3kConstants;
 import com.openggf.level.render.SpriteMappingFrame;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.util.List;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @RequiresRom(SonicGame.SONIC_3K)
 public class TestS3kSlotMappingFormats {
-
-    @Rule
-    public RequiresRomRule romRule = new RequiresRomRule();
-
     private RomByteReader reader;
 
-    @Before
+    @BeforeEach
     public void setUp() throws IOException {
-        Rom rom = romRule.rom();
+        Rom rom = com.openggf.tests.TestEnvironment.currentRom();
         reader = RomByteReader.fromRom(rom);
     }
 
@@ -68,3 +62,5 @@ public class TestS3kSlotMappingFormats {
         assertTrue(frames.stream().allMatch(frame -> frame.pieces().size() > 0 && frame.pieces().size() < 64));
     }
 }
+
+

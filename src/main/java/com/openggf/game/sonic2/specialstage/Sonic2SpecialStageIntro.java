@@ -1,5 +1,8 @@
 package com.openggf.game.sonic2.specialstage;
 
+import com.openggf.game.GameServices;
+import com.openggf.game.sonic2.constants.Sonic2Constants;
+import com.openggf.game.sonic2.resources.Sonic2PlcService;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Logger;
@@ -10,26 +13,56 @@ import static com.openggf.game.sonic2.specialstage.Sonic2SpecialStageConstants.*
  * Manages the intro sequence for Sonic 2 Special Stage.
  *
  * The intro sequence matches the original game's Obj5F (START banner) behavior:
- * 1. DROP phase: Banner drops from y=-64 to y=72 (136 frames at 1 pixel/frame)
- * 2. WAIT1 phase: Pause while letters "explode" off banner (15 frames)
- * 3. WAIT2 phase: Display ring requirement message (31 frames)
- * 4. GAMEPLAY: Normal gameplay begins (SpecialStage_Started is set)
+ * 1. PRE_ROLL phase: Current speed/track/banner remain idle during ROM initialization
+ * 2. ROM_STARTUP phase: The manager runs the two semantic track waits and first RunObjects pass
+ * 3. FADE_FROM_WHITE phase: The ROM's 22 palette waits freeze the stage runtime
+ * 4. DROP phase: Banner drops from y=-64 to y=72 (136 frames at 1 pixel/frame)
+ * 5. WAIT1 phase: Pause while letters "explode" off banner (15 frames)
+ * 6. WAIT2 phase: Display ring requirement message (31 frames)
+ * 7. MESSAGE_FLYOUT: Ring message exists and SpecialStage_Started is set
+ * 8. GAMEPLAY: Intro presentation has fully cleared
  *
- * The "GET X RINGS" message appears at the start of GAMEPLAY and displays
- * for 70 frames before flying off screen.
+ * Creating the "GET X RINGS" message enters MESSAGE_FLYOUT, sets
+ * SpecialStage_Started, and displays it for 70 frames before flying off screen.
  *
  * During the intro sequence:
- * - Track animation runs normally
- * - Player input is ignored
+ * - Track animation runs during ROM_STARTUP, freezes during FADE_FROM_WHITE, then resumes
+ * - Input remains control-locked until the later intro phases, but the ROM pre-start loop
+ *   still copies logical controls and executes player/object routines before
+ *   SpecialStage_Started is set (s2.asm:6674-6690)
  * - Banner and message sprites are rendered on top
  */
 public class Sonic2SpecialStageIntro {
     private static final Logger LOGGER = Logger.getLogger(Sonic2SpecialStageIntro.class.getName());
 
     /**
+     * The {@code Pal_FadeToWhite} window the special-stage entry code runs
+     * before it masks interrupts and initializes the stage. The routine loads
+     * {@code d4=$15} and uses {@code dbf}, so it executes exactly 22 V-ints
+     * (s2.asm:3568-3578, called from the special-stage entry at s2.asm:6546).
+     * Everything after it -- the VDP setup, DMA fills, RAM clears,
+     * {@code ssLdComprsdData} and the entry PLC -- runs with interrupts masked
+     * or blocking, so no later V-int exposes pre-initialization special-stage
+     * state.
+     */
+    public static final int PRE_ROLL_FRAMES = 22;
+
+    /**
+     * ROM {@code Pal_FadeFromWhite} loads {@code d4=$15} and uses {@code dbf},
+     * producing 22 waits (s2.asm:3460-3483, call at 6672).
+     */
+    public static final int FADE_FROM_WHITE_FRAMES = 22;
+
+    /**
      * Intro sequence phases.
      */
     public enum Phase {
+        /** Initial empty-player/zero-speed observation window */
+        PRE_ROLL,
+        /** Manager-owned drawing-index startup waits through the first RunObjects pass */
+        ROM_STARTUP,
+        /** Palette fade waits which do not tick track, players, objects, or banner */
+        FADE_FROM_WHITE,
         /** Banner dropping from top of screen */
         DROP,
         /** Pause after banner lands, letters fly off */
@@ -73,9 +106,10 @@ public class Sonic2SpecialStageIntro {
     private static final int TILE_N = 0x0C;
     private static final int TILE_S = 0x12;
 
-    private Phase currentPhase = Phase.DROP;
+    private Phase currentPhase = Phase.PRE_ROLL;
     private int phaseTimer = 0;
     private int frameCounter = 0;
+    private boolean specialStageStarted;
 
     // Banner state
     private int bannerX = INTRO_BANNER_X;
@@ -131,9 +165,10 @@ public class Sonic2SpecialStageIntro {
      */
     public void initialize(int stageIndex, int ringRequirement) {
         this.ringRequirement = ringRequirement;
-        currentPhase = Phase.DROP;
+        currentPhase = Phase.PRE_ROLL;
         phaseTimer = 0;
         frameCounter = 0;
+        specialStageStarted = false;
 
         bannerX = INTRO_BANNER_X;
         bannerY = INTRO_BANNER_START_Y;
@@ -165,6 +200,16 @@ public class Sonic2SpecialStageIntro {
         frameCounter++;
 
         switch (currentPhase) {
+            case PRE_ROLL:
+                updatePreRollPhase();
+                break;
+            case ROM_STARTUP:
+                // The manager owns the two semantic Vint_S2SS waits and advances
+                // this phase only after their final RunObjects pass.
+                break;
+            case FADE_FROM_WHITE:
+                updateFadeFromWhitePhase();
+                break;
             case DROP:
                 updateDropPhase();
                 break;
@@ -183,6 +228,39 @@ public class Sonic2SpecialStageIntro {
         }
 
         return currentPhase == Phase.GAMEPLAY;
+    }
+
+    private void updatePreRollPhase() {
+        phaseTimer++;
+        if (phaseTimer >= PRE_ROLL_FRAMES) {
+            currentPhase = Phase.ROM_STARTUP;
+            phaseTimer = 0;
+        }
+    }
+
+    /**
+     * Called by the manager immediately after the startup RunObjects pass at
+     * s2.asm:6660-6663, before the CtrlDMA lag row and Pal_FadeFromWhite call.
+     */
+    void beginFadeFromWhite() {
+        if (currentPhase != Phase.ROM_STARTUP) {
+            throw new IllegalStateException("Fade from white can only follow ROM startup");
+        }
+        // Obj5F_Init falls through Obj5F_Main and applies its first +$100
+        // ObjectMove step on the allocation pass before Pal_FadeFromWhite.
+        // Preserve that object-local fall-through while the subsequent fade
+        // freezes presentation/runtime state (s2.asm:9661-9684).
+        bannerY += INTRO_BANNER_VELOCITY;
+        currentPhase = Phase.FADE_FROM_WHITE;
+        phaseTimer = 0;
+    }
+
+    private void updateFadeFromWhitePhase() {
+        phaseTimer++;
+        if (phaseTimer >= FADE_FROM_WHITE_FRAMES) {
+            currentPhase = Phase.DROP;
+            phaseTimer = 0;
+        }
     }
 
     private void updateDropPhase() {
@@ -219,39 +297,42 @@ public class Sonic2SpecialStageIntro {
             bannerFlyoutInitialized = true;
             lettersFlying = true;
             letterFlyoutProgress = 0;
+            // Obj5F starts its $1E countdown as soon as it creates the independent
+            // banner-letter children. Their movement overlaps WAIT2; waiting for
+            // them to leave the screen before starting the count adds a false
+            // 21-pass delay to SpecialStage_Started (s2.asm:9710-9746).
+            currentPhase = Phase.WAIT2;
+            // This child-creation pass only stores $1E and returns. The first
+            // decrement belongs to the following Obj5F dispatch.
+            phaseTimer = 0;
+            bannerVisible = true;
+            messageVisible = false;
+            // RunObjects scans ascending live slots. Obj5F's newly allocated
+            // later-slot children therefore execute routine 6 once before this
+            // allocation pass returns, while the parent $1E counter remains
+            // untouched until its next dispatch (s2.asm:9707-9739).
+            updateBannerLetterFlyout();
+            LOGGER.fine("Intro: WAIT1 complete, entering overlapping Obj5F WAIT2");
         }
+    }
 
-        // Update banner letter flyout - each piece flies off independently
+    private void updateBannerLetterFlyout() {
+        if (!bannerFlyoutInitialized) {
+            return;
+        }
         letterFlyoutProgress++;
-        boolean allGone = true;
         for (BannerLetter letter : bannerLetters) {
-            if (!letter.visible) continue;
-
-            // Move letter based on angle (same as Obj5A flyout)
+            if (!letter.visible) {
+                continue;
+            }
             letter.x += (int) (Math.cos(letter.flyoutAngle) * letter.flyoutSpeed);
             letter.y += (int) (Math.sin(letter.flyoutAngle) * letter.flyoutSpeed);
 
-            // Check if off screen using actual screen position
-            // Banner center is at INTRO_BANNER_X (128), letter.x/y are offsets from center
             int screenX = INTRO_BANNER_X + letter.x;
             int screenY = INTRO_BANNER_END_Y + letter.y;
-            // Use generous bounds since pieces are up to 32 pixels wide (4 tiles)
             if (screenX < -32 || screenX > 288 || screenY < -32 || screenY > 256) {
                 letter.visible = false;
-            } else {
-                allGone = false;
             }
-        }
-
-        // Transition to WAIT2 when all banner pieces are gone
-        // Original waits $1E (30) more frames after spawning children, but we transition
-        // when animation is visually complete
-        if (allGone || phaseTimer >= BANNER_LAND_DELAY_FRAMES + 45) {
-            currentPhase = Phase.WAIT2;
-            phaseTimer = 0;
-            bannerVisible = false;  // Banner disappears after letters fly off
-            messageVisible = true;  // Ring requirement message appears
-            LOGGER.fine("Intro: WAIT1 complete, entering WAIT2, showing ring requirement");
         }
     }
 
@@ -298,16 +379,50 @@ public class Sonic2SpecialStageIntro {
     }
 
     private void updateWait2Phase() {
+        // Initial Obj5F countdown overlaps its independently moving children.
+        // Checkpoint WAIT2 reuse has no banner children and shows its message
+        // immediately through showRingRequirementMessage().
+        if (!specialStageStarted) {
+            updateBannerLetterFlyout();
+        }
         phaseTimer++;
 
         // After WAIT2_FRAMES, transition to message flyout phase.
         // Original: counter starts at $1E (30), decrements with bpl (branch if >= 0).
         // Counts 30->29->...->0->-1, exiting at -1. That's 31 frames total.
-        // Java: counter starts at 0, increments to 31. Same 31 frames.
+        // Child creation leaves the parent timer at zero even though the newly
+        // allocated later-slot children already moved once. The following 30
+        // parent passes publish 1..30; pass 31 is the matching terminal dispatch.
         if (phaseTimer >= INTRO_WAIT2_FRAMES) {
+            // The Bombs AddPLC is part of this one-shot handoff. A rejected
+            // preflight must leave WAIT2 armed so the same owner retries next
+            // pass instead of permanently losing the native cue.
+            if (!queueBombPlc()) {
+                return;
+            }
             currentPhase = Phase.MESSAGE_FLYOUT;
             phaseTimer = 0;
+            bannerVisible = false;
+            messageVisible = true;
+            // Obj5F creates the ring-requirement message, sets
+            // SpecialStage_Started, and deletes itself in this same object pass
+            // (s2.asm:9734-9746). Keep this latched through later checkpoint
+            // message reuse of WAIT2.
+            specialStageStarted = true;
             LOGGER.fine("Intro: WAIT2 complete, entering MESSAGE_FLYOUT");
+        }
+    }
+
+    private boolean queueBombPlc() {
+        try {
+            Sonic2PlcService plcService = GameServices.module().getGameService(Sonic2PlcService.class);
+            if (plcService != null) {
+                plcService.transact(Sonic2PlcService.appendOperation(Sonic2Constants.PLC_SPECIAL_STAGE_BOMBS));
+            }
+            return true;
+        } catch (Exception ignored) {
+            // Focused presentation tests do not create a game-owned PLC service.
+            return GameServices.module().getGameService(Sonic2PlcService.class) == null;
         }
     }
 
@@ -417,11 +532,97 @@ public class Sonic2SpecialStageIntro {
         }
     }
 
+    Sonic2SpecialStageSnapshot.IntroSnapshot captureRewindSnapshot() {
+        ArrayList<Sonic2SpecialStageSnapshot.IntroMessageLetterSnapshot> message = new ArrayList<>();
+        for (MessageLetter letter : messageLetters) {
+            message.add(new Sonic2SpecialStageSnapshot.IntroMessageLetterSnapshot(
+                    letter.x,
+                    letter.y,
+                    letter.tileOffset,
+                    letter.flyoutAngle,
+                    letter.flyoutSpeed,
+                    letter.visible));
+        }
+
+        ArrayList<Sonic2SpecialStageSnapshot.IntroBannerLetterSnapshot> banner = new ArrayList<>();
+        for (BannerLetter letter : bannerLetters) {
+            banner.add(new Sonic2SpecialStageSnapshot.IntroBannerLetterSnapshot(
+                    letter.x,
+                    letter.y,
+                    letter.frame,
+                    letter.flyoutAngle,
+                    letter.flyoutSpeed,
+                    letter.visible));
+        }
+
+        return new Sonic2SpecialStageSnapshot.IntroSnapshot(
+                currentPhase,
+                phaseTimer,
+                frameCounter,
+                specialStageStarted,
+                bannerX,
+                bannerY,
+                bannerVisible,
+                messageX,
+                messageY,
+                messageVisible,
+                ringRequirement,
+                lettersFlying,
+                letterFlyoutProgress,
+                messageFlyoutInitialized,
+                bannerFlyoutInitialized,
+                message,
+                banner);
+    }
+
+    void restoreRewindSnapshot(Sonic2SpecialStageSnapshot.IntroSnapshot snapshot) {
+        currentPhase = snapshot.currentPhase();
+        phaseTimer = snapshot.phaseTimer();
+        frameCounter = snapshot.frameCounter();
+        specialStageStarted = snapshot.specialStageStarted();
+        bannerX = snapshot.bannerX();
+        bannerY = snapshot.bannerY();
+        bannerVisible = snapshot.bannerVisible();
+        messageX = snapshot.messageX();
+        messageY = snapshot.messageY();
+        messageVisible = snapshot.messageVisible();
+        ringRequirement = snapshot.ringRequirement();
+        lettersFlying = snapshot.lettersFlying();
+        letterFlyoutProgress = snapshot.letterFlyoutProgress();
+        messageFlyoutInitialized = snapshot.messageFlyoutInitialized();
+        bannerFlyoutInitialized = snapshot.bannerFlyoutInitialized();
+
+        messageLetters.clear();
+        for (Sonic2SpecialStageSnapshot.IntroMessageLetterSnapshot letter : snapshot.messageLetters()) {
+            MessageLetter restored = new MessageLetter(letter.x(), letter.y(), letter.tileOffset());
+            restored.flyoutAngle = letter.flyoutAngle();
+            restored.flyoutSpeed = letter.flyoutSpeed();
+            restored.visible = letter.visible();
+            messageLetters.add(restored);
+        }
+
+        bannerLetters.clear();
+        for (Sonic2SpecialStageSnapshot.IntroBannerLetterSnapshot letter : snapshot.bannerLetters()) {
+            BannerLetter restored = new BannerLetter(letter.x(), letter.y(), letter.frame());
+            restored.flyoutAngle = letter.flyoutAngle();
+            restored.flyoutSpeed = letter.flyoutSpeed();
+            restored.visible = letter.visible();
+            bannerLetters.add(restored);
+        }
+    }
+
     /**
      * Gets the current intro phase.
      */
     public Phase getCurrentPhase() {
         return currentPhase;
+    }
+
+    /**
+     * Returns whether the ROM's empty-player/zero-speed pre-roll is active.
+     */
+    public boolean isPreRollActive() {
+        return currentPhase == Phase.PRE_ROLL;
     }
 
     /**
@@ -432,11 +633,19 @@ public class Sonic2SpecialStageIntro {
     }
 
     /**
-     * Checks if player input should be processed.
-     * Input is ignored during DROP, WAIT1, and WAIT2 phases.
+     * Returns the ROM's latched {@code SpecialStage_Started} state. This turns
+     * on when Obj5F creates the initial ring message at the WAIT2 boundary,
+     * before the message flyout presentation completes (s2.asm:9734-9746).
      */
-    public boolean isInputEnabled() {
-        return currentPhase == Phase.GAMEPLAY || currentPhase == Phase.MESSAGE_FLYOUT;
+    public boolean isSpecialStageStarted() {
+        return specialStageStarted;
+    }
+
+    /** Native Obj5F state immediately before its terminal WAIT2 object pass. */
+    boolean isTerminalPreStartPassPending() {
+        return currentPhase == Phase.WAIT2
+                && phaseTimer == INTRO_WAIT2_FRAMES - 1
+                && !specialStageStarted;
     }
 
     /**
@@ -501,7 +710,8 @@ public class Sonic2SpecialStageIntro {
      * Checks if letters are currently flying off the banner.
      */
     public boolean areLettersFlying() {
-        return lettersFlying && currentPhase == Phase.WAIT1;
+        return lettersFlying && (currentPhase == Phase.WAIT1
+                || (currentPhase == Phase.WAIT2 && !specialStageStarted));
     }
 
     /**
@@ -530,14 +740,15 @@ public class Sonic2SpecialStageIntro {
     }
 
     /**
-     * Checks if the banner is currently in the flyout animation phase (WAIT1 after delay).
+     * Checks if the banner is currently in its independent child-flight phase.
      * When true, the renderer should render individual banner pieces instead of the full banner.
-     * Returns false during the 15-frame delay after landing.
+     * Returns false during the 15-frame delay after landing and after Obj5F's
+     * terminal pass creates the initial ring-requirement message.
      */
     public boolean isBannerInFlyoutPhase() {
-        return currentPhase == Phase.WAIT1 &&
-               phaseTimer >= BANNER_LAND_DELAY_FRAMES &&
-               bannerFlyoutInitialized;
+        boolean childFlightPhase = currentPhase == Phase.WAIT1
+                || (currentPhase == Phase.WAIT2 && !specialStageStarted);
+        return childFlightPhase && bannerFlyoutInitialized;
     }
 
     /**

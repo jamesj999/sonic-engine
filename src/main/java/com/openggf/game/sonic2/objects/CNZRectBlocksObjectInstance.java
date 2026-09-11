@@ -30,7 +30,7 @@ import java.util.List;
  * <b>Disassembly Reference:</b> s2.asm lines 58068-58201 (ObjD2)
  */
 public class CNZRectBlocksObjectInstance extends BoxObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
 
     /**
      * Animation frame data from byte_2B654.
@@ -59,12 +59,18 @@ public class CNZRectBlocksObjectInstance extends BoxObjectInstance
     private static final int FRAMES_PER_TICK = 16; // objoff_3A reset value + 1
 
     // Base position (stored during init, from spawn location)
-    private final int baseX;
-    private final int baseY;
+    private int baseX;
+    private int baseY;
 
     // Animation state
     private int mappingFrame = 0;
-    private int animTimer = FRAMES_PER_TICK - 1; // Counts down from 15 to 0
+    // ROM ObjD2_Init (s2.asm:58524-58538) never writes objoff_3A, so it is
+    // zero-initialized. The first ObjD2_Main tick (s2.asm:58547-58549) does
+    // subq.w #1,objoff_3A on 0 -> -1 -> bmi -> immediately advances mapping_frame
+    // and resets objoff_3A to $F. Thus mapping_frame 0 shows for only 1 tick.
+    // Mirror that by starting animTimer at 0 (not FRAMES_PER_TICK-1) so the engine
+    // and ROM caterpillar animation stay phase-aligned.
+    private int animTimer = 0; // objoff_3A, zero-initialized per ROM (s2.asm:58524-58538)
     private int invisibleTimer; // Counts down, object invisible when > 0
 
     // Current computed position
@@ -86,6 +92,11 @@ public class CNZRectBlocksObjectInstance extends BoxObjectInstance
 
         // Compute initial position
         updatePosition();
+    }
+
+    @Override
+    public CNZRectBlocksObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new CNZRectBlocksObjectInstance(ctx.spawn(), getName());
     }
 
     /**
@@ -118,7 +129,7 @@ public class CNZRectBlocksObjectInstance extends BoxObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // Phase 1: If invisible, count down and skip everything else
         if (invisibleTimer > 0) {
@@ -195,11 +206,17 @@ public class CNZRectBlocksObjectInstance extends BoxObjectInstance
         int d2 = height;
         int d3 = height + 1;
 
-        // Calculate offset from spawn position to current position
-        int offsetX = currentX - baseX;
-        int offsetY = currentY - baseY;
+        // getX/getY expose the live native x_pos/y_pos, so collision is already
+        // anchored at the per-frame rectangle position. Applying the offset a
+        // second time would move the solid surface twice.
+        return SolidObjectParams.of(d1, d2, d3, 0, 0);
+    }
 
-        return new SolidObjectParams(d1, d2, d3, offsetX, offsetY);
+    @Override
+    public boolean carriesRiderOnHorizontalMove(PlayableEntity player) {
+        // ObjD2 stores the current x_pos in d4 immediately before SolidObject,
+        // so MvSonicOnPtfm observes zero object delta for this routine.
+        return false;
     }
 
     @Override
@@ -245,15 +262,37 @@ public class CNZRectBlocksObjectInstance extends BoxObjectInstance
         return frameData[3];
     }
 
+    @Override
+    public int getX() {
+        return currentX;
+    }
+
+    @Override
+    public int getY() {
+        return currentY;
+    }
+
+    @Override
+    public int getBalanceWidthPixels() {
+        return FRAME_DATA[mappingFrame][2];
+    }
+
+    @Override
+    public int getOutOfRangeReferenceX() {
+        // ObjD2 keeps the placement x in objoff_30 for MarkObjGone2 while
+        // x_pos follows the per-frame rectangle offsets.
+        return baseX;
+    }
+
     /**
-     * Override to use current computed position instead of base spawn position.
+     * Exposes the current computed position for diagnostics.
      */
     public int getCurrentX() {
         return currentX;
     }
 
     /**
-     * Override to use current computed position instead of base spawn position.
+     * Exposes the current computed position for diagnostics.
      */
     public int getCurrentY() {
         return currentY;

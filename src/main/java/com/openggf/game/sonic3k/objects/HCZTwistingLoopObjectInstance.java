@@ -5,8 +5,12 @@ import com.openggf.game.PlayableEntity;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.physics.TrigLookupTable;
+import com.openggf.sprites.NativePositionOps;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
+import com.openggf.sprites.playable.ObjectControlState;
 
 import java.util.List;
 import java.util.logging.Logger;
@@ -27,7 +31,7 @@ import java.util.logging.Logger;
  * <p>Two instances at the HCZ1 boss arena (X=$3418/$3440, Y=$07F4, subtype $38)
  * carry Sonic downward into the Act 2 starting area after the miniboss.
  */
-public class HCZTwistingLoopObjectInstance extends AbstractObjectInstance {
+public class HCZTwistingLoopObjectInstance extends AbstractObjectInstance implements RewindRecreatable {
     private static final Logger LOG = Logger.getLogger(HCZTwistingLoopObjectInstance.class.getName());
 
     // =========================================================================
@@ -146,9 +150,9 @@ public class HCZTwistingLoopObjectInstance extends AbstractObjectInstance {
     // Instance state
     // =========================================================================
 
-    private final int subtype;
-    private final boolean reverseEntry;  // bit 7 of subtype
-    private final boolean objectFlippedX;  // ROM: status bit 0 from layout render_flags
+    private int subtype;
+    private boolean reverseEntry;  // bit 7 of subtype
+    private boolean objectFlippedX;  // ROM: status bit 0 from layout render_flags
     private final LoopDef loopDef;
     private final PlayerState p1State = new PlayerState();
     private final PlayerState p2State = new PlayerState();
@@ -173,27 +177,35 @@ public class HCZTwistingLoopObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public HCZTwistingLoopObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new HCZTwistingLoopObjectInstance(ctx.spawn());
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         if (isDestroyed()) return;
 
         // Process Player 1
-        AbstractPlayableSprite player1 = services().camera().getFocusedSprite();
+        PlayableEntity queriedMainPlayer = services().playerQuery().mainPlayerOrNull();
+        AbstractPlayableSprite player1 = queriedMainPlayer instanceof AbstractPlayableSprite sprite ? sprite : null;
+        if (player1 == null && playerEntity instanceof AbstractPlayableSprite sprite) {
+            player1 = sprite;
+        }
         if (player1 != null) {
             processPlayer(player1, p1State);
         }
 
         // Process Player 2 (sidekick)
-        for (AbstractPlayableSprite sidekick : services().spriteManager().getSidekicks()) {
+        PlayableEntity nativeP2 = services().playerQuery().nativeP2OrNull();
+        if (nativeP2 instanceof AbstractPlayableSprite sidekick && sidekick != player1) {
             processPlayer(sidekick, p2State);
-            break; // Only first sidekick (matches ROM's single Player_2)
         }
 
         // ROM: loc_3909C — if both players are in phase 0 (not captured),
-        // call Delete_Sprite_If_Not_In_Range. In the ROM this frees the slot
-        // but clears the "loaded" bit so the object respawns when the camera
-        // returns. Our engine doesn't support respawning, so we keep the
-        // object alive — isPersistent() already returns true, and the per-frame
-        // cost of idle detection checks is negligible for an invisible object.
+        // call Delete_Sprite_If_Not_In_Range. ObjectManager's ordinary
+        // off-screen path now clears the placement-loaded state and permits a
+        // later respawn, so only an actively captured player needs to make the
+        // controller persistent.
     }
 
     // =========================================================================
@@ -320,8 +332,15 @@ public class HCZTwistingLoopObjectInstance extends AbstractObjectInstance {
     private void capturePlayer(AbstractPlayableSprite player, PlayerState state) {
         state.phase = 2;  // ROM: addq.b #2,(a4)
 
-        // ROM: move.b #1,object_control(a1)
-        player.setObjectControlled(true);
+        // The native routine changes status/radius fields without writing x_pos
+        // or y_pos. Engine rolling setup can move the centre while it swaps the
+        // collision box, so retain the native position words (and their packed
+        // subpixels) across that representation change.
+        short captureX = player.getCentreX();
+        short captureY = player.getCentreY();
+
+        // ROM: move.b #1,object_control(a1) — bits 0-6, movement suppressed but CPU/touch remain allowed.
+        ObjectControlState.nativeBits0To6CpuAllowedMovementSuppressed().applyTo(player);
 
         // ROM: move.b #2,anim(a1) — force rolling animation
         player.setRolling(true);
@@ -343,6 +362,8 @@ public class HCZTwistingLoopObjectInstance extends AbstractObjectInstance {
         player.setAngle(CAPTURE_ANGLE);
         player.setGroundMode(GroundMode.GROUND);
         player.setAir(false);
+        NativePositionOps.writeXPosPreserveSubpixel(player, captureX);
+        NativePositionOps.writeYPosPreserveSubpixel(player, captureY);
 
         // Initial vertical progress = player Y - topY
         // ROM: move.w d1,2(a4) — stores as word in upper half of the 16.16 long
@@ -356,7 +377,7 @@ public class HCZTwistingLoopObjectInstance extends AbstractObjectInstance {
      * Releases the player from object control — ROM: move.b #0,object_control(a1).
      */
     private void releasePlayer(AbstractPlayableSprite player) {
-        player.setObjectControlled(false);
+        ObjectControlState.none().applyTo(player);
         LOG.fine("HCZTwistingLoop: released player");
     }
 
@@ -483,8 +504,8 @@ public class HCZTwistingLoopObjectInstance extends AbstractObjectInstance {
         int y = loopDef.topY + progress;
 
         // ROM: move.w d0,x_pos(a1); move.w d0,y_pos(a1) — center coordinates
-        player.setCentreX((short) x);
-        player.setCentreY((short) y);
+        NativePositionOps.writeXPosPreserveSubpixel(player, x);
+        NativePositionOps.writeYPosPreserveSubpixel(player, y);
 
         advanceProgress(player, state);
     }
@@ -514,8 +535,8 @@ public class HCZTwistingLoopObjectInstance extends AbstractObjectInstance {
         int y = loopDef.topY + state.getProgressPixels();
 
         // ROM: move.w d0,x_pos(a1); move.w d0,y_pos(a1) — center coordinates
-        player.setCentreX((short) x);
-        player.setCentreY((short) y);
+        NativePositionOps.writeXPosPreserveSubpixel(player, x);
+        NativePositionOps.writeYPosPreserveSubpixel(player, y);
 
         advanceProgress(player, state);
     }
@@ -540,6 +561,10 @@ public class HCZTwistingLoopObjectInstance extends AbstractObjectInstance {
 
     @Override
     public boolean isPersistent() {
-        return true;  // Must survive while player is captured
+        // sonic3k.asm loc_3909C tests both per-player phase bytes before
+        // Delete_Sprite_If_Not_In_Range. A captured player can carry the
+        // invisible controller beyond its placement window, but an idle loop
+        // must release its SST slot just like any other placed object.
+        return p1State.phase != 0 || p2State.phase != 0;
     }
 }

@@ -4,14 +4,14 @@ import com.openggf.data.Rom;
 import com.openggf.game.sonic3k.bonusstage.slots.S3kSlotBonusStageRuntime;
 import com.openggf.game.sonic3k.constants.Sonic3kZoneIds;
 import com.openggf.level.scroll.ZoneScrollHandler;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNotSame;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static com.openggf.level.scroll.M68KMath.unpackBG;
 import static com.openggf.level.scroll.M68KMath.unpackFG;
 
@@ -57,7 +57,7 @@ public class SwScrlSlotsTest {
         scroll.updateForTest(runtime, horizScrollBuf, 0x300, 0x200, 0);
 
         for (int line = 0; line < horizScrollBuf.length; line++) {
-            assertEquals("BG scroll should be zero on init line " + line, 0, unpackBG(horizScrollBuf[line]));
+            assertEquals(0, unpackBG(horizScrollBuf[line]), "BG scroll should be zero on init line " + line);
         }
         assertEquals(0, scroll.backgroundVelocityForTest());
         assertEquals(0, scroll.getVscrollFactorBG() & 0xFF);
@@ -144,11 +144,10 @@ public class SwScrlSlotsTest {
             scroll.updateForTest(runtime, 0x300, 0x200, i);
         }
 
-        assertTrue("positiveVelocity=" + positiveVelocity, positiveVelocity >= 0x7C00);
-        assertTrue("positiveVelocity=" + positiveVelocity, positiveVelocity <= 0x8000);
-        assertTrue("positiveVelocity=" + positiveVelocity + " postFlipVelocity=" + postFlipVelocity,
-                postFlipVelocity < positiveVelocity);
-        assertTrue("finalVelocity=" + scroll.backgroundVelocityForTest(), scroll.backgroundVelocityForTest() < 0);
+        assertTrue(positiveVelocity >= 0x7C00, "positiveVelocity=" + positiveVelocity);
+        assertTrue(positiveVelocity <= 0x8000, "positiveVelocity=" + positiveVelocity);
+        assertTrue(postFlipVelocity < positiveVelocity, "positiveVelocity=" + positiveVelocity + " postFlipVelocity=" + postFlipVelocity);
+        assertTrue(scroll.backgroundVelocityForTest() < 0, "finalVelocity=" + scroll.backgroundVelocityForTest());
         assertEquals(0x12, scroll.getVscrollFactorBG() & 0xFF);
     }
 
@@ -194,3 +193,5 @@ public class SwScrlSlotsTest {
         assertEquals(unpackBG(horizScrollBuf[95]), unpackBG(horizScrollBuf[176]));
     }
 }
+
+

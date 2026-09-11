@@ -8,7 +8,10 @@ import com.openggf.graphics.RenderPriority;
 import com.openggf.level.LevelManager;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
+import com.openggf.level.objects.ObjectLifetimeOps;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
@@ -38,7 +41,7 @@ import java.util.List;
  * Reference: docs/s1disasm/_incObj/35 Burning Grass.asm
  */
 public class Sonic1GrassFireObjectInstance extends AbstractObjectInstance
-        implements TouchResponseProvider {
+        implements TouchResponseProvider, RewindRecreatable {
 
     // ========================================================================
     // ROM Constants
@@ -106,13 +109,18 @@ public class Sonic1GrassFireObjectInstance extends AbstractObjectInstance
     // ========================================================================
 
     /** Whether this is the walking fire (subtype 0) or stationary (subtype 1). */
-    private final boolean isWalker;
+    private boolean isWalker;
 
     /** Current X position (updated for walker). */
     private int currentX;
 
-    /** Base Y from the platform surface (objoff_2C in ROM = lgrass_origY + 5). */
-    private final int baseY;
+    /**
+     * Base Y from the platform surface (objoff_2C in ROM = lgrass_origY + 5).
+     * Un-finaled for rewind: NOT spawn-derivable (getSpawn() reports baseY + sinkOffset,
+     * not baseY), so the generic field capturer reapplies the captured value after the
+     * recreate hook uses a placeholder.
+     */
+    private int baseY;
 
     /** Vertical offset from parent platform sinking (objoff_3C). */
     private int sinkOffset;
@@ -120,14 +128,19 @@ public class Sonic1GrassFireObjectInstance extends AbstractObjectInstance
     /** Current Y position (computed from baseY + sinkOffset). */
     private int currentY;
 
-    /** Starting X position (gfire_origX). */
-    private final int originX;
+    /**
+     * Starting X position (gfire_origX).
+     * Un-finaled for rewind: NOT spawn-derivable (getSpawn() reports the walked currentX,
+     * not originX), so the generic field capturer reapplies the captured value after the
+     * recreate hook uses a placeholder.
+     */
+    private int originX;
 
     /** Slope height data from parent platform (objoff_30 pointer). */
-    private final byte[] slopeData;
+    private byte[] slopeData;
 
     /** Reference to parent platform for child registration and sink tracking. */
-    private final Sonic1LargeGrassyPlatformObjectInstance parentPlatform;
+    private Sonic1LargeGrassyPlatformObjectInstance parentPlatform;
 
     /** Animation timer. */
     private int animTimer;
@@ -136,10 +149,18 @@ public class Sonic1GrassFireObjectInstance extends AbstractObjectInstance
     private int animIndex;
 
     /** Walker: tracks spawned children for cleanup. */
-    private final List<Sonic1GrassFireObjectInstance> children;
+    private List<Sonic1GrassFireObjectInstance> children;
 
     /** Whether the sound has been played (only on init, routine 0). */
     private boolean soundPlayed;
+
+    /**
+     * Harmless probe constructor used by the generic rewind recreator before
+     * delegating to {@link #recreateForRewind(RewindRecreateContext)}.
+     */
+    public Sonic1GrassFireObjectInstance() {
+        this(0, 0, 0, null, null, true);
+    }
 
     /**
      * Creates a GrassFire instance.
@@ -170,12 +191,22 @@ public class Sonic1GrassFireObjectInstance extends AbstractObjectInstance
         this.soundPlayed = false;
     }
 
+    @Override
+    public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        if (ctx == null || ctx.spawn() == null) {
+            return null;
+        }
+        ObjectSpawn spawn = ctx.spawn();
+        return new Sonic1GrassFireObjectInstance(
+                spawn.x(), spawn.y(), 0, null, null, spawn.subtype() == 0);
+    }
+
     // ========================================================================
     // Update Logic
     // ========================================================================
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // Play burning sound on first frame (GFire_Main: jsr QueueSound2)
         if (!soundPlayed) {
@@ -267,17 +298,15 @@ public class Sonic1GrassFireObjectInstance extends AbstractObjectInstance
             }
         }
 
-        Sonic1GrassFireObjectInstance child = new Sonic1GrassFireObjectInstance(
-                currentX, childBaseY, sinkOffset, slopeData, parentPlatform, false);
-        // ROM: FindNextFreeObj allocates a slot AFTER the current fire's slot.
-        int mySlot = getSlotIndex();
-        if (mySlot >= 0) {
-            int childSlot = services().objectManager().allocateSlotAfter(mySlot);
-            if (childSlot >= 0) {
-                child.setSlotIndex(childSlot);
-            }
-        }
-        services().objectManager().addDynamicObject(child);
+        final int fChildBaseY = childBaseY;
+        final int mySlot = getSlotIndex();
+        Sonic1GrassFireObjectInstance child = spawnFreeChild(() -> {
+            Sonic1GrassFireObjectInstance c = new Sonic1GrassFireObjectInstance(
+                    currentX, fChildBaseY, sinkOffset, slopeData, parentPlatform, false);
+            // ROM: FindNextFreeObj allocates a slot AFTER the current fire's slot.
+            ObjectLifetimeOps.assignFindNextFreeChildSlot(services().objectManager(), c, mySlot);
+            return c;
+        });
         children.add(child);
 
         // Register child with parent platform for sink offset updates

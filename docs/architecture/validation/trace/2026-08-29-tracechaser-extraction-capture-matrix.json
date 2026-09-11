@@ -1,0 +1,220 @@
+{
+  "capture": {
+    "batch_root": "external TRACECHASER_EVIDENCE_ROOT/pre-extraction",
+    "estimated_peak_bytes": 4100000000,
+    "mode": "trace",
+    "output_template": "captures/{id}",
+    "required_free_space_multiplier": 1.25,
+    "runner": "tools/bizhawk-headless/run.sh"
+  },
+  "format": "openggf-tracechaser-extraction-capture-matrix-v1",
+  "freeze": {
+    "fixture_inventory": {
+      "aggregate_sha256": "ecf9506d175a6b336e87e9baffb0fb0262a8821c9dc38d696dc985b518259ed9",
+      "file_count": 1519,
+      "path": "docs/architecture/validation/trace/2026-08-29-tracechaser-extraction-fixture-inventory.json"
+    },
+    "native_test_filters": [
+      "Bk2Reader",
+      "S1TraceCaptureRunner",
+      "S1RunCaptureRunner",
+      "S2TraceCaptureRunner",
+      "S2RunCaptureRunner records a level-ss-level round trip",
+      "S2RunCaptureRunner publishes mandatory audit manifest",
+      "S3K runner",
+      "S3KCompleteRun",
+      "S3K complete-run",
+      "TraceCli"
+    ],
+    "native_artifacts": {
+      "BizHawk.Headless.Gpgx.Tests.exe": {
+        "sha256": "0e65176bb80e3fbee699a8bc4174a9adc62c6359e9773e8495fe68515a738947",
+        "size": 1024000
+      },
+      "BizHawk.Headless.Gpgx.Tests.pdb": {
+        "sha256": "2ef3337c4b54734b16eddf1a2a0149839842d5aedeac55bb8907ad0610fa2f63",
+        "size": 241468
+      },
+      "BizHawk.Headless.Gpgx.exe": {
+        "sha256": "5811e3103ac64a26c56e9ae08775ec0beab3ddf02be6b20ef31113abbb5cd316",
+        "size": 537600
+      },
+      "BizHawk.Headless.Gpgx.pdb": {
+        "sha256": "ac213d7c55316b63001b34a0c72e727f95767151ff6f2c75f5a2260aa526a0f7",
+        "size": 157796
+      }
+    },
+    "bizhawk": {
+      "archive_lock": {
+        "archive_name": "BizHawk-2.11-linux-x64.tar.gz",
+        "archive_sha256": "cdaf9650d880bae660d63a388430f630b8d8a96b1ba59ebf0e0195a645c3bab8",
+        "path": "tools/bizhawk/fetch_bizhawk_2_11_linux.sh",
+        "tracechaser_path": "bizhawk/fetch_bizhawk_2_11_linux.sh",
+        "sha256": "8dadc9cad103b30155a72a948e81b360753f867cd35978e3e16cd115de25d85d"
+      },
+      "capabilities": [
+        {
+          "contains": "invisibleemulation",
+          "path": "dll/BizHawk.Client.Common.dll"
+        },
+        {
+          "contains": "client.invisibleemulation",
+          "path": "Lua/GBA/SonicAdvance_CamHack.lua"
+        }
+      ],
+      "runtime_inputs": {
+        "EmuHawk.exe": {
+          "sha256": "b2d4be5e2a766a5161cc26f3af2a90753c39d64c91c54a9884171aed09e21df3",
+          "size": 5320192
+        },
+        "Lua/GBA/SonicAdvance_CamHack.lua": {
+          "sha256": "19a528329ba0d0fc960105e1b450006fe6cb56b4abec62751aae47b90c273ee5",
+          "size": 875
+        },
+        "dll/BizHawk.BizInvoke.dll": {
+          "sha256": "8d05389bf0e02be1244bdc7a2adcd93b4cff95acf199fc927987ca699760a1b7",
+          "size": 173056
+        },
+        "dll/BizHawk.Client.Common.dll": {
+          "sha256": "08f9578bfa36f6179fee41e5ce3a3067ce68808dc28ae206e4a5aa2bb7eca283",
+          "size": 1672192
+        },
+        "dll/BizHawk.Common.dll": {
+          "sha256": "438a49d6a45d9fcac17016240ae205d1af7a4632865f6f70468b684b82323f33",
+          "size": 399872
+        },
+        "dll/BizHawk.Emulation.Common.dll": {
+          "sha256": "f20cd009f6f5b0a95bd47b66c48dc8de85afcd7ae0cc6aab3486baf55f501fb4",
+          "size": 422912
+        },
+        "dll/BizHawk.Emulation.Cores.dll": {
+          "sha256": "0144e6e236be68ce126eb771dcb5a9ae7c153a083fa0333f345ac37b4a60acf7",
+          "size": 8774144
+        },
+        "dll/BizHawk.Emulation.DiscSystem.dll": {
+          "sha256": "a18f4ca3a7bb36aeea117dc36311664ad410b660d0052f55617055b3d6822d64",
+          "size": 351744
+        },
+        "dll/Newtonsoft.Json.dll": {
+          "sha256": "e1e27af7b07eeedf5ce71a9255f0422816a6fc5849a483c6714e1b472044fa9d",
+          "size": 711952
+        },
+        "dll/gpgx.wbx.zst": {
+          "sha256": "c4231296ec5ba59b431df22b68e234ae7bfbbfc87b6e72fa471234ac1b220d12",
+          "size": 400161
+        },
+        "dll/libwaterboxhost.so": {
+          "sha256": "d2367818aafb4e520ad5ab005b5762c61506b0c819c4d79687235acfb0fc0c78",
+          "size": 688512
+        }
+      },
+      "source_lock": {
+        "path": "tools/bizhawk-headless/native/gpgx-audio-observer/source-lock.json",
+        "tracechaser_path": "bizhawk-headless/native/gpgx-audio-observer/source-lock.json",
+        "sha256": "348ffd29471bcd9a0f452b6112a7bed941f0dd43f364a315c5cbd68f918205f9"
+      },
+      "version": "2.11"
+    },
+    "policy": "extraction-build-test-v1",
+    "source_commit": "41828f10998f531e614d855c858ba1b26429d757",
+    "source_diff_base_commit": "081167cb9363f989b74d56e7551b3cce37a8017a",
+    "source_diff_sha256": "4238071a54cb4e23b2b19b63a05bf6ed57c535f61a0cd18ae9b34cc44be75b90",
+    "tracechaser_build": {
+      "source_commit": "398483941681d4b6a29d68494c5664a0e58a59a7",
+      "source_diff_base_commit": "88ec9f1c61992a04f72763d94a231e7ffe0ff801",
+      "source_diff_sha256": "4ffa6fc8e23a04ebdd52bc844d9aefc0554f8c7aee24de431aa2ff89fe870976",
+      "native_test_filters": [
+        "Bk2Reader",
+        "S1TraceCaptureRunner",
+        "S1RunCaptureRunner",
+        "S2TraceCaptureRunner",
+        "S2RunCaptureRunner records a level-ss-level round trip",
+        "S2RunCaptureRunner publishes mandatory audit manifest",
+        "S3K runner",
+        "S3KCompleteRun",
+        "S3K complete-run",
+        "TraceCli"
+      ]
+    },
+    "toolchain": {
+      "mono_version": "Mono JIT compiler version 6.12.0 (makepkg/0cbf0e290c3 Tue Jun 11 13:06:07 CEST 2024)",
+      "roslyn_csc_path": "/usr/lib/mono/msbuild/Current/bin/Roslyn/csc.exe",
+      "roslyn_csc_sha256": "81e98ade50f3e4127237128211778bd6ebe0c3998c9cc2f5eb44f3196a0297f8",
+      "roslyn_csc_version": "3.9.0-6.21124.20 (db94f4cc)",
+      "xbuild_version": "XBuild Engine Version 14.0"
+    }
+  },
+  "roms": {
+    "s1": {
+      "crc32": "AFE05EEE",
+      "environment": "S1_ROM_PATH",
+      "filename": "Sonic The Hedgehog (W) (REV01) [!].gen",
+      "sha1": "69E102855D4389C3FD1A8F3DC7D193F8EEE5FE5B",
+      "sha256": "1b7f6635bd713f37f3c2f44f302b872c2e3c5f56e63637918dad4637146900fd"
+    },
+    "s2": {
+      "crc32": "7B905383",
+      "environment": "S2_ROM_PATH",
+      "filename": "Sonic The Hedgehog 2 (W) (REV01) [!].gen",
+      "sha1": "8BCA5DCEF1AF3E00098666FD892DC1C2A76333F9",
+      "sha256": "193bc4064ce0daf27ea9e908ed246d87ec576cc294833badebb590b6ad8e8f6b"
+    },
+    "s3k": {
+      "crc32": "63522553",
+      "environment": "S3K_ROM_PATH",
+      "filename": "Sonic and Knuckles & Sonic 3 (W) [!].gen",
+      "sha1": "CFBF98C36C776677290A872547AC47C53D2761D6",
+      "sha256": "fba0677fde9f76df93f3e98d6310d8af68b9847bde16e253d73cd4dd8134ed23"
+    }
+  },
+  "rows": [
+    {
+      "game": "s1",
+      "id": "s1-ghz1",
+      "mappings": [{"destination": "s1/ghz1_fullrun", "source": ""}],
+      "movie": "s1/ghz1_fullrun/ghz1_fullrun.bk2",
+      "movie_sha256": "dced61b2d3a3346b2ecd62254140497ef2827374c1de8597780f91e39ca0dcea",
+      "selectors": []
+    },
+    {
+      "game": "s1",
+      "id": "s1-emeralds-run",
+      "mappings": [{"destination": "s1/runs/s1-sonic-complete-withemeralds", "source": ""}],
+      "movie": "s1/runs/s1-sonic-complete-withemeralds/sonic1-complete-withemeralds.bk2",
+      "movie_sha256": "f2e817936d07b2b1f2b80d61451f174189509a2817da2b2349ce0e19b8a5567b",
+      "selectors": ["--run-id", "s1-sonic-complete-withemeralds"]
+    },
+    {
+      "game": "s2",
+      "id": "s2-ehz1",
+      "mappings": [{"destination": "s2/ehz1_fullrun", "source": ""}],
+      "movie": "s2/ehz1_fullrun/s2-ehz1.bk2",
+      "movie_sha256": "db310fa5e70a3cbaca4bafb06d98509894df920e4ab267d3e22db3f530104eed",
+      "selectors": ["--trace-profile", "gameplay_unlock"]
+    },
+    {
+      "game": "s2",
+      "id": "s2-emeralds-run",
+      "mappings": [{"destination": "s2/runs/s2-sonic-tails-complete-emeralds", "source": ""}],
+      "movie": "s2/runs/s2-sonic-tails-complete-emeralds/sonic-2-sonic-tails-complete-emeralds.bk2",
+      "movie_sha256": "e850798f882b8c580aad148bc97cb50f260cae1d336dd649fe2f4dfae6796aa5",
+      "selectors": ["--run-id", "s2-sonic-tails-complete-emeralds"]
+    },
+    {
+      "game": "s3k",
+      "id": "s3k-aiz",
+      "mappings": [{"destination": "s3k/aiz1_to_hcz_fullrun", "source": ""}],
+      "movie": "s3k/aiz1_to_hcz_fullrun/s3-aiz1-2-sonictails.bk2",
+      "movie_sha256": "6837de0f67db7eb68f20b6f6df6a2872713a613d8b4dbc804847209c16b56e97",
+      "selectors": ["--trace-profile", "aiz_end_to_end", "--load-queue-state"]
+    },
+    {
+      "game": "s3k",
+      "id": "s3k-complete",
+      "mappings": [{"destination": "s3k", "source": ""}],
+      "movie": "s3k/_movies/s3k-complete-sonic-tails.bk2",
+      "movie_sha256": "82eabfbc65e33c160ce209baa1ca3f967cb677fe22350bc100625d8c41a8e1bf",
+      "selectors": ["--trace-profile", "complete_run", "--load-queue-state"]
+    }
+  ]
+}

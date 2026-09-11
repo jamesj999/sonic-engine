@@ -7,23 +7,21 @@ import com.openggf.game.GameServices;
 import com.openggf.game.GroundMode;
 import com.openggf.sprites.playable.Sonic;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * Headless integration tests verifying that the S3K big ring (Obj_SSEntryRing)
  * is NOT interactable during its formation animation in a real AIZ2 scenario.
  * <p>
  * Setup: AIZ Act 2, post-fire section. A red spring at approximately (566, 1223)
- * launches Sonic upward past a big ring (near Y ≈ 803). The ring should NOT trigger
+ * launches Sonic upward past a big ring (near Y â‰ˆ 803). The ring should NOT trigger
  * during Sonic's ascent (it's still forming), but SHOULD trigger on his descent.
  * <p>
  * Test 1: Sonic spawns directly on the spring. Guards against the ring triggering
@@ -36,14 +34,11 @@ import static org.junit.Assert.fail;
  */
 @RequiresRom(SonicGame.SONIC_3K)
 public class TestS3kAiz2BigRingFormation {
-
-    @ClassRule public static RequiresRomRule romRule = new RequiresRomRule();
-
     private static final int ZONE_AIZ = 0;
     private static final int ACT_2 = 1;
     private static final int FPS = 60;
 
-    // Spring position — Sonic placed here should land on the red spring
+    // Spring position â€” Sonic placed here should land on the red spring
     private static final short SPRING_X = 566;
     private static final short SPRING_Y = 1223;
 
@@ -62,7 +57,7 @@ public class TestS3kAiz2BigRingFormation {
     private static Object oldSkipIntros;
     private static SharedLevel sharedLevel;
 
-    @BeforeClass
+    @BeforeAll
     public static void loadLevel() throws Exception {
         SonicConfigurationService config = SonicConfigurationService.getInstance();
         oldSkipIntros = config.getConfigValue(SonicConfiguration.S3K_SKIP_INTROS);
@@ -71,7 +66,7 @@ public class TestS3kAiz2BigRingFormation {
         sharedLevel = SharedLevel.load(SonicGame.SONIC_3K, ZONE_AIZ, ACT_2);
     }
 
-    @AfterClass
+    @AfterAll
     public static void cleanup() {
         SonicConfigurationService.getInstance().setConfigValue(
                 SonicConfiguration.S3K_SKIP_INTROS,
@@ -82,7 +77,7 @@ public class TestS3kAiz2BigRingFormation {
     private HeadlessTestFixture fixture;
     private Sonic sprite;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         fixture = HeadlessTestFixture.builder()
                 .withSharedLevel(sharedLevel)
@@ -93,7 +88,7 @@ public class TestS3kAiz2BigRingFormation {
     }
 
     // ---------------------------------------------------------------
-    // Test 1: Spawn on the spring — immediate launch
+    // Test 1: Spawn on the spring â€” immediate launch
     // ---------------------------------------------------------------
 
     /**
@@ -122,7 +117,7 @@ public class TestS3kAiz2BigRingFormation {
      */
     @Test
     public void bigRingFormationDoesNotAdvanceOffScreen_delayedApproach() {
-        // Phase 1: Place Sonic nearby and idle — ring might spawn but shouldn't animate
+        // Phase 1: Place Sonic nearby and idle â€” ring might spawn but shouldn't animate
         placeOnSpring(NEARBY_X, SPRING_Y);
         for (int i = 0; i < IDLE_WAIT_FRAMES; i++) {
             fixture.stepIdleFrames(1);
@@ -173,13 +168,12 @@ public class TestS3kAiz2BigRingFormation {
             }
         }
 
-        assertTrue(testLabel + ": Sonic should rise past Y=" + RING_Y_THRESHOLD
+        assertTrue(rosePastRing, testLabel + ": Sonic should rise past Y=" + RING_Y_THRESHOLD
                         + " (proving spring launched him). minY=" + minY
                         + " minYFrame=" + minYFrame
-                        + " finalY=" + sprite.getY(),
-                rosePastRing);
+                        + " finalY=" + sprite.getY());
 
-        // Phase B: Descend into the ring — expect capture (objectControlled)
+        // Phase B: Descend into the ring â€” expect capture (objectControlled)
         boolean captured = false;
         for (int frame = 0; frame < CAPTURE_TIMEOUT_FRAMES; frame++) {
             fixture.stepIdleFrames(1);
@@ -195,12 +189,11 @@ public class TestS3kAiz2BigRingFormation {
             }
         }
 
-        assertTrue(testLabel + ": Ring should capture Sonic on descent after formation"
+        assertTrue(captured, testLabel + ": Ring should capture Sonic on descent after formation"
                         + " (isObjectControlled=" + sprite.isObjectControlled()
                         + " isHidden=" + sprite.isHidden()
                         + " minY=" + minY
-                        + " finalY=" + sprite.getY() + ")",
-                captured);
+                        + " finalY=" + sprite.getY() + ")");
     }
 
     // ---------------------------------------------------------------
@@ -227,3 +220,5 @@ public class TestS3kAiz2BigRingFormation {
         camera.updatePosition(true);
     }
 }
+
+

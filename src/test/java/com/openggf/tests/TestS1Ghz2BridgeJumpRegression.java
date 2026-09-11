@@ -11,28 +11,23 @@ import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.ObjectInstance;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.Comparator;
 import java.util.List;
 
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Regression coverage for occasional missed jump input on GHZ2's first bridge.
  */
 @RequiresRom(SonicGame.SONIC_1)
 public class TestS1Ghz2BridgeJumpRegression {
-
-    @ClassRule public static RequiresRomRule romRule = new RequiresRomRule();
-
     private static final int ZONE_GHZ = 0;
     private static final int ACT_2 = 1;
     private static final int JUMP_TRIALS = 180;
@@ -43,26 +38,26 @@ public class TestS1Ghz2BridgeJumpRegression {
 
     private HeadlessTestFixture fixture;
 
-    @BeforeClass
+    @BeforeAll
     public static void loadLevel() throws Exception {
         sharedLevel = SharedLevel.load(SonicGame.SONIC_1, ZONE_GHZ, ACT_2);
 
-        RomByteReader reader = RomByteReader.fromRom(romRule.rom());
+        RomByteReader reader = RomByteReader.fromRom(com.openggf.tests.TestEnvironment.currentRom());
         Sonic1ObjectPlacement placement = new Sonic1ObjectPlacement(reader);
         List<ObjectSpawn> spawns = placement.load(Sonic1Constants.ZONE_GHZ, ACT_2);
         firstBridgeSpawn = spawns.stream()
                 .filter(s -> s.objectId() == Sonic1ObjectIds.BRIDGE)
                 .min(Comparator.comparingInt(ObjectSpawn::x))
                 .orElse(null);
-        assertNotNull("GHZ2 should contain at least one bridge object", firstBridgeSpawn);
+        assertNotNull(firstBridgeSpawn, "GHZ2 should contain at least one bridge object");
     }
 
-    @AfterClass
+    @AfterAll
     public static void cleanup() {
         if (sharedLevel != null) sharedLevel.dispose();
     }
 
-    @Before
+    @BeforeEach
     public void setUp() {
         fixture = HeadlessTestFixture.builder()
                 .withSharedLevel(sharedLevel)
@@ -79,16 +74,13 @@ public class TestS1Ghz2BridgeJumpRegression {
         Sonic1BridgeObjectInstance bridge = requireFirstBridgeActive();
 
         for (int trial = 0; trial < JUMP_TRIALS; trial++) {
-            assertTrue("Failed to settle on GHZ2 first bridge before trial " + trial,
-                    settleOnBridge(bridge));
+            assertTrue(settleOnBridge(bridge), "Failed to settle on GHZ2 first bridge before trial " + trial);
 
             fixture.stepFrame(false, false, false, false, false);
             fixture.stepFrame(false, false, false, false, true);
 
-            assertTrue("Jump press did not enter airborne state on trial " + trial,
-                    fixture.sprite().getAir());
-            assertTrue("Jump press did not apply upward velocity on trial " + trial,
-                    fixture.sprite().getYSpeed() < 0);
+            assertTrue(fixture.sprite().getAir(), "Jump press did not enter airborne state on trial " + trial);
+            assertTrue(fixture.sprite().getYSpeed() < 0, "Jump press did not apply upward velocity on trial " + trial);
 
             fixture.stepIdleFrames(4);
         }
@@ -142,3 +134,5 @@ public class TestS1Ghz2BridgeJumpRegression {
                 .orElse(null);
     }
 }
+
+

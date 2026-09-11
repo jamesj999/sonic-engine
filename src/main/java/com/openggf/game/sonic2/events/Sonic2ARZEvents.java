@@ -3,6 +3,7 @@ package com.openggf.game.sonic2.events;
 import com.openggf.game.sonic2.audio.Sonic2Music;
 import com.openggf.game.GameServices;
 import com.openggf.game.sonic2.constants.Sonic2ObjectIds;
+import com.openggf.game.sonic2.constants.Sonic2Constants;
 import com.openggf.game.sonic2.objects.bosses.Sonic2ARZBossInstance;
 import com.openggf.level.objects.ObjectSpawn;
 
@@ -27,6 +28,7 @@ public class Sonic2ARZEvents extends Sonic2ZoneEvents {
 
     @Override
     public void update(int act, int frameCounter) {
+        retryPendingPlc();
         if (act == 0) {
             // Act 1: No dynamic events
             return;
@@ -46,7 +48,8 @@ public class Sonic2ARZEvents extends Sonic2ZoneEvents {
                     eventRoutine += 2;
                     // ROM: move.b #4,(Current_Boss_ID).w
                     gameState().setCurrentBossId(4);
-                    // ROM: LoadPLC for ARZ boss art (handled elsewhere)
+                    // ROM: LoadPLC for ARZ boss art
+                    requestSonic2Plc(Sonic2Constants.PLC_ARZ_BOSS);
                 }
             }
             case 2 -> {

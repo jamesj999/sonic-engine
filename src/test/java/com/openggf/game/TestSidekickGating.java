@@ -7,6 +7,7 @@ import com.openggf.data.RomByteReader;
 import com.openggf.game.sonic1.Sonic1GameModule;
 import com.openggf.game.sonic2.Sonic2GameModule;
 import com.openggf.game.sonic3k.Sonic3kGameModule;
+import com.openggf.game.session.SessionManager;
 import com.openggf.level.objects.ObjectRegistry;
 import com.openggf.level.objects.PlaneSwitcherConfig;
 import com.openggf.level.objects.TouchResponseTable;
@@ -30,11 +31,15 @@ class TestSidekickGating {
 
     @BeforeEach
     void setUp() {
+        SessionManager.clear();
+        CrossGameFeatureProvider.getInstance().resetState();
         GameModuleRegistry.setCurrent(new Sonic2GameModule());
     }
 
     @AfterEach
     void tearDown() {
+        CrossGameFeatureProvider.getInstance().resetState();
+        SessionManager.clear();
         GameModuleRegistry.reset();
     }
 
@@ -112,3 +117,5 @@ class TestSidekickGating {
                 "Default supportsSidekick() should be false");
     }
 }
+
+

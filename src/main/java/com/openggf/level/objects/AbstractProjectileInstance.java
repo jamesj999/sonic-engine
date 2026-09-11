@@ -24,9 +24,11 @@ public abstract class AbstractProjectileInstance extends AbstractObjectInstance
     protected int currentX;
     protected int currentY;
     protected final SubpixelMotion.State motionState;
-    protected final int gravity;
-    protected final int collisionSizeIndex;
-    protected final int offScreenMargin;
+    protected int gravity;
+    protected int collisionSizeIndex;
+    protected int offScreenMargin;
+    protected boolean touchCollisionActive = true;
+    protected boolean deferSameFrameUpdateAfterSpawn = false;
 
     /**
      * Creates a projectile with the given motion parameters.
@@ -60,17 +62,17 @@ public abstract class AbstractProjectileInstance extends AbstractObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity player) {
+    public void update(int vIntRunCount, PlayableEntity player) {
         updateMotion();
         currentX = motionState.x;
         currentY = motionState.y;
 
         if (!isOnScreen(offScreenMargin)) {
-            setDestroyed(true);
+            ObjectLifetimeOps.expireDynamic(this);
             return;
         }
 
-        updateExtra(frameCounter, player);
+        updateExtra(vIntRunCount, player);
     }
 
     /**
@@ -98,7 +100,7 @@ public abstract class AbstractProjectileInstance extends AbstractObjectInstance
      * Hook for subclass-specific per-frame logic (animation, parent tracking, etc.).
      * Called after motion update and off-screen check. Default is no-op.
      */
-    protected void updateExtra(int frameCounter, PlayableEntity player) {
+    protected void updateExtra(int vIntRunCount, PlayableEntity player) {
         // Default no-op
     }
 
@@ -115,12 +117,17 @@ public abstract class AbstractProjectileInstance extends AbstractObjectInstance
     @Override
     public int getCollisionFlags() {
         // HURT category ($80) + size index
-        return 0x80 | (collisionSizeIndex & 0x3F);
+        return touchCollisionActive ? 0x80 | (collisionSizeIndex & 0x3F) : 0;
     }
 
     @Override
     public int getCollisionProperty() {
         return 0;
+    }
+
+    @Override
+    protected boolean skipsSameFrameUpdateAfterSpawn() {
+        return deferSameFrameUpdateAfterSpawn;
     }
 
     @Override

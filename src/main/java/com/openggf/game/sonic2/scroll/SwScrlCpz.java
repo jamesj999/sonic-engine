@@ -2,6 +2,7 @@ package com.openggf.game.sonic2.scroll;
 
 import com.openggf.level.scroll.AbstractZoneScrollHandler;
 import com.openggf.level.scroll.M68KMath;
+import com.openggf.level.scroll.compose.ScrollEffectComposer;
 
 /**
  * ROM-accurate implementation of SwScrl_CPZ (Chemical Plant Zone scroll
@@ -13,6 +14,19 @@ import com.openggf.level.scroll.M68KMath;
  * - BG2 (lower "underwater" region): X scrolls at 1/2 camera, Y same as BG1
  *
  * The screen is processed in 16-line blocks (14 blocks for 224 lines).
+ *
+ * fixBugs (s2.asm:27 `fixBugs = 0`, blocks at s2.asm:17329-17339 and 17349-17370):
+ * the shipped (fixBugs=0) branch loops `screen_height/block_height + 1` blocks so a
+ * partially-offscreen top block still leaves a full block for the bottom, which writes
+ * up to 16 longwords past the 224 visible entries of Horiz_Scroll_Buf. Those extra
+ * longwords land in the reserved `ds.l 16` slack that the HorizontalScrollBuffer struct
+ * declares for exactly this overrun (s2.constants.asm:1191-1195), so nothing else in
+ * RAM is touched and no visible line reads them. The engine therefore fills exactly
+ * VISIBLE_LINES and stops: behaviourally identical to the shipped branch, not an
+ * implementation of the fixBugs=1 branch (which instead splits the run into a
+ * remainder pass so no overrun occurs at all). The same pair of conditionals guards
+ * the unused SwScrl_HPZ_Continued at s2.asm:17944-17984.
+ *
  * Each block uses either BG1 or BG2 based on lineBlockIndex comparison:
  * - lineBlockIndex < 18: Use BG1 X (slow)
  * - lineBlockIndex > 18: Use BG2 X (fast)
@@ -48,15 +62,18 @@ public class SwScrlCpz extends AbstractZoneScrollHandler {
     private boolean initialized;
 
     // Ripple phase counter - decrements once every 8 frames
-    // Equivalent to TempArray_LayerDef ripple counter in original
+    // Equivalent to TempArray_LayerDef ripple counter in original.
+    // Derived from the frame counter each update() (see update()) rather than a
+    // running per-call decrement, so it rewinds correctly. Retained as a field
+    // only to back getRipplePhase().
     private int ripplePhase;
-    private int frameCounterForRipple; // Tracks frames for 8-frame decrement
+
+    private final ScrollEffectComposer composer = new ScrollEffectComposer();
 
     public SwScrlCpz(ParallaxTables tables) {
         this.tables = tables;
         this.initialized = false;
         this.ripplePhase = 0;
-        this.frameCounterForRipple = 0;
     }
 
     /**
@@ -82,7 +99,6 @@ public class SwScrlCpz extends AbstractZoneScrollHandler {
         initialized = true;
 
         ripplePhase = 0;
-        frameCounterForRipple = 0;
     }
 
     @Override
@@ -97,6 +113,7 @@ public class SwScrlCpz extends AbstractZoneScrollHandler {
         }
 
         resetScrollTracking();
+        composer.reset();
 
         // ==================== Step 1: Calculate Camera Diffs ====================
         // Diffs in subpixels (1/256 pixel units, which is camera diff << 8)
@@ -128,13 +145,12 @@ public class SwScrlCpz extends AbstractZoneScrollHandler {
         // Note: BG2 Y is same as BG1 Y (bgY_16_16), no separate tracking needed
 
         // ==================== Step 3: Update Ripple Phase ====================
-        // Ripple phase advances (decrements) once every 8 frames
-        // This matches EHZ behavior and fixes the "too fast" bug
-        frameCounterForRipple++;
-        if (frameCounterForRipple >= 8) {
-            frameCounterForRipple = 0;
-            ripplePhase--; // Decrement (wraps naturally with & 0x1F mask)
-        }
+        // Ripple phase advances (decrements) once every 8 frames. Derived from
+        // the frame counter (= -floor((frameCounter+1)/8)) instead of a running
+        // per-call decrement, so held-rewind re-derivation reproduces the exact
+        // phase for any frame instead of drifting off the update-call count. The
+        // +1 keeps the historical cadence (decrements at frames 7, 15, 23, ...).
+        ripplePhase = -((frameCounter + 1) / 8);
 
         // ==================== Step 4: Extract Integer Pixel Values
         // ====================
@@ -143,7 +159,7 @@ public class SwScrlCpz extends AbstractZoneScrollHandler {
         int bgYpx = bgY_16_16 >> 16;
 
         // Set vscrollFactorBG for external use (renderer vertical scroll)
-        vscrollFactorBG = (short) bgYpx;
+        composer.setVscrollFactorBG((short) bgYpx);
 
         // ==================== Step 5: Calculate Block Position ====================
         // Position within the current 16-pixel block (0-15)
@@ -173,44 +189,29 @@ public class SwScrlCpz extends AbstractZoneScrollHandler {
             if (blockIdx < SEAM_BLOCK_INDEX) {
                 // Above seam: use BG1 (slow scroll)
                 bgScroll = M68KMath.negWord(bg1Xpx);
-                // Fill linesToFill lines with same value
-                int packed = M68KMath.packScrollWords(fgScroll, bgScroll);
-                trackOffset(fgScroll, bgScroll);
-                for (int i = 0; i < linesToFill; i++) {
-                    horizScrollBuf[screenLine++] = packed;
-                }
+                composer.fillPackedScrollWords(screenLine, linesToFill, fgScroll, bgScroll);
+                screenLine += linesToFill;
             } else if (blockIdx > SEAM_BLOCK_INDEX) {
                 // Below seam: use BG2 (fast scroll)
                 bgScroll = M68KMath.negWord(bg2Xpx);
-                // Fill linesToFill lines with same value
-                int packed = M68KMath.packScrollWords(fgScroll, bgScroll);
-                trackOffset(fgScroll, bgScroll);
-                for (int i = 0; i < linesToFill; i++) {
-                    horizScrollBuf[screenLine++] = packed;
-                }
+                composer.fillPackedScrollWords(screenLine, linesToFill, fgScroll, bgScroll);
+                screenLine += linesToFill;
             } else {
                 // Seam block (blockIdx == 18): Apply ripple effect
-                // Base is BG1 X, add ripple offset per scanline
                 int baseBg1Xpx = bg1Xpx;
                 int rippleStart = ripplePhase & 0x1F; // 0..31 index into ripple data
 
-                // lineInBlock tells us where in the block we start (for first iteration)
-                // For the seam block, we need to track the actual position within the block
-                int posInBlock = LINES_PER_BLOCK - remainingInBlock; // 0-15 position we start at
+                int posInBlock = LINES_PER_BLOCK - remainingInBlock;
 
                 for (int i = 0; i < linesToFill; i++) {
-                    // Get ripple offset from ROM data
-                    // Use position within block + rippleStart for the ripple index
                     int ripple = 0;
                     if (tables != null) {
                         int rippleIdx = (rippleStart + posInBlock + i) & 0x3F;
-                        ripple = tables.getRippleByte(rippleIdx) & 0xFF; // Unsigned 0..3
+                        ripple = tables.getRippleByte(rippleIdx) & 0xFF;
                     }
 
-                    // Apply ripple: bgScrollXpx = baseBg1Xpx + ripple
                     bgScroll = M68KMath.negWord(baseBg1Xpx + ripple);
-                    horizScrollBuf[screenLine++] = M68KMath.packScrollWords(fgScroll, bgScroll);
-                    trackOffset(fgScroll, bgScroll);
+                    composer.writePackedScrollWord(screenLine++, fgScroll, bgScroll);
                 }
             }
 
@@ -218,6 +219,11 @@ public class SwScrlCpz extends AbstractZoneScrollHandler {
             currentBlockIdx++;
             remainingInBlock = LINES_PER_BLOCK;
         }
+
+        composer.copyPackedScrollWordsTo(horizScrollBuf);
+        vscrollFactorBG = composer.getVscrollFactorBG();
+        minScrollOffset = composer.getMinScrollOffset();
+        maxScrollOffset = composer.getMaxScrollOffset();
     }
 
     /**
@@ -231,7 +237,6 @@ public class SwScrlCpz extends AbstractZoneScrollHandler {
         lastCameraX = 0;
         lastCameraY = 0;
         ripplePhase = 0;
-        frameCounterForRipple = 0;
     }
 
     // ==================== Test Access Methods ====================

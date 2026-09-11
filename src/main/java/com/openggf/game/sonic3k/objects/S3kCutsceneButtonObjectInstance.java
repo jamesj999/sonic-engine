@@ -7,7 +7,9 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
+import com.openggf.sprites.playable.AbstractPlayableSprite;
 
 import java.util.List;
 
@@ -20,18 +22,19 @@ import java.util.List;
  * run-in — only after the LAUGH_2 phase begins (Knuckles has completed
  * his jump and is now laughing at the player).
  */
-public class S3kCutsceneButtonObjectInstance extends AbstractObjectInstance {
+public class S3kCutsceneButtonObjectInstance extends AbstractObjectInstance
+        implements SpawnRewindRecreatable {
 
     private static final int INIT_Y_OFFSET = 4;
     private static final int PRIORITY = 4;
     private static final int RANGE_LEFT = -0x18;
-    private static final int RANGE_RIGHT = 0x30;
+    private static final int RANGE_RIGHT = RANGE_LEFT + 0x30;
     private static final int RANGE_TOP = -0x18;
-    private static final int RANGE_BOTTOM = 0x30;
+    private static final int RANGE_BOTTOM = RANGE_TOP + 0x30;
 
-    private final int x;
-    private final int y;
-    private final boolean cutsceneOverride;
+    private int x;
+    private int y;
+    private boolean cutsceneOverride;
     private boolean pressed;
 
     public S3kCutsceneButtonObjectInstance(ObjectSpawn spawn) {
@@ -76,7 +79,7 @@ public class S3kCutsceneButtonObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         if (!cutsceneOverride && Aiz2BossEndSequenceState.isCutsceneOverrideObjectsActive()) {
             setDestroyed(true);
             return;
@@ -88,21 +91,35 @@ public class S3kCutsceneButtonObjectInstance extends AbstractObjectInstance {
         if (knuckles == null) {
             return;
         }
-        // ROM: The button is pressed when Knuckles lands ON it during the first
-        // arc of his jump (loc_620EA uses SolidObjectFull2). This is before
-        // the bounce back — NOT during his initial run-in or after the full
-        // jump sequence. Gate on hasLandedOnButton() which becomes true at the
-        // first bounce (when Knuckles physically touches down on the button).
-        if (!knuckles.hasLandedOnButton()) {
-            return;
-        }
+        // Obj_CutsceneButton reads the object pointer in _unkFAA4 and calls
+        // Check_InMyRange directly; it does not require a landing/bounce flag
+        // (sonic3k.asm:133931-133943).
         int dx = knuckles.getX() - x;
         int dy = knuckles.getY() - y;
         if (dx >= RANGE_LEFT && dx < RANGE_RIGHT && dy >= RANGE_TOP && dy < RANGE_BOTTOM) {
-            pressed = true;
-            Aiz2BossEndSequenceState.pressButton();
-            services().playSfx(Sonic3kSfx.SWITCH.id);
+            // loc_65C04 installs loc_65C50, then immediately dispatches the
+            // subtype action through off_65C40 in this same object pass.
+            pressButton(playerEntity);
         }
+    }
+
+    private void pressButton(PlayableEntity playerEntity) {
+        pressed = true;
+        Aiz2BossEndSequenceState.pressButton();
+        if (playerEntity instanceof AbstractPlayableSprite player) {
+            // loc_65C56 clears Ctrl_1_locked in the button's own SST slot.
+            // Player_1 is SST slot 0 and has already run this frame, so the
+            // logical UP word AIZEndBoss_WaitForCutsceneKnuckles wrote from
+            // slot 7 is still the word that pass consumed; the unlock only
+            // reaches the player on the following frame
+            // (sonic3k.asm:133968-133970, 138317-138323).
+            player.setControlLocked(false);
+        }
+        // loc_65C04 only publishes st (_unkFAA9).w; the draw bridge consumes it
+        // from its own, strictly later, SST slot in this same object scan
+        // (sonic3k.asm:59622-59628, 133943-133946). Nothing is pushed at the
+        // bridge from here.
+        services().playSfx(Sonic3kSfx.SWITCH.id);
     }
 
     @Override

@@ -19,6 +19,23 @@ A fully supported zone needs:
 Not all of these are needed for initial bring-up. A zone can be "loadable" with just
 level data and collision, and incrementally improved from there.
 
+## Current S3K Priority
+
+For Sonic 3 & Knuckles, prefer playable vertical slices over checklist-only zone work.
+AIZ -> HCZ remains the primary release slice, but CNZ, MGZ, ICZ, MHZ, and LBZ now
+have enough coverage that new S3K work should be selected from route blockers,
+complete-run trace frontiers, and release-readiness gaps rather than first-pass zone
+bring-up. A slice should be judged by whether a player can traverse it with coherent
+events, camera bounds, scroll/parallax, animated tiles, palette/PLC state, required
+objects, bosses or transitions, and known trace or visual parity blockers addressed
+or documented.
+
+Use the runtime-owned framework stack when implementing the slice: typed zone state in
+`ZoneRuntimeRegistry`, palette writes through `PaletteOwnershipRegistry`, art uploads
+through `AnimatedTileChannelGraph`, layout edits through `ZoneLayoutMutationPipeline`,
+scroll composition through `ScrollEffectComposer`, and extra render state through
+`SpecialRenderEffectRegistry` / `AdvancedRenderModeController`.
+
 ## Step 1: Verify Level Data
 
 Before writing any code, confirm that the zone's data loads correctly from the ROM.
@@ -115,11 +132,14 @@ tell you exactly which unimplemented objects the zone's placement data reference
 ### Implementation Priority
 
 Not all objects are equally important. Prioritise:
-1. **Platforms and terrain modifiers** (collapsing floors, moving platforms, bridges) --
+1. **Route blockers** (doors, launchers, forced movement, water/chase pieces, boss gates) --
+   these decide whether the slice can be played end to end.
+2. **Platforms and terrain modifiers** (collapsing floors, moving platforms, bridges) --
    these affect whether the zone is traversable.
-2. **Hazards** (spikes, lava, crushers) -- these affect gameplay.
-3. **Badniks** -- enemies make the zone feel alive.
-4. **Scenery and decoration** (waterfalls, background animations) -- visual polish.
+3. **Hazards** (spikes, lava, crushers) -- these affect gameplay.
+4. **Boss/miniboss support objects and event helpers** -- these often gate act completion.
+5. **High-usage badniks** -- enemies make the zone feel alive and exercise touch/collision parity.
+6. **Scenery and decoration** (waterfalls, background animations) -- visual polish.
 
 See [Tutorial: Implement an Object](tutorial-implement-object.md) for the implementation
 pattern.

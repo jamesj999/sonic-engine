@@ -7,8 +7,11 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.level.objects.TouchResponseProvider;
+import com.openggf.level.objects.TouchResponseProfile;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.TrigLookupTable;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
@@ -19,7 +22,8 @@ import java.util.List;
  * Sol fireball (Obj95 child) - orbiting then fired projectile.
  * Uses Ani_obj95_b and follows Obj95_FireballUpdate behavior.
  */
-public class SolFireballObjectInstance extends AbstractObjectInstance implements TouchResponseProvider {
+public class SolFireballObjectInstance extends AbstractObjectInstance
+        implements TouchResponseProvider, RewindRecreatable {
     private enum State {
         ORBIT,
         FLYING
@@ -48,8 +52,22 @@ public class SolFireballObjectInstance extends AbstractObjectInstance implements
         this.animationState = new ObjectAnimationState(SolBadnikInstance.getFireballAnimations(), 0, 3);
     }
 
+    private SolFireballObjectInstance() {
+        this(new ObjectSpawn(0, 0, 0, 0, 0, false, 0), null, 0);
+    }
+
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        SolBadnikInstance parent = Sonic2BadnikChildRewindLinks.nearestSol(ctx);
+        SolFireballObjectInstance fireball = new SolFireballObjectInstance(ctx.spawn(), parent, 0);
+        if (parent != null) {
+            parent.attachFireballForRewind(fireball);
+        }
+        return fireball;
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) {
             return;
@@ -122,6 +140,11 @@ public class SolFireballObjectInstance extends AbstractObjectInstance implements
     @Override
     public int getCollisionProperty() {
         return 0;
+    }
+
+    @Override
+    public TouchResponseProfile getTouchResponseProfile() {
+        return TouchResponseProfile.standardEnemy();
     }
 
     @Override

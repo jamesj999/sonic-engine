@@ -1,6 +1,7 @@
 package com.openggf.game.sonic3k.bonusstage.slots;
 
 import com.openggf.data.Rom;
+import com.openggf.game.GameServices;
 import com.openggf.game.sonic3k.constants.Sonic3kConstants;
 import com.openggf.graphics.GraphicsManager;
 import com.openggf.level.Pattern;
@@ -65,32 +66,95 @@ public final class S3kSlotMachinePanelAnimator {
         int[] faces = displayState.faces();
         int[] nextFaces = displayState.nextFaces();
         float[] offsets = displayState.offsets();
-        int[] offsetPixels = {
-                offsetPixels(offsets[0]),
-                offsetPixels(offsets[1]),
-                offsetPixels(offsets[2])
-        };
-        if (Arrays.equals(lastFaces, faces)
-                && Arrays.equals(lastNextFaces, nextFaces)
-                && Arrays.equals(lastOffsetPixels, offsetPixels)) {
+        int offsetPixels0 = offsetPixels(offsets[0]);
+        int offsetPixels1 = offsetPixels(offsets[1]);
+        int offsetPixels2 = offsetPixels(offsets[2]);
+        if (isUnchanged(
+                faces[0], faces[1], faces[2],
+                nextFaces[0], nextFaces[1], nextFaces[2],
+                offsetPixels0, offsetPixels1, offsetPixels2)) {
             return;
         }
+        syncChangedPanelPatterns(
+                faces[0], faces[1], faces[2],
+                nextFaces[0], nextFaces[1], nextFaces[2],
+                offsets[0], offsets[1], offsets[2],
+                offsetPixels0, offsetPixels1, offsetPixels2);
+    }
 
-        GraphicsManager graphicsManager = GraphicsManager.getInstance();
-        graphicsManager.beginPatternAtlasBatch();
-        for (int reel = 0; reel < 3; reel++) {
-            Pattern[] patterns = buildVisibleWindowPatterns(
-                    facePixels, faces[reel], nextFaces[reel], offsets[reel]);
-            int destBase = DEST_PATTERN_BASES[reel];
-            for (int i = 0; i < patterns.length; i++) {
-                graphicsManager.updatePatternTexture(patterns[i], destBase + i);
-            }
+    void syncPanelPatterns(S3kSlotStageState state) {
+        if (!initialized) {
+            return;
         }
+        S3kSlotMachineDisplayState.syncPanelPatterns(state, this);
+    }
+
+    void syncPanelPatterns(
+            int face0, int face1, int face2,
+            int nextFace0, int nextFace1, int nextFace2,
+            float offset0, float offset1, float offset2) {
+        if (!initialized) {
+            return;
+        }
+        int offsetPixels0 = offsetPixels(offset0);
+        int offsetPixels1 = offsetPixels(offset1);
+        int offsetPixels2 = offsetPixels(offset2);
+        if (isUnchanged(
+                face0, face1, face2,
+                nextFace0, nextFace1, nextFace2,
+                offsetPixels0, offsetPixels1, offsetPixels2)) {
+            return;
+        }
+        syncChangedPanelPatterns(
+                face0, face1, face2,
+                nextFace0, nextFace1, nextFace2,
+                offset0, offset1, offset2,
+                offsetPixels0, offsetPixels1, offsetPixels2);
+    }
+
+    private boolean isUnchanged(
+            int face0, int face1, int face2,
+            int nextFace0, int nextFace1, int nextFace2,
+            int offsetPixels0, int offsetPixels1, int offsetPixels2) {
+        return lastFaces[0] == face0 && lastFaces[1] == face1 && lastFaces[2] == face2
+                && lastNextFaces[0] == nextFace0
+                && lastNextFaces[1] == nextFace1
+                && lastNextFaces[2] == nextFace2
+                && lastOffsetPixels[0] == offsetPixels0
+                && lastOffsetPixels[1] == offsetPixels1
+                && lastOffsetPixels[2] == offsetPixels2;
+    }
+
+    private void syncChangedPanelPatterns(
+            int face0, int face1, int face2,
+            int nextFace0, int nextFace1, int nextFace2,
+            float offset0, float offset1, float offset2,
+            int offsetPixels0, int offsetPixels1, int offsetPixels2) {
+        GraphicsManager graphicsManager = GameServices.graphics();
+        graphicsManager.beginPatternAtlasBatch();
+        syncReelPatterns(graphicsManager, 0, face0, nextFace0, offset0);
+        syncReelPatterns(graphicsManager, 1, face1, nextFace1, offset1);
+        syncReelPatterns(graphicsManager, 2, face2, nextFace2, offset2);
         graphicsManager.endPatternAtlasBatch();
 
-        System.arraycopy(faces, 0, lastFaces, 0, 3);
-        System.arraycopy(nextFaces, 0, lastNextFaces, 0, 3);
-        System.arraycopy(offsetPixels, 0, lastOffsetPixels, 0, 3);
+        lastFaces[0] = face0;
+        lastFaces[1] = face1;
+        lastFaces[2] = face2;
+        lastNextFaces[0] = nextFace0;
+        lastNextFaces[1] = nextFace1;
+        lastNextFaces[2] = nextFace2;
+        lastOffsetPixels[0] = offsetPixels0;
+        lastOffsetPixels[1] = offsetPixels1;
+        lastOffsetPixels[2] = offsetPixels2;
+    }
+
+    private void syncReelPatterns(
+            GraphicsManager graphicsManager, int reel, int face, int nextFace, float offset) {
+        Pattern[] patterns = buildVisibleWindowPatterns(facePixels, face, nextFace, offset);
+        int destBase = DEST_PATTERN_BASES[reel];
+        for (int i = 0; i < patterns.length; i++) {
+            graphicsManager.updatePatternTexture(patterns[i], destBase + i);
+        }
     }
 
     static int[] destinationPatternBasesForTest() {

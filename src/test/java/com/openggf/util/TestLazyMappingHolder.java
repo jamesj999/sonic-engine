@@ -1,12 +1,19 @@
 package com.openggf.util;
 
+import com.openggf.game.session.SessionManager;
 import com.openggf.level.render.SpriteMappingFrame;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import java.util.Collections;
 import java.util.List;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class TestLazyMappingHolder {
+
+    @BeforeEach
+    public void clearGameplaySession() {
+        SessionManager.clear();
+    }
 
     @Test
     public void testReturnsEmptyListWhenLevelManagerNull() {
@@ -31,3 +38,5 @@ public class TestLazyMappingHolder {
         assertTrue(result.isEmpty());
     }
 }
+
+

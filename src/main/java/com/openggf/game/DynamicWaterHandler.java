@@ -16,4 +16,12 @@ public interface DynamicWaterHandler {
      * @param cameraY camera Y position in world pixels
      */
     void update(WaterSystem.DynamicWaterState state, int cameraX, int cameraY);
+
+    /**
+     * Whether this handler's positive shake countdown is owned by a native SST
+     * timer object rather than only by global water state.
+     */
+    default boolean shakeTimerOccupiesObjectSlot() {
+        return false;
+    }
 }

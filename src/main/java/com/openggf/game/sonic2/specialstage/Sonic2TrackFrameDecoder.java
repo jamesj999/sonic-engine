@@ -27,6 +27,9 @@ import java.util.logging.Logger;
  */
 public class Sonic2TrackFrameDecoder {
     private static final Logger LOGGER = Logger.getLogger(Sonic2TrackFrameDecoder.class.getName());
+    private static final int TRACK_FRAME_COUNT = Sonic2SpecialStageConstants.TRACK_FRAME_COUNT;
+    private static final DecodedFrameEntry[] DECODED_FRAME_CACHE = new DecodedFrameEntry[TRACK_FRAME_COUNT * 2];
+    private static int decodedFrameBuildCount;
 
     // VDP plane is 128 cells wide internally, even in H32 mode
     public static final int VDP_PLANE_WIDTH = 128;
@@ -69,6 +72,55 @@ public class Sonic2TrackFrameDecoder {
      */
     public static int[] decodeFrame(byte[] frameData, boolean flipped) {
         return decodeFrame(frameData, flipped, false);
+    }
+
+    /**
+     * Returns a defensively copied decoded frame from the finite 56-frame stage
+     * domain. The source bytes are part of the key so a stage/data reload can never
+     * reuse a stale frame merely because it has the same numeric index.
+     */
+    static synchronized int[] decodeFrameCached(int frameIndex, byte[] frameData, boolean flipped) {
+        if (frameIndex < 0 || frameIndex >= TRACK_FRAME_COUNT) {
+            return decodeFrame(frameData, flipped);
+        }
+        int slot = frameIndex * 2 + (flipped ? 1 : 0);
+        DecodedFrameEntry entry = DECODED_FRAME_CACHE[slot];
+        if (entry == null || !Arrays.equals(entry.sourceData, frameData)) {
+            int[] decoded = decodeFrame(frameData, flipped);
+            entry = new DecodedFrameEntry(frameData != null ? frameData.clone() : null, decoded);
+            DECODED_FRAME_CACHE[slot] = entry;
+            decodedFrameBuildCount++;
+        }
+        return entry.tiles.clone();
+    }
+
+    static synchronized void invalidateDecodedFrameCache() {
+        Arrays.fill(DECODED_FRAME_CACHE, null);
+        decodedFrameBuildCount = 0;
+    }
+
+    static synchronized int decodedFrameBuildCountForTesting() {
+        return decodedFrameBuildCount;
+    }
+
+    static synchronized int decodedFrameCacheSizeForTesting() {
+        int size = 0;
+        for (DecodedFrameEntry entry : DECODED_FRAME_CACHE) {
+            if (entry != null) {
+                size++;
+            }
+        }
+        return size;
+    }
+
+    static synchronized Object decodedFrameIdentityForTesting(int frameIndex, boolean flipped) {
+        if (frameIndex < 0 || frameIndex >= TRACK_FRAME_COUNT) {
+            return null;
+        }
+        return DECODED_FRAME_CACHE[frameIndex * 2 + (flipped ? 1 : 0)];
+    }
+
+    private record DecodedFrameEntry(byte[] sourceData, int[] tiles) {
     }
 
     /**

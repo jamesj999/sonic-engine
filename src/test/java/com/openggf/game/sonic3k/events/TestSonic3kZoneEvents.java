@@ -1,8 +1,8 @@
 package com.openggf.game.sonic3k.events;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import com.openggf.camera.Camera;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class TestSonic3kZoneEvents {
 
@@ -34,3 +34,5 @@ public class TestSonic3kZoneEvents {
         assertEquals(4, events.getEventRoutine());
     }
 }
+
+

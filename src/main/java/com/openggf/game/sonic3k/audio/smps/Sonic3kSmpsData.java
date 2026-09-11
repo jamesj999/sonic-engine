@@ -32,9 +32,9 @@ import static com.openggf.game.sonic3k.audio.Sonic3kSmpsConstants.Z80_GLOBAL_INS
  * <p>Key differences from Sonic 2:
  * <ul>
  *   <li>Base note is C (offset 0) per DefDrv.txt: {@code FMBaseNote = C}</li>
- *   <li>InsMode=DEFAULT: voice operator order is Op4,Op3,Op2,Op1 (same as S1).
- *       {@link #getVoice(int)} swaps the middle two bytes in each 4-byte group
- *       to convert to the engine's expected S2 format (Op4,Op2,Op3,Op1).</li>
+ *   <li>InsMode=DEFAULT: voice operator order is Op4,Op3,Op2,Op1. The raw
+ *       bytes are preserved so the sequencer can reproduce zSendFMInstrument's
+ *       30,38,34,3C register traversal.</li>
  *   <li>Some songs use a global instrument table rather than per-song voices.</li>
  * </ul>
  */
@@ -83,6 +83,9 @@ public class Sonic3kSmpsData extends AbstractSmpsData {
         this.bankData = bankData;
         this.bankZ80Base = bankZ80Base;
     }
+
+    public byte[] getBankData() { return bankData; }
+    public int getBankZ80Base() { return bankZ80Base; }
 
     @Override
     protected void parseHeader() {
@@ -198,14 +201,6 @@ public class Sonic3kSmpsData extends AbstractSmpsData {
 
         byte[] voice = new byte[VOICE_STRIDE];
         System.arraycopy(source, offset, voice, 0, VOICE_STRIDE);
-        // S3K InsMode=DEFAULT: operator order is Op4,Op3,Op2,Op1 per group.
-        // Engine expects S2 order: Op4,Op2,Op3,Op1.
-        // Swap positions [g+1] and [g+2] in each 4-byte group.
-        for (int g = 1; g < 25; g += 4) {
-            byte tmp = voice[g + 1];
-            voice[g + 1] = voice[g + 2];
-            voice[g + 2] = tmp;
-        }
         return voice;
     }
 

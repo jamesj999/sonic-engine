@@ -81,3 +81,5 @@ public class TestPatternAtlasSlotReclamation {
         assertEquals(0, reused.atlasIndex());
     }
 }
+
+

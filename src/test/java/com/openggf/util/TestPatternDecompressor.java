@@ -1,8 +1,8 @@
 package com.openggf.util;
 
 import com.openggf.level.Pattern;
-import org.junit.Test;
-import static org.junit.Assert.*;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class TestPatternDecompressor {
 
@@ -53,3 +53,5 @@ public class TestPatternDecompressor {
         assertEquals(2, result.length);
     }
 }
+
+

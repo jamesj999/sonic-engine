@@ -1,13 +1,15 @@
 package com.openggf.debug;
 
+import com.openggf.graphics.PixelFont;
+import com.openggf.graphics.PixelFontTextRenderer;
 import org.lwjgl.system.MemoryUtil;
 import com.openggf.graphics.GraphicsManager;
 import com.openggf.graphics.ShaderProgram;
 
 import java.nio.FloatBuffer;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 
 import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL15.*;
@@ -22,6 +24,8 @@ import static org.lwjgl.opengl.GL30.*;
  * - Frame history graph showing frame time spikes
  */
 public class PerformancePanelRenderer {
+
+    static final float PERFORMANCE_TEXT_SCALE = 0.5f;
 
     /** Colors for pie chart sections (distinct, easy to differentiate) */
     private static final float[][] SECTION_COLORS = {
@@ -58,7 +62,7 @@ public class PerformancePanelRenderer {
     /** Target frame time at 60fps (16.67ms) */
     private static final float TARGET_FRAME_MS = 16.67f;
 
-    private final GlyphBatchRenderer glyphBatch;
+    private final PixelFontTextRenderer textRenderer;
     private int viewportWidth;
     private int viewportHeight;
     private double scaleX = 1.0;
@@ -67,18 +71,18 @@ public class PerformancePanelRenderer {
     /** Font size for performance stats (small for compact display) */
     private static final FontSize PERF_FONT = FontSize.SMALL;
 
+    private final GraphicsManager graphicsManager;
+    private final PerformanceProfiler profiler;
+
     /** Base dimensions (game screen size) */
     private final int baseWidth;
     private final int baseHeight;
 
-    /** Reusable list for pie chart sections to avoid per-frame allocations */
-    private final List<SectionStats> pieChartSections = new ArrayList<>(16);
-
     /** Reusable StringBuilder for formatting stats text */
     private final StringBuilder perfBuilder = new StringBuilder(64);
 
-    /** Comparator for sorting sections by name (alphabetical order for stable pie chart) */
-    private static final Comparator<SectionStats> NAME_COMPARATOR = Comparator.comparing(SectionStats::name);
+    /** Reusable time-sorted section selection for the legend. */
+    private final List<SectionStats> legendSections = new ArrayList<>(6);
 
     // VAO/VBO for primitive rendering
     private int vaoId;
@@ -92,10 +96,37 @@ public class PerformancePanelRenderer {
     private int cachedCameraOffsetLoc = -1;
     private int lastProgramId = -1;
 
-    public PerformancePanelRenderer(int baseWidth, int baseHeight, GlyphBatchRenderer glyphBatch) {
+    public PerformancePanelRenderer(int baseWidth, int baseHeight, PixelFontTextRenderer textRenderer,
+                                    GraphicsManager graphicsManager, PerformanceProfiler profiler) {
         this.baseWidth = baseWidth;
         this.baseHeight = baseHeight;
-        this.glyphBatch = glyphBatch;
+        this.textRenderer = Objects.requireNonNull(textRenderer, "textRenderer");
+        this.graphicsManager = Objects.requireNonNull(graphicsManager, "graphicsManager");
+        this.profiler = Objects.requireNonNull(profiler, "profiler");
+    }
+
+    List<SectionStats> legendSections(ProfileSnapshot snapshot) {
+        List<SectionStats> sortedSections = snapshot.getSectionsSortedByTime();
+        legendSections.clear();
+        int limit = Math.min(6, sortedSections.size());
+        int audioIndex = -1;
+        for (int i = 0; i < sortedSections.size(); i++) {
+            if ("audio".equals(sortedSections.get(i).name())) {
+                audioIndex = i;
+                break;
+            }
+        }
+        if (audioIndex < 0 || audioIndex < limit || limit < 6) {
+            for (int i = 0; i < limit; i++) {
+                legendSections.add(sortedSections.get(i));
+            }
+            return legendSections;
+        }
+        for (int i = 0; i < 5; i++) {
+            legendSections.add(sortedSections.get(i));
+        }
+        legendSections.add(sortedSections.get(audioIndex));
+        return legendSections;
     }
 
     /**
@@ -117,7 +148,7 @@ public class PerformancePanelRenderer {
     }
 
     private void setupShader() {
-        GraphicsManager gm = GraphicsManager.getInstance();
+        GraphicsManager gm = graphicsManager;
         ShaderProgram debugShader = gm.getDebugShaderProgram();
         if (debugShader == null) {
             return;
@@ -148,7 +179,11 @@ public class PerformancePanelRenderer {
     }
 
     private void putVertex(float x, float y, float r, float g, float b, float a) {
-        vertexBuffer.put(x).put(y).put(r).put(g).put(b).put(a);
+        putVertex(vertexBuffer, x, y, r, g, b, a);
+    }
+
+    private static void putVertex(FloatBuffer buffer, float x, float y, float r, float g, float b, float a) {
+        buffer.put(x).put(y).put(r).put(g).put(b).put(a);
     }
 
     private void drawVertices(int drawMode, int vertexCount) {
@@ -181,8 +216,9 @@ public class PerformancePanelRenderer {
      * @param snapshot The profiling data snapshot to display
      */
     public void render(ProfileSnapshot snapshot) {
-        if (glyphBatch == null || !glyphBatch.isInitialized()) {
-            return;
+        float[] projectionMatrix = graphicsManager.getProjectionMatrixBuffer();
+        if (projectionMatrix != null) {
+            textRenderer.setProjectionMatrix(projectionMatrix);
         }
 
         // Panel position in game coordinates (right side, upper area)
@@ -191,9 +227,9 @@ public class PerformancePanelRenderer {
         int panelTop = baseHeight - 8;     // 8 pixels from top (in screen terms, high Y in GL)
 
         if (!snapshot.hasData()) {
-            glyphBatch.begin();
-            glyphBatch.drawTextOutlined("Perf: collecting...", uiX(panelRight - 80), uiY(panelTop - 10), DebugColor.WHITE, PERF_FONT);
-            glyphBatch.end();
+            textRenderer.beginBatch();
+            drawTextBottomLeft("Perf: collecting...", panelRight - 80, panelTop - 10, DebugColor.WHITE);
+            textRenderer.endBatch();
             return;
         }
 
@@ -213,15 +249,15 @@ public class PerformancePanelRenderer {
         drawFrameHistoryGraph(graphX, graphY, graphWidth, graphHeight, snapshot);
 
         // Draw memory stats below the frame graph
-        MemoryStats.Snapshot memSnapshot = MemoryStats.getInstance().snapshot();
+        MemoryStats.Snapshot memSnapshot = profiler.memoryStats().snapshot();
 
-        // Draw text stats (uses viewport coordinates via uiX/uiY)
-        glyphBatch.begin();
-
-        int textX = uiX(panelRight - 85);
-        int textY = uiY(panelTop - 10);
-        int lineHeight = glyphBatch.getLineHeight(PERF_FONT);
+        int textX = panelRight - 85;
+        int textY = panelTop - 10;
+        int lineHeight = lineHeight(PERF_FONT);
         StringBuilder pb = perfBuilder;
+
+        // Batch all text into a single GL draw call
+        textRenderer.beginBatch();
 
         // Header line - show work time and actual FPS
         double workMs = snapshot.totalFrameTimeMs();
@@ -230,15 +266,13 @@ public class PerformancePanelRenderer {
         appendFixed1(pb, workMs).append("ms (");
         appendFixed0(pb, budgetPct).append("%) ");
         appendFixed1(pb, snapshot.fps()).append("fps");
-        glyphBatch.drawTextOutlined(pb.toString(), textX, textY, DebugColor.WHITE, PERF_FONT);
+        drawTextBottomLeft(pb.toString(), textX, textY, DebugColor.WHITE);
 
-        // Section legend — reuse the sorted list from getSectionsSortedByTime()
-        // (also used by drawPieChart, but it caches internally)
-        List<SectionStats> sections = snapshot.getSectionsSortedByTime();
+        // Section legend uses time-sorted sections, while the pie chart uses
+        // a cached name-sorted view for stable slice positions.
         int legendY = textY - lineHeight;
 
-        int count = 0;
-        for (SectionStats section : sections) {
+        for (SectionStats section : legendSections(snapshot)) {
             int colorIndex = getColorIndexForSection(section.name());
             DebugColor textColor = SECTION_COLOR_OBJECTS[colorIndex];
 
@@ -246,49 +280,39 @@ public class PerformancePanelRenderer {
             pb.setLength(0);
             appendFixed1(pb, section.timeMs()).append(' ');
             pb.append(name, 0, Math.min(name.length(), 10));
-            glyphBatch.drawTextOutlined(pb.toString(), textX, legendY, textColor, PERF_FONT);
+            drawTextBottomLeft(pb.toString(), textX, legendY, textColor);
 
             legendY -= lineHeight;
-            count++;
-
-            if (count >= 6) {
-                break;
-            }
         }
 
         // Memory stats below the frame graph
-        int memY = uiY(graphY - 8);
-        pb.setLength(0);
-        pb.append("Heap: ");
-        appendFixed0(pb, memSnapshot.heapUsedMB()).append("MB/");
-        appendFixed0(pb, memSnapshot.heapMaxMB()).append("MB (");
-        pb.append(memSnapshot.heapPercentage()).append("%)");
-        glyphBatch.drawTextOutlined(pb.toString(), textX, memY, DebugColor.LIGHT_GRAY, PERF_FONT);
+        int memY = graphY - 8;
+        drawTextBottomLeft(formatHeapLine(pb, memSnapshot.heapUsedMB(),
+                memSnapshot.heapMaxMB(), memSnapshot.heapPercentage()),
+                textX, memY, DebugColor.LIGHT_GRAY);
 
         memY -= lineHeight;
-        pb.setLength(0);
-        pb.append("GC: ").append(memSnapshot.gcCount())
-          .append(" (").append(memSnapshot.gcTimeMs()).append("ms) | Alloc: ");
-        appendFixed1(pb, memSnapshot.allocationRateMBPerSec()).append("MB/s");
-        glyphBatch.drawTextOutlined(pb.toString(), textX, memY, DebugColor.LIGHT_GRAY, PERF_FONT);
+        drawTextBottomLeft(formatGcLine(pb, memSnapshot.gcCount(),
+                memSnapshot.gcTimeMs(), memSnapshot.allocationRateMBPerSec()),
+                textX, memY, DebugColor.LIGHT_GRAY);
 
         // Top allocators
         List<MemoryStats.SectionAllocation> topAllocators = memSnapshot.topAllocators();
         if (!topAllocators.isEmpty()) {
             memY -= lineHeight;
-            glyphBatch.drawTextOutlined("Top Alloc:", textX, memY, DebugColor.ORANGE, PERF_FONT);
+            drawTextBottomLeft("Top Alloc:", textX, memY, DebugColor.ORANGE);
 
             for (MemoryStats.SectionAllocation alloc : topAllocators) {
                 memY -= lineHeight;
                 String name = alloc.name();
                 pb.setLength(0);
                 appendFixed1(pb, alloc.kbPerFrame()).append("KB ");
-                pb.append(name, 0, Math.min(name.length(), 8));
-                glyphBatch.drawTextOutlined(pb.toString(), textX, memY, DebugColor.ORANGE, PERF_FONT);
+                pb.append(name, 0, Math.min(name.length(), 9));
+                drawTextBottomLeft(pb.toString(), textX, memY, DebugColor.ORANGE);
             }
         }
 
-        glyphBatch.end();
+        textRenderer.endBatch();
     }
 
     /**
@@ -297,11 +321,7 @@ public class PerformancePanelRenderer {
      * Sections are drawn in alphabetical order for stable positioning.
      */
     private void drawPieChart(int centerX, int centerY, int radius, ProfileSnapshot snapshot) {
-        // Sort by name for stable pie chart positioning
-        pieChartSections.clear();
-        pieChartSections.addAll(snapshot.getSectionsSortedByTime());
-        pieChartSections.sort(NAME_COMPARATOR);
-        List<SectionStats> sections = pieChartSections;
+        List<SectionStats> sections = snapshot.getSectionsSortedByName();
         if (sections.isEmpty()) {
             return;
         }
@@ -312,6 +332,8 @@ public class PerformancePanelRenderer {
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+        vertexBuffer.clear();
+        int vertexCount = 0;
         float startAngle = 90; // Start from top
 
         for (SectionStats section : sections) {
@@ -323,32 +345,13 @@ public class PerformancePanelRenderer {
             int colorIndex = getColorIndexForSection(section.name());
             float[] color = SECTION_COLORS[colorIndex];
 
-            // Build triangle fan for pie slice
-            vertexBuffer.clear();
-            int vertexCount = 0;
-
-            // Center vertex
-            putVertex(centerX, centerY, color[0], color[1], color[2], 1.0f);
-            vertexCount++;
-
-            for (float a = startAngle; a >= startAngle - sweepAngle; a -= 10) {
-                float rad = (float) Math.toRadians(a);
-                putVertex(centerX + radius * (float) Math.cos(rad),
-                         centerY + radius * (float) Math.sin(rad),
-                         color[0], color[1], color[2], 1.0f);
-                vertexCount++;
-            }
-            float endRad = (float) Math.toRadians(startAngle - sweepAngle);
-            putVertex(centerX + radius * (float) Math.cos(endRad),
-                     centerY + radius * (float) Math.sin(endRad),
-                     color[0], color[1], color[2], 1.0f);
-            vertexCount++;
-
-            vertexBuffer.flip();
-            drawVertices(GL_TRIANGLE_FAN, vertexCount);
-
+            vertexCount += appendPieSliceTriangles(vertexBuffer, centerX, centerY, radius,
+                    startAngle, sweepAngle, color);
             startAngle -= sweepAngle;
         }
+
+        vertexBuffer.flip();
+        drawVertices(GL_TRIANGLES, vertexCount);
 
         // Outline
         vertexBuffer.clear();
@@ -406,16 +409,15 @@ public class PerformancePanelRenderer {
         putVertex(x + width, y, 0.0f, 0.0f, 0.0f, 0.6f);
         putVertex(x + width, y + height, 0.0f, 0.0f, 0.0f, 0.6f);
         putVertex(x, y + height, 0.0f, 0.0f, 0.0f, 0.6f);
+        putVertex(x + width, y + height, 0.0f, 0.0f, 0.0f, 0.6f);
+        putVertex(x, y, 0.0f, 0.0f, 0.0f, 0.6f);
         vertexBuffer.flip();
-        drawVertices(GL_TRIANGLE_FAN, 4);
+        drawVertices(GL_TRIANGLES, 6);
 
-        // Mid-line (at 50% of scale)
-        float midY = y + 0.5f * height;
         vertexBuffer.clear();
-        putVertex(x, midY, 0.3f, 0.3f, 0.3f, 1.0f);
-        putVertex(x + width, midY, 0.3f, 0.3f, 0.3f, 1.0f);
+        int guideVertices = appendGraphLineBatch(vertexBuffer, x, y, width, height);
         vertexBuffer.flip();
-        drawVertices(GL_LINES, 2);
+        drawVertices(GL_LINES, guideVertices);
 
         // Frame time line
         vertexBuffer.clear();
@@ -432,26 +434,79 @@ public class PerformancePanelRenderer {
         vertexBuffer.flip();
         drawVertices(GL_LINE_STRIP, lineVertices);
 
-        // Border
-        vertexBuffer.clear();
-        putVertex(x, y, 0.5f, 0.5f, 0.5f, 1.0f);
-        putVertex(x + width, y, 0.5f, 0.5f, 0.5f, 1.0f);
-        putVertex(x + width, y + height, 0.5f, 0.5f, 0.5f, 1.0f);
-        putVertex(x, y + height, 0.5f, 0.5f, 0.5f, 1.0f);
-        vertexBuffer.flip();
-        drawVertices(GL_LINE_LOOP, 4);
-
         glUseProgram(0);
     }
 
-    /** Scale game X to viewport X */
-    private int uiX(int gameX) {
-        return (int) Math.round(gameX * scaleX);
+    private static int appendPieSliceTriangles(FloatBuffer buffer, int centerX, int centerY, int radius,
+                                               float startAngle, float sweepAngle, float[] color) {
+        float endAngle = startAngle - sweepAngle;
+        float segmentStart = startAngle;
+        int vertices = 0;
+        while (segmentStart > endAngle) {
+            float segmentEnd = Math.max(endAngle, segmentStart - 10.0f);
+            putVertex(buffer, centerX, centerY, color[0], color[1], color[2], 1.0f);
+            putPieEdgeVertex(buffer, centerX, centerY, radius, segmentStart, color);
+            putPieEdgeVertex(buffer, centerX, centerY, radius, segmentEnd, color);
+            vertices += 3;
+            segmentStart = segmentEnd;
+        }
+        return vertices;
     }
 
-    /** Scale game Y to viewport Y (for TextRenderer) */
-    private int uiY(int gameY) {
-        return (int) Math.round(gameY * scaleY);
+    private static void putPieEdgeVertex(FloatBuffer buffer, int centerX, int centerY, int radius,
+                                         float angle, float[] color) {
+        float rad = (float) Math.toRadians(angle);
+        putVertex(buffer,
+                centerX + radius * (float) Math.cos(rad),
+                centerY + radius * (float) Math.sin(rad),
+                color[0], color[1], color[2], 1.0f);
+    }
+
+    private static int appendGraphLineBatch(FloatBuffer buffer, int x, int y, int width, int height) {
+        float midY = y + 0.5f * height;
+        putVertex(buffer, x, midY, 0.3f, 0.3f, 0.3f, 1.0f);
+        putVertex(buffer, x + width, midY, 0.3f, 0.3f, 0.3f, 1.0f);
+
+        putVertex(buffer, x, y, 0.5f, 0.5f, 0.5f, 1.0f);
+        putVertex(buffer, x + width, y, 0.5f, 0.5f, 0.5f, 1.0f);
+        putVertex(buffer, x + width, y, 0.5f, 0.5f, 0.5f, 1.0f);
+        putVertex(buffer, x + width, y + height, 0.5f, 0.5f, 0.5f, 1.0f);
+        putVertex(buffer, x + width, y + height, 0.5f, 0.5f, 0.5f, 1.0f);
+        putVertex(buffer, x, y + height, 0.5f, 0.5f, 0.5f, 1.0f);
+        putVertex(buffer, x, y + height, 0.5f, 0.5f, 0.5f, 1.0f);
+        putVertex(buffer, x, y, 0.5f, 0.5f, 0.5f, 1.0f);
+        return 10;
+    }
+
+    private void drawTextBottomLeft(String text, int x, int y, DebugColor color) {
+        int topLeftY = baseHeight - y - PixelFont.scaledGlyphHeight(PERFORMANCE_TEXT_SCALE);
+        textRenderer.drawShadowedText(text, x, topLeftY, color, PERFORMANCE_TEXT_SCALE);
+    }
+
+    private static int lineHeight(FontSize fontSize) {
+        int baseHeight = switch (fontSize) {
+            case SMALL -> 10;
+            case MEDIUM -> 12;
+            case LARGE -> 14;
+        };
+        return Math.max(1, Math.round(baseHeight * PERFORMANCE_TEXT_SCALE));
+    }
+
+    private static String formatHeapLine(StringBuilder sb, double heapUsedMB, double heapMaxMB, int heapPercentage) {
+        sb.setLength(0);
+        sb.append("Heap ");
+        appendFixed0(sb, heapUsedMB).append('/');
+        appendFixed0(sb, heapMaxMB).append(' ');
+        sb.append(heapPercentage).append('%');
+        return sb.toString();
+    }
+
+    private static String formatGcLine(StringBuilder sb, long gcCount, long gcTimeMs, double allocationRateMBPerSec) {
+        sb.setLength(0);
+        sb.append("GC ").append(gcCount).append(' ')
+                .append(gcTimeMs).append("ms ");
+        appendFixed1(sb, allocationRateMBPerSec).append("M/s");
+        return sb.toString();
     }
 
     /** Append a double formatted to 1 decimal place without String.format. */

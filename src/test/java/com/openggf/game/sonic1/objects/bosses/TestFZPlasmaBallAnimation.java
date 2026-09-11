@@ -1,11 +1,11 @@
 package com.openggf.game.sonic1.objects.bosses;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TestFZPlasmaBallAnimation {
 
@@ -19,13 +19,13 @@ public class TestFZPlasmaBallAnimation {
             ball.update(0, null);
             safety++;
         }
-        assertTrue("Ball should enter chase (obColType=$9A) before timeout", readBooleanField(ball, "hasCollision"));
+        assertTrue(readBooleanField(ball, "hasCollision"), "Ball should enter chase (obColType=$9A) before timeout");
 
         // Ani_Plasma.short from docs/s1disasm/_anim/Plasma Balls.asm:
         // dc.b 0, 6, 5, 1, 5, 7, 5, 1, 5, afEnd
         int[] expectedFrames = {6, 5, 1, 5, 7, 5, 1, 5, 6, 5};
         for (int expected : expectedFrames) {
-            assertEquals("Downward chase should use Ani_Plasma.short sequence", expected, readIntField(ball, "animFrame"));
+            assertEquals(expected, readIntField(ball, "animFrame"), "Downward chase should use Ani_Plasma.short sequence");
             ball.update(0, null);
         }
     }
@@ -42,3 +42,5 @@ public class TestFZPlasmaBallAnimation {
         return field.getBoolean(target);
     }
 }
+
+

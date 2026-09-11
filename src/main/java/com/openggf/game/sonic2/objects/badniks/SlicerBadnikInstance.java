@@ -5,11 +5,17 @@ import com.openggf.level.objects.AbstractBadnikInstance;
 import com.openggf.debug.DebugRenderContext;
 import com.openggf.game.sonic2.Sonic2ObjectArtKeys;
 import com.openggf.game.PlayableEntity;
+import com.openggf.game.sonic2.constants.Sonic2ObjectIds;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.ObjectPlayerQuery;
+import com.openggf.level.objects.ObjectPlayerParticipationPolicy;
+import com.openggf.level.objects.ObjectServices;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.level.objects.PatrolMovementHelper;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
@@ -31,7 +37,7 @@ import java.util.List;
  *   Routine 6 (THROW_WINDUP): Raise arms (frame 3), wait 8 frames
  *   Routine 8 (AFTER_THROW): Display until off-screen (frame 4, no claws)
  */
-public class SlicerBadnikInstance extends AbstractBadnikInstance {
+public class SlicerBadnikInstance extends AbstractBadnikInstance implements RewindRecreatable {
     // From ObjA1_SubObjData: collision_flags = 6 (enemy, size index 6)
     private static final int COLLISION_SIZE_INDEX = 0x06;
 
@@ -73,6 +79,7 @@ public class SlicerBadnikInstance extends AbstractBadnikInstance {
     private static final int PINCER_HOMING_TIMER = 0x78;
 
     private enum State {
+        INIT,       // Routine 0: ObjA1_Init — set up velocity/radius, no movement this frame
         WALKING,    // Routine 2: walk + detect player
         EDGE_WAIT,  // Routine 4: pause at edge, then reverse
         THROW_WINDUP, // Routine 6: raise arms, preparing to throw
@@ -95,7 +102,15 @@ public class SlicerBadnikInstance extends AbstractBadnikInstance {
         this.facingLeft = !xFlip;
         this.xVelocity = facingLeft ? -WALK_SPEED : WALK_SPEED;
 
-        this.state = State.WALKING;
+        // ROM ObjA1_Init (routine 0) runs as its own object frame: it sets
+        // velocity/radius via LoadSubObject (which does addq.b #2,routine) and
+        // returns WITHOUT calling ObjectMove. ObjA1_Main (routine 2) first runs
+        // — and first moves the Slicer — on the NEXT object frame.
+        // (docs/s2disasm/s2.asm:75777-75788 ObjA1_Init; LoadSubObject's
+        // addq.b #2,routine at s2.asm:72633.) Starting directly in WALKING would
+        // move the Slicer one frame early, leading its ROM x_pos by ~1px and
+        // suppressing the MTZ Touch_KillEnemy bounce on the contact frame.
+        this.state = State.INIT;
         this.timer = 0;
         this.walkAnimTimer = WALK_ANIM_SPEED;
         this.walkAnimToggle = false;
@@ -103,9 +118,17 @@ public class SlicerBadnikInstance extends AbstractBadnikInstance {
     }
 
     @Override
-    protected void updateMovement(int frameCounter, PlayableEntity playerEntity) {
+    public SlicerBadnikInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new SlicerBadnikInstance(ctx.spawn());
+    }
+
+    @Override
+    protected void updateMovement(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         switch (state) {
+            // Routine 0 -> 2 transition consumes a frame without moving, matching
+            // ObjA1_Init's addq.b #2,routine then rts (s2.asm:75777-75788).
+            case INIT -> state = State.WALKING;
             case WALKING -> updateWalking(player);
             case EDGE_WAIT -> updateEdgeWait();
             case THROW_WINDUP -> updateThrowWindup();
@@ -123,13 +146,13 @@ public class SlicerBadnikInstance extends AbstractBadnikInstance {
     private void updateWalking(AbstractPlayableSprite player) {
         // ROM: _btst #render_flags.on_screen,render_flags(a0) / _beq.s loc_3841C
         // isOnScreenX() matches ROM's on_screen render flag (camera X bounds check via MarkObjGone)
-        if (isOnScreenX() && player != null) {
+        AbstractPlayableSprite target = closestNativeOrientationTarget(player);
+        if (isOnScreenX() && target != null) {
             // ROM: bsr.w Obj_GetOrientationToPlayer
-            // Returns d0 = 0 if player is right, 2 if player is left
-            // Returns d1 = 0 if player is below, 2 if player is above
-            // d2 = x distance (obj - player), d3 = y distance (obj - player)
-            int dx = currentX - player.getCentreX();
-            int dy = currentY - player.getCentreY();
+            // Selects nearest MainCharacter/Sidekick by ROM X distance, then
+            // returns d0/d1/d2/d3 relative to that selected player.
+            int dx = currentX - target.getCentreX();
+            int dy = currentY - target.getCentreY();
 
             // Obj_GetOrientationToPlayer: d0 = 0 if dx >= 0 (player LEFT), 2 if dx < 0 (player RIGHT)
             // ObjA1_Main: if x_flip set (facing right), subq.w #2,d0
@@ -181,6 +204,24 @@ public class SlicerBadnikInstance extends AbstractBadnikInstance {
         animFrame = walkAnimToggle ? 2 : 0;
     }
 
+    private AbstractPlayableSprite closestNativeOrientationTarget(AbstractPlayableSprite fallback) {
+        ObjectServices svc = tryServices();
+        if (svc == null) {
+            return fallback;
+        }
+        ObjectPlayerQuery query;
+        try {
+            query = svc.playerQuery();
+        } catch (UnsupportedOperationException e) {
+            return fallback;
+        }
+        ObjectPlayerQuery.NearestPlayerX nearest = query.nearestByRomX(
+                ObjectPlayerParticipationPolicy.NATIVE_P1_P2,
+                currentX,
+                candidate -> candidate instanceof AbstractPlayableSprite);
+        return nearest.player() instanceof AbstractPlayableSprite sprite ? sprite : fallback;
+    }
+
     /**
      * Routine 4 (loc_38466): Count down timer, then reverse direction.
      */
@@ -214,9 +255,6 @@ public class SlicerBadnikInstance extends AbstractBadnikInstance {
      * Each pincer is an independent homing projectile (ObjA2).
      */
     private void spawnPincers() {
-        var objectManager = services().objectManager();
-        if (objectManager == null) return;
-
         int[][] offsets = {
             { PINCER_0_X_OFFSET, 0 },
             { PINCER_1_X_OFFSET, 0 }
@@ -228,20 +266,28 @@ public class SlicerBadnikInstance extends AbstractBadnikInstance {
             if (!facingLeft) {
                 xOff = -xOff;
             }
-            int pincerX = currentX + xOff;
-            int pincerY = currentY + offset[1];
+            final int pincerX = currentX + xOff;
+            final int pincerY = currentY + offset[1];
 
             // ROM: move.w #-$200,d0 / btst #render_flags.x_flip / beq.s + / neg.w d0
-            int pincerXVel = facingLeft ? -PINCER_INIT_X_VEL : PINCER_INIT_X_VEL;
+            final int pincerXVel = facingLeft ? -PINCER_INIT_X_VEL : PINCER_INIT_X_VEL;
+            ObjectSpawn pincerSpawn = new ObjectSpawn(
+                    pincerX,
+                    pincerY,
+                    Sonic2ObjectIds.SLICER_PINCERS,
+                    spawn.subtype(),
+                    spawn.renderFlags(),
+                    false,
+                    pincerY);
 
-            SlicerPincerInstance pincer = new SlicerPincerInstance(
-                    spawn, this, pincerX, pincerY, pincerXVel, !facingLeft, PINCER_HOMING_TIMER);
-            objectManager.addDynamicObject(pincer);
+            // ROM (s2.asm:75496-75502): 2x ObjA2 spawned as children of the body.
+            spawnChild(() -> new SlicerPincerInstance(
+                    pincerSpawn, this, pincerX, pincerY, pincerXVel, !facingLeft, PINCER_HOMING_TIMER));
         }
     }
 
     @Override
-    protected void updateAnimation(int frameCounter) {
+    protected void updateAnimation(int vIntRunCount) {
         // Animation state is set directly in state machine methods
     }
 
@@ -266,8 +312,11 @@ public class SlicerBadnikInstance extends AbstractBadnikInstance {
         PatternSpriteRenderer renderer = renderManager.getRenderer(Sonic2ObjectArtKeys.SLICER);
         if (renderer == null || !renderer.isReady()) return;
 
-        // Sprite art faces left by default; flip when facing right
-        renderer.drawFrameIndex(animFrame, currentX, currentY, !facingLeft, false);
+        // LoadSubObject preserves placement flips; AnimateSprite copies status bits
+        // 0/1 back to render_flags. ObjA1 only toggles status.x_flip at an edge,
+        // so the placement's y_flip also survives windup and the body-only frame.
+        renderer.drawFrameIndex(animFrame, currentX, currentY, !facingLeft,
+                (spawn.renderFlags() & 0x02) != 0);
     }
 
     @Override

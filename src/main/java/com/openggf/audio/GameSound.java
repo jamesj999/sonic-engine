@@ -36,6 +36,8 @@ public enum GameSound {
     LIGHTNING_ATTACK,
     BUBBLE_ATTACK,
     INSTA_SHIELD,
+    TAILS_FLYING,
+    TAILS_FLY_TIRED,
     GRAB,       // SFX $4B - Knuckles wall grab (SndID_Grab)
     GLIDE_LAND  // SFX $4C - Knuckles glide land/slide (SndID_GlideLand)
 }

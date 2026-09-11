@@ -1,12 +1,16 @@
 package com.openggf.level;
 
 import com.openggf.camera.Camera;
+import com.openggf.configuration.SonicConfiguration;
 import com.openggf.data.Rom;
-import com.openggf.game.GameModuleRegistry;
-import com.openggf.game.GameModule;
+import com.openggf.data.RomManager;
 import com.openggf.game.GameServices;
-import com.openggf.game.RuntimeManager;
+import com.openggf.game.GameModule;
 import com.openggf.game.ScrollHandlerProvider;
+import com.openggf.game.rewind.RewindSnapshottable;
+import com.openggf.game.rewind.snapshot.ParallaxSnapshot;
+import com.openggf.level.scroll.BgTilemapUpdateMode;
+import com.openggf.level.scroll.CameraDrivenScrollHandler;
 import com.openggf.level.scroll.ZoneScrollHandler;
 
 import java.io.IOException;
@@ -20,7 +24,7 @@ import java.util.logging.Logger;
  * {@link ScrollHandlerProvider} obtained from the active {@link GameModule}.
  * ParallaxManager itself contains no game-specific imports or constants.
  */
-public class ParallaxManager {
+public class ParallaxManager implements RewindSnapshottable<ParallaxSnapshot> {
     private static final Logger LOGGER = Logger.getLogger(ParallaxManager.class.getName());
 
     public static final int VISIBLE_LINES = 224;
@@ -29,12 +33,29 @@ public class ParallaxManager {
     private final int[] hScroll = new int[VISIBLE_LINES];
     // Optional per-line BG VScroll deltas (added on top of vscrollFactorBG).
     private final short[] vScrollPerLineBG = new short[VISIBLE_LINES];
-    // Optional per-column BG VScroll deltas (20 columns in H40 mode).
-    private static final int BG_VSCROLL_COLUMN_COUNT = 20;
-    private final short[] vScrollPerColumnBG = new short[BG_VSCROLL_COLUMN_COUNT];
-    // Optional per-column FG VScroll values (20 columns in H40 mode).
-    private static final int FG_VSCROLL_COLUMN_COUNT = 20;
-    private final short[] vScrollPerColumnFG = new short[FG_VSCROLL_COLUMN_COUNT];
+    // Per-column VScroll buffer size: ceil(screenWidth / 16). 20 at native 320px.
+    private final int BG_VSCROLL_COLUMN_COUNT;
+    private final short[] vScrollPerColumnBG;
+    private final int FG_VSCROLL_COLUMN_COUNT;
+    private final short[] vScrollPerColumnFG;
+
+    public ParallaxManager() {
+        int screenWidth;
+        try {
+            screenWidth = GameServices.configuration().getInt(SonicConfiguration.SCREEN_WIDTH_PIXELS);
+        } catch (Exception e) {
+            screenWidth = 320;
+        }
+        BG_VSCROLL_COLUMN_COUNT = columnCount(screenWidth);
+        FG_VSCROLL_COLUMN_COUNT = columnCount(screenWidth);
+        vScrollPerColumnBG = new short[BG_VSCROLL_COLUMN_COUNT];
+        vScrollPerColumnFG = new short[FG_VSCROLL_COLUMN_COUNT];
+    }
+
+    private static int columnCount(int width) {
+        return (width + 15) / 16;
+    }
+
     private boolean hasPerLineVScrollBG = false;
     private boolean hasPerColumnVScrollBG = false;
     private boolean hasPerColumnVScrollFG = false;
@@ -59,19 +80,7 @@ public class ParallaxManager {
     // Cached BG camera X from the active scroll handler (Integer.MIN_VALUE = no offset)
     private int cachedBgCameraX = Integer.MIN_VALUE;
     private int cachedBgPeriodWidth = 512;
-
-    private static ParallaxManager bootstrapInstance;
-
-    public static synchronized ParallaxManager getInstance() {
-        var runtime = RuntimeManager.getCurrent();
-        if (runtime != null) {
-            return runtime.getParallaxManager();
-        }
-        if (bootstrapInstance == null) {
-            bootstrapInstance = new ParallaxManager();
-        }
-        return bootstrapInstance;
-    }
+    private BgTilemapUpdateMode cachedBgTilemapUpdateMode = BgTilemapUpdateMode.STATIC_WINDOW;
 
     /**
      * Reset zone state to force reinitialization on next initZone call.
@@ -99,6 +108,7 @@ public class ParallaxManager {
         currentShakeOffsetY = 0;
         cachedBgCameraX = Integer.MIN_VALUE;
         cachedBgPeriodWidth = 512;
+        cachedBgTilemapUpdateMode = BgTilemapUpdateMode.STATIC_WINDOW;
         minScroll = 0;
         maxScroll = 0;
         java.util.Arrays.fill(hScroll, 0);
@@ -116,7 +126,7 @@ public class ParallaxManager {
         }
 
         // Get the game-specific scroll handler provider
-        GameModule module = GameModuleRegistry.getCurrent();
+        GameModule module = GameServices.module();
 
         if (module != null) {
             scrollProvider = module.getScrollHandlerProvider();
@@ -130,6 +140,22 @@ public class ParallaxManager {
                 }
             }
         }
+    }
+
+    /**
+     * Compatibility overload for callers that supplied the obsolete game-level
+     * background-Y hint. The active zone handler is authoritative.
+     */
+    @Deprecated
+    public void update(int zoneId, int actId, Camera camera, int frameCounter, int ignoredBackgroundY) {
+        update(zoneId, actId, camera, frameCounter);
+    }
+
+    /** Compatibility overload retaining the obsolete background-Y hint. */
+    @Deprecated
+    public void update(int zoneId, int actId, Camera camera, int frameCounter,
+            int ignoredBackgroundY, Level level) {
+        update(zoneId, actId, camera, frameCounter, level);
     }
 
     public void initZone(int zoneId, int actId, int cameraX, int cameraY) {
@@ -172,6 +198,15 @@ public class ParallaxManager {
     }
 
     /**
+     * Returns the active zone scroll handler for the given zone, or null.
+     * Used by event handlers that need to communicate directly with
+     * their zone's scroll handler (e.g., HCZ2 wall-chase driving SwScrlHcz).
+     */
+    public ZoneScrollHandler getHandler(int zoneId) {
+        return scrollProvider != null ? scrollProvider.getHandler(zoneId) : null;
+    }
+
+    /**
      * Optional per-line BG VScroll values for shader-based heat haze effects.
      *
      * @return 224-entry per-line VScroll array, or null when not active
@@ -183,7 +218,7 @@ public class ParallaxManager {
     /**
      * Optional per-column BG VScroll values for shader-based column distortion effects.
      *
-     * @return 20-entry per-column VScroll array, or null when not active
+     * @return per-column VScroll array (ceil(screenWidth/16) entries), or null when not active
      */
     public short[] getVScrollPerColumnBGForShader() {
         return hasPerColumnVScrollBG ? vScrollPerColumnBG : null;
@@ -194,7 +229,7 @@ public class ParallaxManager {
      * Used by the S3K Gumball bonus stage to make machine body tiles drift with the
      * gumball machine object.
      *
-     * @return 20-entry per-column FG VScroll array, or null when not active
+     * @return per-column FG VScroll array (ceil(screenWidth/16) entries), or null when not active
      */
     public short[] getVScrollPerColumnFGForShader() {
         return hasPerColumnVScrollFG ? vScrollPerColumnFG : null;
@@ -218,6 +253,11 @@ public class ParallaxManager {
      */
     public int getBgPeriodWidth() {
         return cachedBgPeriodWidth;
+    }
+
+    /** Returns the active handler's Plane B residency model. */
+    public BgTilemapUpdateMode getBgTilemapUpdateMode() {
+        return cachedBgTilemapUpdateMode;
     }
 
     /**
@@ -276,18 +316,7 @@ public class ParallaxManager {
         GameServices.gameState().setScreenShakeActive(screenShakeFlag);
     }
 
-    /**
-     * Set the HTZ screen shake mode flag.
-     * This sets the HTZ-specific flag (Screen_Shaking_Flag_HTZ) which stays
-     * active for the entire earthquake sequence, as well as the general
-     * screen shake flag for visual shake effects.
-     */
-    public void setHtzScreenShake(boolean active) {
-        GameServices.gameState().setHtzScreenShakeActive(active);
-        GameServices.gameState().setScreenShakeActive(active);
-    }
-
-    public void update(int zoneId, int actId, Camera cam, int frameCounter, int bgScrollY) {
+    public void update(int zoneId, int actId, Camera cam, int frameCounter) {
         // Clear scroll buffer to ensure deterministic state
         // (some zone handlers intentionally leave lines unwritten)
         java.util.Arrays.fill(hScroll, 0);
@@ -323,6 +352,7 @@ public class ParallaxManager {
                 currentShakeOffsetY = handler.getShakeOffsetY();
                 cachedBgCameraX = handler.getBgCameraX();
                 cachedBgPeriodWidth = handler.getBgPeriodWidth();
+                cachedBgTilemapUpdateMode = handler.getBgTilemapUpdateMode();
                 capturePerLineVScroll(handler);
                 capturePerColumnVScroll(handler);
                 capturePerColumnVScrollFG(handler);
@@ -341,11 +371,43 @@ public class ParallaxManager {
             } else {
                 cachedBgCameraX = Integer.MIN_VALUE;
                 cachedBgPeriodWidth = 512;
+                cachedBgTilemapUpdateMode = BgTilemapUpdateMode.STATIC_WINDOW;
                 fillMinimal(cam);
             }
         } else {
+            cachedBgTilemapUpdateMode = BgTilemapUpdateMode.STATIC_WINDOW;
             fillMinimal(cam);
         }
+    }
+
+    /**
+     * Advances scroll routines that drive foreground camera movement as gameplay
+     * state. Render-time parallax updates must only consume the resulting state.
+     */
+    public boolean advanceCameraDrivenScroll(int zoneId, int actId, Camera cam, int frameCounter) {
+        if (!providerLoaded) {
+            try {
+                Rom rom = GameServices.rom().getRom();
+                if (rom != null) {
+                    load(rom);
+                }
+            } catch (IOException e) {
+                if (RomManager.isConfiguredRomMissing(e)) {
+                    LOGGER.fine(() -> "Skipped lazy scroll-provider load: " + e.getMessage());
+                } else {
+                    LOGGER.warning("Failed to lazy-load scroll provider: " + e.getMessage());
+                }
+            }
+        }
+        if (scrollProvider == null || cam == null) {
+            return false;
+        }
+        initZone(zoneId, actId, cam.getX(), cam.getY());
+        ZoneScrollHandler handler = scrollProvider.getHandler(zoneId);
+        if (handler instanceof CameraDrivenScrollHandler cameraDriven) {
+            return cameraDriven.advanceCameraForFrame(cam, actId);
+        }
+        return false;
     }
 
     /**
@@ -356,12 +418,11 @@ public class ParallaxManager {
      * @param actId Act identifier
      * @param cam Camera instance
      * @param frameCounter Current frame counter
-     * @param bgScrollY Background scroll Y value
      * @param level Level instance for dynamic art updates (may be null)
      */
-    public void update(int zoneId, int actId, Camera cam, int frameCounter, int bgScrollY, Level level) {
+    public void update(int zoneId, int actId, Camera cam, int frameCounter, Level level) {
         // Perform standard parallax update
-        update(zoneId, actId, cam, frameCounter, bgScrollY);
+        update(zoneId, actId, cam, frameCounter);
 
         // Update zone-specific dynamic art via the provider
         if (scrollProvider != null && level != null) {
@@ -389,6 +450,7 @@ public class ParallaxManager {
         // Camera is (0,0) during ending
         vscrollFactorFG = 0;
         vscrollFactorBG = (short) bgVscroll;
+        cachedBgTilemapUpdateMode = BgTilemapUpdateMode.STATIC_WINDOW;
 
         // Initialize zone if needed
         initZone(zoneId, actId, 0, 0);
@@ -402,6 +464,9 @@ public class ParallaxManager {
                     minScroll = handler.getMinScrollOffset();
                     maxScroll = handler.getMaxScrollOffset();
                     vscrollFactorBG = handler.getVscrollFactorBG();
+                    cachedBgCameraX = handler.getBgCameraX();
+                    cachedBgPeriodWidth = handler.getBgPeriodWidth();
+                    cachedBgTilemapUpdateMode = handler.getBgTilemapUpdateMode();
                 }
             }
         }
@@ -468,5 +533,42 @@ public class ParallaxManager {
             java.util.Arrays.fill(vScrollPerColumnFG, count, FG_VSCROLL_COLUMN_COUNT, (short) 0);
         }
         hasPerColumnVScrollFG = true;
+    }
+
+    // ── RewindSnapshottable ───────────────────────────────────────────────
+
+    @Override
+    public String key() {
+        return "parallax";
+    }
+
+    @Override
+    public ParallaxSnapshot capture() {
+        // Dense/scalar parallax is derived from the restored camera/frame/zone
+        // and recomputed after the registry restore. The only state that must be
+        // carried is the active handler's genuinely-stateful logical scroll
+        // state (e.g. SCZ's camera-driven BG accumulator + level-event routine),
+        // which is not recomputable from the camera/frame.
+        return new ParallaxSnapshot(captureActiveHandlerRewindState());
+    }
+
+    @Override
+    public void restore(ParallaxSnapshot s) {
+        // Dense/scalar parallax is recomputed by GameplayModeContext after the
+        // registry restore; only the active handler's logical state is restored
+        // here so re-simulation continues from the correct values.
+        ZoneScrollHandler handler = activeHandler();
+        if (handler != null) {
+            handler.restoreRewindState(s.handlerRewindState());
+        }
+    }
+
+    private Object captureActiveHandlerRewindState() {
+        ZoneScrollHandler handler = activeHandler();
+        return handler != null ? handler.captureRewindState() : null;
+    }
+
+    private ZoneScrollHandler activeHandler() {
+        return scrollProvider != null ? scrollProvider.getHandler(currentZone) : null;
     }
 }

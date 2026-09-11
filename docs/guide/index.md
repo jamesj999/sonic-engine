@@ -38,10 +38,12 @@ You want to add objects, bosses, zones, or engine improvements.
 
 - [Dev Setup](contributing/dev-setup.md) -- Environment, build, and test setup
 - [Architecture Deep Dive](contributing/architecture.md) -- Providers, services, and runtime
+- [Documentation and Branch Policy](contributing/documentation-policy.md) -- Commit trailers, changelog/discrepancy updates, and PR documentation checks
 - [Tutorial: Implement an Object](contributing/tutorial-implement-object.md) -- Worked example from disassembly to running code
 - [Adding Bosses](contributing/adding-bosses.md) -- Boss-specific patterns
 - [Adding Zones](contributing/adding-zones.md) -- Bringing up a new zone
 - [Audio System](contributing/audio-system.md) -- SMPS driver, FM synthesis, PSG
+- [Rewind System](contributing/rewind-system.md) -- Using, validating, and extending frame rewind
 - [Testing](contributing/testing.md) -- Writing and running tests
 - [Trace Replay Testing](contributing/trace-replay.md) -- BizHawk recordings, replay tests, and divergence analysis
 

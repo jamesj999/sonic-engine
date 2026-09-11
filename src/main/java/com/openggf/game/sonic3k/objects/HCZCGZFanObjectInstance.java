@@ -13,16 +13,23 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.WaterSystem;
 import com.openggf.level.objects.AbstractObjectInstance;
+import com.openggf.level.objects.ObjectPlayerParticipationPolicy;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreateObjectLinks;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.RomObjectCodePointerProvider;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.SolidContact;
+import com.openggf.level.objects.SolidExecutionMode;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
+import com.openggf.sprites.NativePositionOps;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Random;
 
 /**
  * Object 0x38 — HCZ/CGZ Fan (Sonic 3 &amp; Knuckles, Hydrocity Zone / Chrome Gadget Zone).
@@ -49,7 +56,7 @@ import java.util.Random;
  * Bits 4-5: (When bit 7 set) Platform slide distance: ($00/$40/$80/$C0)
  * </pre>
  */
-public class HCZCGZFanObjectInstance extends AbstractObjectInstance {
+public class HCZCGZFanObjectInstance extends AbstractObjectInstance implements RewindRecreatable {
 
     // ===== Subtype bit masks =====
     private static final int MASK_STRENGTH = 0x0F;
@@ -73,6 +80,10 @@ public class HCZCGZFanObjectInstance extends AbstractObjectInstance {
     // ===== Timer durations (in frames) =====
     // ROM: move.w #2*60,$30(a0) — 120 frames when turning off
     private static final int IDLE_DURATION = 2 * 60;    // 120 frames
+    // The ROM stores #120 after the first negative countdown tick; because the
+    // engine's Java update observes the post-setup state in the same call, keep
+    // the terminal zero tick idle before the fan resumes player interaction.
+    private static final int ENGINE_IDLE_COUNTDOWN_RESET = IDLE_DURATION + 1;
     // ROM: move.w #3*60,$30(a0) — 180 frames when turning on
     private static final int ACTIVE_DURATION = 3 * 60;  // 180 frames
 
@@ -106,18 +117,16 @@ public class HCZCGZFanObjectInstance extends AbstractObjectInstance {
     // ROM: move.b #8,flip_speed(a1)
     private static final int PLAYER_FLIP_SPEED = 8;
 
-    private static final Random RANDOM = new Random();
-
     // ===== Configuration (from subtype) =====
-    private final int innerRange;      // $36(a0): inner detection range
-    private final int outerRange;      // $38(a0): outer detection range
-    private final boolean isUnderwater; // subtype bit 6
+    private int innerRange;            // $36(a0): inner detection range
+    private int outerRange;            // $38(a0): outer detection range
+    private boolean isUnderwater;      // subtype bit 6
     private int subtype;               // mutable: trigger mode clears bit 5, sets bit 4
 
     // ===== Instance state =====
     private int x;                     // current X position (may be updated by platform)
-    private final int y;               // Y position (fixed)
-    private final int originalX;       // $40(a0): stored for on-screen test
+    private int y;                     // Y position (fixed)
+    private int originalX;             // $40(a0): stored for on-screen test
 
     // Timer-toggle state
     private int timer;                 // $30(a0): countdown timer
@@ -131,6 +140,10 @@ public class HCZCGZFanObjectInstance extends AbstractObjectInstance {
     private FanPlatformChild platformChild;
 
     public HCZCGZFanObjectInstance(ObjectSpawn spawn) {
+        this(spawn, true);
+    }
+
+    private HCZCGZFanObjectInstance(ObjectSpawn spawn, boolean spawnPlatform) {
         super(spawn, "HCZCGZFan");
         this.subtype = spawn.subtype();
         this.originalX = spawn.x();
@@ -155,9 +168,14 @@ public class HCZCGZFanObjectInstance extends AbstractObjectInstance {
         this.latchedOn = false;
 
         // ROM: btst #7,d0 / beq.s loc_30602
-        if ((subtype & BIT_PLATFORM) != 0) {
+        if (spawnPlatform && (subtype & BIT_PLATFORM) != 0) {
             spawnPlatformChild();
         }
+    }
+
+    @Override
+    public HCZCGZFanObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new HCZCGZFanObjectInstance(ctx.spawn(), false);
     }
 
     /**
@@ -187,7 +205,7 @@ public class HCZCGZFanObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (playerEntity instanceof AbstractPlayableSprite)
                 ? (AbstractPlayableSprite) playerEntity : null;
 
@@ -202,15 +220,25 @@ public class HCZCGZFanObjectInstance extends AbstractObjectInstance {
             subtype |= BIT_ALWAYS_ON;
         }
 
+        // ROM platform mode makes the original slot the sliding platform and
+        // updates the fan child after the platform has written the fan x_pos.
+        if (platformChild != null) {
+            return;
+        }
+
+        updateFanRoutine(vIntRunCount, player);
+    }
+
+    private void updateFanRoutine(int vIntRunCount, AbstractPlayableSprite player) {
         // ROM: tst.b $42(a0) — latched-on flag (sonic3k.asm:65368-65370)
         if (latchedOn) {
-            updateRampUp(frameCounter, player);
+            updateRampUp(vIntRunCount, player);
             return;
         }
 
         // ROM: btst #4,subtype(a0) — always-on fan (sonic3k.asm:65372-65374)
         if ((subtype & BIT_ALWAYS_ON) != 0) {
-            updatePlayerInteraction(frameCounter, player);
+            updatePlayerInteraction(vIntRunCount, player);
             return;
         }
 
@@ -218,7 +246,7 @@ public class HCZCGZFanObjectInstance extends AbstractObjectInstance {
         timer--;
         if (timer < 0) {
             speedRamp = 0;
-            timer = IDLE_DURATION;
+            timer = ENGINE_IDLE_COUNTDOWN_RESET;
             toggleFlag ^= 1;  // ROM: bchg #0,$32(a0)
             if (toggleFlag == 0) {
                 // Fan just turned on
@@ -229,10 +257,10 @@ public class HCZCGZFanObjectInstance extends AbstractObjectInstance {
         // ROM: tst.b $32(a0) / beq.w loc_306C2
         if (toggleFlag == 0) {
             // Fan is active — do player interaction
-            updatePlayerInteraction(frameCounter, player);
+            updatePlayerInteraction(vIntRunCount, player);
         } else {
             // Fan is ramping down/idle
-            updateRampUp(frameCounter, player);
+            updateRampUp(vIntRunCount, player);
         }
     }
 
@@ -242,7 +270,7 @@ public class HCZCGZFanObjectInstance extends AbstractObjectInstance {
      * ROM: loc_306A2 (sonic3k.asm:65384-65392).
      * Gradually increases frame delay as speedRamp increases, creating a slowing effect.
      */
-    private void updateRampUp(int frameCounter, AbstractPlayableSprite player) {
+    private void updateRampUp(int vIntRunCount, AbstractPlayableSprite player) {
         animFrameTimer--;
         if (animFrameTimer >= 0) {
             return;
@@ -264,14 +292,18 @@ public class HCZCGZFanObjectInstance extends AbstractObjectInstance {
      * <p>
      * ROM: loc_306C2 (sonic3k.asm:65394-65447).
      */
-    private void updatePlayerInteraction(int frameCounter, AbstractPlayableSprite player) {
-        // Process both Player 1 and sidekicks (ROM: Player_1 + Player_2)
-        if (player != null) {
-            applyFanPush(player, frameCounter);
+    private void updatePlayerInteraction(int vIntRunCount, AbstractPlayableSprite player) {
+        List<PlayableEntity> participants = services().playerQuery().playersFor(
+                ObjectPlayerParticipationPolicy.MAIN_PLUS_ENGINE_SIDEKICKS_AS_NATIVE_P2_EXTENDED);
+        if (player != null && !participants.contains(player)) {
+            ArrayList<PlayableEntity> withUpdatePlayer = new ArrayList<>(participants.size() + 1);
+            withUpdatePlayer.add(player);
+            withUpdatePlayer.addAll(participants);
+            participants = withUpdatePlayer;
         }
-        for (PlayableEntity sidekick : services().sidekicks()) {
-            if (sidekick instanceof AbstractPlayableSprite sk) {
-                applyFanPush(sk, frameCounter);
+        for (PlayableEntity participant : participants) {
+            if (participant instanceof AbstractPlayableSprite sprite) {
+                applyFanPush(sprite, vIntRunCount);
             }
         }
 
@@ -287,7 +319,7 @@ public class HCZCGZFanObjectInstance extends AbstractObjectInstance {
         // ROM: tst.b render_flags(a0) / bpl.s — only if on-screen
         if (isOnScreen()) {
             // ROM: move.b (Level_frame_counter+1).w,d0 / addq.b #1,d0 / andi.b #$F,d0
-            int fc = (frameCounter & 0xFF) + 1;
+            int fc = (vIntRunCount & 0xFF) + 1;
             if ((fc & SFX_INTERVAL_MASK) == 0) {
                 try {
                     services().playSfx(Sonic3kSfx.FAN_SMALL.id);
@@ -299,7 +331,7 @@ public class HCZCGZFanObjectInstance extends AbstractObjectInstance {
 
         // Underwater bubble spawning (sonic3k.asm:65420-65447)
         if (isUnderwater) {
-            spawnBubbles(frameCounter);
+            spawnBubbles(vIntRunCount);
         }
     }
 
@@ -309,7 +341,7 @@ public class HCZCGZFanObjectInstance extends AbstractObjectInstance {
      * ROM: loc_3077E (sonic3k.asm:65453-65520).
      * Distance-dependent upward force with oscillation wobble.
      */
-    private void applyFanPush(AbstractPlayableSprite player, int frameCounter) {
+    private void applyFanPush(AbstractPlayableSprite player, int vIntRunCount) {
         // ROM: cmpi.b #4,routine(a1) — player dead/hurt?
         if (player.isHurt()) {
             return;
@@ -356,8 +388,8 @@ public class HCZCGZFanObjectInstance extends AbstractObjectInstance {
         force = (-force) & 0xFFFF;
         int push = ((short) force) >> 6;  // asr.w #6
 
-        // ROM: add.w d1,y_pos(a1) — directly adjust player Y
-        player.setCentreY((short) (player.getCentreY() + push));
+        // ROM: add.w d1,y_pos(a1) — directly adjust the native Y word.
+        NativePositionOps.addYPosPreserveSubpixel(player, push);
 
         // Player state changes (sonic3k.asm:65500-65510)
         // ROM: bset #Status_InAir,status(a1)
@@ -402,15 +434,18 @@ public class HCZCGZFanObjectInstance extends AbstractObjectInstance {
      * ROM: loc_3070C (sonic3k.asm:65420-65447).
      * Spawns a bubble every 4 frames that rises until it reaches the water surface.
      */
-    private void spawnBubbles(int frameCounter) {
+    private void spawnBubbles(int vIntRunCount) {
         // ROM: andi.b #3,d0 / bne.s — every 4 frames
-        if ((frameCounter & BUBBLE_SPAWN_INTERVAL_MASK) != 0) {
+        if ((vIntRunCount & BUBBLE_SPAWN_INTERVAL_MASK) != 0) {
             return;
         }
         // ROM: jsr (AllocateObject).l
         try {
-            int bubbleX = x + RANDOM.nextInt(16) - 8;  // ROM: random X offset -8..+7
-            spawnChild(() -> new FanBubbleChild(
+            int bubbleX = x + services().rng().nextInt(16) - 8;  // ROM: random X offset -8..+7
+            // ROM: Obj_HCZCGZFan uses AllocateObject here, not
+            // AllocateObjectAfterCurrent. Bubbles therefore take the lowest
+            // free dynamic SST slot, which can be below their fan parent.
+            spawnFreeChild(() -> new FanBubbleChild(
                     new ObjectSpawn(bubbleX, y, Sonic3kObjectIds.HCZ_CGZ_FAN, 0, 0, false, 0)));
         } catch (Exception e) {
             // Object allocation failed
@@ -472,6 +507,13 @@ public class HCZCGZFanObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
+    public int getOutOfRangeReferenceX() {
+        // ROM: loc_30774 feeds $40(a0), not the current sliding fan x_pos, to
+        // Sprite_OnScreen_Test2.
+        return originalX;
+    }
+
+    @Override
     public void appendDebugRenderCommands(DebugRenderContext ctx) {
         if (ctx == null) return;
         ctx.drawCross(x, y, 4, 0.2f, 0.8f, 1f);
@@ -493,7 +535,23 @@ public class HCZCGZFanObjectInstance extends AbstractObjectInstance {
      * Uses Map_HCZWaterRushBlock mappings, ArtTile_HCZMisc+$A.
      */
     static class FanPlatformChild extends AbstractObjectInstance
-            implements SolidObjectProvider, SolidObjectListener {
+            implements SolidObjectProvider, SolidObjectListener, RewindRecreatable, RomObjectCodePointerProvider {
+
+        /**
+         * Word 0 of this object's S3K SST holds its live ROM code pointer.
+         * ROM {@code Obj_HCZCGZFan} is installed from the S3K object pointer table at
+         * {@code $00030580} (table read from the user-supplied ROM; the
+         * label is defined at docs/skdisasm/sonic3k.asm:65314).
+         * Its whole code block lies in one bank, so the HIGH word that
+         * {@code sub_13EFC} latches into {@code Tails_CPU_interact} and compares
+         * on the next off-screen on-object frame is {@code $0003}
+         * (docs/skdisasm/sonic3k.asm:26816-26843).
+         */
+        @Override
+        public int romObjectCodePointerHighWord() {
+            return 0x0003;
+        }
+
 
         // ROM: move.b #$10,width_pixels(a0) / move.b #$10,height_pixels(a0)
         private static final int HALF_WIDTH = 0x10;
@@ -507,12 +565,11 @@ public class HCZCGZFanObjectInstance extends AbstractObjectInstance {
         private static final int BELOW_THRESHOLD = 0x20;
         // ROM: cmpi.w #-$30,d0 — above threshold
         private static final int ABOVE_THRESHOLD = -0x30;
-
         private final HCZCGZFanObjectInstance fanParent;
-        private final int maxSlideDistance;   // $3A(a0): max slide offset
-        private final boolean facingLeft;
-        private final int originalX;         // $40(a0): base X position
-        private final int y;                 // Y position (fixed, platform doesn't move vertically)
+        private int maxSlideDistance;         // $3A(a0): max slide offset
+        private boolean facingLeft;
+        private int originalX;                // $40(a0): base X position
+        private int y;                        // Y position (fixed, platform doesn't move vertically)
 
         private int x;
         private int slideOffset;             // $30(a0): current slide offset
@@ -530,13 +587,20 @@ public class HCZCGZFanObjectInstance extends AbstractObjectInstance {
         }
 
         @Override
+        public FanPlatformChild recreateForRewind(RewindRecreateContext ctx) {
+            HCZCGZFanObjectInstance restoredParent =
+                    RewindRecreateObjectLinks.nearestLiveObject(ctx, HCZCGZFanObjectInstance.class);
+            return new FanPlatformChild(ctx.spawn(), restoredParent, 0, false);
+        }
+
+        @Override
         public SolidObjectParams getSolidParams() {
             // ROM: move.b width_pixels(a0),d1 / addi.w #$B,d1
             //      move.b height_pixels(a0),d2 / move.w d2,d3 / addq.w #1,d3
             int d1 = HALF_WIDTH + 0xB;
             int d2 = HALF_HEIGHT;
             int d3 = HALF_HEIGHT + 1;
-            return new SolidObjectParams(d1, d2, d3);
+            return SolidObjectParams.of(d1, d2, d3);
         }
 
         @Override
@@ -545,7 +609,7 @@ public class HCZCGZFanObjectInstance extends AbstractObjectInstance {
         }
 
         @Override
-        public void update(int frameCounter, PlayableEntity playerEntity) {
+        public void update(int vIntRunCount, PlayableEntity playerEntity) {
             AbstractPlayableSprite player = (playerEntity instanceof AbstractPlayableSprite)
                     ? (AbstractPlayableSprite) playerEntity : null;
 
@@ -593,6 +657,9 @@ public class HCZCGZFanObjectInstance extends AbstractObjectInstance {
             x = originalX + offset;
             // ROM: move.w d0,x_pos(a1) — set fan X too
             fanParent.setFanX(x);
+
+            checkpointAll();
+            fanParent.updateFanRoutine(vIntRunCount, player);
         }
 
         private void extendPlatform() {
@@ -627,6 +694,18 @@ public class HCZCGZFanObjectInstance extends AbstractObjectInstance {
         public int getPriorityBucket() { return RenderPriority.clamp(PLATFORM_PRIORITY); }
 
         @Override
+        public SolidExecutionMode solidExecutionMode() {
+            return SolidExecutionMode.MANUAL_CHECKPOINT;
+        }
+
+        @Override
+        public int getOutOfRangeReferenceX() {
+            // ROM: loc_308B8 feeds $40(a0), not the current platform x_pos, to
+            // Sprite_OnScreen_Test2.
+            return originalX;
+        }
+
+        @Override
         public void appendDebugRenderCommands(DebugRenderContext ctx) {
             if (ctx == null) return;
             ctx.drawRect(x, y, HALF_WIDTH, HALF_HEIGHT, 0f, 1f, 0.5f);
@@ -644,7 +723,7 @@ public class HCZCGZFanObjectInstance extends AbstractObjectInstance {
      * ROM: loc_30834 (sonic3k.asm:65511-65520).
      * Uses Map_Bubbler mappings, ArtTile_Bubbles ($045C), palette 0.
      */
-    static class FanBubbleChild extends AbstractObjectInstance {
+    static class FanBubbleChild extends AbstractObjectInstance implements RewindRecreatable {
 
         // ROM: move.w #$300,priority(a1)
         private static final int PRIORITY = 6;
@@ -654,9 +733,9 @@ public class HCZCGZFanObjectInstance extends AbstractObjectInstance {
         // enough to reach any water surface in HCZ.
         private static final int MAX_LIFETIME = 120;
 
-        private final int x;
+        private int x;
         private int y;
-        private final int yVelocity;    // y_vel = -$800
+        private int yVelocity;          // y_vel = -$800
         private int lifetime;
 
         FanBubbleChild(ObjectSpawn spawn) {
@@ -668,7 +747,12 @@ public class HCZCGZFanObjectInstance extends AbstractObjectInstance {
         }
 
         @Override
-        public void update(int frameCounter, PlayableEntity playerEntity) {
+        public FanBubbleChild recreateForRewind(RewindRecreateContext ctx) {
+            return new FanBubbleChild(ctx.spawn());
+        }
+
+        @Override
+        public void update(int vIntRunCount, PlayableEntity playerEntity) {
             // Safety: force-destroy after max lifetime to prevent object leaks
             lifetime++;
             if (lifetime >= MAX_LIFETIME) {
@@ -700,9 +784,10 @@ public class HCZCGZFanObjectInstance extends AbstractObjectInstance {
                 return;
             }
 
-            // ROM: jsr (MoveSprite2).l — apply velocity AFTER water check
-            // $800 = 8.00 in 8.8 fixed point = 8 pixels per frame upward
-            y += (yVelocity >> 8);
+            // ROM: Obj_HCZCGZFan's bubble routine calls MoveSprite2 twice
+            // after the water check. $800 is 8 pixels per call, so the native
+            // bubble advances 16 pixels upward per frame.
+            y += 2 * (yVelocity >> 8);
         }
 
         @Override

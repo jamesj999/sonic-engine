@@ -1,13 +1,14 @@
 package com.openggf.game.sonic1.objects;
 
-import com.openggf.audio.AudioManager;
 import com.openggf.debug.DebugRenderContext;
 import com.openggf.game.sonic1.audio.Sonic1Sfx;
 import com.openggf.game.PlayableEntity;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
+import com.openggf.level.LevelManager;
 import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
@@ -20,7 +21,7 @@ import java.util.List;
  * <p>
  * Electrocution orbs that periodically zap with an electrical discharge.
  * The subtype controls the zap frequency: the orb zaps when
- * {@code (frameCounter & frequency) == 0}, where frequency is
+ * {@code (v_framecount & frequency) == 0}, where frequency is
  * {@code (subtype * 0x10) - 1}.
  * <p>
  * During the zap animation, frame 4 (the peak discharge) hurts Sonic
@@ -29,7 +30,7 @@ import java.util.List;
  * ROM reference: docs/s1disasm/_incObj/6E Electrocuter.asm
  */
 public class Sonic1ElectrocuterObjectInstance extends AbstractObjectInstance
-        implements TouchResponseProvider {
+        implements TouchResponseProvider, SpawnRewindRecreatable {
 
     // obColType value when the zap frame (frame 4) is displayed.
     // $A4 = HURT($80) | size index $24
@@ -52,7 +53,7 @@ public class Sonic1ElectrocuterObjectInstance extends AbstractObjectInstance
     private static final int[] ZAP_SEQUENCE = {1, 1, 1, 2, 3, 3, 4, 4, 4, 5, 5, 5, 0};
 
     // The frequency mask derived from subtype: (subtype * $10) - 1
-    private final int frequencyMask;
+    private int frequencyMask;
 
     // Animation state
     private int animationId;        // 0 = idle, 1 = zap
@@ -79,7 +80,7 @@ public class Sonic1ElectrocuterObjectInstance extends AbstractObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // Elec_Shock:
         //   move.w (v_framecount).w,d0
@@ -89,7 +90,10 @@ public class Sonic1ElectrocuterObjectInstance extends AbstractObjectInstance
         //   tst.b  obRender(a0)
         //   bpl.s  .animate
         //   play electricity sound
-        if ((frameCounter & frequencyMask) == 0) {
+        // ObjectManager passes the VBla clock into update(...), but this S1 routine
+        // reads the gameplay frame counter instead (docs/s1disasm/_incObj/6E Electrocuter.asm:29-34).
+        int vFrameCounter = resolveVFrameCounter(vIntRunCount);
+        if ((vFrameCounter & frequencyMask) == 0) {
             if (animationId != 1) {
                 animationId = 1;
                 animFrameIndex = 0;
@@ -101,6 +105,23 @@ public class Sonic1ElectrocuterObjectInstance extends AbstractObjectInstance
         }
 
         animate();
+    }
+
+    private int resolveVFrameCounter(int vIntRunCount) {
+        // ROM Elec_Shock reads v_framecount (Level_frame_counter). The engine's
+        // canonical Level_frame_counter is LevelManager.frameCounter (the value the
+        // trace records as gameplay_frame_counter and seeds on replay). The
+        // ObjectManager's own free-running counter is NOT trace-seeded, so reading
+        // it drifts the zap phase relative to ROM (SBZ1 f1925: a frame-4 zap that
+        // hurts Sonic one trace-frame early). LevelManager.frameCounter has not yet
+        // been incremented for the current frame at object-execution time (objects
+        // run with frameCounter+1, see LevelManager.updateObjectPositions*), so +1
+        // gives the current frame's v_framecount.
+        LevelManager levelManager = services().levelManager();
+        if (levelManager != null) {
+            return levelManager.getFrameCounter();
+        }
+        return vIntRunCount;
     }
 
     private void animate() {

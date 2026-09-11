@@ -1,10 +1,13 @@
 package com.openggf.tests;
 
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.Test;
 import com.openggf.game.GameServices;
 import com.openggf.level.LevelManager;
 import com.openggf.level.objects.ObjectManager;
@@ -12,10 +15,9 @@ import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.game.sonic2.objects.BreakableBlockObjectInstance;
 import com.openggf.sprites.playable.Sonic;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Headless integration test for Bug #4: breakable blocks reappear after going off-screen.
@@ -26,7 +28,7 @@ import static org.junit.Assert.*;
  * {@code objectManager.isRemembered(spawn)} to skip re-creation. Despite this, the block
  * currently respawns intact when the camera window re-enters the spawn area.
  *
- * <p>Level data is loaded once via {@link SharedLevel#load} in {@code @BeforeClass};
+ * <p>Level data is loaded once via {@link SharedLevel#load} in {@code @BeforeAll};
  * sprite, camera, and game state are reset per test via {@link HeadlessTestFixture}.
  *
  * <p>Test scenario:
@@ -42,9 +44,6 @@ import static org.junit.Assert.*;
  */
 @RequiresRom(SonicGame.SONIC_2)
 public class TestBreakableBlockDespawn {
-
-    @ClassRule public static RequiresRomRule romRule = new RequiresRomRule();
-
     // CPZ is zone index 1 in Sonic2ZoneRegistry (EHZ=0, CPZ=1, ARZ=2, CNZ=3, HTZ=4)
     private static final int ZONE_CPZ = 1;
     private static final int ACT_1 = 0;
@@ -54,17 +53,17 @@ public class TestBreakableBlockDespawn {
     private HeadlessTestFixture fixture;
     private Sonic sprite;
 
-    @BeforeClass
+    @BeforeAll
     public static void loadLevel() throws Exception {
         sharedLevel = SharedLevel.load(SonicGame.SONIC_2, ZONE_CPZ, ACT_1);
     }
 
-    @AfterClass
+    @AfterAll
     public static void cleanup() {
         if (sharedLevel != null) sharedLevel.dispose();
     }
 
-    @Before
+    @BeforeEach
     public void setUp() {
         fixture = HeadlessTestFixture.builder()
                 .withSharedLevel(sharedLevel)
@@ -117,39 +116,54 @@ public class TestBreakableBlockDespawn {
             if (blockSpawn != null) break;
         }
 
-        org.junit.Assume.assumeTrue("No breakable block (0x32) found in CPZ1", blockSpawn != null);
+        Assumptions.assumeTrue(blockSpawn != null, "No breakable block (0x32) found in CPZ1");
 
         System.out.printf("Found breakable block at X=%d, Y=%d%n", blockSpawn.x(), blockSpawn.y());
 
-        // Position Sonic near the block and roll through it
-        sprite.setCentreX((short) (blockX - 32));
-        sprite.setCentreY((short) blockSpawn.y());
+        // Position Sonic ABOVE the block in a rolling jump so SolidObject seats him
+        // on top with status.standing set + rolling anim active. ROM Obj32_Main only
+        // breaks the block when the player is STANDING on it AND rolling
+        // (s2.asm:48889-48959). Side-roll-into-block no longer breaks (engine matches
+        // ROM after iter-3 fix).
+        // Block half-height is 16, Sonic standing y_radius is ~19, rolling y_radius=14.
+        // Sonic's centre when standing on block top = block.y - block_halfH - sonic_yRadius.
+        // Place Sonic ~40px above so he falls a clean rolling distance onto the block.
+        sprite.setCentreX((short) blockX);
+        sprite.setCentreY((short) (blockSpawn.y() - 60));
         sprite.setRolling(true);
-        sprite.setGSpeed((short) 0x800);
-        sprite.setXSpeed((short) 0x800);
+        sprite.setGSpeed((short) 0);
+        sprite.setXSpeed((short) 0);
+        sprite.setYSpeed((short) 0x100);
+        sprite.setAir(true);
         fixture.camera().updatePosition(true);
         objMgr.reset(fixture.camera().getX());
 
-        logState("Positioned near block, rolling");
+        logState("Positioned above block, rolling+falling");
 
-        // Step frames to roll through the block
+        // Step frames so the player lands rolling on top of the block, satisfying
+        // ROM's standing+rolling break condition.
         boolean blockBroken = false;
-        for (int frame = 0; frame < 60; frame++) {
-            fixture.stepFrame(false, false, false, true, false);
+        for (int frame = 0; frame < 120; frame++) {
+            fixture.stepFrame(false, false, false, false, false);
+            // Keep rolling state asserted: setAir() resets rolling, so re-roll if
+            // the engine cleared it (we want the player rolling at impact).
+            if (!sprite.getRolling()) {
+                sprite.setRolling(true);
+            }
             if (objMgr.isRemembered(blockSpawn)) {
                 blockBroken = true;
-                System.out.printf("Block broken at frame %d%n", frame);
+                System.out.printf("Block broken at frame %d, sprite Y=%d, blockY=%d%n",
+                        frame, sprite.getY(), blockSpawn.y());
                 break;
             }
         }
 
-        org.junit.Assume.assumeTrue("Failed to break the block by rolling through it", blockBroken);
+        Assumptions.assumeTrue(blockBroken, "Failed to break the block by landing rolling on top");
 
         System.out.printf("Block at X=%d broken and remembered%n", blockX);
 
         // Verify block is remembered
-        assertTrue("Block should be marked as remembered after breaking",
-            objMgr.isRemembered(blockSpawn));
+        assertTrue(objMgr.isRemembered(blockSpawn), "Block should be marked as remembered after breaking");
 
         logState("After block broken");
 
@@ -165,7 +179,7 @@ public class TestBreakableBlockDespawn {
 
         logState("Teleported far away for despawn");
 
-        // Step frames for despawn processing — use stepIdleFrames which calls
+        // Step frames for despawn processing Ã¢â‚¬â€ use stepIdleFrames which calls
         // objMgr.update() (via Placement.update -> refreshWindow -> trySpawn),
         // preserving the remembered BitSet unlike reset() which clears it.
         for (int frame = 0; frame < 60; frame++) {
@@ -175,11 +189,10 @@ public class TestBreakableBlockDespawn {
         logState("After despawn frames");
 
         // Verify block is still remembered even after despawn cycle
-        assertTrue("Block should still be remembered after despawn",
-            objMgr.isRemembered(blockSpawn));
+        assertTrue(objMgr.isRemembered(blockSpawn), "Block should still be remembered after despawn");
 
         // Move back to the original block position.
-        // Do NOT call objMgr.reset() — that clears the remembered BitSet.
+        // Do NOT call objMgr.reset() Ã¢â‚¬â€ that clears the remembered BitSet.
         // Instead, teleport and step frames so update() re-spawns via refreshWindow,
         // which checks remembered state and skips remembered spawns.
         sprite.setCentreX((short) blockX);
@@ -200,12 +213,11 @@ public class TestBreakableBlockDespawn {
         logState("After respawn frames");
 
         // Verify the block's spawn is still remembered after the full cycle
-        assertTrue("Block spawn should still be remembered after return",
-            objMgr.isRemembered(blockSpawn));
+        assertTrue(objMgr.isRemembered(blockSpawn), "Block spawn should still be remembered after return");
 
         // Check: no BreakableBlockObjectInstance (the parent block) should exist at
         // the original position. BreakableBlockFragmentInstance (flying debris from
-        // the original break) may linger as dynamic objects — these are NOT respawned
+        // the original break) may linger as dynamic objects Ã¢â‚¬â€ these are NOT respawned
         // blocks and should not trigger the assertion.
         boolean foundIntactBlock = false;
         for (var obj : objMgr.getActiveObjects()) {
@@ -220,9 +232,8 @@ public class TestBreakableBlockDespawn {
             }
         }
 
-        assertFalse("Broken block should NOT reappear as intact when camera returns. " +
-            "Block at X=" + blockX + " was remembered but respawned anyway.",
-            foundIntactBlock);
+        assertFalse(foundIntactBlock, "Broken block should NOT reappear as intact when camera returns. " +
+            "Block at X=" + blockX + " was remembered but respawned anyway.");
     }
 
     /**
@@ -242,3 +253,5 @@ public class TestBreakableBlockDespawn {
             sprite.getDirection());
     }
 }
+
+

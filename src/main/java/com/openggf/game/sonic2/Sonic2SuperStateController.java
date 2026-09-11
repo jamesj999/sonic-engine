@@ -1,8 +1,13 @@
 package com.openggf.game.sonic2;
 
+import com.openggf.audio.GameMusic;
 import com.openggf.data.RomByteReader;
 import com.openggf.game.CrossGameFeatureProvider;
 import com.openggf.game.PhysicsProfile;
+import com.openggf.game.rules.GameRules;
+import com.openggf.game.rules.PowerUpRules;
+import com.openggf.level.objects.ObjectLifetimeOps;
+import com.openggf.level.objects.ObjectManager;
 import com.openggf.game.sonic2.constants.Sonic2AudioConstants;
 import com.openggf.game.sonic2.constants.Sonic2Constants;
 import com.openggf.game.sonic2.objects.SuperSonicStarsObjectInstance;
@@ -44,8 +49,6 @@ public class Sonic2SuperStateController extends SuperStateController {
     private int paletteFrame;
     /** Countdown timer between palette frame advances. */
     private int paletteTimer;
-    /** Frames remaining in the transformation animation (30 frame timer). */
-    private int transformFramesRemaining;
 
     /**
      * Raw ROM palette data from CyclingPal_SSTransformation.
@@ -83,7 +86,6 @@ public class Sonic2SuperStateController extends SuperStateController {
         paletteState = 0;
         paletteFrame = 0;
         paletteTimer = 0;
-        transformFramesRemaining = 0;
     }
 
     @Override
@@ -130,14 +132,23 @@ public class Sonic2SuperStateController extends SuperStateController {
     @Override
     protected void onTransformationStarted() {
         paletteState = 1;
-        paletteFrame = 0;
-        paletteTimer = 3;
-        transformFramesRemaining = 30;
+        // ROM Sonic_CheckGoSuper (s2.asm:37476-37477) writes Super_Sonic_palette and
+        // Palette_timer but deliberately does NOT write Palette_frame; the same holds
+        // for the second entry point at s2.asm:26204-26205. Palette_frame therefore
+        // carries over from whatever the previous cycle left - $0000 on a fresh level
+        // (RAM clear), $00F8 after a revert on the shipped ROM (see updatePaletteFade).
+        // Zeroing it here would be the fixBugs = 1 behaviour by proxy.
+        // ROM Sonic_CheckGoSuper: move.b #$F,(Palette_timer).w (s2.asm:37477).
+        // $F is the transformation's own first interval; 3 is only the value
+        // PalCycle_SuperSonic reloads on every step AFTER the first
+        // (s2.asm:3129). Seeding 3 here shortened the fade's opening step from
+        // 16 frames to 4.
+        paletteTimer = 0xF;
         // Play transformation SFX
         try {
             if (CrossGameFeatureProvider.isActive()) {
                 GameServices.audio().playDonorSfx(
-                        CrossGameFeatureProvider.getInstance().getDonorGameId(),
+                        GameServices.crossGameFeatures().getDonorGameId(),
                         Sonic2AudioConstants.SFX_SUPER_TRANSFORM);
             } else {
                 GameServices.audio().playSfx(Sonic2AudioConstants.SFX_SUPER_TRANSFORM);
@@ -149,9 +160,20 @@ public class Sonic2SuperStateController extends SuperStateController {
 
     @Override
     protected boolean updateTransformationAnimation() {
+        // The transformation ends when the PALETTE FADE ends, not when an
+        // animation or a counter does. Nothing in Sonic's own code clears
+        // obj_control after Sonic_CheckGoSuper sets it to $81 (s2.asm:37479):
+        // there is no `clr.b obj_control(a0)` anywhere in s2.asm, and
+        // SupSonAni_Transform terminates `$FD, 0` (:38818), which SAnim_End_FD
+        // handles by writing anim(a0) and nothing else (:38439). The one clear
+        // that runs on this path is PalCycle_SuperSonic's, on the pass that
+        // takes Palette_frame to $30:
+        //   move.b #0,(MainCharacter+obj_control).w  ; restore Sonic's movement
+        // (s2.asm:3139). So the freeze's length is a consequence of $F, the
+        // reloads of 3 and the six steps to $30 -- derived, never chosen. This
+        // used to count down an invented 30-frame timer instead.
         updatePaletteFade();
-        transformFramesRemaining--;
-        return transformFramesRemaining <= 0;
+        return paletteState != 1;
     }
 
     @Override
@@ -162,10 +184,10 @@ public class Sonic2SuperStateController extends SuperStateController {
         try {
             if (CrossGameFeatureProvider.isActive()) {
                 GameServices.audio().playDonorMusic(
-                        CrossGameFeatureProvider.getInstance().getDonorGameId(),
-                        Sonic2AudioConstants.MUS_SUPER_SONIC);
+                        GameServices.crossGameFeatures().getDonorGameId(),
+                        GameMusic.SUPER);
             } else {
-                GameServices.audio().playMusic(Sonic2AudioConstants.MUS_SUPER_SONIC);
+                GameServices.audio().playMusic(GameMusic.SUPER);
             }
         } catch (Exception e) {
             LOGGER.fine("Could not play Super Sonic music: " + e.getMessage());
@@ -182,9 +204,31 @@ public class Sonic2SuperStateController extends SuperStateController {
         // Spawn Super Sonic stars sparkle effect (Obj7E)
         if (starsObject == null) {
             starsObject = new SuperSonicStarsObjectInstance(player);
-            GameServices.level().getObjectManager().addDynamicObject(starsObject);
+            addStarsObject(starsObject);
         }
         LOGGER.info("Super Sonic activated (S2)");
+    }
+
+    /**
+     * Places the super-form stars in the SST the game's ROM owns for it.
+     *
+     * <p>{@code ObjID_SuperSonicStars} is written straight into the fixed
+     * {@code SuperSonicStars} SST and never runs {@code FindFreeObj}, so
+     * allocating one from the dynamic pool would consume a level-object slot the
+     * ROM never consumes and displace every later object -- and SST order is
+     * execution order. See {@link PowerUpRules#superStarsFixedSlotIndex()}.
+     * A negative index keeps ordinary dynamic allocation.
+     */
+    private void addStarsObject(SuperSonicStarsObjectInstance stars) {
+        ObjectManager objects = GameServices.level().getObjectManager();
+        GameRules rules = player != null ? player.getGameRules() : null;
+        PowerUpRules powerUp = rules != null ? rules.powerUp() : null;
+        int fixedSlot = powerUp != null ? powerUp.superStarsFixedSlotIndex() : -1;
+        if (fixedSlot >= 0) {
+            ObjectLifetimeOps.addDynamicAtReservedSlot(objects, stars, fixedSlot);
+            return;
+        }
+        objects.addDynamicObject(stars);
     }
 
     @Override
@@ -201,10 +245,13 @@ public class Sonic2SuperStateController extends SuperStateController {
         int frameOffset = paletteFrame;
         paletteFrame += 8;
 
-        // Wrap: when paletteFrame exceeds 0x78, reset to 0x30
-        // ROM (fixBugs): cmpi.w #$78 / bls.s (less or equal -> branch if <= 0x78)
-        // So wrap occurs when paletteFrame > 0x78
-        if (paletteFrame > CYCLE_WRAP_OFFSET) {
+        // fixBugs (s2.asm:27 `fixBugs = 0`, block at s2.asm:3210-3216): after
+        // `addq.w #8,(Palette_frame)` the shipped branch is `cmpi.w #$78 / blo.s`, so the
+        // cycle wraps as soon as the counter REACHES $78 and the $70 entry is the last
+        // one ever displayed -- the $78 frame of the Super Sonic cycle is skipped. The
+        // fixBugs=1 branch uses `bls.s`, which lets $78 display before wrapping. The
+        // engine models the shipped branch.
+        if (paletteFrame >= CYCLE_WRAP_OFFSET) {
             paletteFrame = FADE_COMPLETE_OFFSET;
         }
 
@@ -217,7 +264,10 @@ public class Sonic2SuperStateController extends SuperStateController {
         // ROM: move.w #$28,(Palette_frame).w on revert
         paletteFrame = 0x28;
         paletteTimer = 3;
-        // 1-frame invincibility grace period to prevent instant damage on revert
+        // ROM: move.w #1,invincibility_time(a0). Besides the one-frame grace
+        // period, this is how Sonic_RevertToNormal restores the zone music: it
+        // plays none itself and lets Obj01_ChkInvin re-issue Level_Music when
+        // the timer expires on the next tick.
         player.setInvincibleFrames(1);
         // Restore normal animation set
         if (normalAnimSet != null) {
@@ -230,12 +280,6 @@ public class Sonic2SuperStateController extends SuperStateController {
         if (starsObject != null) {
             starsObject.destroy();
             starsObject = null;
-        }
-        // Revert to zone music
-        try {
-            GameServices.audio().endMusicOverride(Sonic2AudioConstants.MUS_SUPER_SONIC);
-        } catch (Exception e) {
-            LOGGER.fine("Could not revert Super Sonic music: " + e.getMessage());
         }
         LOGGER.info("Super Sonic deactivated (S2)");
     }
@@ -280,10 +324,32 @@ public class Sonic2SuperStateController extends SuperStateController {
             int frameOffset = paletteFrame;
             paletteFrame -= 8;
 
-            // ROM (fixBugs): bcc.s + (branch if no borrow)
-            // If paletteFrame went negative, stop cycling
+            // ASSEMBLY FLAG: fixBugs (docs/s2disasm/s2.asm:27), 0 in the shipped ROM.
+            // THE ENGINE IMPLEMENTS THE SHIPPED (UN-FIXED) BRANCH. `subq.w #8` from 0
+            // borrows, and PalCycle_SuperSonic_revert then does
+            //   move.b #0,(Palette_frame).w        (s2.asm:3180)
+            // a BYTE write to a WORD variable, i.e. to the HIGH byte only, so the
+            // underflowed $FFF8 becomes $00F8 and Palette_frame is left at $F8 rather
+            // than 0 -- the disassembly's own note, "This does not clear the full
+            // variable, causing this palette cycle to behave incorrectly the next time
+            // it is activated." With fixBugs = 1 the instruction is
+            // move.w #0,(Palette_frame).w (s2.asm:3176) and the variable is fully
+            // cleared.
+            //
+            // The residual IS observable: Sonic_CheckGoSuper writes Super_Sonic_palette
+            // and Palette_timer but NOT Palette_frame (s2.asm:37476-37481), so a second
+            // transformation resumes PalCycle_SuperSonic_normal from $F8. Only
+            // Sonic_RevertToNormal (s2.asm:37530, $28) and the title-card/Super seed at
+            // s2.asm:13036 ($30) re-seed it, and neither runs on that path.
+            //
+            // Engine divergence noted, not modelled: at $F8 the ROM indexes 8 bytes past
+            // the end of CyclingPal_SSTransformation for one frame; applyPaletteFrame
+            // bounds-checks and leaves the palette untouched instead of reading whatever
+            // follows the table in ROM.
+            //
+            // ROM: bcc.s + (branch if no borrow) -- the clear runs only on underflow.
             if (paletteFrame < 0) {
-                paletteFrame = 0;
+                paletteFrame = paletteFrame & 0x00FF;
                 paletteState = 0;
             }
 
@@ -317,7 +383,7 @@ public class Sonic2SuperStateController extends SuperStateController {
         }
 
         // Mark palette dirty for GPU re-upload
-        GraphicsManager gfx = GraphicsManager.getInstance();
+        GraphicsManager gfx = GameServices.graphics();
         if (gfx.isGlInitialized()) {
             gfx.cachePaletteTexture(palette, target.gpuLine());
         }

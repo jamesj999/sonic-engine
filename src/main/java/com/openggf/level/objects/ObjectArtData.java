@@ -1,10 +1,7 @@
 package com.openggf.level.objects;
 
 import com.openggf.level.Pattern;
-import com.openggf.level.render.SpriteMappingFrame;
 import com.openggf.sprites.animation.SpriteAnimationSet;
-
-import java.util.List;
 
 /**
  * Bundles object art and animations loaded from ROM.
@@ -37,15 +34,6 @@ public class ObjectArtData {
         private final ObjectSpriteSheet flipperSheet;
         private final ObjectSpriteSheet speedBoosterSheet;
         private final ObjectSpriteSheet blueBallsSheet;
-        private final ObjectSpriteSheet breakableBlockSheet;
-        private final ObjectSpriteSheet cpzPlatformSheet;
-        private final ObjectSpriteSheet cpzStairBlockSheet;
-        private final ObjectSpriteSheet sidewaysPformSheet;
-        private final ObjectSpriteSheet cpzPylonSheet;
-        private final ObjectSpriteSheet pipeExitSpringSheet;
-        private final ObjectSpriteSheet tippingFloorSheet;
-        private final ObjectSpriteSheet barrierSheet;
-        private final ObjectSpriteSheet springboardSheet;
         private final ObjectSpriteSheet resultsSheet;
         private final ObjectSpriteSheet bubblesSheet;
         private final ObjectSpriteSheet leavesSheet;
@@ -54,9 +42,6 @@ public class ObjectArtData {
         private final Pattern[] hudLivesPatterns;
         private final Pattern[] hudLivesNumbers;
         private final Pattern[] debugFontPatterns;
-        private final List<SpriteMappingFrame> obj26Mappings;
-        private final List<SpriteMappingFrame> obj41Mappings;
-        private final List<SpriteMappingFrame> obj79Mappings;
         private final SpriteAnimationSet monitorAnimations;
         private final SpriteAnimationSet springAnimations;
         private final SpriteAnimationSet checkpointAnimations;
@@ -94,15 +79,6 @@ public class ObjectArtData {
                         ObjectSpriteSheet flipperSheet,
                         ObjectSpriteSheet speedBoosterSheet,
                         ObjectSpriteSheet blueBallsSheet,
-                        ObjectSpriteSheet breakableBlockSheet,
-                        ObjectSpriteSheet cpzPlatformSheet,
-                        ObjectSpriteSheet cpzStairBlockSheet,
-                        ObjectSpriteSheet sidewaysPformSheet,
-                        ObjectSpriteSheet cpzPylonSheet,
-                        ObjectSpriteSheet pipeExitSpringSheet,
-                        ObjectSpriteSheet tippingFloorSheet,
-                        ObjectSpriteSheet barrierSheet,
-                        ObjectSpriteSheet springboardSheet,
                         ObjectSpriteSheet resultsSheet,
                         ObjectSpriteSheet bubblesSheet,
                         ObjectSpriteSheet leavesSheet,
@@ -111,9 +87,6 @@ public class ObjectArtData {
                         Pattern[] hudLivesPatterns,
                         Pattern[] hudLivesNumbers,
                         Pattern[] debugFontPatterns,
-                        List<SpriteMappingFrame> obj26Mappings,
-                        List<SpriteMappingFrame> obj41Mappings,
-                        List<SpriteMappingFrame> obj79Mappings,
                         SpriteAnimationSet monitorAnimations,
                         SpriteAnimationSet springAnimations,
                         SpriteAnimationSet checkpointAnimations,
@@ -149,15 +122,6 @@ public class ObjectArtData {
                 this.flipperSheet = flipperSheet;
                 this.speedBoosterSheet = speedBoosterSheet;
                 this.blueBallsSheet = blueBallsSheet;
-                this.breakableBlockSheet = breakableBlockSheet;
-                this.cpzPlatformSheet = cpzPlatformSheet;
-                this.cpzStairBlockSheet = cpzStairBlockSheet;
-                this.sidewaysPformSheet = sidewaysPformSheet;
-                this.cpzPylonSheet = cpzPylonSheet;
-                this.pipeExitSpringSheet = pipeExitSpringSheet;
-                this.tippingFloorSheet = tippingFloorSheet;
-                this.barrierSheet = barrierSheet;
-                this.springboardSheet = springboardSheet;
                 this.resultsSheet = resultsSheet;
                 this.bubblesSheet = bubblesSheet;
                 this.leavesSheet = leavesSheet;
@@ -166,9 +130,6 @@ public class ObjectArtData {
                 this.hudLivesPatterns = hudLivesPatterns;
                 this.hudLivesNumbers = hudLivesNumbers;
                 this.debugFontPatterns = debugFontPatterns;
-                this.obj26Mappings = obj26Mappings;
-                this.obj41Mappings = obj41Mappings;
-                this.obj79Mappings = obj79Mappings;
                 this.monitorAnimations = monitorAnimations;
                 this.springAnimations = springAnimations;
                 this.checkpointAnimations = checkpointAnimations;
@@ -286,42 +247,6 @@ public class ObjectArtData {
 
         public ObjectSpriteSheet blueBallsSheet() {
                 return blueBallsSheet;
-        }
-
-        public ObjectSpriteSheet breakableBlockSheet() {
-                return breakableBlockSheet;
-        }
-
-        public ObjectSpriteSheet cpzPlatformSheet() {
-                return cpzPlatformSheet;
-        }
-
-        public ObjectSpriteSheet cpzStairBlockSheet() {
-                return cpzStairBlockSheet;
-        }
-
-        public ObjectSpriteSheet sidewaysPformSheet() {
-                return sidewaysPformSheet;
-        }
-
-        public ObjectSpriteSheet cpzPylonSheet() {
-                return cpzPylonSheet;
-        }
-
-        public ObjectSpriteSheet pipeExitSpringSheet() {
-                return pipeExitSpringSheet;
-        }
-
-        public ObjectSpriteSheet tippingFloorSheet() {
-                return tippingFloorSheet;
-        }
-
-        public ObjectSpriteSheet barrierSheet() {
-                return barrierSheet;
-        }
-
-        public ObjectSpriteSheet springboardSheet() {
-                return springboardSheet;
         }
 
         public ObjectSpriteSheet resultsSheet() {

@@ -1,0 +1,47 @@
+{
+  "dynamic_art_gap_transitions": [],
+  "game": "s2",
+  "recorder": "native-bizhawk-headless",
+  "recorder_version": "3.0",
+  "rom_checksum": "synthetic-no-rom",
+  "run_id": "bad-transition-order",
+  "segments": [
+    {
+      "bk2_frame_offset": 10,
+      "dir": "seg0",
+      "kind": "level",
+      "trace_frame_count": 1,
+      "trace_profile": "complete_run"
+    },
+    {
+      "bk2_frame_offset": 20,
+      "dir": "seg1",
+      "kind": "level",
+      "trace_frame_count": 1,
+      "trace_profile": "complete_run"
+    },
+    {
+      "bk2_frame_offset": 30,
+      "dir": "seg2",
+      "kind": "level",
+      "trace_frame_count": 1,
+      "trace_profile": "complete_run"
+    }
+  ],
+  "source_bk2": "synthetic-input.bk2",
+  "trace_schema": 5,
+  "transitions": [
+    {
+      "entry_kind": "level_advance",
+      "from_segment": 1,
+      "mode_change_bk2_frame": 29,
+      "to_segment": 2
+    },
+    {
+      "entry_kind": "level_advance",
+      "from_segment": 0,
+      "mode_change_bk2_frame": 19,
+      "to_segment": 1
+    }
+  ]
+}

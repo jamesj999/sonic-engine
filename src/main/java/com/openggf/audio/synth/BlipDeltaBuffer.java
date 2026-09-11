@@ -316,12 +316,26 @@ public class BlipDeltaBuffer {
             if (remain > 0) {
                 System.arraycopy(bufferL, count, bufferL, 0, remain);
                 System.arraycopy(bufferR, count, bufferR, 0, remain);
-                Arrays.fill(bufferL, remain, size, 0);
-                Arrays.fill(bufferR, remain, size, 0);
+                int clearTo = Math.min(size, remain + count);
+                Arrays.fill(bufferL, remain, clearTo, 0);
+                Arrays.fill(bufferR, remain, clearTo, 0);
             }
         }
 
         offsetFp -= (long) count << (FRAC_BITS + FACTOR_FP_BITS);
+    }
+
+    /**
+     * Number of clocks that must be run (and passed to {@link #endFrame}) so
+     * that at least {@code samples} samples are available to
+     * {@link #readSamples}; blip_buf's {@code blip_clocks_needed}.
+     */
+    public int clocksNeeded(int samples) {
+        long needed = (long) samples << (FRAC_BITS + FACTOR_FP_BITS);
+        if (needed < offsetFp) {
+            return 0;
+        }
+        return (int) ((needed - offsetFp + factorFp - 1) / factorFp);
     }
 
     /**
@@ -330,5 +344,125 @@ public class BlipDeltaBuffer {
      */
     public void endFrame(int clocks) {
         offsetFp += (long) clocks * factorFp;
+    }
+
+    /** Mutable owner-private transaction storage; never used by durable snapshots. */
+    static final class MutationBackup {
+        private long factorFp;
+        private long offsetFp;
+        private int size;
+        private int integL;
+        private int integR;
+        private int[] left = new int[0], right = new int[0];
+    }
+
+    void captureMutation(MutationBackup backup) {
+        backup.factorFp = factorFp;
+        backup.offsetFp = offsetFp;
+        backup.size = size;
+        backup.integL = integL;
+        backup.integR = integR;
+        if (backup.left.length < size) {
+            backup.left = new int[size];
+            backup.right = new int[size];
+        }
+        System.arraycopy(bufferL, 0, backup.left, 0, size);
+        System.arraycopy(bufferR, 0, backup.right, 0, size);
+    }
+
+    void restoreMutation(MutationBackup backup) {
+        factorFp = backup.factorFp;
+        offsetFp = backup.offsetFp;
+        size = backup.size;
+        integL = backup.integL;
+        integR = backup.integR;
+        if (bufferL.length != size) {
+            bufferL = new int[size];
+            bufferR = new int[size];
+        }
+        System.arraycopy(backup.left, 0, bufferL, 0, size);
+        System.arraycopy(backup.right, 0, bufferR, 0, size);
+    }
+
+    Snapshot captureSnapshot() {
+        // The compact constructor performs the single defensive copy (truncated
+        // to size); passing the live buffers avoids a second full copy here.
+        return new Snapshot(
+                factorFp,
+                offsetFp,
+                bufferL,
+                bufferR,
+                size,
+                integL,
+                integR);
+    }
+
+    void restoreSnapshot(Snapshot snapshot) {
+        this.factorFp = snapshot.factorFp();
+        this.offsetFp = snapshot.offsetFp();
+        this.size = snapshot.size();
+        int[] srcL = snapshot.bufferLRef();
+        int[] srcR = snapshot.bufferRRef();
+        if (bufferL == null || bufferL.length != size) {
+            bufferL = new int[size];
+            bufferR = new int[size];
+        }
+        System.arraycopy(srcL, 0, bufferL, 0, size);
+        System.arraycopy(srcR, 0, bufferR, 0, size);
+        this.integL = snapshot.integL();
+        this.integR = snapshot.integR();
+    }
+
+    public record Snapshot(
+            long factorFp,
+            long offsetFp,
+            int[] bufferL,
+            int[] bufferR,
+            int size,
+            int integL,
+            int integR) {
+        public Snapshot {
+            bufferL = Arrays.copyOf(bufferL, size);
+            bufferR = Arrays.copyOf(bufferR, size);
+        }
+
+        @Override
+        public int[] bufferL() {
+            return Arrays.copyOf(bufferL, bufferL.length);
+        }
+
+        @Override
+        public int[] bufferR() {
+            return Arrays.copyOf(bufferR, bufferR.length);
+        }
+
+        /** Non-copying view for in-memory restore paths only. Do not mutate. */
+        int[] bufferLRef() { return bufferL; }
+
+        /** Non-copying view for in-memory restore paths only. Do not mutate. */
+        int[] bufferRRef() { return bufferR; }
+
+        @Override
+        public boolean equals(Object candidate) {
+            return candidate instanceof Snapshot other
+                    && factorFp == other.factorFp
+                    && offsetFp == other.offsetFp
+                    && Arrays.equals(bufferL, other.bufferL)
+                    && Arrays.equals(bufferR, other.bufferR)
+                    && size == other.size
+                    && integL == other.integL
+                    && integR == other.integR;
+        }
+
+        @Override
+        public int hashCode() {
+            int result = Long.hashCode(factorFp);
+            result = 31 * result + Long.hashCode(offsetFp);
+            result = 31 * result + Arrays.hashCode(bufferL);
+            result = 31 * result + Arrays.hashCode(bufferR);
+            result = 31 * result + Integer.hashCode(size);
+            result = 31 * result + Integer.hashCode(integL);
+            return 31 * result + Integer.hashCode(integR);
+        }
     }
 }

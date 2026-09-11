@@ -1,7 +1,6 @@
 package com.openggf.game.sonic1.objects;
 import com.openggf.game.PlayableEntity;
 
-import com.openggf.camera.Camera;
 import com.openggf.debug.DebugRenderContext;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
@@ -10,8 +9,11 @@ import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
+import com.openggf.level.objects.SpawnRewindRecreatable;
+import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
+import com.openggf.level.objects.SolidRoutineProfile;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -38,7 +40,7 @@ import java.util.List;
  * Reference: docs/s1disasm/_incObj/70 Girder Block.asm
  */
 public class Sonic1GirderBlockObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, SpawnRewindRecreatable {
 
     // From disassembly: move.b #$60,obActWid(a0)
     private static final int ACTIVE_WIDTH = 0x60;
@@ -81,13 +83,12 @@ public class Sonic1GirderBlockObjectInstance extends AbstractObjectInstance
     private int x;
     private int y;
 
-    // Sub-pixel accumulators for SpeedToPos (16.8 fixed-point: velocity << 8 added to 24-bit pos)
-    private int xSubpixel;
-    private int ySubpixel;
+    /** Subpixel accumulators for ROM-accurate 16.16 SpeedToPos integration (velocity << 8 added to 32-bit position). */
+    private final SubpixelMotion.State motion = new SubpixelMotion.State(0, 0, 0, 0, 0, 0);
 
     // Original position for out-of-range deletion check (gird_origX = objoff_32, gird_origY = objoff_30)
-    private final int origX;
-    private final int origY;
+    private int origX;
+    private int origY;
 
     // Current X and Y velocities (obVelX, obVelY) — 8.8 fixed-point
     private int velX;
@@ -110,8 +111,6 @@ public class Sonic1GirderBlockObjectInstance extends AbstractObjectInstance
         this.y = spawn.y();
         this.origX = spawn.x();
         this.origY = spawn.y();
-        this.xSubpixel = 0;
-        this.ySubpixel = 0;
 
         // Gird_Main calls Gird_ChgMove to initialize first movement phase
         this.movePhase = 0;
@@ -130,7 +129,7 @@ public class Sonic1GirderBlockObjectInstance extends AbstractObjectInstance
         return y;
     }
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // Gird_Action (routine 2):
         // First check delay, then SpeedToPos + duration countdown
@@ -177,13 +176,36 @@ public class Sonic1GirderBlockObjectInstance extends AbstractObjectInstance
         // d2 = obHeight = $18 (air half-height)
         // d3 = d2 + 1 = $19 (ground half-height)
         // bsr.w SolidObject — full-sided solid
-        return new SolidObjectParams(SOLID_HALF_WIDTH, SOLID_AIR_HALF_HEIGHT, SOLID_GND_HALF_HEIGHT);
+        return SolidObjectParams.of(SOLID_HALF_WIDTH, SOLID_AIR_HALF_HEIGHT, SOLID_GND_HALF_HEIGHT);
+    }
+
+    @Override
+    public int getBalanceWidthPixels() {
+        // Sonic_Move's on-object balance check reads obActWid from the stood-on
+        // object's SST, not the SolidObject-expanded d1 width. Obj70 initializes
+        // obActWid to $60 in Gird_Main.
+        return ACTIVE_WIDTH;
     }
 
     @Override
     public boolean isTopSolidOnly() {
         // Uses SolidObject (not PlatformObject), so all-sides solid
         return false;
+    }
+
+    @Override
+    public SolidRoutineProfile getSolidRoutineProfile() {
+        // Gird_Action calls the generic S1 SolidObject helper after moving, so
+        // it is a full-sided solid with the ROM Solid_ChkEnter inclusive right edge.
+        return SolidRoutineProfile.fullSolid(false, true, false);
+    }
+
+    @Override
+    public boolean usesInstanceSolidStateLatchKey() {
+        // SolidObject stores standing/pushing ownership in this girder's SST
+        // status byte. The engine updates the dynamic spawn as the girder moves,
+        // so the latch must follow the live instance, not each transient spawn.
+        return true;
     }
 
     // ---- SolidObjectListener ----
@@ -210,7 +232,7 @@ public class Sonic1GirderBlockObjectInstance extends AbstractObjectInstance
     public boolean isPersistent() {
         // out_of_range.s .delete,gird_origX(a0)
         // Uses original X position for range check (not current position)
-        return !isDestroyed() && isInRange(origX);
+        return !isDestroyed() && isInRangeAt(origX);
     }
 
     @Override
@@ -275,37 +297,30 @@ public class Sonic1GirderBlockObjectInstance extends AbstractObjectInstance
      * </pre>
      */
     private void applySpeedToPos() {
-        // X axis
-        if (velX != 0) {
-            long xPos32 = ((long) x << 16) | (xSubpixel & 0xFFFF);
-            long xVel32 = (long) (short) velX << 8;
-            xPos32 += xVel32;
-            x = (int) (xPos32 >> 16);
-            xSubpixel = (int) (xPos32 & 0xFFFF);
+        // SpeedToPos (16.16 fixed-point): only update each axis when its velocity is non-zero,
+        // matching the original implementation's behaviour (preserves sub-pixel state otherwise).
+        if (velX != 0 || velY != 0) {
+            motion.x = x;
+            motion.y = y;
+            motion.xVel = velX;
+            motion.yVel = velY;
+            if (velX != 0 && velY != 0) {
+                SubpixelMotion.speedToPos(motion);
+                x = motion.x;
+                y = motion.y;
+            } else if (velX != 0) {
+                // X-only: avoid touching y/ySub when velY == 0
+                int xVel32 = (int) (short) motion.xVel;
+                int x32 = (motion.x << 16) | (motion.xSub & 0xFFFF);
+                x32 += xVel32 << 8;
+                motion.x = x32 >> 16;
+                motion.xSub = x32 & 0xFFFF;
+                x = motion.x;
+            } else {
+                // Y-only: avoid touching x/xSub when velX == 0
+                SubpixelMotion.speedToPosY(motion);
+                y = motion.y;
+            }
         }
-
-        // Y axis
-        if (velY != 0) {
-            long yPos32 = ((long) y << 16) | (ySubpixel & 0xFFFF);
-            long yVel32 = (long) (short) velY << 8;
-            yPos32 += yVel32;
-            y = (int) (yPos32 >> 16);
-            ySubpixel = (int) (yPos32 & 0xFFFF);
-        }
-    }
-
-    /**
-     * Checks if the object is within out-of-range distance from camera using the given X.
-     * Matches the S1 out_of_range macro behavior.
-     */
-    private boolean isInRange(int objectX) {
-        Camera camera = services().camera();
-        if (camera == null) {
-            return true;
-        }
-        int objRounded = objectX & 0xFF80;
-        int camRounded = (camera.getX() - 128) & 0xFF80;
-        int distance = (objRounded - camRounded) & 0xFFFF;
-        return distance <= (128 + 320 + 192);
     }
 }

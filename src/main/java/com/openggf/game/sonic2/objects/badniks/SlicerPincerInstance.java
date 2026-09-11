@@ -7,6 +7,11 @@ import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.ObjectPlayerQuery;
+import com.openggf.level.objects.ObjectPlayerParticipationPolicy;
+import com.openggf.level.objects.ObjectServices;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
@@ -27,7 +32,7 @@ import java.util.List;
  * Animation: Ani_objA2 = {3, 5, 6, 7, 8, $FF} → frames 5-8 at speed 4.
  */
 public class SlicerPincerInstance extends AbstractObjectInstance
-        implements TouchResponseProvider {
+        implements TouchResponseProvider, RewindRecreatable {
 
     // From ObjA2_SubObjData: collision_flags = $9A
     private static final int COLLISION_SIZE_INDEX = 0x1A;
@@ -90,8 +95,19 @@ public class SlicerPincerInstance extends AbstractObjectInstance
         this.animTimer = ANIM_SPEED;
     }
 
+    private SlicerPincerInstance() {
+        this(new ObjectSpawn(0, 0, 0, 0, 0, false, 0), null, 0, 0, 0, false, 0);
+    }
+
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        ObjectSpawn spawn = ctx.spawn();
+        SlicerBadnikInstance parent = Sonic2BadnikChildRewindLinks.nearestSlicer(ctx);
+        return new SlicerPincerInstance(spawn, parent, spawn.x(), spawn.y(), 0, false, 0);
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         switch (phase) {
             case HOMING -> updateHoming(player);
@@ -106,14 +122,22 @@ public class SlicerPincerInstance extends AbstractObjectInstance
         }
     }
 
+    @Override
+    protected boolean skipsSameFrameUpdateAfterSpawn() {
+        // ObjA1_LoadPincers creates ObjA2 in routine 0; the constructor already
+        // applies that setup, so the first ObjA2_Main tick begins next frame.
+        return true;
+    }
+
     /**
      * Routine 2 (ObjA2_Main): Homing phase.
      * Accelerates toward player, capped at MAX_SPEED.
      * When timer expires, transitions to falling phase.
      */
     private void updateHoming(AbstractPlayableSprite player) {
-        // ROM: _btst #render_flags.on_screen / _beq.w JmpTo65_DeleteObject
-        if (!isOnScreenX(32)) {
+        // ROM: _btst #render_flags.on_screen / _beq.w JmpTo65_DeleteObject (s2.asm:75451-75452)
+        // No margin — mirror the ROM on_screen flag (matches SlicerBadnikInstance).
+        if (!isOnScreenX()) {
             setDestroyed(true);
             return;
         }
@@ -126,9 +150,10 @@ public class SlicerPincerInstance extends AbstractObjectInstance
             return;
         }
 
-        if (player != null) {
-            int dx = currentX - player.getCentreX();
-            int dy = currentY - player.getCentreY();
+        AbstractPlayableSprite target = closestNativeOrientationTarget(player);
+        if (target != null) {
+            int dx = currentX - target.getCentreX();
+            int dy = currentY - target.getCentreY();
 
             // Obj_GetOrientationToPlayer: d0=0 if dx>=0 (player LEFT), d0=2 if dx<0 (player RIGHT)
             // ObjA2_acceleration: dc.w -$10, $10 → accelerate TOWARD player
@@ -144,6 +169,24 @@ public class SlicerPincerInstance extends AbstractObjectInstance
 
         // ObjectMove
         objectMove();
+    }
+
+    private AbstractPlayableSprite closestNativeOrientationTarget(AbstractPlayableSprite fallback) {
+        ObjectServices svc = tryServices();
+        if (svc == null) {
+            return fallback;
+        }
+        ObjectPlayerQuery query;
+        try {
+            query = svc.playerQuery();
+        } catch (UnsupportedOperationException e) {
+            return fallback;
+        }
+        ObjectPlayerQuery.NearestPlayerX nearest = query.nearestByRomX(
+                ObjectPlayerParticipationPolicy.NATIVE_P1_P2,
+                currentX,
+                candidate -> candidate instanceof AbstractPlayableSprite);
+        return nearest.player() instanceof AbstractPlayableSprite sprite ? sprite : fallback;
     }
 
     /**

@@ -1,8 +1,8 @@
 package com.openggf.tests;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import com.openggf.level.SolidTile;
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class TestSolidTileAngle {
 
@@ -48,9 +48,11 @@ public class TestSolidTileAngle {
 
     private void checkAngle(byte original, byte expectedH, byte expectedV, byte expectedBoth) {
         SolidTile tile = new SolidTile(0, new byte[16], new byte[16], original);
-        assertEquals("No Flip", original, tile.getAngle(false, false));
-        assertEquals("H Flip", expectedH, tile.getAngle(true, false));
-        assertEquals("V Flip", expectedV, tile.getAngle(false, true));
-        assertEquals("Both Flip", expectedBoth, tile.getAngle(true, true));
+        assertEquals(original, tile.getAngle(false, false), "No Flip");
+        assertEquals(expectedH, tile.getAngle(true, false), "H Flip");
+        assertEquals(expectedV, tile.getAngle(false, true), "V Flip");
+        assertEquals(expectedBoth, tile.getAngle(true, true), "Both Flip");
     }
 }
+
+

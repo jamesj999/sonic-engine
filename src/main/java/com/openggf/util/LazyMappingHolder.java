@@ -1,6 +1,7 @@
 package com.openggf.util;
 
 import com.openggf.data.RomByteReader;
+import com.openggf.game.GameServices;
 import com.openggf.level.LevelManager;
 import com.openggf.level.render.SpriteMappingFrame;
 
@@ -13,7 +14,9 @@ import java.util.logging.Logger;
  * Lazy-loading holder for static sprite mapping data.
  * Not thread-safe; assumes single-threaded game loop access.
  * Load is attempted only once per instance. If loading fails,
- * subsequent calls return an empty list without retrying.
+ * subsequent calls return an empty list without retrying. A call made
+ * before a ROM-backed game is mounted is not an attempt: it returns
+ * empty and leaves the holder unlatched so the real load still happens.
  */
 public final class LazyMappingHolder {
 
@@ -31,12 +34,14 @@ public final class LazyMappingHolder {
         if (attempted) {
             return mappings != null ? mappings : Collections.emptyList();
         }
-        attempted = true;
-
-        LevelManager manager = LevelManager.getInstance();
+        LevelManager manager = GameServices.levelOrNull();
         if (manager == null || manager.getGame() == null) {
+            // No ROM-backed game is mounted yet, so nothing was attempted. Latching
+            // here would cache the empty result for the lifetime of the holder and
+            // permanently starve every later consumer of its mapping frames.
             return Collections.emptyList();
         }
+        attempted = true;
 
         try {
             var rom = manager.getGame().getRom();

@@ -2,13 +2,13 @@ package com.openggf.game.sonic2.credits;
 
 import com.openggf.level.render.SpriteMappingFrame;
 import com.openggf.level.render.SpriteMappingPiece;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Tests for {@link Sonic2CreditsMappings} credit text mapping data.
@@ -27,15 +27,13 @@ public class TestSonic2CreditsMappings {
     @Test
     public void testMappingsHave21Frames() {
         List<SpriteMappingFrame> frames = Sonic2CreditsMappings.createFrames();
-        assertEquals("Should have exactly 21 credit screens",
-                21, frames.size());
+        assertEquals(21, frames.size(), "Should have exactly 21 credit screens");
     }
 
     @Test
     public void testFrameCountMatchesCreditsDataConstant() {
         List<SpriteMappingFrame> frames = Sonic2CreditsMappings.createFrames();
-        assertEquals("Frame count should match Sonic2CreditsData.TOTAL_CREDITS",
-                Sonic2CreditsData.TOTAL_CREDITS, frames.size());
+        assertEquals(Sonic2CreditsData.TOTAL_CREDITS, frames.size(), "Frame count should match Sonic2CreditsData.TOTAL_CREDITS");
     }
 
     // ========================================================================
@@ -46,9 +44,8 @@ public class TestSonic2CreditsMappings {
     public void testAllFramesHavePieces() {
         List<SpriteMappingFrame> frames = Sonic2CreditsMappings.createFrames();
         for (int i = 0; i < frames.size(); i++) {
-            assertNotNull("Frame " + i + " should not be null", frames.get(i));
-            assertFalse("Frame " + i + " should have pieces",
-                    frames.get(i).pieces().isEmpty());
+            assertNotNull(frames.get(i), "Frame " + i + " should not be null");
+            assertFalse(frames.get(i).pieces().isEmpty(), "Frame " + i + " should have pieces");
         }
     }
 
@@ -58,16 +55,14 @@ public class TestSonic2CreditsMappings {
 
     @Test
     public void testAllPiecesAre1x1Tiles() {
-        // ROM credit font uses 8×8 tiles: each charset value is a single tile,
-        // and characters are 2 tiles wide × 1 tile tall (16×8 px).
+        // ROM credit font uses 8Ã—8 tiles: each charset value is a single tile,
+        // and characters are 2 tiles wide Ã— 1 tile tall (16Ã—8 px).
         List<SpriteMappingFrame> frames = Sonic2CreditsMappings.createFrames();
         for (int f = 0; f < frames.size(); f++) {
             for (int p = 0; p < frames.get(f).pieces().size(); p++) {
                 SpriteMappingPiece piece = frames.get(f).pieces().get(p);
-                assertEquals("Frame " + f + " piece " + p + " width should be 1 tile",
-                        1, piece.widthTiles());
-                assertEquals("Frame " + f + " piece " + p + " height should be 1 tile",
-                        1, piece.heightTiles());
+                assertEquals(1, piece.widthTiles(), "Frame " + f + " piece " + p + " width should be 1 tile");
+                assertEquals(1, piece.heightTiles(), "Frame " + f + " piece " + p + " height should be 1 tile");
             }
         }
     }
@@ -85,8 +80,7 @@ public class TestSonic2CreditsMappings {
                 break;
             }
         }
-        assertTrue("At least one frame should have an odd piece count (1-wide chars present)",
-                hasOddCount);
+        assertTrue(hasOddCount, "At least one frame should have an odd piece count (1-wide chars present)");
     }
 
     // ========================================================================
@@ -101,8 +95,7 @@ public class TestSonic2CreditsMappings {
         // "2" = 2(2) = 2 pieces
         // "CAST  OF  CHARACTERS" = 16 non-space letters * 2 = 32 pieces
         // Total = 9 + 2 + 32 = 43 pieces
-        assertEquals("Screen 0 (SONIC 2 / CAST OF CHARACTERS) piece count",
-                43, screen0.pieces().size());
+        assertEquals(43, screen0.pieces().size(), "Screen 0 (SONIC 2 / CAST OF CHARACTERS) piece count");
     }
 
     @Test
@@ -111,8 +104,7 @@ public class TestSonic2CreditsMappings {
         SpriteMappingFrame lastFrame = frames.get(20);
         // "PRESENTED" = 9 chars, "BY" = 2 chars, "SEGA" = 4 chars = 15 * 2 = 30 pieces
         int expectedPieces = (9 + 2 + 4) * 2; // 30
-        assertEquals("Last frame (PRESENTED BY SEGA) should have 30 pieces",
-                expectedPieces, lastFrame.pieces().size());
+        assertEquals(expectedPieces, lastFrame.pieces().size(), "Last frame (PRESENTED BY SEGA) should have 30 pieces");
     }
 
     @Test
@@ -134,8 +126,7 @@ public class TestSonic2CreditsMappings {
 
         // Zone Artists or Executive Supporters or Special Thanks screens should have
         // the most pieces due to having the most text lines
-        assertTrue("Screen with most pieces should be >= 10",
-                maxScreen >= 10 || maxScreen == 6 || maxScreen == 17 || maxScreen == 18 || maxScreen == 19);
+        assertTrue(maxScreen >= 10 || maxScreen == 6 || maxScreen == 17 || maxScreen == 18 || maxScreen == 19, "Screen with most pieces should be >= 10");
     }
 
     // ========================================================================
@@ -150,13 +141,12 @@ public class TestSonic2CreditsMappings {
         for (SpriteMappingFrame frame : frames) {
             for (SpriteMappingPiece piece : frame.pieces()) {
                 palettes.add(piece.paletteIndex());
-                assertTrue("Palette index " + piece.paletteIndex() + " should be 0 or 1",
-                        piece.paletteIndex() == 0 || piece.paletteIndex() == 1);
+                assertTrue(piece.paletteIndex() == 0 || piece.paletteIndex() == 1, "Palette index " + piece.paletteIndex() + " should be 0 or 1");
             }
         }
         // Both palettes should be used
-        assertTrue("Palette 0 (names) should be used", palettes.contains(0));
-        assertTrue("Palette 1 (roles) should be used", palettes.contains(1));
+        assertTrue(palettes.contains(0), "Palette 0 (names) should be used");
+        assertTrue(palettes.contains(1), "Palette 1 (roles) should be used");
     }
 
     @Test
@@ -165,8 +155,8 @@ public class TestSonic2CreditsMappings {
         List<SpriteMappingFrame> frames = Sonic2CreditsMappings.createFrames();
         for (int f = 0; f < frames.size(); f++) {
             for (SpriteMappingPiece piece : frames.get(f).pieces()) {
-                assertFalse("Frame " + f + " should not use H-flip", piece.hFlip());
-                assertFalse("Frame " + f + " should not use V-flip", piece.vFlip());
+                assertFalse(piece.hFlip(), "Frame " + f + " should not use H-flip");
+                assertFalse(piece.vFlip(), "Frame " + f + " should not use V-flip");
             }
         }
     }
@@ -177,7 +167,7 @@ public class TestSonic2CreditsMappings {
         List<SpriteMappingFrame> frames = Sonic2CreditsMappings.createFrames();
         for (int f = 0; f < frames.size(); f++) {
             for (SpriteMappingPiece piece : frames.get(f).pieces()) {
-                assertFalse("Frame " + f + " should not use priority", piece.priority());
+                assertFalse(piece.priority(), "Frame " + f + " should not use priority");
             }
         }
     }
@@ -191,8 +181,7 @@ public class TestSonic2CreditsMappings {
         List<SpriteMappingFrame> frames = Sonic2CreditsMappings.createFrames();
         for (int f = 0; f < frames.size(); f++) {
             for (SpriteMappingPiece piece : frames.get(f).pieces()) {
-                assertTrue("Frame " + f + " tile index should be >= 0, got " + piece.tileIndex(),
-                        piece.tileIndex() >= 0);
+                assertTrue(piece.tileIndex() >= 0, "Frame " + f + " tile index should be >= 0, got " + piece.tileIndex());
             }
         }
     }
@@ -204,10 +193,11 @@ public class TestSonic2CreditsMappings {
         List<SpriteMappingFrame> frames = Sonic2CreditsMappings.createFrames();
         for (int f = 0; f < frames.size(); f++) {
             for (SpriteMappingPiece piece : frames.get(f).pieces()) {
-                assertTrue("Frame " + f + " tile index " + piece.tileIndex()
-                                + " should be within font range (<= 0x3F)",
-                        piece.tileIndex() <= 0x3F);
+                assertTrue(piece.tileIndex() <= 0x3F, "Frame " + f + " tile index " + piece.tileIndex()
+                                + " should be within font range (<= 0x3F)");
             }
         }
     }
 }
+
+

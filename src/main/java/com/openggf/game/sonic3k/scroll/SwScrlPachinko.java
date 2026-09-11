@@ -1,9 +1,9 @@
 package com.openggf.game.sonic3k.scroll;
 
 import com.openggf.level.scroll.AbstractZoneScrollHandler;
+import com.openggf.level.scroll.compose.ScrollEffectComposer;
 
 import static com.openggf.level.scroll.M68KMath.negWord;
-import static com.openggf.level.scroll.M68KMath.packScrollWords;
 
 /**
  * Pachinko / Glowing Spheres bonus stage scroll handler.
@@ -15,6 +15,8 @@ import static com.openggf.level.scroll.M68KMath.packScrollWords;
 public class SwScrlPachinko extends AbstractZoneScrollHandler {
     private static final int VISIBLE_LINES = 224;
 
+    private final ScrollEffectComposer composer = new ScrollEffectComposer();
+
     @Override
     public void update(int[] horizScrollBuf,
                        int cameraX,
@@ -22,16 +24,18 @@ public class SwScrlPachinko extends AbstractZoneScrollHandler {
                        int frameCounter,
                        int actId) {
         resetScrollTracking();
+        composer.reset();
 
         short fgScroll = negWord(cameraX);
         int bgWorldX = 0x60 + (((cameraX - 0xA0) * 5) >> 3);
         short bgScroll = negWord(bgWorldX);
-        vscrollFactorBG = (short) (cameraY >> 3);
+        composer.setVscrollFactorBG((short) (cameraY >> 3));
 
-        int packed = packScrollWords(fgScroll, bgScroll);
-        trackOffset(fgScroll, bgScroll);
-        for (int line = 0; line < VISIBLE_LINES; line++) {
-            horizScrollBuf[line] = packed;
-        }
+        composer.fillPackedScrollWords(0, VISIBLE_LINES, fgScroll, bgScroll);
+
+        composer.copyPackedScrollWordsTo(horizScrollBuf);
+        vscrollFactorBG = composer.getVscrollFactorBG();
+        minScrollOffset = composer.getMinScrollOffset();
+        maxScrollOffset = composer.getMaxScrollOffset();
     }
 }

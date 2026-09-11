@@ -2,11 +2,13 @@ package com.openggf.game.sonic2.objects;
 
 import com.openggf.configuration.SonicConfiguration;
 import com.openggf.configuration.SonicConfigurationService;
-import com.openggf.game.sonic2.Sonic2LevelEventManager;
 import com.openggf.game.PlayableEntity;
+import com.openggf.game.sonic2.runtime.HtzRuntimeState;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
@@ -44,10 +46,10 @@ import static org.lwjgl.opengl.GL11.GL_TRIANGLE_FAN;
  *   <li>HTZ2: 4 instances [0x06, 0x08]</li>
  * </ul>
  *
- * @see LevelEventManager#getCameraBgYOffset() For earthquake Y offset
+ * @see HtzRuntimeState#cameraBgYOffset() For earthquake Y offset
  */
 public class RisingLavaObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SlopedSolidProvider, SolidObjectListener {
+        implements SolidObjectProvider, SlopedSolidProvider, SolidObjectListener, RewindRecreatable {
 
     // ========================================================================
     // ROM Constants - Width table from Obj30_Widths (line 49042)
@@ -120,16 +122,16 @@ public class RisingLavaObjectInstance extends AbstractObjectInstance
     // Instance State
     // ========================================================================
 
-    private final int subtype;
-    private final int widthPixels;
-    private final int baseY;
-    private final int baseX;
+    private int subtype;
+    private int widthPixels;
+    private int baseY;
+    private int baseX;
     private boolean routeEnabled;
     private boolean routeChecked;
     private int currentY;
 
     /** Cached frame counter from last update for use in onSolidContact. */
-    private int lastFrameCounter;
+    private int lastVIntRunCount;
 
     public RisingLavaObjectInstance(ObjectSpawn spawn, String name) {
         super(spawn, name);
@@ -144,6 +146,11 @@ public class RisingLavaObjectInstance extends AbstractObjectInstance
         this.widthPixels = SUBTYPE_WIDTHS[widthIndex];
 
         updateDynamicSpawn(baseX, currentY);
+    }
+
+    @Override
+    public RisingLavaObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new RisingLavaObjectInstance(ctx.spawn(), getName());
     }
 
     /**
@@ -176,7 +183,7 @@ public class RisingLavaObjectInstance extends AbstractObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         ensureInitialized();
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (!routeEnabled) {
@@ -184,13 +191,16 @@ public class RisingLavaObjectInstance extends AbstractObjectInstance
         }
 
         // Store frame counter for use in onSolidContact callback
-        this.lastFrameCounter = frameCounter;
+        this.lastVIntRunCount = vIntRunCount;
 
         // ROM: Obj30_Main (s2.asm:49083-49086)
         // y_pos = objoff_32 + Camera_BG_Y_offset (ONLY bgYOffset, no shake)
         // Ripple shake is a global screen-space effect applied via Camera shake offsets,
         // so objects don't add it to their world positions.
-        int bgYOffset = ((Sonic2LevelEventManager) services().levelEventProvider()).getCameraBgYOffset();
+        int bgYOffset = services().zoneRuntimeRegistry()
+                .currentAs(HtzRuntimeState.class)
+                .map(HtzRuntimeState::cameraBgYOffset)
+                .orElseThrow(() -> new IllegalStateException("HTZ runtime state not installed"));
         currentY = baseY + bgYOffset;
 
         updateDynamicSpawn(baseX, currentY);
@@ -216,7 +226,7 @@ public class RisingLavaObjectInstance extends AbstractObjectInstance
         // Check if player has rings
         boolean hadRings = player.getRingCount() > 0;
         if (hadRings && !player.hasShield()) {
-            services().spawnLostRings(player, lastFrameCounter);
+            services().spawnLostRings(player, lastVIntRunCount);
         }
         // Apply hurt - lava uses DamageCause.FIRE for fire shield immunity
         player.applyHurtOrDeath(getX(), DamageCause.FIRE, hadRings);
@@ -281,7 +291,7 @@ public class RisingLavaObjectInstance extends AbstractObjectInstance
                 break;
         }
 
-        return new SolidObjectParams(halfWidth, airHalfHeight, groundHalfHeight);
+        return SolidObjectParams.of(halfWidth, airHalfHeight, groundHalfHeight);
     }
 
     @Override
@@ -291,16 +301,29 @@ public class RisingLavaObjectInstance extends AbstractObjectInstance
             return false;
         }
 
-        // ROM: tst.b (Screen_Shaking_Flag_HTZ).w at line 49091
-        // Only solid when HTZ earthquake sequence is active.
-        // Uses the HTZ-specific flag which stays on during delay periods,
-        // unlike the general Screen_Shaking_Flag which gets cleared.
-        return services().gameState().isHtzScreenShakeActive();
+        // ROM Obj30_Main runs Obj30_Modes (SolidObject_Always / DropOnFloor /
+        // hurt-supported-player handling) before testing Screen_Shaking_Flag_HTZ
+        // for MarkObjGone3 (docs/s2disasm/s2.asm:49568-49581,49635-49642).
+        return true;
+    }
+
+    private boolean isHtzEarthquakeActive() {
+        return services().zoneRuntimeRegistry()
+                .currentAs(HtzRuntimeState.class)
+                .map(HtzRuntimeState::earthquakeActive)
+                .orElse(false);
     }
 
     @Override
     public boolean isTopSolidOnly() {
         return false;
+    }
+
+    @Override
+    public boolean bypassesOffscreenSolidGate() {
+        // Obj30 subtypes call SolidObject_Always before DropOnFloor / hurt
+        // handling (docs/s2disasm/s2.asm:49598-49604,49635-49642).
+        return true;
     }
 
     // ========================================================================
@@ -334,6 +357,9 @@ public class RisingLavaObjectInstance extends AbstractObjectInstance
         if ((subtype == 4 || subtype == 6) && contact.standing()) {
             if (!player.getInvulnerable()) {
                 applyHurt(player);
+                // Obj30 hurts supported players after SolidObject_Always and DropOnFloor.
+                // Hurt_Sidekick does not clear Status_OnObj; the next solid pass owns unseating.
+                player.setOnObject(true);
             }
         }
     }
@@ -341,6 +367,76 @@ public class RisingLavaObjectInstance extends AbstractObjectInstance
     @Override
     public boolean dropOnFloor() {
         return true;
+    }
+
+    @Override
+    public boolean usesSidekickCpuCurrentPushObjectOrderInputDelay(PlayableEntity player) {
+        // Obj30 subtype 6 runs SolidObject_Always, DropOnFloor, then the
+        // supported-player hurt path after TailsCPU_Normal has already sampled
+        // Ctrl_2 (docs/s2disasm/s2.asm:49636-49643,39291-39294). The HTZ2
+        // lower-route platform keeps that object-order push visible to the CPU
+        // slot only on the left/probed side of the support. On the right side,
+        // TailsCPU_Normal keeps the already-loaded d1 history word from the same
+        // slot as d4 (s2.asm:39285-39300); re-reading the adjacent older input
+        // manufactures stale LEFT on HTZ2 f4442.
+        return subtype == 6
+                && player != null
+                && player.isCpuControlled()
+                && ((short) (player.getCentreX() - getX())) <= 0;
+    }
+
+    @Override
+    public boolean preservesSidekickCpuPushGraceFromInteractSlot(PlayableEntity player) {
+        // HTZ2 Obj30 subtype 6 keeps its SST status visible through the
+        // interact(a0) slot when TailsCPU_Normal tests Status_Push at
+        // s2.asm:39297-39300, before Obj30's later SolidObject_Always /
+        // DropOnFloor pass refreshes supported-player state (s2.asm:49635-49642).
+        return subtype == 6
+                && player != null
+                && player.isCpuControlled();
+    }
+
+    @Override
+    public boolean preservesSidekickDelayedLeaderPushFromInteractSlot(PlayableEntity player) {
+        // Same Obj30 object-order window, but for the delayed d4 Status_Push
+        // fall-through at s2.asm:39297-39300 after the current push grace has
+        // decayed and Tails is stationary on the released interact target.
+        return preservesSidekickCpuPushGraceFromInteractSlot(player);
+    }
+
+    @Override
+    public int sidekickCpuPushGraceMinimumFramesFromInteractSlot(PlayableEntity player) {
+        return preservesSidekickCpuPushGraceFromInteractSlot(player) ? 0 : Integer.MAX_VALUE;
+    }
+
+    @Override
+    public int sidekickCpuPushGraceMaximumFramesFromInteractSlot(PlayableEntity player) {
+        return preservesSidekickCpuPushGraceFromInteractSlot(player) ? 9 : Integer.MIN_VALUE;
+    }
+
+    @Override
+    public int getOnScreenHalfWidth() {
+        return widthPixels;
+    }
+
+    @Override
+    public int getBalanceWidthPixels() {
+        // Obj30_Init writes Obj30_Widths[subtype] to width_pixels(a0)
+        // before the player balance routines read it (docs/s2disasm/s2.asm:49545-49547).
+        return widthPixels;
+    }
+
+    @Override
+    public int getOnScreenHalfHeight() {
+        return getSolidParams().groundHalfHeight();
+    }
+
+    @Override
+    public boolean keepsOnObjWhenAirborneAfterSameFrameStandingContact(PlayableEntity player) {
+        // Obj30 subtype 4/6 runs SolidObject_Always/DropOnFloor before
+        // Obj30_HurtSupportedPlayers; Hurt_Sidekick then sets InAir without
+        // clearing OnObj (docs/s2disasm/s2.asm:49603-49615,49635-49642,85468-85472).
+        return subtype == 4 || subtype == 6;
     }
 
     // ========================================================================
@@ -360,7 +456,7 @@ public class RisingLavaObjectInstance extends AbstractObjectInstance
         }
 
         // Only render when HTZ earthquake is active
-        if (!services().gameState().isHtzScreenShakeActive()) {
+        if (!isHtzEarthquakeActive()) {
             return;
         }
 

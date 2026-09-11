@@ -1,0 +1,1 @@
+{"type":"header","format":"openggf-physical-chip-bus-v1","initial_state":"constructor_reset","ym_core":"nuked-opn2","ym_core_mode":3,"ym_chip_type":"YM2612","ym_domain":"YM2612_INTERNAL_CYCLE","capture_capacity":1,"events":0,"overflow":false,"dropped":0,"rendered_output_frames":1,"ym_replay_start_ordinal":null,"terminal_ym_cycle":null}

@@ -9,24 +9,37 @@ import java.util.List;
  * S3K boss explosion controller (ROM: Obj_BossExplosionSpecial → Obj_CreateBossExplosion).
  * Plain Java object (not an ObjectInstance) — ticked directly by the owning boss.
  *
- * ROM flow (s3.asm Obj_BossExpControl / Obj_NormalExpControl):
- * 1. Initial Obj_Wait: $2E = 3-1 = 2 (3 frames before first explosion)
+ * ROM flow (sonic3k.asm Obj_BossExpControl / Obj_NormalExpControl):
+ * 1. Obj_CreateBossExplosion initializes wait timer
  * 2. Obj_NormalExpControl: decrement $39 timer, spawn explosion, set $2E = 3-1
- * 3. Obj_Wait: 3 frames between each explosion
- * 4. Repeat until $39 goes negative (bmi → delete)
+ * 3. Obj_Wait: 3 frames between subsequent explosions
+ * 4. Repeat until $39 decrements to zero, then delete before spawning.
  *
  * CreateBossExp02: timer=$28, xRange=$80, yRange=$80, routine=2
- * Result: 41 explosions ($28→$00 inclusive), each spaced 3 frames apart.
- * Total duration: 3 + 41*3 = 126 frames (~2.1 seconds).
+ * Result: 39 explosions ($27→$01 inclusive), each spaced 3 frames apart.
+ * Total duration: 3 + 39*3 plus the zero-timer delete wait.
  *
  * SFX (sfx_Explode) is played by the controller (sub_52850), not by each child.
  */
 public class S3kBossExplosionController {
     private static final int[][] SUBTYPE_PARAMS = {
-            {0x20, 0x20, 0x20},
-            {0x28, 0x80, 0x80},
-            {0x80, 0x20, 0x20},
-            {0x04, 0x10, 0x10},
+            {0x20, 0x20, 0x20, 0x00},
+            {0x28, 0x80, 0x80, 0x18},
+            {0x80, 0x20, 0x20, 0x08},
+            {0x04, 0x10, 0x10, 0x00},
+            {0x08, 0x20, 0x20, 0x10},
+            {0x20, 0x20, 0x20, 0x00},
+            {0x40, 0x80, 0x20, 0x00},
+            {0x80, 0x40, 0x40, 0x08},
+            {0x20, 0x20, 0x20, 0x18},
+            {0x80, 0x20, 0x20, 0x20},
+            {0x08, 0x80, 0x20, 0x10},
+            {0x80, 0x80, 0x80, 0x08},
+            {0x80, 0x80, 0x80, 0x28},
+            {0x80, 0x40, 0x40, 0x28},
+            {0x80, 0x80, 0x40, 0x08},
+            {0x80, 0x10, 0x10, 0x08},
+            {0x80, 0x20, 0x20, 0x30},
     };
     // ROM: move.w #3-1,$2E(a0) — Obj_Wait counts $2E down, fires at -1 = 3 frame cycle
     private static final int SPAWN_INTERVAL = 3;
@@ -50,13 +63,15 @@ public class S3kBossExplosionController {
         this.centreX = centreX;
         this.centreY = centreY;
         this.rng = rng;
-        int paramIndex = Math.min((subtype & 0xFF) >> 1, SUBTYPE_PARAMS.length - 1);
+        int paramIndex = (subtype & 0xFF) >> 1;
+        if (paramIndex >= SUBTYPE_PARAMS.length) {
+            throw new IllegalArgumentException("Unsupported boss explosion subtype: " + subtype);
+        }
         int[] params = SUBTYPE_PARAMS[paramIndex];
         this.timer = params[0];
         this.xRange = params[1];
         this.yRange = params[2];
-        // ROM: initial $2E = 3-1 (same as between-explosion wait)
-        this.intervalCounter = SPAWN_INTERVAL;
+        this.intervalCounter = SPAWN_INTERVAL - 1;
     }
 
     public void tick() {
@@ -65,12 +80,14 @@ public class S3kBossExplosionController {
         if (intervalCounter >= 0) {
             return;
         }
-        // ROM: Obj_NormalExpControl fires when Obj_Wait counter goes negative
+        // ROM timed controls decrement $39 and branch to delete when it becomes zero
+        // before creating a child (sonic3k.asm:176775-176792).
         timer--;
-        if (timer < 0) {
+        if (timer <= 0) {
+            timer = -1;
             return;
         }
-        // ROM: sub_52850 plays sfx_Explode, spawns child, applies random offset
+        // ROM: sub_52850 plays sfx_Explode, spawns child, applies random offset.
         spawnExplosionChild();
         intervalCounter = SPAWN_INTERVAL - 1; // ROM: move.w #3-1,$2E(a0)
     }
@@ -79,8 +96,25 @@ public class S3kBossExplosionController {
         return timer < 0;
     }
 
+    /**
+     * Runs the callback reached by Obj_CreateBossExplosion's creation-time
+     * tail jump through Obj_Wait while its zeroed $2E is already expired.
+     */
+    public void dispatchCreation() {
+        if (timer <= 0 || isFinished()) {
+            return;
+        }
+        timer--;
+        if (timer <= 0) {
+            timer = -1;
+            return;
+        }
+        spawnExplosionChild();
+        intervalCounter = SPAWN_INTERVAL - 1;
+    }
+
     private void spawnExplosionChild() {
-        // ROM: sub_52850 random offset calculation (s3.asm:101267-101285)
+        // ROM: sub_52850 random offset calculation (sonic3k.asm:176746-176751).
         int random = rng.nextRaw();
         int xMask = (xRange * 2) - 1;
         int yMask = (yRange * 2) - 1;

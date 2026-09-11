@@ -1,16 +1,18 @@
 package com.openggf.game.sonic1.objects;
 
 import com.openggf.game.PlayableEntity;
+import com.openggf.game.mutation.MutationEffects;
+import com.openggf.game.sonic1.constants.Sonic1ObjectIds;
 import com.openggf.graphics.GLCommand;
-import com.openggf.level.Level;
-import com.openggf.level.Map;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
-import com.openggf.level.objects.ObjectManager;
+import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.ObjectRenderManager;
+import com.openggf.level.objects.SpawnCoordinateRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Logger;
 
@@ -36,7 +38,8 @@ import java.util.logging.Logger;
  * </pre>
  * Reference: docs/s1disasm/_incObj/87 Ending Sequence Sonic.asm
  */
-public class Sonic1EndingSonicObjectInstance extends AbstractObjectInstance {
+public class Sonic1EndingSonicObjectInstance extends AbstractObjectInstance
+        implements SpawnCoordinateRewindRecreatable {
     private static final Logger LOGGER = Logger.getLogger(Sonic1EndingSonicObjectInstance.class.getName());
 
     // ========================================================================
@@ -97,11 +100,24 @@ public class Sonic1EndingSonicObjectInstance extends AbstractObjectInstance {
 
     /** Reference to the spawned emerald master for radius checking. */
     private Sonic1EndingEmeraldsObjectInstance emeraldMaster;
+    // Un-final so generic recreate does not leave an un-restorable final
+    // reference; children are re-spawned via the emeraldsSpawned latch and the ending
+    // sequence tolerates stale/empty child refs (advances on timers/anim commands).
+    private List<Sonic1EndingEmeraldsObjectInstance> emeralds = new ArrayList<>(6);
+
+    public Sonic1EndingSonicObjectInstance() {
+        this(0, 0);
+    }
 
     public Sonic1EndingSonicObjectInstance(int x, int y) {
         super(null, "EndSonic");
         this.currentX = x;
         this.currentY = y;
+    }
+
+    @Override
+    public ObjectSpawn getSpawn() {
+        return new ObjectSpawn(currentX, currentY, Sonic1ObjectIds.END_SONIC, 0, 0, false, 0);
     }
 
     private void ensureRenderer() {
@@ -114,7 +130,7 @@ public class Sonic1EndingSonicObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         ensureRenderer();
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         switch (routine) {
@@ -307,28 +323,22 @@ public class Sonic1EndingSonicObjectInstance extends AbstractObjectInstance {
         }
         emeraldsSpawned = true;
 
-        ObjectManager objectManager = services().objectManager();
-        if (objectManager == null) {
+        if (services().objectManager() == null) {
             return;
         }
 
         // ROM: ECha_CreateEms spawns 6 emeralds at player position
         // with angle offsets spaced by $100/6 = $2A
         int angleStep = 0x100 / 6; // $2A
-        setConstructionContext(services());
-        try {
-            for (int i = 0; i < 6; i++) {
-                int angleOffset = (angleStep * i) & 0xFF;
-                int emeraldFrame = i + 1; // frames 1-6
-                Sonic1EndingEmeraldsObjectInstance emerald =
-                        new Sonic1EndingEmeraldsObjectInstance(currentX, currentY, angleOffset, emeraldFrame);
-                objectManager.addDynamicObject(emerald);
-                if (i == 0) {
-                    emeraldMaster = emerald;
-                }
+        for (int i = 0; i < 6; i++) {
+            final int angleOffset = (angleStep * i) & 0xFF;
+            final int emeraldFrame = i + 1; // frames 1-6
+            Sonic1EndingEmeraldsObjectInstance emerald = spawnFreeChild(() ->
+                    new Sonic1EndingEmeraldsObjectInstance(currentX, currentY, angleOffset, emeraldFrame));
+            emeralds.add(emerald);
+            if (i == 0) {
+                emeraldMaster = emerald;
             }
-        } finally {
-            clearConstructionContext();
         }
     }
 
@@ -343,34 +353,28 @@ public class Sonic1EndingSonicObjectInstance extends AbstractObjectInstance {
      * that reference the animated Kos_EndFlowers tile positions.
      */
     private void patchLayoutWithFlowers() {
-        Level level = services().currentLevel();
-        if (level == null) {
-            return;
-        }
-        Map map = level.getMap();
-        if (map == null) {
-            return;
-        }
-        try {
-            // ROM writes $2E at v_lvllayout+$80 (row 1, col 0)
-            //          $2F at v_lvllayout+$81 (row 1, col 1)
-            map.setValue(0, 0, 1, (byte) 0x2E);
-            map.setValue(0, 1, 1, (byte) 0x2F);
-            // ROM: bsr.w DrawChunks — re-render level with modified layout
-            services().invalidateForegroundTilemap();
-        } catch (IllegalArgumentException e) {
-            LOGGER.warning("Ending layout patch failed: " + e.getMessage());
-        }
+        // ROM writes $2E at v_lvllayout+$80 (row 1, col 0)
+        //          $2F at v_lvllayout+$81 (row 1, col 1)
+        // ROM: bsr.w DrawChunks — pipeline publishes redraw effects automatically.
+        services().zoneLayoutMutationPipeline().queue(context -> {
+            try {
+                context.surface().setBlockInMap(0, 0, 1, 0x2E);
+                return context.surface().setBlockInMap(0, 1, 1, 0x2F);
+            } catch (IllegalArgumentException e) {
+                LOGGER.warning("Ending layout patch failed: " + e.getMessage());
+                return MutationEffects.NONE;
+            }
+        });
     }
 
     private void clearEmeralds() {
-        // Signal all emerald instances to remove themselves
-        if (emeraldMaster != null) {
-            emeraldMaster = null;
+        for (Sonic1EndingEmeraldsObjectInstance emerald : emeralds) {
+            emerald.setDestroyed(true);
         }
+        emeralds.clear();
+        emeraldMaster = null;
         // Emeralds are cleared via ObjectManager — they check a flag or we mark them destroyed
         // The ROM clears object RAM directly. We use the destroy mechanism.
-        Sonic1EndingEmeraldsObjectInstance.destroyAllEmeralds();
     }
 
     private void spawnSTH() {
@@ -379,13 +383,7 @@ public class Sonic1EndingSonicObjectInstance extends AbstractObjectInstance {
         }
         sthSpawned = true;
 
-        setConstructionContext(services());
-        try {
-            Sonic1EndingSTHObjectInstance sth = new Sonic1EndingSTHObjectInstance();
-            spawnDynamicObject(sth);
-        } finally {
-            clearConstructionContext();
-        }
+        spawnChild(Sonic1EndingSTHObjectInstance::new);
     }
 
     private void triggerFlash() {
@@ -420,5 +418,10 @@ public class Sonic1EndingSonicObjectInstance extends AbstractObjectInstance {
     /** Returns current mapping frame index (used by emerald spawn trigger). */
     public int getCurrentFrame() {
         return currentFrame;
+    }
+
+    @Override
+    public void onUnload() {
+        clearEmeralds();
     }
 }

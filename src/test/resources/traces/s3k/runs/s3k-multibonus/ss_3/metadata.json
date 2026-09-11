@@ -1,0 +1,22 @@
+{
+  "game": "s3k",
+  "trace_profile": "s3k_special_stage",
+  "special_stage_index": 2,
+  "characters": ["knuckles"],
+  "main_character": "knuckles",
+  "sidekicks": [],
+  "bk2_frame_offset": 98092,
+  "trace_frame_count": 6537,
+  "source_bk2": "s3-knux-multibonus-ss.bk2",
+  "recorder": "native-bizhawk-headless",
+  "recorder_version": "3.0",
+  "trace_schema": 5,
+  "recording_date": "2026-08-04",
+  "bizhawk_version": "2.11",
+  "genesis_core": "Genplus-gx",
+  "rom_checksum": "C5B1C655C19F462ADE0AC4E17A844D10",
+  "run_id": "s3k-multibonus",
+  "aux_schema_extras": ["load_queue_state_per_frame"],
+  "fresh_load": false,
+  "segment_index": 23
+}

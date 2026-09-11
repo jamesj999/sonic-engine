@@ -9,6 +9,10 @@ import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.SpawnRewindRecreatable;
+import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.ObjectTerrainUtils;
@@ -40,7 +44,8 @@ import java.util.List;
  * <p>
  * Reference: docs/s1disasm/_incObj/62 Gargoyle.asm
  */
-public class Sonic1GargoyleObjectInstance extends AbstractObjectInstance {
+public class Sonic1GargoyleObjectInstance extends AbstractObjectInstance
+        implements SpawnRewindRecreatable {
 
     // ========================================================================
     // ROM Constants
@@ -69,13 +74,13 @@ public class Sonic1GargoyleObjectInstance extends AbstractObjectInstance {
     // ========================================================================
 
     /** Spit delay in frames, from Gar_SpitRate. Stored in obDelayAni. */
-    private final int spitDelay;
+    private int spitDelay;
 
     /** Countdown timer. Stored in obTimeFrame. */
     private int timer;
 
     /** Whether gargoyle faces right (obStatus bit 0: 0=left, 1=right). */
-    private final boolean facingRight;
+    private boolean facingRight;
 
     public Sonic1GargoyleObjectInstance(ObjectSpawn spawn) {
         super(spawn, "Gargoyle");
@@ -102,7 +107,7 @@ public class Sonic1GargoyleObjectInstance extends AbstractObjectInstance {
     // ========================================================================
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // ROM: Gar_MakeFire (Routine 2)
         // subq.b #1,obTimeFrame(a0)
@@ -115,8 +120,9 @@ public class Sonic1GargoyleObjectInstance extends AbstractObjectInstance {
         // move.b obDelayAni(a0),obTimeFrame(a0) ; reset timer
         timer = spitDelay;
 
-        // bsr.w ChkObjectVisible / bne.s .nofire
-        if (!isOnScreen(HEAD_ACT_WIDTH * 2)) {
+        // docs/s1disasm/s1disasm/_incObj/62 LZ Gargoyle.asm:38 calls
+        // ChkObjectVisible, which uses exact screen bounds with no act-width margin.
+        if (!isChkObjectVisible()) {
             return;
         }
 
@@ -132,8 +138,7 @@ public class Sonic1GargoyleObjectInstance extends AbstractObjectInstance {
         //      move.w obY(a0),obY(a1)
         //      move.b obRender(a0),obRender(a1)
         //      move.b obStatus(a0),obStatus(a1)
-        Fireball fireball = new Fireball(spawn.x(), spawn.y(), facingRight);
-        services().objectManager().addDynamicObject(fireball);
+        spawnFreeChild(() -> new Fireball(spawn.x(), spawn.y(), facingRight));
         // Play fireball sound (ROM: move.w #sfx_Fireball,d0 / jsr (QueueSound2).l)
         services().playSfx(Fireball.SFX_FIREBALL);
     }
@@ -188,7 +193,7 @@ public class Sonic1GargoyleObjectInstance extends AbstractObjectInstance {
      * Reference: docs/s1disasm/_incObj/62 Gargoyle.asm, Gar_FireBall / Gar_AniFire
      */
     public static class Fireball extends AbstractObjectInstance
-            implements TouchResponseProvider {
+            implements TouchResponseProvider, RewindRecreatable {
 
         // ====================================================================
         // ROM Constants
@@ -251,13 +256,13 @@ public class Sonic1GargoyleObjectInstance extends AbstractObjectInstance {
         private int currentY;
 
         /** X velocity ($200 or -$200). */
-        private final int velX;
+        private int velX;
 
-        /** X subpixel accumulator. */
-        private int xSubpixel;
+        /** Subpixel accumulators (xSub / ySub) for ROM-accurate 16:8 fixed-point integration. */
+        private final SubpixelMotion.State motion = new SubpixelMotion.State(0, 0, 0, 0, 0, 0);
 
         /** Whether fireball is moving right. */
-        private final boolean movingRight;
+        private boolean movingRight;
 
         /** Current animation frame (toggles between FIREBALL_FRAME_1 and FIREBALL_FRAME_2). */
         private int currentFrame;
@@ -283,30 +288,42 @@ public class Sonic1GargoyleObjectInstance extends AbstractObjectInstance {
             // move.b #2,obFrame(a0) -> starts at mapping frame 2
             this.currentFrame = FIREBALL_FRAME_1;
 
-            this.xSubpixel = 0;
-
             // Sound is played by the parent Gargoyle after construction
         }
 
+        private Fireball() {
+            this(0, 0, false);
+        }
+
         @Override
-        public void update(int frameCounter, PlayableEntity playerEntity) {
+        public Fireball recreateForRewind(RewindRecreateContext ctx) {
+            ObjectSpawn spawn = ctx.spawn();
+            return new Fireball(spawn.x(), spawn.y() - FIREBALL_Y_OFFSET, false);
+        }
+
+        @Override
+        public void update(int vIntRunCount, PlayableEntity playerEntity) {
             AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
             // ROM: Gar_AniFire (Routine 6)
 
             // Animation: toggle frame every 8 game frames
             // move.b (v_framebyte).w,d0 / andi.b #7,d0 / bne.s .nochg
             // bchg #0,obFrame(a0) ; change every 8 frames
-            if ((frameCounter & ANIM_TOGGLE_MASK) == 0) {
+            if ((vIntRunCount & ANIM_TOGGLE_MASK) == 0) {
                 // Toggle between frames 2 and 3
                 currentFrame = (currentFrame == FIREBALL_FRAME_1)
                         ? FIREBALL_FRAME_2 : FIREBALL_FRAME_1;
             }
 
-            // bsr.w SpeedToPos - apply X velocity
-            // 16.8 fixed-point: velX is in 1/256ths of a pixel per frame
-            xSubpixel += velX;
-            currentX += xSubpixel >> 8;
-            xSubpixel &= 0xFF;
+            // bsr.w SpeedToPos - apply X velocity using shared 16:8 helper.
+            // Note: the previous inline form (xSubpixel += velX; currentX += xSubpixel >> 8;
+            // xSubpixel &= 0xFF) is mathematically equivalent to SubpixelMotion.moveX for the
+            // velocities used here (FIREBALL_SPEED = ±$200, low byte 0), but the helper keeps
+            // the integration semantics consistent across the codebase.
+            motion.x = currentX;
+            motion.xVel = velX;
+            SubpixelMotion.moveX(motion);
+            currentX = motion.x;
 
             // Wall collision check
             // btst #0,obStatus(a0) / bne.s .isright

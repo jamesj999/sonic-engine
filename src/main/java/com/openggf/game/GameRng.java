@@ -1,12 +1,15 @@
 package com.openggf.game;
 
+import com.openggf.game.rewind.RewindSnapshottable;
+import com.openggf.game.rewind.snapshot.GameRngSnapshot;
+
 /**
  * Deterministic ROM-accurate pseudo-random number generator.
  * <p>
  * Implements the Mega Drive Sonic {@code RandomNumber} / {@code Random_Number}
  * subroutine: 32-bit multiply-by-41 with the original word-fold step.
  */
-public final class GameRng {
+public final class GameRng implements RewindSnapshottable<GameRngSnapshot> {
     private static final long MASK32 = 0xFFFFFFFFL;
     private static final long MASK16 = 0xFFFFL;
 
@@ -132,5 +135,26 @@ public final class GameRng {
 
     private static long swapWords(long value) {
         return (((value >>> 16) & MASK16) | ((value & MASK16) << 16)) & MASK32;
+    }
+
+    @Override
+    public String key() {
+        return "gamerng";
+    }
+
+    @Override
+    public GameRngSnapshot capture() {
+        return new GameRngSnapshot(seed & MASK32, flavour);
+    }
+
+    @Override
+    public void restore(GameRngSnapshot snapshot) {
+        this.seed = snapshot.seed() & MASK32;
+        // Flavour is immutable (set at construction), so we don't restore it
+        // If flavour mismatch is detected, log a warning but don't change it
+        if (snapshot.flavour() != this.flavour) {
+            System.err.println("Warning: GameRng flavour mismatch during restore: "
+                    + this.flavour + " -> " + snapshot.flavour());
+        }
     }
 }

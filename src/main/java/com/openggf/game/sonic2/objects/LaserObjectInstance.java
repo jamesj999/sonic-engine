@@ -9,8 +9,9 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
-import com.openggf.sprites.playable.AbstractPlayableSprite;
 
 import com.openggf.debug.DebugColor;
 import java.util.List;
@@ -41,7 +42,7 @@ import java.util.List;
  * SubObjData: mappings=ObjB9_MapUnc_3BB18, art_tile=make_art_tile(ArtTile_ArtNem_WfzHrzntlLazer,2,1),
  * render_flags=level_fg, priority=1, width=$60, collision=0.
  */
-public class LaserObjectInstance extends AbstractObjectInstance {
+public class LaserObjectInstance extends AbstractObjectInstance implements RewindRecreatable {
 
     /**
      * Horizontal velocity when firing.
@@ -55,6 +56,8 @@ public class LaserObjectInstance extends AbstractObjectInstance {
      * From disassembly: subi.w #$40,d1 / cmp.w d1,d0 / blt.w JmpTo65_DeleteObject
      */
     private static final int DELETE_MARGIN = 0x40;
+    private static final int ON_SCREEN_HALF_WIDTH = 0x60;
+    private static final int ON_SCREEN_HALF_HEIGHT = 0x20;
 
     /** Current state: 0=init, 2=waiting for on-screen, 4=firing */
     private int routine;
@@ -81,6 +84,11 @@ public class LaserObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
+    public LaserObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new LaserObjectInstance(ctx.spawn());
+    }
+
+    @Override
     public int getX() {
         return currentX;
     }
@@ -97,8 +105,13 @@ public class LaserObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
+    public boolean isHighPriority() {
+        // ROM: make_art_tile(ArtTile_ArtNem_WfzHrzntlLazer,2,1)
+        return true;
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         switch (routine) {
             case 2 -> updateWaitForOnScreen();
             case 4 -> updateFiring();
@@ -129,7 +142,7 @@ public class LaserObjectInstance extends AbstractObjectInstance {
      * When on screen: advance to routine 4, set x_vel, play sound.
      */
     private void updateWaitForOnScreen() {
-        if (!isOnScreen()) {
+        if (!isWithinSolidContactBounds()) {
             return;
         }
         // ROM: addq.b #2,routine(a0) => routine 4
@@ -159,6 +172,16 @@ public class LaserObjectInstance extends AbstractObjectInstance {
         xPosFrac &= 0xFF;
         // Subpixel wrap: X_VELOCITY is -0x1000 so xPosFrac always stays 0,
         // and currentX decreases by exactly 16 pixels per frame.
+    }
+
+    @Override
+    public int getOnScreenHalfWidth() {
+        return ON_SCREEN_HALF_WIDTH;
+    }
+
+    @Override
+    public int getOnScreenHalfHeight() {
+        return ON_SCREEN_HALF_HEIGHT;
     }
 
     @Override

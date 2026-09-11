@@ -1,10 +1,9 @@
 package com.openggf.game.sonic3k.objects;
 
-import com.openggf.game.CrossGameFeatureProvider; // type reference for gameService() lookup
+import com.openggf.game.CrossGameFeatureProvider;
 import com.openggf.game.InstaShieldHandle;
 import com.openggf.game.PlayableEntity;
 import com.openggf.game.GameModule;
-import com.openggf.game.GameModuleRegistry;
 import com.openggf.game.ObjectArtProvider;
 import com.openggf.level.objects.ShieldObjectInstance;
 import com.openggf.game.sonic3k.Sonic3kObjectArtKeys;
@@ -64,7 +63,9 @@ public class InstaShieldObjectInstance extends ShieldObjectInstance implements I
                 return;
             }
         }
-        CrossGameFeatureProvider donor = services().gameService(CrossGameFeatureProvider.class);
+        // Cross-game donation is exposed through ObjectServices directly, not the host module's
+        // gameService() registry. S2/S1 modules won't return CrossGameFeatureProvider here.
+        CrossGameFeatureProvider donor = services().crossGameFeatures();
         if (donor != null) {
             this.dplcRenderer = donor.getInstaShieldRenderer();
             SpriteArtSet artSet = donor.getInstaShieldArtSet();
@@ -73,7 +74,7 @@ public class InstaShieldObjectInstance extends ShieldObjectInstance implements I
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isShieldDestroyed()) return;
         stepAnimation();
@@ -186,8 +187,8 @@ public class InstaShieldObjectInstance extends ShieldObjectInstance implements I
         commands.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1, GLCommand.BlendType.SOLID, r, g, b, cx, top, 0, 0));
     }
 
-    private static Sonic3kObjectArtProvider getS3kArtProvider() {
-        GameModule module = GameModuleRegistry.getCurrent();
+    private Sonic3kObjectArtProvider getS3kArtProvider() {
+        GameModule module = services().gameModule();
         if (module == null) return null;
         ObjectArtProvider provider = module.getObjectArtProvider();
         return (provider instanceof Sonic3kObjectArtProvider s3k) ? s3k : null;

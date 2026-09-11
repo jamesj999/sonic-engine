@@ -5,6 +5,8 @@ import com.openggf.game.sonic3k.Sonic3kObjectArtKeys;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 
 import java.util.List;
@@ -18,14 +20,16 @@ import java.util.List;
  * - Moving (xVel != 0): frames $12, $13, $14 (ROM: byte_69E2F)
  * - Stationary (xVel == 0): frames $18, $19, $1A (ROM: byte_69E38)
  */
-public class AizEndBossSmokeChild extends AbstractObjectInstance {
+public class AizEndBossSmokeChild extends AbstractObjectInstance implements RewindRecreatable {
 
     private static final int SMOKE_DURATION = 14; // Approximate duration from animation
-
     private final AizEndBossInstance boss;
-    private final int posX;
-    private final int posY;
-    private final boolean moving;
+    // posX/posY/moving are non-final so the rewind field capturer reapplies them
+    // after the recreate hook rebuilds the smoke. This object has a null spawn,
+    // so its position cannot be derived from spawn data.
+    private int posX;
+    private int posY;
+    private boolean moving;
     private int animTimer;
     private int mappingFrame;
 
@@ -40,7 +44,18 @@ public class AizEndBossSmokeChild extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity player) {
+    public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        AizEndBossInstance restoredBoss = AizEndBossRewindLinks.nearestBoss(ctx);
+        if (restoredBoss == null) {
+            return null;
+        }
+        AizEndBossSmokeChild restored = new AizEndBossSmokeChild(restoredBoss, 0, 0, false);
+        AizEndBossRewindLinks.seedCapturedScalars(restored, ctx);
+        return restored;
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity player) {
         if (isDestroyed()) return;
 
         animTimer++;

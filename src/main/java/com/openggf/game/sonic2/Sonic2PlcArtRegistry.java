@@ -3,6 +3,7 @@ package com.openggf.game.sonic2;
 import com.openggf.game.sonic2.constants.Sonic2Constants;
 import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectSpriteSheet;
+import com.openggf.level.objects.art.ObjectArtRegistration;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -27,8 +28,12 @@ public final class Sonic2PlcArtRegistry {
         ObjectSpriteSheet build(Sonic2ObjectArt art);
     }
 
-    /** Registration entry: art key + builder function. */
-    public record ArtRegistration(String key, SheetBuilder builder) {}
+    /** Registration entry: provider-owned metadata + builder function. */
+    public record ArtRegistration(ObjectArtRegistration metadata, SheetBuilder builder) {
+        public String key() {
+            return metadata.key();
+        }
+    }
 
     private static final Map<Integer, ArtRegistration> REGISTRY = new HashMap<>();
 
@@ -58,12 +63,14 @@ public final class Sonic2PlcArtRegistry {
         reg(Sonic2Constants.ART_NEM_NUMBERS_ADDR,
                 ObjectArtKeys.POINTS, Sonic2ObjectArt::loadPointsSheet);
         // EggPrison (PLC 64) is loaded manually in provider — not via registry dispatch.
-        // Boss explosion (PLCStdWtr) and Super Sonic stars are loaded manually in provider.
+        // Boss explosion (PLCStdWtr/WFZ boss PLC) and Super Sonic stars are loaded manually in provider.
+        // Keep the fiery explosion registered as well so event-triggered boss PLCs
+        // can dispatch the ROM PLC list directly when requested at runtime.
+        reg(Sonic2Constants.ART_NEM_FIERY_EXPLOSION_ADDR,
+                Sonic2ObjectArtKeys.BOSS_EXPLOSION, Sonic2ObjectArt::loadBossExplosionSheet);
 
         // ===== EHZ zone objects =====
-        // TODO: loadWaterfallSheet() does not exist yet on Sonic2ObjectArt — uncomment when extracted
-        // reg(Sonic2Constants.ART_NEM_EHZ_WATERFALL_ADDR,
-        //         Sonic2ObjectArtKeys.WATERFALL, Sonic2ObjectArt::loadWaterfallSheet);
+        // EHZ waterfall art is assembled with the zone art bundle and registered manually by provider.
         reg(Sonic2Constants.ART_NEM_BRIDGE_ADDR,
                 ObjectArtKeys.BRIDGE, Sonic2ObjectArt::loadBridgeSheet);
         reg(Sonic2Constants.ART_NEM_BUZZER_ADDR,
@@ -108,9 +115,7 @@ public final class Sonic2PlcArtRegistry {
                 Sonic2ObjectArtKeys.SPINY, Sonic2ObjectArt::loadSpinySheet);
         reg(Sonic2Constants.ART_NEM_GRABBER_ADDR,
                 Sonic2ObjectArtKeys.GRABBER, Sonic2ObjectArt::loadGrabberSheet);
-        // TODO: loadCpzPlatformSheet() does not exist yet on Sonic2ObjectArt — uncomment when extracted
-        // reg(Sonic2Constants.ART_NEM_CPZ_ELEVATOR_ADDR,
-        //         Sonic2ObjectArtKeys.CPZ_PLATFORM, Sonic2ObjectArt::loadCpzPlatformSheet);
+        // Obj19 platforms use the shared platform sheet path; CPZ elevator art is not PLC-dispatched here.
 
         // ===== ARZ zone objects =====
         reg(Sonic2Constants.ART_NEM_CHOPCHOP_ADDR,
@@ -123,6 +128,8 @@ public final class Sonic2PlcArtRegistry {
                 Sonic2ObjectArtKeys.ARROW_SHOOTER, Sonic2ObjectArt::loadArrowShooterSheet);
         reg(Sonic2Constants.ART_NEM_LEAVES_ADDR,
                 Sonic2ObjectArtKeys.LEAVES, Sonic2ObjectArt::loadLeavesSheet);
+        reg(Sonic2Constants.ART_NEM_BUBBLE_GENERATOR_ADDR,
+                Sonic2ObjectArtKeys.BUBBLES, Sonic2ObjectArt::loadBubblesSheet);
         reg(Sonic2Constants.ART_NEM_BUBBLES_ADDR,
                 Sonic2ObjectArtKeys.BUBBLES, Sonic2ObjectArt::loadBubblesSheet);
 
@@ -167,6 +174,10 @@ public final class Sonic2PlcArtRegistry {
                 Sonic2ObjectArtKeys.OOZ_LAUNCHER_HORIZ, Sonic2ObjectArt::loadOOZLauncherHorizSheet);
         reg(Sonic2Constants.ART_NEM_OOZ_COLLAPSING_PLATFORM_ADDR,
                 Sonic2ObjectArtKeys.OOZ_COLLAPSING_PLATFORM, Sonic2ObjectArt::loadOOZCollapsingPlatformSheet);
+        reg(Sonic2Constants.ART_NEM_SPIKY_THING_ADDR,
+                Sonic2ObjectArtKeys.OOZ_SLIDING_SPIKE, Sonic2ObjectArt::loadOOZSlidingSpikeSheet);
+        reg(Sonic2Constants.ART_NEM_PUSH_SPRING_ADDR,
+                Sonic2ObjectArtKeys.OOZ_PRESSURE_SPRING, Sonic2ObjectArt::loadOOZPressureSpringSheet);
         reg(Sonic2Constants.ART_NEM_OCTUS_ADDR,
                 Sonic2ObjectArtKeys.OCTUS, Sonic2ObjectArt::loadOctusSheet);
         reg(Sonic2Constants.ART_NEM_AQUIS_ADDR,
@@ -247,15 +258,24 @@ public final class Sonic2PlcArtRegistry {
                 Sonic2ObjectArtKeys.WFZ_RIVET, Sonic2ObjectArt::loadWfzRivetSheet);
         reg(Sonic2Constants.ART_NEM_WFZ_BELT_PLATFORM_ADDR,
                 Sonic2ObjectArtKeys.WFZ_BELT_PLATFORM, Sonic2ObjectArt::loadWFZBeltPlatformSheet);
+        reg(Sonic2Constants.ART_NEM_WFZ_UNUSED_BADNIK_ADDR,
+                Sonic2ObjectArtKeys.WFZ_STICK, Sonic2ObjectArt::loadWfzStickSheet);
         reg(Sonic2Constants.ART_NEM_WFZ_TILT_PLATFORMS_ADDR,
                 Sonic2ObjectArtKeys.WFZ_TILT_PLATFORM, Sonic2ObjectArt::loadWFZTiltPlatformSheet);
         reg(Sonic2Constants.ART_NEM_WFZ_CONVEYOR_BELT_WHEEL_ADDR,
                 Sonic2ObjectArtKeys.WFZ_CONVEYOR_BELT_WHEEL, Sonic2ObjectArt::loadWFZConveyorBeltWheelSheet);
         reg(Sonic2Constants.ART_NEM_WFZ_SCRATCH_ADDR,
                 Sonic2ObjectArtKeys.CLUCKER, Sonic2ObjectArt::loadCluckerSheet);
-        // TODO: loadWfzFloatingPlatformSheet() does not exist yet on Sonic2ObjectArt — uncomment when extracted
-        // reg(Sonic2Constants.ART_NEM_WFZ_PLATFORM_ADDR,
-        //         "wfz_floating_platform", Sonic2ObjectArt::loadWfzFloatingPlatformSheet);
+        reg(Sonic2Constants.ART_NEM_WFZ_PLATFORM_ADDR,
+                Sonic2ObjectArtKeys.WFZ_PLATFORM, Sonic2ObjectArt::loadWfzFloatingPlatformSheet);
+        reg(Sonic2Constants.ART_NEM_WFZ_BOSS_ADDR,
+                Sonic2ObjectArtKeys.WFZ_BOSS, Sonic2ObjectArt::loadWFZBossSheet);
+        reg(Sonic2Constants.ART_NEM_ROBOTNIK_RUNNING_ADDR,
+                Sonic2ObjectArtKeys.WFZ_ROBOTNIK, Sonic2ObjectArt::loadWFZRobotnikSheet);
+        reg(Sonic2Constants.ART_NEM_ROBOTNIK_UPPER_ADDR,
+                Sonic2ObjectArtKeys.WFZ_ROBOTNIK, Sonic2ObjectArt::loadWFZRobotnikSheet);
+        reg(Sonic2Constants.ART_NEM_ROBOTNIK_LOWER_ADDR,
+                Sonic2ObjectArtKeys.WFZ_ROBOTNIK, Sonic2ObjectArt::loadWFZRobotnikSheet);
 
         // ===== SCZ zone objects =====
         reg(Sonic2Constants.ART_NEM_NEBULA_ADDR,
@@ -286,6 +306,8 @@ public final class Sonic2PlcArtRegistry {
                 Sonic2ObjectArtKeys.CNZ_BOSS, Sonic2ObjectArt::loadCNZBossSheet);
         reg(Sonic2Constants.ART_NEM_MCZ_BOSS_ADDR,
                 Sonic2ObjectArtKeys.MCZ_BOSS, Sonic2ObjectArt::loadMCZBossSheet);
+        reg(Sonic2Constants.ART_NEM_OOZ_BOSS_ADDR,
+                Sonic2ObjectArtKeys.OOZ_BOSS, Sonic2ObjectArt::loadOOZBossSheet);
     }
 
     /**
@@ -306,7 +328,14 @@ public final class Sonic2PlcArtRegistry {
     }
 
     private static void reg(int romAddr, String key, SheetBuilder builder) {
-        ArtRegistration existing = REGISTRY.put(romAddr, new ArtRegistration(key, builder));
+        ObjectArtRegistration metadata = ObjectArtRegistration.sheet(key)
+                .withRomSource(
+                        romAddr,
+                        ObjectArtRegistration.UNSPECIFIED,
+                        ObjectArtRegistration.UNSPECIFIED,
+                        ObjectArtRegistration.UNSPECIFIED)
+                .requiringPlc();
+        ArtRegistration existing = REGISTRY.put(romAddr, new ArtRegistration(metadata, builder));
         if (existing != null) {
             LOG.fine(String.format("Registry override at 0x%06X: %s -> %s", romAddr, existing.key(), key));
         }

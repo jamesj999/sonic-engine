@@ -12,6 +12,8 @@ import com.openggf.level.PatternDesc;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
@@ -47,7 +49,7 @@ import java.util.logging.Logger;
  * </ul>
  */
 public class RisingPillarObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
     private static final Logger LOGGER = Logger.getLogger(RisingPillarObjectInstance.class.getName());
 
     // art_tile palette from disassembly: make_art_tile(ArtTile_ArtKos_LevelArt,1,0)
@@ -61,6 +63,10 @@ public class RisingPillarObjectInstance extends AbstractObjectInstance
     private static final int RISE_DELAY = 3;
     private static final int MAX_EXTENSION_FRAME = 6;
     private static final int GRAVITY = 0x18;
+    private static final int DEBRIS_PIECE_MASK = 0x0F;
+    private static final int DEBRIS_FRAME_SHIFT = 4;
+    private static final int DEBRIS_FRAME_MASK = 0x0F;
+    private static final int APPROX_RENDER_Y_MARGIN = 32;
 
     // Debris fragment velocities from word_25BBE and delays from byte_25BB0
     // Format: x velocity, y velocity, delay
@@ -98,6 +104,7 @@ public class RisingPillarObjectInstance extends AbstractObjectInstance
     private int velY;
     private int debrisDelay;       // objoff_3F in ROM - delay before debris starts moving
     private SpriteMappingPiece debrisPiece;  // single piece for debris mode
+    private boolean romRenderOnScreen;
     public RisingPillarObjectInstance(ObjectSpawn spawn, String name) {
         super(spawn, name);
         this.x = spawn.x();
@@ -113,8 +120,14 @@ public class RisingPillarObjectInstance extends AbstractObjectInstance
         this.velY = 0;
         this.debrisDelay = 0;
         this.debrisPiece = null;
+        this.romRenderOnScreen = true;
 
         updateDynamicSpawn(x, y);
+    }
+
+    @Override
+    public RisingPillarObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new RisingPillarObjectInstance(ctx.spawn(), getName());
     }
 
     @Override
@@ -127,7 +140,7 @@ public class RisingPillarObjectInstance extends AbstractObjectInstance
         return y;
     }
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (routine == 2) {
             updateMain(player);
@@ -205,18 +218,21 @@ public class RisingPillarObjectInstance extends AbstractObjectInstance
         // Check delay (objoff_3F)
         if (debrisDelay > 0) {
             debrisDelay--;
-            return;
+        } else {
+            // ROM loc_25B9A does ObjectMove first, then adds gravity to y_vel.
+            // Doing gravity first applies one frame's acceleration to the
+            // current frame's motion and accumulates y-position drift.
+            subX += velX;
+            subY += velY;
+            x = subX >> 8;
+            y = subY >> 8;
+            velY += GRAVITY;
         }
 
-        // Apply gravity and move (ObjectMove + add gravity)
-        velY += GRAVITY;
-        subX += velX;
-        subY += velY;
-        x = subX >> 8;
-        y = subY >> 8;
-
-        // Check if off-screen - delete if beyond camera viewport + margin
-        if (!isOnScreen(112)) {
+        // ROM loc_25BA4 tests render_flags.on_screen and jumps to DeleteObject
+        // when the previous BuildSprites pass cleared the render-bounds bit
+        // (docs/s2disasm/s2.asm:51885-51888).
+        if (!romRenderOnScreen) {
             setDestroyed(true);
         }
     }
@@ -227,9 +243,31 @@ public class RisingPillarObjectInstance extends AbstractObjectInstance
      * Corresponds to loc_25ACE and loc_25BF6 in disassembly.
      */
     private void releasePlayerAndBreak(AbstractPlayableSprite player) {
-        // Set player to rolling state and in-air
+        // ROM loc_25AF6 (s2.asm:51393-51405) does: bset rolling; move.b #$E,y_radius;
+        // move.b #7,x_radius; set Roll anim; bset in_air; bclr on_object; routine=2.
+        // ROM y_pos is the CENTRE, so the y_radius change does not move the centre.
+        // The engine stores top-left, so naively calling setRolling(true) here would
+        // shrink height by 2 (runHeight 30 → rollHeight 28) and drop centreY by 1,
+        // since SolidObject_Landed's RideObject_SetRide → Tails_ResetOnFloor_Part2
+        // (s2.asm:40629-40636) already uncurled Tails (clearRollingOnLanding mirrors
+        // that, including the subq.w #1, y_pos lift) before the pillar re-curls here.
+        // Preserve the post-landing centreY across the curl toggle.
+        short centreYBeforeCurl = player.getCentreY();
         player.setRolling(true);
+        if (player.getCentreY() != centreYBeforeCurl) {
+            player.setCentreYPreserveSubpixel(centreYBeforeCurl);
+        }
         player.setAir(true);
+        player.setOnObject(false); // ROM loc_25AF6 s2.asm:51401 bclr #status.player.on_object,status(a1)
+
+        // Clear riding state so the stale-riding-state recovery in PlayableSpriteMovement
+        // (which fires before inline solid contacts on the next frame) does not re-ground
+        // the player. In the ROM this is implicit: once on_object is cleared and routine=2
+        // is set, SolidObject no longer treats the player as riding this object.
+        ObjectManager om = services().objectManager();
+        if (om != null) {
+            om.clearRidingObject(player);
+        }
 
         // Play slow smash sound effect
         services().playSfx(GameSound.SLOW_SMASH);
@@ -278,11 +316,21 @@ public class RisingPillarObjectInstance extends AbstractObjectInstance
                 int vy = DEBRIS_DATA[i][1];
                 int delay = DEBRIS_DATA[i][2];
 
-                RisingPillarDebrisInstance debris = new RisingPillarDebrisInstance(
-                        x, y, vx, vy, piece, delay);
-                objectManager.addDynamicObject(debris);
+                // ROM loc_25C1C calls AllocateObjectAfterCurrent for each
+                // debris sibling (docs/s2disasm/s2.asm:51936-51938), so the
+                // spawned pieces must occupy slots after the pillar slot.
+                int fragmentIndex = i;
+                spawnChild(() -> new RisingPillarDebrisInstance(
+                        x, y, vx, vy, piece, delay, debrisFrame, fragmentIndex));
             }
         }
+
+        // ROM Obj2B breaks from Obj2B_Main through loc_25ACE, spawns the debris
+        // in loc_25BF6, then immediately branches to loc_25B8E for the parent
+        // object, so piece 0 moves on the same frame as the standing contact
+        // (docs/s2disasm/s2.asm:51840-51855,51875-51888,51909-51949).
+        updateDebris();
+        updateDynamicSpawn(x, y);
 
         LOGGER.fine(() -> String.format("Rising pillar at (%d,%d) broke into debris", spawn.x(), spawn.y()));
     }
@@ -342,6 +390,22 @@ public class RisingPillarObjectInstance extends AbstractObjectInstance
         renderPieceWithArtTile(graphicsManager, debrisPiece, x, y, false, false);
     }
 
+    @Override
+    public void refreshPostCameraRenderState() {
+        if (routine == 4) {
+            romRenderOnScreen = isWithinRenderSpriteBounds(getOnScreenHalfWidth(), getOnScreenHalfHeight());
+        }
+    }
+
+    @Override
+    public int getOnScreenHalfHeight() {
+        // Obj2B sets render_flags.level_fg and width_pixels but does not set
+        // render_flags.explicit_height, so S2 BuildSprites uses its approximate
+        // +/-32px Y band before setting render_flags.on_screen.
+        // docs/s2disasm/s2.asm:30569-30588
+        return APPROX_RENDER_Y_MARGIN;
+    }
+
     /**
      * Render a piece, adding art_tile palette offset as the original game does.
      * The original game does: pattern_word = mapping_pattern + art_tile
@@ -379,7 +443,7 @@ public class RisingPillarObjectInstance extends AbstractObjectInstance
 
     @Override
     public SolidObjectParams getSolidParams() {
-        return new SolidObjectParams(
+        return SolidObjectParams.of(
                 HALF_WIDTH + 0x0B,
                 yRadius,
                 yRadius + 1
@@ -432,7 +496,8 @@ public class RisingPillarObjectInstance extends AbstractObjectInstance
      * Inner class for debris fragments (pieces 1-13).
      * Piece 0 is the original pillar object transformed into debris.
      */
-    public static class RisingPillarDebrisInstance extends AbstractObjectInstance {
+    public static class RisingPillarDebrisInstance extends AbstractObjectInstance
+            implements RewindRecreatable {
 
         private static final int GRAVITY = 0x18;
 
@@ -443,18 +508,73 @@ public class RisingPillarObjectInstance extends AbstractObjectInstance
         private int velX;
         private int velY;
         private int delay;
+        private int mappingFrame;
+        private int pieceIndex;
+        private boolean romRenderOnScreen;
         private final SpriteMappingPiece piece;
 
         public RisingPillarDebrisInstance(int x, int y, int velX, int velY, SpriteMappingPiece piece, int delay) {
-            super(new ObjectSpawn(x, y, 0x2B, 0, 0, false, 0), "PillarDebris");
-            this.currentX = x;
-            this.currentY = y;
-            this.subX = x << 8;
-            this.subY = y << 8;
+            this(x, y, velX, velY, piece, delay, 0, 0);
+        }
+
+        public RisingPillarDebrisInstance(int x, int y, int velX, int velY, SpriteMappingPiece piece, int delay,
+                                          int mappingFrame, int pieceIndex) {
+            this(debrisSpawn(x, y, mappingFrame, pieceIndex), velX, velY, piece, delay,
+                    mappingFrame, pieceIndex);
+        }
+
+        public RisingPillarDebrisInstance(ObjectSpawn spawn) {
+            this(spawn, 0, 0, debrisPiece(decodeMappingFrame(spawn), decodePieceIndex(spawn)), 0,
+                    decodeMappingFrame(spawn), decodePieceIndex(spawn));
+        }
+
+        private RisingPillarDebrisInstance(ObjectSpawn spawn, int velX, int velY, SpriteMappingPiece piece,
+                                           int delay, int mappingFrame, int pieceIndex) {
+            super(spawn, "PillarDebris");
+            this.currentX = spawn.x();
+            this.currentY = spawn.y();
+            this.subX = spawn.x() << 8;
+            this.subY = spawn.y() << 8;
             this.velX = velX;
             this.velY = velY;
             this.piece = piece;
             this.delay = delay;
+            this.mappingFrame = mappingFrame;
+            this.pieceIndex = pieceIndex;
+            this.romRenderOnScreen = true;
+        }
+
+        @Override
+        public RisingPillarDebrisInstance recreateForRewind(RewindRecreateContext ctx) {
+            return new RisingPillarDebrisInstance(ctx.spawn());
+        }
+
+        private static ObjectSpawn debrisSpawn(int x, int y, int mappingFrame, int pieceIndex) {
+            int subtype = (pieceIndex & DEBRIS_PIECE_MASK)
+                    | ((mappingFrame & DEBRIS_FRAME_MASK) << DEBRIS_FRAME_SHIFT);
+            return new ObjectSpawn(x, y, 0x2B, subtype, 0, false, 0);
+        }
+
+        private static int decodePieceIndex(ObjectSpawn spawn) {
+            return spawn.subtype() & DEBRIS_PIECE_MASK;
+        }
+
+        private static int decodeMappingFrame(ObjectSpawn spawn) {
+            return (spawn.subtype() >> DEBRIS_FRAME_SHIFT) & DEBRIS_FRAME_MASK;
+        }
+
+        private static SpriteMappingPiece debrisPiece(int mappingFrame, int pieceIndex) {
+            List<SpriteMappingFrame> mappings = MAPPINGS.get(
+                    Sonic2Constants.MAP_UNC_OBJ2B_ADDR, S2SpriteDataLoader::loadMappingFrames, "Obj2B");
+            if (mappingFrame < 0 || mappingFrame >= mappings.size()) {
+                return null;
+            }
+            SpriteMappingFrame frame = mappings.get(mappingFrame);
+            if (frame == null || frame.pieces().isEmpty()
+                    || pieceIndex < 0 || pieceIndex >= frame.pieces().size()) {
+                return null;
+            }
+            return frame.pieces().get(pieceIndex);
         }
 
         @Override
@@ -468,7 +588,7 @@ public class RisingPillarObjectInstance extends AbstractObjectInstance
         }
 
         @Override
-        public void update(int frameCounter, PlayableEntity playerEntity) {
+        public void update(int vIntRunCount, PlayableEntity playerEntity) {
             AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
             if (isDestroyed()) {
                 return;
@@ -477,20 +597,31 @@ public class RisingPillarObjectInstance extends AbstractObjectInstance
             // Handle spawn delay (objoff_3F)
             if (delay > 0) {
                 delay--;
-                return;
+            } else {
+                subX += velX;
+                subY += velY;
+                currentX = subX >> 8;
+                currentY = subY >> 8;
+                velY += GRAVITY;
             }
 
-            // Apply gravity and move
-            velY += GRAVITY;
-            subX += velX;
-            subY += velY;
-            currentX = subX >> 8;
-            currentY = subY >> 8;
-
-            // Check if off-screen - delete if beyond camera viewport + margin
-            if (!isOnScreen(112)) {
+            // ROM loc_25BA4 tests the previous BuildSprites on-screen bit.
+            // BuildSprites uses a 32px approximate Y band for Obj2B debris
+            // because Obj2B does not set render_flags.explicit_height.
+            // docs/s2disasm/s2.asm:30569-30588,51885-51888
+            if (!romRenderOnScreen) {
                 setDestroyed(true);
             }
+        }
+
+        @Override
+        public void refreshPostCameraRenderState() {
+            romRenderOnScreen = isWithinRenderSpriteBounds(getOnScreenHalfWidth(), getOnScreenHalfHeight());
+        }
+
+        @Override
+        public int getOnScreenHalfHeight() {
+            return APPROX_RENDER_Y_MARGIN;
         }
 
         @Override

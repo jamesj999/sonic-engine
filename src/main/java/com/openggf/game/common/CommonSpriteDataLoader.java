@@ -63,6 +63,18 @@ public final class CommonSpriteDataLoader {
      * @param scriptAddr ROM address of the script data
      * @return parsed animation script
      */
+    /**
+     * Raw ROM bytes captured past a script's terminator so an out-of-range
+     * {@code anim_frame} can be resolved the way the 68000 handlers resolve it:
+     * {@code move.b 1(a1,d1.w),d0} with no bounds check, reading straight on
+     * into the next script in the block. The longest table that can strand an
+     * {@code anim_frame} in another script is {@code AniRaw_Tails_Carry}'s 17
+     * entries (sonic3k.asm:27417-27419, advanced at 24932-24938 against the
+     * player's shared {@code anim_frame}), so a window this size covers every
+     * index those routines can leave behind.
+     */
+    private static final int SCRIPT_TRAILING_BYTE_WINDOW = 32;
+
     public static SpriteAnimationScript parseAnimationScript(RomByteReader reader, int scriptAddr) {
         int delay = reader.readU8(scriptAddr);
         scriptAddr += 1;
@@ -71,7 +83,9 @@ public final class CommonSpriteDataLoader {
         SpriteAnimationEndAction endAction = SpriteAnimationEndAction.LOOP;
         int endParam = 0;
 
+        int terminatorAddr = scriptAddr;
         while (true) {
+            terminatorAddr = scriptAddr;
             int value = reader.readU8(scriptAddr);
             scriptAddr += 1;
             if (value >= 0xF0) {
@@ -99,7 +113,13 @@ public final class CommonSpriteDataLoader {
             frames.add(value);
         }
 
-        return new SpriteAnimationScript(delay, frames, endAction, endParam);
+        List<Integer> trailingBytes = new ArrayList<>(SCRIPT_TRAILING_BYTE_WINDOW);
+        for (int i = 0; i < SCRIPT_TRAILING_BYTE_WINDOW; i++) {
+            trailingBytes.add(reader.readU8(terminatorAddr + i));
+        }
+
+        return new SpriteAnimationScript(delay, frames, endAction, endParam,
+                List.copyOf(trailingBytes));
     }
 
     /**

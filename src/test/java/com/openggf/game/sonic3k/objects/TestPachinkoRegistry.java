@@ -3,9 +3,9 @@ package com.openggf.game.sonic3k.objects;
 import com.openggf.game.sonic3k.constants.Sonic3kObjectIds;
 import com.openggf.level.objects.ObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TestPachinkoRegistry {
 
@@ -74,3 +74,5 @@ public class TestPachinkoRegistry {
         assertTrue(instance instanceof PachinkoMagnetOrbObjectInstance);
     }
 }
+
+

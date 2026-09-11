@@ -1,6 +1,7 @@
 package com.openggf.game.sonic1.scroll;
 
 import com.openggf.level.scroll.AbstractZoneScrollHandler;
+import com.openggf.level.scroll.compose.ScrollEffectComposer;
 
 import java.util.logging.Logger;
 
@@ -35,13 +36,32 @@ public class SwScrlGhz extends AbstractZoneScrollHandler {
 
     // GHZ cloud auto-scroll accumulators (16.16 fixed point).
     // High word is added to BG3 X to create layered cloud drift at idle.
+    //
+    // These are pure per-frame accumulators in the ROM (Deform_GHZ adds a fixed
+    // increment every frame), so they are re-derived from the frame counter each
+    // update() rather than free-accumulated. Free-accumulating on the update
+    // call count breaks rewind: rewind restores an earlier frameCounter and
+    // recomputes parallax by calling update() again, but a call-count accumulator
+    // keeps climbing, leaving the clouds drifting between keyframes and only
+    // snapping back at keyframe boundaries. Deriving from the (rewind-restored)
+    // frameCounter makes update() idempotent per frame, so the clouds rewind
+    // exactly like the camera-linear mountain/hill bands already do.
     protected int cloudLayer1Counter;
     protected int cloudLayer2Counter;
     protected int cloudLayer3Counter;
 
+    // Frame the cloud counters are anchored to. Captured on the first update()
+    // after init() so that (frameCounter - cloudBaseFrame) counts frames since
+    // the counters were last zeroed — matching the ROM's clear-at-zone-init +
+    // add-every-frame behaviour regardless of the frameCounter's absolute value.
+    protected int cloudBaseFrame;
+    protected boolean cloudBaseFrameSet = false;
+
     protected int lastCameraX;
     protected boolean initialized = false;
     private boolean firstFrameLogged = false;
+
+    private final ScrollEffectComposer composer = new ScrollEffectComposer();
 
     /**
      * Initialize BG camera positions.
@@ -57,6 +77,7 @@ public class SwScrlGhz extends AbstractZoneScrollHandler {
         cloudLayer1Counter = 0;
         cloudLayer2Counter = 0;
         cloudLayer3Counter = 0;
+        cloudBaseFrameSet = false;
         lastCameraX = cameraX;
         initialized = true;
         LOG.info("SwScrlGhz.init: cameraX=" + cameraX +
@@ -74,6 +95,7 @@ public class SwScrlGhz extends AbstractZoneScrollHandler {
         }
 
         resetScrollTracking();
+        composer.reset();
 
         // Compute camera movement delta (equivalent to v_scrshiftx)
         int deltaX = cameraX - lastCameraX;
@@ -89,10 +111,22 @@ public class SwScrlGhz extends AbstractZoneScrollHandler {
         bg2XPos += (long) deltaX * 32768;
 
         // GHZ auto-scroll clouds (JP1 Deform_GHZ behavior):
-        // +0x10000/frame, +0xC000/frame, +0x8000/frame.
-        cloudLayer1Counter += 0x00010000;
-        cloudLayer2Counter += 0x0000C000;
-        cloudLayer3Counter += 0x00008000;
+        // +0x10000/frame, +0xC000/frame, +0x8000/frame since zone init.
+        // Derived from the frame counter (not accumulated on the update call
+        // count) so the offsets are a deterministic, rewind-safe function of
+        // the current frame. See the field docs above.
+        if (!cloudBaseFrameSet) {
+            // Anchor so the first update() after init reproduces one frame of
+            // drift, exactly as a single "+= increment" would have.
+            cloudBaseFrame = frameCounter - 1;
+            cloudBaseFrameSet = true;
+        }
+        int cloudFrames = frameCounter - cloudBaseFrame;
+        // int multiply wraps mod 2^32 identically to repeated addition, so the
+        // 16.16 sub-pixel accumulation matches the original behaviour bit-for-bit.
+        cloudLayer1Counter = cloudFrames * 0x00010000;
+        cloudLayer2Counter = cloudFrames * 0x0000C000;
+        cloudLayer3Counter = cloudFrames * 0x00008000;
 
         // Extract integer pixel positions (high word of 16.16)
         int bg3X = (int) (bg3XPos >> 16);
@@ -103,7 +137,7 @@ public class SwScrlGhz extends AbstractZoneScrollHandler {
         if (d4 < 0) {
             d4 = 0;
         }
-        vscrollFactorBG = (short) d4;
+        composer.setVscrollFactorBG((short) d4);
 
         // FG scroll = -screenposx (constant for all lines)
         short fgScroll = negWord(cameraX);
@@ -116,26 +150,18 @@ public class SwScrlGhz extends AbstractZoneScrollHandler {
         short cloud3Offset = (short) (cloudLayer3Counter >> 16);
 
         // Upper clouds: 32-d4 lines
-        lineIndex = fillBand(horizScrollBuf, lineIndex, Math.max(0, 0x20 - d4), fgScroll,
+        lineIndex = fillBand(lineIndex, Math.max(0, 0x20 - d4), fgScroll,
                 negWord(bg3X + cloud1Offset));
         // Middle clouds: 16 lines
-        lineIndex = fillBand(horizScrollBuf, lineIndex, 16, fgScroll, negWord(bg3X + cloud2Offset));
+        lineIndex = fillBand(lineIndex, 16, fgScroll, negWord(bg3X + cloud2Offset));
         // Lower clouds: 16 lines
-        lineIndex = fillBand(horizScrollBuf, lineIndex, 16, fgScroll, negWord(bg3X + cloud3Offset));
+        lineIndex = fillBand(lineIndex, 16, fgScroll, negWord(bg3X + cloud3Offset));
         // Mountains: 48 lines
-        lineIndex = fillBand(horizScrollBuf, lineIndex, 48, fgScroll, negWord(bg3X));
+        lineIndex = fillBand(lineIndex, 48, fgScroll, negWord(bg3X));
 
         // ==================== Section 2: BG2 (distant hills) ====================
         // 40 lines (0x28) with BG = -bg2X
-        {
-            short bgScroll = negWord(bg2X);
-            int packed = packScrollWords(fgScroll, bgScroll);
-            trackOffset(fgScroll, bgScroll);
-            int limit = Math.min(VISIBLE_LINES, lineIndex + 40);
-            for (; lineIndex < limit; lineIndex++) {
-                horizScrollBuf[lineIndex] = packed;
-            }
-        }
+        lineIndex = fillBand(lineIndex, 40, fgScroll, negWord(bg2X));
 
         // ==================== Section 3: Perspective interpolation ====================
         // (0x48 + d4) lines, interpolating from bg2X to cameraX
@@ -169,15 +195,16 @@ public class SwScrlGhz extends AbstractZoneScrollHandler {
                 int bgPixel = (int) (currentVal >> 16);
                 short bgScroll = negWord(bgPixel);
 
-                horizScrollBuf[lineIndex] = packScrollWords(fgScroll, bgScroll);
-
-                int offset = (bgScroll & 0xFFFF) - (fgScroll & 0xFFFF);
-                if ((short) offset < minScrollOffset) minScrollOffset = (short) offset;
-                if ((short) offset > maxScrollOffset) maxScrollOffset = (short) offset;
+                composer.writePackedScrollWord(lineIndex, fgScroll, bgScroll);
 
                 currentVal += increment16;
             }
         }
+
+        composer.copyPackedScrollWordsTo(horizScrollBuf);
+        vscrollFactorBG = composer.getVscrollFactorBG();
+        minScrollOffset = composer.getMinScrollOffset();
+        maxScrollOffset = composer.getMaxScrollOffset();
 
         // One-time diagnostic dump to verify scroll state against ROM
         if (!firstFrameLogged) {
@@ -198,17 +225,13 @@ public class SwScrlGhz extends AbstractZoneScrollHandler {
         }
     }
 
-    private int fillBand(int[] horizScrollBuf, int lineIndex, int lineCount, short fgScroll, short bgScroll) {
+    private int fillBand(int lineIndex, int lineCount, short fgScroll, short bgScroll) {
         if (lineCount <= 0 || lineIndex >= VISIBLE_LINES) {
             return lineIndex;
         }
-        int packed = packScrollWords(fgScroll, bgScroll);
-        trackOffset(fgScroll, bgScroll);
-        int limit = Math.min(VISIBLE_LINES, lineIndex + lineCount);
-        for (; lineIndex < limit; lineIndex++) {
-            horizScrollBuf[lineIndex] = packed;
-        }
-        return lineIndex;
+        int writeCount = Math.min(lineCount, VISIBLE_LINES - lineIndex);
+        composer.fillPackedScrollWords(lineIndex, writeCount, fgScroll, bgScroll);
+        return lineIndex + writeCount;
     }
 
     /**

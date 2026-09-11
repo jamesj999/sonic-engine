@@ -1,0 +1,42 @@
+type 3
+write 0 178 199
+write 0 50 33
+write 0 58 48
+write 0 54 16
+write 0 62 50
+write 0 82 31
+write 0 90 31
+write 0 86 31
+write 0 94 31
+write 0 98 5
+write 0 106 24
+write 0 102 5
+write 0 110 16
+write 0 114 11
+write 0 122 31
+write 0 118 16
+write 0 126 16
+write 0 130 31
+write 0 138 47
+write 0 134 79
+write 0 142 47
+write 0 66 13
+write 0 74 7
+write 0 70 4
+write 0 78 128
+write 0 166 34
+write 0 162 105
+write 0 182 192
+write 0 40 2
+write 0 36 0
+write 0 37 1
+write 0 38 128
+write 0 39 143
+render 1100
+status
+render 1100
+status
+write 0 39 48
+status
+render 300
+status

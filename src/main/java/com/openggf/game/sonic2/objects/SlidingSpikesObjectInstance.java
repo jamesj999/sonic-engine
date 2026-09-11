@@ -11,8 +11,11 @@ import com.openggf.graphics.RenderPriority;
 import com.openggf.level.PatternDesc;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
+import com.openggf.level.objects.ObjectPlayerParticipationPolicy;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
@@ -23,6 +26,7 @@ import com.openggf.level.render.SpriteMappingPiece;
 import com.openggf.level.render.SpritePieceRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -40,7 +44,7 @@ import java.util.List;
  * - Y distance: |player_y - object_y + 0x10| < 0x20
  */
 public class SlidingSpikesObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
 
     private static final boolean DEBUG_VIEW_ENABLED = staticDebugViewEnabled();
     private static final DebugOverlayManager OVERLAY_MANAGER = staticDebugOverlay();
@@ -51,9 +55,6 @@ public class SlidingSpikesObjectInstance extends AbstractObjectInstance
     private static final int WIDTH_PIXELS = 0x40;  // 64 pixels (half-width for collision)
     private static final int Y_RADIUS = 0x10;      // 16 pixels
 
-    // Off-screen margin for despawn check (MarkObjGone2 tolerance)
-    private static final int DESPAWN_MARGIN = 128;
-
     // Slide parameters
     private static final int SLIDE_DISTANCE = 0x80; // 128 pixels total movement
 
@@ -63,14 +64,16 @@ public class SlidingSpikesObjectInstance extends AbstractObjectInstance
     private static final int DETECT_X_THRESHOLD = 0x80;  // Must be < 128 to trigger
     private static final int DETECT_Y_OFFSET = 0x10;     // +16 pixels offset to Y delta
     private static final int DETECT_Y_THRESHOLD = 0x20;  // Must be < 32 to trigger
+    private static final ObjectPlayerParticipationPolicy PLAYER_PARTICIPATION =
+            ObjectPlayerParticipationPolicy.MAIN_PLUS_ENGINE_SIDEKICKS_AS_NATIVE_P2_EXTENDED;
 
     // State
-    private final int baseX;
+    private int baseX;
     private int currentX;
     private int slidingRemainingMovement = 0;
     private int currentSubtype;  // 0 = waiting, 2 = sliding
     // Orientation from spawn render_flags
-    private final boolean hFlip;
+    private boolean hFlip;
 
     // Sprite mapping for this object (single frame with 6 pieces)
     // From docs/s2disasm/mappings/sprite/obj76.asm
@@ -106,6 +109,11 @@ public class SlidingSpikesObjectInstance extends AbstractObjectInstance
     }
 
     @Override
+    public SlidingSpikesObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new SlidingSpikesObjectInstance(ctx.spawn(), getName());
+    }
+
+    @Override
     public int getX() {
         return currentX;
     }
@@ -116,8 +124,7 @@ public class SlidingSpikesObjectInstance extends AbstractObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         if (isDestroyed()) {
             return;
         }
@@ -132,7 +139,7 @@ public class SlidingSpikesObjectInstance extends AbstractObjectInstance
 
         if (currentSubtype == 0) {
             // Mode 0: Waiting - check for player approach
-            checkForPlayer(player);
+            checkForPlayers(playerEntity);
         } else if (currentSubtype == 2) {
             // Mode 2: Sliding out
             slideOut();
@@ -161,7 +168,12 @@ public class SlidingSpikesObjectInstance extends AbstractObjectInstance
         int d1 = WIDTH_PIXELS + 0x0B;
         int d2 = Y_RADIUS;
         int d3 = Y_RADIUS + 1;
-        return new SolidObjectParams(d1, d2, d3);
+        return SolidObjectParams.of(d1, d2, d3);
+    }
+
+    @Override
+    public int getBalanceWidthPixels() {
+        return WIDTH_PIXELS; // Obj76_SubObjData width_pixels=$40, s2.asm:55719-55737
     }
 
     @Override
@@ -202,14 +214,21 @@ public class SlidingSpikesObjectInstance extends AbstractObjectInstance
      *   lea (Sidekick).w,a1
      *   ; fall through to Obj76_CheckPlayer
      */
-    private void checkForPlayer(AbstractPlayableSprite player) {
-        // Check main character
-        checkSinglePlayer(player);
-
-        // Check sidekick(s) if present - matches disassembly behavior
-        for (PlayableEntity sidekick : services().sidekicks()) {
-            checkSinglePlayer((AbstractPlayableSprite) sidekick);
+    private void checkForPlayers(PlayableEntity updatePlayer) {
+        for (PlayableEntity participant : detectionParticipants(updatePlayer)) {
+            checkSinglePlayer((AbstractPlayableSprite) participant);
         }
+    }
+
+    private List<PlayableEntity> detectionParticipants(PlayableEntity updatePlayer) {
+        List<PlayableEntity> participants = services().playerQuery().playersFor(PLAYER_PARTICIPATION);
+        if (updatePlayer != null && !participants.contains(updatePlayer)) {
+            ArrayList<PlayableEntity> withUpdatePlayer = new ArrayList<>(participants.size() + 1);
+            withUpdatePlayer.add(updatePlayer);
+            withUpdatePlayer.addAll(participants);
+            return withUpdatePlayer;
+        }
+        return participants;
     }
 
     /**
@@ -371,33 +390,28 @@ public class SlidingSpikesObjectInstance extends AbstractObjectInstance
 
     /**
      * Check if the BASE position (spawn point) is on screen.
-     * ROM uses objoff_34 (original x_pos) for MarkObjGone2, not the current
-     * sliding position. This ensures spikes despawn based on their wall
-     * anchor point, not their extended spike tip.
+     * <p>
+     * ROM Obj76 ends every frame with {@code move.w objoff_34(a0),d0;
+     * jmpto MarkObjGone2} (docs/s2disasm/s2.asm:55722-55723), using objoff_34
+     * (the original x_pos captured in Obj76_Init, s2.asm:55681) — NOT the current
+     * sliding x_pos. This anchors despawn to the spike's wall mount, not its tip.
+     * <p>
+     * MarkObjGone2 (docs/s2disasm/s2.asm:30231-30248) deletes the object when:
+     * <pre>(x &amp; $FF80) - Camera_X_pos_coarse_back &gt; $80 + roundToNextMultiple(screen_width,$80) + $80</pre>
+     * where {@code Camera_X_pos_coarse_back = (Camera_X_pos - $80) &amp; $FF80}, the
+     * subtract is a 16-bit {@code sub.w} and the compare is an unsigned {@code bhi}.
+     * At native 320px width the limit is {@code $80 + $180 + $80 = $280}.
      */
     private boolean isBasePositionOnScreen() {
-        // Access camera bounds via the parent's mechanism
-        // We check baseX (objoff_34 equivalent) instead of currentX
-        return isOnScreenAt(baseX, spawn.y(), DESPAWN_MARGIN);
-    }
-
-    /**
-     * Check if a specific position is on screen with margin.
-     * Used for despawn check with base position instead of current position.
-     */
-    private boolean isOnScreenAt(int x, int y, int margin) {
-        // Use the camera bounds from parent class
-        // This mirrors isOnScreen(margin) but with explicit coordinates
         var camera = services().camera();
         if (camera == null) {
             return true;  // Assume on-screen if no camera
         }
-        int camX = camera.getX();
-        int camY = camera.getY();
-        int screenWidth = 320;
-        int screenHeight = 224;
-
-        return x >= camX - margin && x <= camX + screenWidth + margin
-            && y >= camY - margin && y <= camY + screenHeight + margin;
+        int baseAligned = baseX & 0xFF80;
+        int cameraCoarseBack = (camera.getX() - 0x80) & 0xFF80;
+        int dist = (baseAligned - cameraCoarseBack) & 0xFFFF;
+        int roundedWidth = (viewportWidth() + 0x7F) & ~0x7F;
+        int limit = 0x80 + roundedWidth + 0x80;
+        return dist <= limit;
     }
 }

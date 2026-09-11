@@ -2,20 +2,26 @@ package com.openggf.game.sonic2;
 
 import com.openggf.data.Rom;
 import com.openggf.data.RomByteReader;
-import com.openggf.graphics.GraphicsManager;
+import com.openggf.game.GameServices;
+import com.openggf.game.animation.AnimatedTileChannelGraph;
+import com.openggf.game.animation.ChannelContext;
+import com.openggf.game.rewind.RewindSnapshottable;
+import com.openggf.game.rewind.snapshot.PatternAnimatorSnapshot;
+import com.openggf.game.zone.ZoneRuntimeState;
 import com.openggf.level.Level;
 import com.openggf.level.animation.AnimatedPatternManager;
 import com.openggf.level.animation.AniPlcParser;
 import com.openggf.level.animation.AniPlcScriptState;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.logging.Logger;
 
 /**
  * Updates Sonic 2 zone animated tiles using the Dynamic_Normal scripts.
  */
-class Sonic2PatternAnimator implements AnimatedPatternManager {
+class Sonic2PatternAnimator implements AnimatedPatternManager, RewindSnapshottable<PatternAnimatorSnapshot> {
     private static final Logger LOGGER = Logger.getLogger(Sonic2PatternAnimator.class.getName());
     // Disassembly: loc_3FF94 (Animated_EHZ)
     private static final int ANIMATED_EHZ_ADDR = 0x3FF94;
@@ -34,7 +40,6 @@ class Sonic2PatternAnimator implements AnimatedPatternManager {
         OOZ(10),
         MCZ(11),
         CNZ(12),
-        CNZ_2P(12), // Assumed shared
         CPZ(13),
         DEZ(14),
         ARZ(15),
@@ -72,15 +77,20 @@ class Sonic2PatternAnimator implements AnimatedPatternManager {
     };
 
     private final Level level;
-    private final GraphicsManager graphicsManager = GraphicsManager.getInstance();
+    private final AnimatedTileChannelGraph graph;
     private final List<AniPlcScriptState> scripts;
+    private final int zoneIndex;
     private int tableAddr = -1;
+    private int frameCounter;
 
     public Sonic2PatternAnimator(Rom rom, Level level, int zoneIndex) throws IOException {
         this.level = level;
+        this.graph = GameServices.animatedTileChannelGraph();
+        this.zoneIndex = zoneIndex;
         RomByteReader reader = RomByteReader.fromRom(rom);
         this.tableAddr = scanForTable(reader);
         this.scripts = loadScriptsForZone(reader, zoneIndex);
+        this.graph.install(Sonic2AnimatedTileChannels.fromScripts(this.scripts));
     }
 
     private int scanForTable(RomByteReader reader) {
@@ -114,9 +124,9 @@ class Sonic2PatternAnimator implements AnimatedPatternManager {
         if (scripts == null || scripts.isEmpty()) {
             return;
         }
-        for (AniPlcScriptState script : scripts) {
-            script.tick(level, graphicsManager);
-        }
+        ZoneRuntimeState runtimeState = GameServices.zoneRuntimeState();
+        int actIndex = GameServices.level().getCurrentAct();
+        graph.update(new ChannelContext(graph, null, level, runtimeState, zoneIndex, actIndex, frameCounter++));
     }
 
     private List<AniPlcScriptState> loadScriptsForZone(RomByteReader reader, int zoneIndex) {
@@ -134,7 +144,7 @@ class Sonic2PatternAnimator implements AnimatedPatternManager {
 
         List<AniPlcScriptState> scripts = AniPlcParser.parseScripts(reader, scriptAddr);
         AniPlcParser.ensurePatternCapacity(scripts, level);
-        AniPlcParser.primeScripts(scripts, level, graphicsManager);
+        AniPlcParser.primeScripts(scripts, level, GameServices.graphics());
         return scripts;
     }
 
@@ -143,6 +153,40 @@ class Sonic2PatternAnimator implements AnimatedPatternManager {
             return AnimatedListId.NULL_LIST;
         }
         return ZONE_LISTS[zoneIndex];
+    }
+
+    @Override
+    public String key() {
+        return "pattern-animator";
+    }
+
+    @Override
+    public PatternAnimatorSnapshot capture() {
+        PatternAnimatorSnapshot.ScriptCounter[] counters =
+                new PatternAnimatorSnapshot.ScriptCounter[scripts.size()];
+        for (int i = 0; i < scripts.size(); i++) {
+            AniPlcScriptState script = scripts.get(i);
+            counters[i] = new PatternAnimatorSnapshot.ScriptCounter(script.getTimer(), script.getFrameIndex());
+        }
+        byte[] extra = ByteBuffer.allocate(Integer.BYTES).putInt(frameCounter).array();
+        return new PatternAnimatorSnapshot(counters, new PatternAnimatorSnapshot.HandlerCounter[0], extra);
+    }
+
+    @Override
+    public void restore(PatternAnimatorSnapshot snapshot) {
+        if (snapshot == null) {
+            return;
+        }
+        PatternAnimatorSnapshot.ScriptCounter[] counters = snapshot.scriptCounters();
+        int count = Math.min(scripts.size(), counters != null ? counters.length : 0);
+        for (int i = 0; i < count; i++) {
+            PatternAnimatorSnapshot.ScriptCounter counter = counters[i];
+            scripts.get(i).restoreCounters(counter.timer(), counter.frameIndex());
+        }
+        byte[] extra = snapshot.extra();
+        if (extra != null && extra.length >= Integer.BYTES) {
+            frameCounter = ByteBuffer.wrap(extra).getInt();
+        }
     }
 
 }

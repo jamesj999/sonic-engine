@@ -3,11 +3,14 @@ package com.openggf.game.sonic1;
 import com.openggf.data.Rom;
 import com.openggf.data.RomByteReader;
 import com.openggf.level.Pattern;
+import com.openggf.game.sonic1.constants.Sonic1Constants;
 import com.openggf.level.objects.ObjectSpriteSheet;
 import com.openggf.level.render.SpriteMappingFrame;
+import com.openggf.level.render.SpriteMappingPiece;
 import com.openggf.util.PatternDecompressor;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.logging.Logger;
@@ -56,6 +59,61 @@ public class Sonic1ObjectArt {
     }
 
     /**
+     * Loads S1-format sprite mappings from the current ROM.
+     */
+    public List<SpriteMappingFrame> loadMappingFrames(int mappingAddr) {
+        try {
+            return S1SpriteDataLoader.loadMappingFrames(reader, mappingAddr);
+        } catch (IllegalArgumentException e) {
+            LOG.warning("Failed to load S1 mappings at 0x" + Integer.toHexString(mappingAddr)
+                    + ": " + e.getMessage());
+            return List.of();
+        }
+    }
+
+    /**
+     * Loads S1-format sprite mappings from the current ROM with an explicit frame count.
+     */
+    public List<SpriteMappingFrame> loadMappingFrames(int mappingAddr, int frameCount) {
+        try {
+            return S1SpriteDataLoader.loadMappingFrames(reader, mappingAddr, frameCount);
+        } catch (IllegalArgumentException e) {
+            LOG.warning("Failed to load S1 mappings at 0x" + Integer.toHexString(mappingAddr)
+                    + ": " + e.getMessage());
+            return List.of();
+        }
+    }
+
+    public List<SpriteMappingFrame> loadMappingFramesWithTileOffset(int mappingAddr, int frameCount, int tileOffset) {
+        return offsetMappingTiles(loadMappingFrames(mappingAddr, frameCount), tileOffset);
+    }
+
+    public static List<SpriteMappingFrame> offsetMappingTiles(List<SpriteMappingFrame> frames, int tileOffset) {
+        if (tileOffset == 0 || frames.isEmpty()) {
+            return List.copyOf(frames);
+        }
+
+        List<SpriteMappingFrame> remappedFrames = new ArrayList<>(frames.size());
+        for (SpriteMappingFrame frame : frames) {
+            List<SpriteMappingPiece> remappedPieces = new ArrayList<>(frame.pieces().size());
+            for (SpriteMappingPiece piece : frame.pieces()) {
+                remappedPieces.add(new SpriteMappingPiece(
+                        piece.xOffset(),
+                        piece.yOffset(),
+                        piece.widthTiles(),
+                        piece.heightTiles(),
+                        piece.tileIndex() + tileOffset,
+                        piece.hFlip(),
+                        piece.vFlip(),
+                        piece.paletteIndex(),
+                        piece.priority()));
+            }
+            remappedFrames.add(new SpriteMappingFrame(remappedPieces));
+        }
+        return List.copyOf(remappedFrames);
+    }
+
+    /**
      * Builds a sprite sheet from Nemesis-compressed art and hardcoded mappings.
      *
      * @param artAddr ROM address of Nemesis-compressed art
@@ -93,6 +151,22 @@ public class Sonic1ObjectArt {
     /**
      * Loads Nemesis-compressed patterns from ROM.
      */
+    /**
+     * Obj39 GAME OVER / TIME OVER sheet: Nem_GameOver with Map_Over. The ROM
+     * decompresses it through PLC_GameOver when Sonic_HandleDeath asks for it;
+     * the engine keeps the decoded sheet resident and lets the PLC queue supply
+     * only the ready-timing the card waits on.
+     */
+    public ObjectSpriteSheet loadGameOverSheet() {
+        Pattern[] patterns = loadNemesisPatterns(Sonic1Constants.ART_NEM_GAME_OVER_ADDR);
+        if (patterns.length == 0) {
+            return null;
+        }
+        List<SpriteMappingFrame> frames = loadMappingFrames(
+                Sonic1Constants.MAP_GAME_OVER_ADDR, Sonic1Constants.MAP_GAME_OVER_FRAME_COUNT);
+        return new ObjectSpriteSheet(patterns, frames, 0, 1);
+    }
+
     public Pattern[] loadNemesisPatterns(int address) {
         try {
             return PatternDecompressor.nemesis(rom, address);

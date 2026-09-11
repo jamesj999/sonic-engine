@@ -1,7 +1,7 @@
 package com.openggf.game.sonic3k.audio.smps;
 
 import com.openggf.game.sonic3k.audio.Sonic3kSmpsConstants;
-import com.openggf.tools.DcmDecoder;
+import com.openggf.data.compression.DcmDecoder;
 
 /**
  * DPCM decoder for Sonic 3 &amp; Knuckles DAC samples.

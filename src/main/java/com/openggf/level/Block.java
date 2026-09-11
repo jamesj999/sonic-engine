@@ -8,11 +8,20 @@ import java.util.Arrays;
  * Represents a block of chunks in a level.
  * Sonic 2 uses 128x128 blocks (8x8 grid of 16x16 chunks).
  * Sonic 1 uses 256x256 blocks (16x16 grid of 16x16 chunks).
+ *
+ * Copy-on-write: when gameplay code mutates this block, it calls
+ * cowEnsureWritable(currentEpoch) to clone the internal chunkDescs[] array
+ * if needed. This protects snapshot-captured block references from
+ * being clobbered by subsequent mutations.
  */
 public class Block {
 
     private final int gridSide;
     private ChunkDesc[] chunkDescs;
+
+    // Epoch at which chunkDescs was last cloned. If currentEpoch has moved
+    // forward, the next mutation will clone the array.
+    private long lastTouchedEpoch = 0L;
 
     // Default constructor (8x8 grid for Sonic 2 backward compatibility)
     public Block() {
@@ -52,6 +61,22 @@ public class Block {
         chunkDescs[y * gridSide + x] = desc;
     }
 
+    /**
+     * Ensures this block's chunkDescs array is writable for the current epoch.
+     * On first write per epoch, clones the array. Subsequent writes within the
+     * same epoch reuse the cloned array.
+     *
+     * Called before any gameplay mutation to protect snapshot references.
+     *
+     * @param currentEpoch the current snapshot epoch from the level
+     */
+    public void cowEnsureWritable(long currentEpoch) {
+        if (lastTouchedEpoch < currentEpoch) {
+            chunkDescs = chunkDescs.clone();
+            lastTouchedEpoch = currentEpoch;
+        }
+    }
+
     public int getGridSide() {
         return gridSide;
     }
@@ -75,5 +100,15 @@ public class Block {
         for (int i = 0; i < state.length; i++) {
             chunkDescs[i] = new ChunkDesc(state[i]);
         }
+    }
+
+    /**
+     * Package-private accessor for the live chunkDescs array (testing only).
+     * Marked as @VisibleForTesting: use only in test assertions.
+     *
+     * @return the internal ChunkDesc array reference
+     */
+    ChunkDesc[] chunkDescsArrayForTest() {
+        return chunkDescs;
     }
 }

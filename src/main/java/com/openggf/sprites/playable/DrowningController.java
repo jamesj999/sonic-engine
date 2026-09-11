@@ -3,14 +3,17 @@ package com.openggf.sprites.playable;
 import com.openggf.audio.AudioManager;
 import com.openggf.audio.GameAudioProfile;
 import com.openggf.audio.GameSound;
+import com.openggf.game.rules.DrowningBubbleRules;
+import com.openggf.sprites.playable.PlayableSpriteRuntimeServices;
+import com.openggf.game.rules.GameRules;
 import com.openggf.level.objects.BreathingBubbleInstance;
 import com.openggf.level.LevelManager;
+import com.openggf.game.AbstractLevelEventManager;
 import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.Direction;
 
-import java.util.Random;
 import java.util.Set;
 import java.util.logging.Logger;
 
@@ -50,14 +53,11 @@ public class DrowningController {
     /** X offset for bubble spawn (from player center) */
     private static final int BUBBLE_X_OFFSET = 6;
 
-    /** Maximum delay before second bubble spawns */
-    private static final int SECOND_BUBBLE_MAX_DELAY = 16;
-
     /**
      * Sonic 2 countdown frame mapping: countdownNumber (0-5) -> art frame index.
-     * S2 bubble art: frames 6-11 are countdown numbers (6="5", 7="4", ..., 11="0").
+     * S2 Ani_obj0A selects mapping frames 8-13 for numbers 0-5.
      */
-    private static final int[] S2_COUNTDOWN_FRAMES = {11, 10, 9, 8, 7, 6};
+    private static final int[] S2_COUNTDOWN_FRAMES = {8, 9, 10, 11, 12, 13};
 
     /**
      * Sonic 1 countdown frame mapping: countdownNumber (0-5) -> art frame index.
@@ -73,7 +73,6 @@ public class DrowningController {
 
     private final AbstractPlayableSprite player;
     private final AudioManager audioManager;
-    private final Random random = new Random();
 
     /** Remaining air in seconds */
     private int remainingAir;
@@ -84,14 +83,20 @@ public class DrowningController {
     /** Whether the drowning music has started */
     private boolean drowningMusicStarted;
 
-    /** Delay counter for spawning the second bubble */
-    private int secondBubbleDelay;
+    /** ROM Obj0A objoff_36 / obj0a_flags: active bubble burst and number flags. */
+    private int bubbleFlags;
 
-    /** Whether we need to spawn a second bubble */
-    private boolean pendingSecondBubble;
+    /** ROM Obj0A objoff_34 / obj0a_total_bubbles_to_spawn. */
+    private int bubblesRemainingInBurst;
 
-    /** Countdown number for pending second bubble (-1 if regular bubble) */
-    private int pendingCountdownNumber;
+    /** ROM Obj0A objoff_3A / obj0a_next_bubble_timer. */
+    private int nextBubbleTimer;
+
+    /** ROM Obj0A objoff_32: seconds-between-number-bubbles timer. */
+    private int numberBubbleTimer;
+
+    /** ROM Obj0A objoff_33: seconds-between-number-bubbles frequency. */
+    private int numberBubbleFrequency;
 
     /** Resolved bubble art key (lazily determined from available renderers) */
     private String bubbleArtKey;
@@ -105,6 +110,9 @@ public class DrowningController {
     /** Whether bubble config has been resolved */
     private boolean bubbleConfigResolved;
 
+    public record FixedCountdownAirEvent(int airBefore, int airAfter, int countdownNumber, boolean drowned) {
+    }
+
     public DrowningController(AbstractPlayableSprite player) {
         this.player = player;
         this.audioManager = player.currentAudioManager();
@@ -116,11 +124,14 @@ public class DrowningController {
      */
     public void reset() {
         remainingAir = INITIAL_AIR;
-        frameTimer = FRAMES_PER_SECOND;
+        DrowningBubbleRules rules = drowningBubbleRulesOrNull();
+        frameTimer = rules != null ? rules.initialDrowningCountdownFrameTimer() : FRAMES_PER_SECOND;
         drowningMusicStarted = false;
-        secondBubbleDelay = 0;
-        pendingSecondBubble = false;
-        pendingCountdownNumber = -1;
+        bubbleFlags = 0;
+        bubblesRemainingInBurst = -1;
+        nextBubbleTimer = 0;
+        numberBubbleTimer = 0;
+        numberBubbleFrequency = 1;
         // Reset bubble config so it re-resolves for the current zone's art
         bubbleConfigResolved = false;
     }
@@ -131,22 +142,23 @@ public class DrowningController {
      * @return true if the player should drown (air depleted)
      */
     public boolean update() {
-        // Handle pending second bubble spawn
-        if (pendingSecondBubble) {
-            secondBubbleDelay--;
-            if (secondBubbleDelay <= 0) {
-                spawnBubble(pendingCountdownNumber);
-                pendingSecondBubble = false;
-                pendingCountdownNumber = -1;
-            }
+        // ROM order checks the one-second air timer before the pending
+        // mouth-bubble timer, so same-frame expirations use the fresh air-event
+        // burst state. See S1 Drown_Countdown, S2 Obj0A_Countdown, and S3K
+        // AirCountdown_Countdown.
+        frameTimer--;
+        if (frameTimer <= 0) {
+            return performAirEvent();
         }
 
-        // Decrement frame timer
-        frameTimer--;
-
-        if (frameTimer <= 0) {
-            // Air event occurs
-            return performAirEvent();
+        // ROM Obj0A_MakeBubbleMaybe: while obj0a_flags is nonzero, the
+        // mouth-bubble object decrements its per-bubble timer every frame and
+        // allocates the next bubble when it underflows.
+        if (bubbleFlags != 0) {
+            nextBubbleTimer--;
+            if (nextBubbleTimer < 0) {
+                spawnRomMouthBubble();
+            }
         }
 
         return false;
@@ -182,14 +194,23 @@ public class DrowningController {
             }
         }
 
-        // Check for countdown bubble
-        int countdownNumber = getCountdownNumber(remainingAir);
+        // ROM randomly chooses whether this burst contains one or two bubbles.
+        bubbleFlags = 1;
+        bubblesRemainingInBurst = player.currentRng().nextBits(1);
 
         // 2. Decrease air
+        int airBefore = remainingAir;
+        if (airBefore <= DROWNING_MUSIC_LEVEL) {
+            numberBubbleTimer--;
+            if (numberBubbleTimer < 0) {
+                numberBubbleTimer = numberBubbleFrequency;
+                bubbleFlags |= 0x80;
+            }
+        }
         remainingAir--;
 
-        // 3. Spawn small breathing bubbles
-        spawnBreathingBubbles(countdownNumber);
+        // 3. Spawn the first small breathing bubble immediately.
+        spawnRomMouthBubble();
 
         return false;
     }
@@ -209,38 +230,36 @@ public class DrowningController {
         return -1;
     }
 
-    /**
-     * Spawns small breathing bubbles from the player's mouth.
-     *
-     * @param countdownNumber Countdown number to display (-1 for regular bubble)
-     */
-    private void spawnBreathingBubbles(int countdownNumber) {
-        // Determine number of bubbles (1 or 2, equal chance)
-        int bubbleCount = random.nextBoolean() ? 1 : 2;
+    private void spawnRomMouthBubble() {
+        com.openggf.game.GameRng rng = player.currentRng();
+        // S2/S3K Obj0A_Animate biases the next mouth-bubble delay by +8
+        // (RandomNumber&$F)+8 (s2.asm:42201-42204); S1 LZ Obj64 air bubbles use a
+        // different bubble-maker structure with no such bias. Drive this from the
+        // per-game drowning bubble rules rather than the loaded bubble art key.
+        DrowningBubbleRules rules = drowningBubbleRulesOrNull();
+        int timerBias = rules != null ? rules.mouthBubbleTimerBias() : 8;
+        nextBubbleTimer = rng.nextBits(0x0F) + timerBias;
 
-        if (countdownNumber >= 0) {
-            // Countdown bubble logic
-            if (bubbleCount == 1) {
-                // Only 1 bubble - it must be the countdown bubble
-                spawnBubble(countdownNumber);
-            } else {
-                // 2 bubbles - 25% chance first is countdown, otherwise second is countdown
-                boolean firstIsCountdown = random.nextInt(4) == 0;
-
-                if (firstIsCountdown) {
-                    spawnBubble(countdownNumber);
-                    scheduleSecondBubble(-1); // Second is regular
-                } else {
-                    spawnBubble(-1); // First is regular
-                    scheduleSecondBubble(countdownNumber); // Second is countdown
+        int countdownNumber = -1;
+        if ((bubbleFlags & 0x80) != 0 && remainingAir < DROWNING_MUSIC_LEVEL) {
+            int candidateNumber = remainingAir >> 1;
+            if (rng.nextBits(3) == 0) {
+                if ((bubbleFlags & 0x40) == 0) {
+                    bubbleFlags |= 0x40;
+                    countdownNumber = candidateNumber;
                 }
             }
-        } else {
-            // No countdown - just spawn regular bubbles
-            spawnBubble(-1);
-            if (bubbleCount == 2) {
-                scheduleSecondBubble(-1);
+            if (bubblesRemainingInBurst == 0 && (bubbleFlags & 0x40) == 0) {
+                bubbleFlags |= 0x40;
+                countdownNumber = candidateNumber;
             }
+        }
+
+        spawnBubble(countdownNumber);
+
+        bubblesRemainingInBurst--;
+        if (bubblesRemainingInBurst < 0) {
+            bubbleFlags = 0;
         }
     }
 
@@ -250,7 +269,11 @@ public class DrowningController {
      * @param countdownNumber Countdown number (-1 for regular bubble)
      */
     private void spawnBubble(int countdownNumber) {
-        LevelManager levelManager = player.currentLevelManager();
+        spawnBubble(countdownNumber, true);
+    }
+
+    private void spawnBubble(int countdownNumber, boolean skipFirstUpdate) {
+        LevelManager levelManager = player.currentLevelManagerIfAvailable();
         if (levelManager == null || levelManager.getObjectManager() == null) {
             return;
         }
@@ -270,16 +293,41 @@ public class DrowningController {
         int bubbleX = player.getCentreX() + xOffset;
         int bubbleY = player.getCentreY(); // Player's centre Y (ROM uses centre coordinates for obY)
 
-        // Determine if sine wave should start moving away from player
-        boolean startMovingLeft = player.getDirection() == Direction.RIGHT;
+        DrowningBubbleRules rules = drowningBubbleRulesOrNull();
+        int riseVelocity = rules != null ? rules.mouthBubbleRiseVelocity() : -0x88;
+        boolean deferFirstPass = rules == null || rules.breathingBubbleDefersFirstObjectPass();
+        boolean startsFacingLeft = player.getDirection() == Direction.LEFT;
 
         // Create bubble with game-specific art configuration
         BreathingBubbleInstance bubble = new BreathingBubbleInstance(
-            bubbleX, bubbleY, startMovingLeft, countdownNumber,
-            bubbleArtKey, bubbleCountdownFrames, bubbleMaxFrame
+            bubbleX, bubbleY, startsFacingLeft, countdownNumber,
+            bubbleArtKey, bubbleCountdownFrames, bubbleMaxFrame, riseVelocity,
+            skipFirstUpdate && deferFirstPass, player
         );
 
-        levelManager.getObjectManager().addDynamicObject(bubble);
+        if (deferFirstPass) {
+            levelManager.getObjectManager().addDynamicObjectNextFrame(bubble);
+        } else {
+            levelManager.getObjectManager().addDynamicObject(bubble);
+        }
+    }
+
+    /**
+     * Fixed object-RAM countdown sidecars own their own timers and RNG cadence,
+     * but their visible child bubble is the same Obj0A dynamic object.
+     */
+    public void spawnFixedCountdownBubble(int countdownNumber) {
+        spawnBubble(countdownNumber);
+    }
+
+    /**
+     * S2's fixed Obj0A sidecars run after dynamic SST slots. Their visible
+     * child bubble therefore reaches its first dynamic Obj0A pass on the next
+     * RunObjects scan, without the extra skip needed by player-side early
+     * allocation paths.
+     */
+    public void spawnFixedCountdownBubble(int countdownNumber, boolean skipFirstUpdate) {
+        spawnBubble(countdownNumber, skipFirstUpdate);
     }
 
     /**
@@ -293,9 +341,10 @@ public class DrowningController {
             return;
         }
 
-        // Check for S1 bubble art (LZ_BUBBLES)
+        // Check for S1 bubble art (LZ_BUBBLES). Obj0A allocation is ROM object
+        // state, so it is keyed on loaded art metadata, not on GPU cache readiness.
         PatternSpriteRenderer s1Renderer = renderManager.getRenderer(ObjectArtKeys.LZ_BUBBLES);
-        if (s1Renderer != null && s1Renderer.isReady()) {
+        if (s1Renderer != null) {
             bubbleArtKey = ObjectArtKeys.LZ_BUBBLES;
             bubbleCountdownFrames = S1_COUNTDOWN_FRAMES;
             bubbleMaxFrame = S1_MAX_BUBBLE_FRAME;
@@ -304,7 +353,7 @@ public class DrowningController {
 
         // Check for S2 bubble art (BUBBLES)
         PatternSpriteRenderer s2Renderer = renderManager.getRenderer(ObjectArtKeys.BUBBLES);
-        if (s2Renderer != null && s2Renderer.isReady()) {
+        if (s2Renderer != null) {
             bubbleArtKey = ObjectArtKeys.BUBBLES;
             bubbleCountdownFrames = S2_COUNTDOWN_FRAMES;
             bubbleMaxFrame = S2_MAX_BUBBLE_FRAME;
@@ -316,15 +365,12 @@ public class DrowningController {
         bubbleArtKey = null;
     }
 
-    /**
-     * Schedules a second bubble to spawn after a random delay.
-     *
-     * @param countdownNumber Countdown number for the second bubble (-1 for regular)
-     */
-    private void scheduleSecondBubble(int countdownNumber) {
-        pendingSecondBubble = true;
-        pendingCountdownNumber = countdownNumber;
-        secondBubbleDelay = 1 + random.nextInt(SECOND_BUBBLE_MAX_DELAY);
+    private DrowningBubbleRules drowningBubbleRulesOrNull() {
+        GameRules gameRules = player.getGameRules();
+        if (gameRules != null && gameRules.drowningBubble() != null) {
+            return gameRules.drowningBubble();
+        }
+        return null;
     }
 
     /**
@@ -340,14 +386,39 @@ public class DrowningController {
     }
 
     /**
-     * Restarts the zone music from the beginning.
-     * Called when exiting water or replenishing air while drowning music was playing.
+     * Restarts the music the player should hear now that the countdown is over.
+     *
+     * <p>Which track that is belongs to the game. S3K's
+     * {@code Player_ResetAirTimer} (sonic3k.asm:33663-33686) loads the level
+     * track and then overrides it for an invincible player, a Super or Hyper
+     * player, and a boss fight; S1 and S2 keep the level track. The choice is
+     * made by the active audio profile, which already owns the music ids, so
+     * this method stays free of any per-game branch.
      */
     private void restartZoneMusic() {
-        int musicId = player.currentLevelManager().getCurrentLevelMusicId();
-        if (musicId >= 0) {
-            audioManager.playMusic(musicId);
+        LevelManager levelManager = player.currentLevelManagerIfAvailable();
+        if (levelManager == null) {
+            return;
         }
+        int musicId = levelManager.getCurrentLevelMusicId();
+        if (musicId < 0) {
+            return;
+        }
+        GameAudioProfile profile = audioManager.getAudioProfile();
+        if (profile != null) {
+            musicId = profile.resolveAirResetMusic(musicId,
+                    player.getInvincibleFrames() > 0,
+                    player.isSuperSonic(),
+                    bossOwnsMusic());
+        }
+        audioManager.playMusic(musicId);
+    }
+
+    /** ROM: {@code tst.b (Boss_flag).w} at sonic3k.asm:33681. */
+    private boolean bossOwnsMusic() {
+        return PlayableSpriteRuntimeServices.levelEventsOrNull()
+                instanceof AbstractLevelEventManager events
+                && events.isBossActive();
     }
 
     /**
@@ -378,7 +449,93 @@ public class DrowningController {
         return remainingAir;
     }
 
+    /**
+     * Returns true while the drowning countdown owns music playback, so a
+     * power-up ending must not replace it.
+     *
+     * <p>ROM: {@code cmpi.b #12,air_left(a0)} / {@code blo} in
+     * {@code Sonic_ChkInvin} — the same air level at which the countdown music
+     * starts.
+     */
+    boolean isCountdownOwningMusic() {
+        return remainingAir < DROWNING_MUSIC_LEVEL;
+    }
+
+    /**
+     * A fixed level-event air-countdown object may own bubble allocation and
+     * RNG cadence, but the air-left side effects are the shared ROM path:
+     * warning ding at 25/20/15, drowning music at 12, then decrement air_left.
+     */
+    public FixedCountdownAirEvent performFixedCountdownAirEvent(boolean allowAudio) {
+        frameTimer = FRAMES_PER_SECOND;
+        int airBefore = remainingAir;
+        if (allowAudio && WARNING_CHIME_LEVELS.contains(airBefore)) {
+            audioManager.playSfx(GameSound.AIR_DING);
+        }
+        if (allowAudio && airBefore == DROWNING_MUSIC_LEVEL && !drowningMusicStarted) {
+            GameAudioProfile audioProfile = audioManager.getAudioProfile();
+            if (audioProfile != null) {
+                audioManager.playMusic(audioProfile.getDrowningMusicId());
+                drowningMusicStarted = true;
+            }
+        }
+        int countdownNumber = getCountdownNumber(airBefore);
+        remainingAir--;
+        return new FixedCountdownAirEvent(airBefore, remainingAir, countdownNumber, remainingAir < 0);
+    }
+
+    public void setRemainingAirFromFixedCountdown(int remainingAir) {
+        this.remainingAir = remainingAir;
+    }
+
+    public void resetAirTimerFromFixedCountdownDeath() {
+        remainingAir = INITIAL_AIR;
+        frameTimer = FRAMES_PER_SECOND;
+    }
+
+    public int countdownNumberForFixedCountdown(int airLevel) {
+        return getCountdownNumber(airLevel);
+    }
+
     public boolean isDrowningMusicPlaying() {
         return drowningMusicStarted;
     }
+
+    /**
+     * Captures the mutable breath-timer/countdown/audio-cue state for rewind
+     * restore. Without this, a rewind seek leaves the underwater breath timer,
+     * countdown-bubble cadence, and drowning-music cue phase unrestored even
+     * though the player's own physics fields roll back correctly.
+     */
+    public RewindState captureRewindState() {
+        return new RewindState(remainingAir, frameTimer, drowningMusicStarted,
+                bubbleFlags, bubblesRemainingInBurst, nextBubbleTimer,
+                numberBubbleTimer, numberBubbleFrequency);
+    }
+
+    public void restoreRewindState(RewindState state) {
+        if (state == null) {
+            reset();
+            return;
+        }
+        remainingAir = state.remainingAir();
+        frameTimer = state.frameTimer();
+        drowningMusicStarted = state.drowningMusicStarted();
+        bubbleFlags = state.bubbleFlags();
+        bubblesRemainingInBurst = state.bubblesRemainingInBurst();
+        nextBubbleTimer = state.nextBubbleTimer();
+        numberBubbleTimer = state.numberBubbleTimer();
+        numberBubbleFrequency = state.numberBubbleFrequency();
+    }
+
+    public record RewindState(
+            int remainingAir,
+            int frameTimer,
+            boolean drowningMusicStarted,
+            int bubbleFlags,
+            int bubblesRemainingInBurst,
+            int nextBubbleTimer,
+            int numberBubbleTimer,
+            int numberBubbleFrequency
+    ) {}
 }

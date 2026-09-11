@@ -20,6 +20,8 @@ public record CollisionEvent(
         SOLID_CONTACTS_START,
         SOLID_CANDIDATE,
         SOLID_RESOLVED,
+        SOLID_CHECKPOINT_START,
+        SOLID_CHECKPOINT_RESULT,
         SOLID_CONTACTS_COMPLETE,
         POST_ADJUSTMENT
     }

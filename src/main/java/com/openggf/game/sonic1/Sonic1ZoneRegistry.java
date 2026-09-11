@@ -34,9 +34,7 @@ public class Sonic1ZoneRegistry extends AbstractZoneRegistry {
             Sonic1Music.ENDING.id // Ending sequence
     };
 
-    private static final Sonic1ZoneRegistry INSTANCE = new Sonic1ZoneRegistry();
-
-    private Sonic1ZoneRegistry() {
+    public Sonic1ZoneRegistry() {
         // Gameplay progression order: GHZ -> MZ -> SYZ -> LZ -> SLZ -> SBZ -> FZ -> ENDING
         super(List.of(
                 List.of(LevelData.S1_GREEN_HILL_1, LevelData.S1_GREEN_HILL_2, LevelData.S1_GREEN_HILL_3),
@@ -48,10 +46,6 @@ public class Sonic1ZoneRegistry extends AbstractZoneRegistry {
                 List.of(LevelData.S1_FINAL_ZONE),
                 List.of(LevelData.S1_ENDING_FLOWERS, LevelData.S1_ENDING_NO_EMERALDS)
         ), ZONE_NAMES);
-    }
-
-    public static Sonic1ZoneRegistry getInstance() {
-        return INSTANCE;
     }
 
     @Override

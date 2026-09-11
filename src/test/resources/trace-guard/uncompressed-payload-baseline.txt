@@ -1,0 +1,4 @@
+# Uncompressed trace payloads under src/test/resources/traces/ that predate
+# the compression guard (TestTraceFixtureCompressionGuard). These are
+# canonical fixtures read by name; they are grandfathered, NOT a licence to
+# add more. No uncompressed payloads remain after the v5 publication.

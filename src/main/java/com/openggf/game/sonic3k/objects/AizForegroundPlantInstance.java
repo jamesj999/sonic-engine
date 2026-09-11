@@ -7,6 +7,8 @@ import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.PlaceholderObjectInstance;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 
 import java.util.List;
@@ -26,13 +28,12 @@ import java.util.List;
  * <p>
  * ROM reference: sonic3k.asm lines 60430-60582
  */
-public class AizForegroundPlantInstance extends AbstractObjectInstance {
+public class AizForegroundPlantInstance extends AbstractObjectInstance implements RewindRecreatable {
 
-    private final int origX;
-    private final int origY;
-    private final int mappingFrame;
-    private final int scrollRate;
-
+    private int origX;
+    private int origY;
+    private int mappingFrame;
+    private int scrollRate;
     private PlaceholderObjectInstance placeholder;
 
     public AizForegroundPlantInstance(ObjectSpawn spawn) {
@@ -41,6 +42,11 @@ public class AizForegroundPlantInstance extends AbstractObjectInstance {
         this.origY = spawn.y();
         this.mappingFrame = Math.min(spawn.subtype() & 0x0F, 1);
         this.scrollRate = Math.min((spawn.subtype() >> 4) & 0x07, 6);
+    }
+
+    @Override
+    public AizForegroundPlantInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new AizForegroundPlantInstance(ctx.spawn());
     }
 
     @Override

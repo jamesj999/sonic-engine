@@ -5,7 +5,11 @@ import com.openggf.game.PlayableEntity;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
+import com.openggf.level.objects.ObjectInstance;
+import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -18,13 +22,12 @@ import java.util.List;
  * Based on disassembly Obj9C (s2.asm:74480-74523).
  * Animation: Ani_obj9A = dc.b 1, 6, 7, $FF (alternates frames 6 and 7, speed 1).
  */
-public class TurtloidJetInstance extends AbstractObjectInstance {
+public class TurtloidJetInstance extends AbstractObjectInstance implements RewindRecreatable {
 
     // Animation: frames 6 and 7 from shared Turtloid sheet, speed = 1 (every other frame)
     private static final int JET_FRAME_1 = 6;
     private static final int JET_FRAME_2 = 7;
     private static final int ANIM_SPEED = 1; // Ani_obj9A: dc.b 1, ...
-
     private final TurtloidBadnikInstance parent;
     private int currentX;
     private int currentY;
@@ -41,7 +44,40 @@ public class TurtloidJetInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        if (ctx == null || ctx.spawn() == null || ctx.objectServices() == null) {
+            return null;
+        }
+        TurtloidBadnikInstance liveParent =
+                findNearestLiveParentForRewind(ctx.objectServices().objectManager(), ctx.spawn());
+        return liveParent == null ? null : new TurtloidJetInstance(ctx.spawn(), liveParent);
+    }
+
+    private static TurtloidBadnikInstance findNearestLiveParentForRewind(
+            ObjectManager objectManager,
+            ObjectSpawn spawn) {
+        if (objectManager == null || spawn == null) {
+            return null;
+        }
+        TurtloidBadnikInstance best = null;
+        long bestDistance = Long.MAX_VALUE;
+        for (ObjectInstance instance : objectManager.getActiveObjects()) {
+            if (!(instance instanceof TurtloidBadnikInstance turtloid) || turtloid.isDestroyed()) {
+                continue;
+            }
+            long dx = turtloid.getX() - spawn.x();
+            long dy = turtloid.getY() - spawn.y();
+            long distance = dx * dx + dy * dy;
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = turtloid;
+            }
+        }
+        return best;
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (parent.isParentDestroyed()) {
             setDestroyed(true);

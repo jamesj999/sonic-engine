@@ -5,12 +5,16 @@ import com.openggf.game.sonic2.audio.Sonic2Music;
 import com.openggf.game.PlayableEntity;
 import com.openggf.game.sonic2.audio.Sonic2Sfx;
 import com.openggf.game.sonic2.constants.Sonic2ObjectIds;
+import com.openggf.game.sonic2.constants.Sonic2Constants;
+import com.openggf.game.sonic2.resources.Sonic2PlcRequests;
 import com.openggf.game.sonic2.events.Sonic2CNZEvents;
 import com.openggf.game.sonic2.Sonic2ObjectArtKeys;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.ObjectServices;
+import com.openggf.level.objects.SpawnRewindRecreatable;
+import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.objects.boss.AbstractBossInstance;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
@@ -36,7 +40,7 @@ import java.util.List;
  * - 8: Bounce/settle after defeat
  * - A: Flee off-screen
  */
-public class Sonic2CNZBossInstance extends AbstractBossInstance {
+public class Sonic2CNZBossInstance extends AbstractBossInstance implements SpawnRewindRecreatable {
 
     // Boss routine states (ROM: boss_routine)
     private static final int ROUTINE_PATROL = 0x00;
@@ -69,6 +73,9 @@ public class Sonic2CNZBossInstance extends AbstractBossInstance {
     private static final int COLLISION_OFF = 0;
     private static final int COLLISION_LOWER = 1;   // Lower hurtbox (electrode tips)
     private static final int COLLISION_ZAP = 2;     // Full zap field
+    private static final int BODY_COLLISION_FLAGS = 0x0F;
+    private static final int LOWER_ELECTRIC_HURT_FLAGS = 0x8A;
+    private static final int ZAP_ELECTRIC_HURT_FLAGS = 0x99;
 
     // Player Y thresholds for triggering attacks
     private static final int PLAYER_Y_BALL_TRIGGER = 0x6B0;
@@ -77,24 +84,25 @@ public class Sonic2CNZBossInstance extends AbstractBossInstance {
     // Generator Y positions during defeat fall-off
     private static final int GENERATOR_FLOOR_Y = 0x6F0;
 
-    // Mapping frame indices (Java 0-indexed, ROM is 1-indexed with entry 0 as null)
-    // ROM frame N = Java frame N-1 for frames 1+
-    // The main boss body is ALWAYS rendered as frame 0 (Eggman + machine)
+    // Mapping frame indices. Obj51's mapping table deliberately preserves ROM frame 0
+    // as an empty/no-overlay frame, so these are the ROM mapping_frame values.
+    // The main boss body is ALWAYS rendered as frame 1 (Eggman + machine).
     // Electricity frames are ADDITIONAL overlays when in collision mode
-    private static final int FRAME_BOSS_BODY = 0;           // Main boss with Eggman (always rendered)
-    private static final int FRAME_GENERATOR_LEFT = 1;      // Left generator arm
-    private static final int FRAME_GENERATOR_RIGHT = 2;     // Right generator arm
-    private static final int FRAME_ELECTRODE_SMALL = 3;     // Electrode piece
-    private static final int FRAME_ELECTRODE_EXTENDED = 4;  // Electrode extended
-    private static final int FRAME_PROPELLER_1 = 5;         // Propeller frame 1
-    private static final int FRAME_PROPELLER_2 = 6;         // Propeller frame 2
-    // Electricity frames (these are overlays, not replacements)
-    private static final int FRAME_ELEC_LOWER_1 = 11;       // Lower electricity frame 1 (ROM 0x0C)
-    private static final int FRAME_ELEC_LOWER_2 = 12;       // Lower electricity frame 2 (ROM 0x0D)
-    private static final int FRAME_ELEC_LOWER_3 = 13;       // Lower electricity frame 3 (ROM 0x0E)
-    private static final int FRAME_ZAP_WIDE_1 = 14;         // Zap field wide frame 1 (ROM 0x0F)
-    private static final int FRAME_ZAP_WIDE_2 = 15;         // Zap field wide frame 2 (ROM 0x10)
-    private static final int FRAME_ZAP_WIDE_3 = 16;         // Zap field wide frame 3 (ROM 0x11)
+    private static final int FRAME_NO_OVERLAY = 0;          // Empty/null frame
+    private static final int FRAME_BOSS_BODY = 1;           // Main boss with Eggman (always rendered)
+    private static final int FRAME_GENERATOR_LEFT = 2;      // Left generator arm
+    private static final int FRAME_GENERATOR_RIGHT = 3;     // Right generator arm
+    private static final int FRAME_ELECTRODE_SMALL = 4;     // Electrode piece
+    private static final int FRAME_ELECTRODE_EXTENDED = 5;  // Electrode extended
+    private static final int FRAME_PROPELLER_1 = 6;         // Propeller frame 1
+    private static final int FRAME_PROPELLER_2 = 7;         // Propeller frame 2
+    // Electricity frames (these are overlays, not replacements).
+    private static final int FRAME_ELEC_LOWER_1 = 0x0C;
+    private static final int FRAME_ELEC_LOWER_2 = 0x0D;
+    private static final int FRAME_ELEC_LOWER_3 = 0x0E;
+    private static final int FRAME_ZAP_WIDE_1 = 0x0F;
+    private static final int FRAME_ZAP_WIDE_2 = 0x10;
+    private static final int FRAME_ZAP_WIDE_3 = 0x11;
 
     // Animation IDs (ROM: Ani_obj51)
     private static final int ANIM_FACE_NORMAL = 8;
@@ -116,6 +124,8 @@ public class Sonic2CNZBossInstance extends AbstractBossInstance {
     private int cooldownTimer;  // ROM: objoff_3F
     private int dropPhase;      // ROM: objoff_3E
     private int triggerCount;   // ROM: objoff_2D (capped at 3)
+    /** Publication latch; keeps an equality-timed animal/explosion request retryable. */
+    private boolean animalExplosionSubmitted;
 
     // Collision routine (ROM: Boss_CollisionRoutine)
     private int bossCollisionRoutine;
@@ -125,8 +135,7 @@ public class Sonic2CNZBossInstance extends AbstractBossInstance {
     private int leftGenX, leftGenY;    // Left generator (sub5 in ROM)
 
     // Multi-sprite mapping frames
-    private int mainMapFrame;       // Electricity overlay frame (or -1 for none)
-    private int propellerFrame;     // Propeller animation frame
+    private int mainMapFrame;       // Electricity overlay frame, or frame 0 for none
     private int electricityFrame;   // Current electricity animation frame
     private int electricityTimer;   // Timer for electricity animation
 
@@ -148,7 +157,11 @@ public class Sonic2CNZBossInstance extends AbstractBossInstance {
     private int[] bossAnimArray;  // ROM: Boss_AnimationArray (10 bytes = 5 entries × 2)
 
     // Render state
-    private int lastFrameCounter;
+    private int lastVIntRunCount;
+    private int touchCollisionX;
+    private int touchCollisionY;
+    private boolean touchCollisionSnapshotReady;
+    private int postTriggerBodyCollisionX = Integer.MIN_VALUE;
 
     private final Sonic2CNZEvents cnzEvents;
 
@@ -178,16 +191,15 @@ public class Sonic2CNZBossInstance extends AbstractBossInstance {
         bossXPos = state.x;
         bossYPos = state.y;
 
-        // ROM: move.b #0,mainspr_mapframe(a0) - starts with no electricity overlay
-        mainMapFrame = -1;  // No electricity overlay initially
-        propellerFrame = FRAME_PROPELLER_1;
+        // ROM: move.b #0,mainspr_mapframe(a0) - frame 0 is the empty/no-overlay mapping
+        mainMapFrame = FRAME_NO_OVERLAY;
         electricityFrame = FRAME_ELEC_LOWER_1;
         electricityTimer = 0;
 
         // ROM: sub2_mapframe = 5 (electrode extended), sub5_mapframe = 2 (generator right)
         // Initially in LOWER mode, animation is frozen at first frame of each sequence
-        electrodeFrame = FRAME_ELECTRODE_SMALL;    // Electrode small (ROM frame 4 = Java 3)
-        generatorFrame = FRAME_GENERATOR_LEFT;     // Generator left arm (ROM frame 2 = Java 1)
+        electrodeFrame = FRAME_ELECTRODE_EXTENDED;
+        generatorFrame = FRAME_GENERATOR_LEFT;
 
         // ROM: move.w #0,(Boss_Y_vel).w / move.w #-$180,(Boss_X_vel).w
         state.xVel = -VELOCITY_HORIZONTAL;
@@ -257,18 +269,39 @@ public class Sonic2CNZBossInstance extends AbstractBossInstance {
 
     @Override
     protected void onDefeatStarted() {
+        if (!isDefeatEntryPrepared() && !Sonic2PlcRequests.append(services(), Sonic2Constants.PLC_CAPSULE)) return;
         bossCountdown = DEFEAT_TIMER_START;
         state.routine = ROUTINE_DEFEAT_EXPLODE;
     }
 
     @Override
-    protected void updateBossLogic(int frameCounter, PlayableEntity playerEntity) {
+    protected boolean prepareDefeatEntry() {
+        return Sonic2PlcRequests.append(services(), Sonic2Constants.PLC_CAPSULE);
+    }
+
+    @Override
+    protected boolean defeatDeferralAppliesToThisBoss() {
+        // ObjA7/Obj51 reads boss_routine(a0) once at the top of its update and jumps
+        // through off_31A2A (docs/s2disasm/s2.asm:66554-66566). The hit bookkeeping runs
+        // in loc_31CDC (docs/s2disasm/s2.asm:66781-66792), called from the tail of the
+        // already-selected routine, and loc_31D42 only awards points, sets
+        // Boss_Countdown = $B3 and boss_routine = 6 before returning
+        // (docs/s2disasm/s2.asm:66818-66826). So the defeat routine loc_31D5C's first
+        // `subq.w #1,(Boss_Countdown).w` lands on the NEXT frame
+        // (docs/s2disasm/s2.asm:66828-66830). The engine applies touch responses before
+        // this object's own update(), so opt into the existing per-boss routine-read-once
+        // deferral to restore that one-frame offset.
+        return true;
+    }
+
+    @Override
+    protected void updateBossLogic(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        lastFrameCounter = frameCounter;
+        lastVIntRunCount = vIntRunCount;
 
         // ROM: loc_31A04 - Zap SFX tick every 32 frames when collision is active
         if (bossCollisionRoutine != COLLISION_OFF) {
-            if ((frameCounter & 0x1F) == 0) {
+            if ((vIntRunCount & 0x1F) == 0) {
                 services().playSfx(Sonic2Sfx.CNZ_BOSS_ZAP.id);
             }
         }
@@ -278,7 +311,7 @@ public class Sonic2CNZBossInstance extends AbstractBossInstance {
             case ROUTINE_PATROL -> updatePatrol(player);
             case ROUTINE_POST_TRIGGER -> updatePostTrigger();
             case ROUTINE_VERTICAL_DROP -> updateVerticalDrop();
-            case ROUTINE_DEFEAT_EXPLODE -> updateDefeatExplode(frameCounter);
+            case ROUTINE_DEFEAT_EXPLODE -> updateDefeatExplode(vIntRunCount);
             case ROUTINE_DEFEAT_BOUNCE -> updateDefeatBounce();
             case ROUTINE_FLEE -> updateFlee();
         }
@@ -294,6 +327,19 @@ public class Sonic2CNZBossInstance extends AbstractBossInstance {
 
         alignGeneratorPositions();
         updateFaceAnimation(player);
+    }
+
+    @Override
+    public void snapshotTouchResponseState() {
+        if (touchCollisionSnapshotReady) {
+            touchCollisionX = getPreUpdateX();
+            touchCollisionY = getPreUpdateY();
+        } else {
+            touchCollisionX = state.x;
+            touchCollisionY = state.y;
+            touchCollisionSnapshotReady = true;
+        }
+        super.snapshotTouchResponseState();
     }
 
     /**
@@ -334,7 +380,13 @@ public class Sonic2CNZBossInstance extends AbstractBossInstance {
         }
 
         // ROM: loc_31AB6 - Player proximity check
-        int dx = player.getCentreX() - state.x + 0x10;
+        // The compare reads x_pos(a0), not the freshly-moved Boss_X_pos long
+        // (docs/s2disasm/s2.asm:66577-66594). In the leftward pass this displayed
+        // Obj51 x is one pixel to the right of the engine's current state.x at the
+        // same post-player-slot phase; BizHawk probe at BK2 f21917: x_pos=$29A2,
+        // Boss_X_pos=$29A1, Sonic x=$29B1, so dx=$1F and loc_31BF2 runs.
+        int triggerX = state.x + (state.xVel < 0 ? 1 : 0);
+        int dx = player.getCentreX() - triggerX + 0x10;
         if (dx >= 0 && dx < 0x20) {
             int playerY = player.getCentreY();
 
@@ -347,6 +399,13 @@ public class Sonic2CNZBossInstance extends AbstractBossInstance {
                     bossAnimArray[3] = 0;  // Reset anim timer at offset 3
                     bossAnimArray[9] = 0;  // Reset anim timer at offset 9
                     bossCollisionRoutine = COLLISION_OFF;
+                    // ROM loc_31AB6 compares against stale x_pos(a0), then loc_31C08
+                    // copies the freshly-moved Boss_X_pos into x_pos(a0). The engine's
+                    // fixed accumulator is already one movement phase ahead on the
+                    // leftward pass, while the rightward body touch needs the freshly
+                    // advanced Boss_X_pos. Preserve the ROM body x for Touch_Boss;
+                    // the allocated ball separately retains its spawn-time parent x.
+                    postTriggerBodyCollisionX = state.xVel < 0 ? triggerX - 1 : bossXPos;
                     spawnElectricBall();
                     bossCountdown = TRIGGER_COUNTDOWN;
                     return;
@@ -417,7 +476,7 @@ public class Sonic2CNZBossInstance extends AbstractBossInstance {
      */
     private void updateElectricityAnimation() {
         if (bossCollisionRoutine == COLLISION_OFF) {
-            mainMapFrame = -1;  // No electricity overlay
+            mainMapFrame = FRAME_NO_OVERLAY;
             return;
         }
 
@@ -446,7 +505,7 @@ public class Sonic2CNZBossInstance extends AbstractBossInstance {
      */
     private void updatePostTrigger() {
         bossCollisionRoutine = COLLISION_OFF;
-        mainMapFrame = -1;  // No electricity during post-trigger
+        mainMapFrame = FRAME_NO_OVERLAY;
         bossCountdown--;
 
         if (bossCountdown == 0) {
@@ -456,6 +515,7 @@ public class Sonic2CNZBossInstance extends AbstractBossInstance {
             bossAnimArray[3] = 0;
             bossAnimArray[9] = 0;
             state.routine = ROUTINE_PATROL;
+            postTriggerBodyCollisionX = Integer.MIN_VALUE;
             bossCountdown = -1;
             cooldownTimer = COOLDOWN_DURATION;
         }
@@ -494,7 +554,7 @@ public class Sonic2CNZBossInstance extends AbstractBossInstance {
                     state.xVel = -VELOCITY_HORIZONTAL;
                 }
                 // Clear electricity overlay when returning to patrol
-                mainMapFrame = -1;
+                mainMapFrame = FRAME_NO_OVERLAY;
                 bossCollisionRoutine = COLLISION_OFF;
             }
         }
@@ -503,15 +563,15 @@ public class Sonic2CNZBossInstance extends AbstractBossInstance {
     /**
      * ROM: loc_31D5C - Defeat exploding state.
      */
-    private void updateDefeatExplode(int frameCounter) {
+    private void updateDefeatExplode(int vIntRunCount) {
         bossCountdown--;
 
         if (bossCountdown >= 0) {
             bossCollisionRoutine = COLLISION_OFF;
-            mainMapFrame = -1;  // No electricity overlay during defeat
+            mainMapFrame = FRAME_NO_OVERLAY;
 
             // Spawn explosions every 8 frames
-            if ((frameCounter & 7) == 0) {
+            if ((vIntRunCount & 7) == 0) {
                 spawnDefeatExplosion();
             }
         } else {
@@ -551,7 +611,10 @@ public class Sonic2CNZBossInstance extends AbstractBossInstance {
         } else if (bossCountdown < 0x18) {
             // Slow ascent
             state.yVel -= 8;
-        } else if (bossCountdown == 0x18) {
+        } else if (bossCountdown >= 0x18 && !animalExplosionSubmitted) {
+            if (!Sonic2PlcRequests.append(services(), Sonic2Constants.PLC_ANIMALS_CNZ,
+                    Sonic2Constants.PLC_EXPLOSION)) return;
+            animalExplosionSubmitted = true;
             state.yVel = 0;
             // Play level music and load animal PLCs
             services().playMusic(Sonic2Music.CASINO_NIGHT.id);
@@ -571,14 +634,42 @@ public class Sonic2CNZBossInstance extends AbstractBossInstance {
 
         Camera camera = services().camera();
         if (camera.getMaxX() < CAMERA_MAX_X_TARGET) {
-            camera.setMaxXTarget((short) (camera.getMaxX() + 2));
+            // ROM loc_31E2A writes Camera_Max_X_pos directly on the same frame
+            // (`addq.w #2,(Camera_Max_X_pos).w`, docs/s2disasm/s2.asm:66919-66925), so the
+            // bound opens immediately rather than being eased in on the following frame.
+            camera.setMaxX((short) (camera.getMaxX() + 2));
         } else if (!isOnScreen()) {
-            // Clear boss ID so palette cycling stops
-            services().gameState().setCurrentBossId(0);
+            // ROM: Current_Boss_ID is NEVER cleared in Sonic 2. It is written only by
+            // the boss-arena setup routines (`move.b #N,(Current_Boss_ID).w`, ids 1-9)
+            // and read by `tst.b`; docs/s2disasm/s2.asm contains no `clr.b` or
+            // `move.b #0` for it, so it resets only via the level-load RAM clear and
+            // persists to the end of the act. Sonic_Boundary's right-hand test widens
+            // the side boundary by $40 only when it is zero (s2.asm:37243-37251), so
+            // clearing it here let the character run 64px past the ROM's clamp.
+            // Contrast S1, which DOES clear at the Egg Prison
+            // (s1disasm/_incObj/3E Prison Capsule.asm:97), and S3K, which clears
+            // Boss_flag at 31 sites. S2 is the exception.
             setDestroyed(true);
         }
 
         applyBossVelocity();
+    }
+
+    @Override
+    public boolean usesCustomOutOfRangeCheck() {
+        return true;
+    }
+
+    @Override
+    public boolean isCustomOutOfRange(int cameraX) {
+        // ROM loc_31E2A opens Camera_Max_X_pos to $2B20 before it can delete:
+        // cmpi.w #$2B20,(Camera_Max_X_pos).w / addq.w #2,(Camera_Max_X_pos)
+        // / bra.s loc_31E4A. Only once the max-X boundary reaches $2B20 does
+        // it test render_flags.on_screen and branch to DeleteObject
+        // (docs/s2disasm/s2.asm:66887-66899). The shared S2 MarkObjGone-style
+        // unload would remove Obj51 while that camera-opening branch is still
+        // active, stopping the boundary advance early.
+        return false;
     }
 
     /**
@@ -683,10 +774,10 @@ public class Sonic2CNZBossInstance extends AbstractBossInstance {
             return;
         }
         // ROM: move.b #4,boss_subtype(a1) / move.l a0,objoff_34(a1)
-        // The spawn coordinates are informational - ball uses parent position directly
+        // Capture the parent SST coordinate visible at allocation. The ball keeps
+        // this X while loc_31BA8 leaves Boss_X_pos stationary.
         ObjectSpawn ballSpawn = new ObjectSpawn(state.x, state.y, Sonic2ObjectIds.CNZ_BOSS, 4, 0, false, 0);
-        CNZBossElectricBall ball = new CNZBossElectricBall(ballSpawn, this);
-        services().objectManager().addDynamicObject(ball);
+        spawnFreeChild(() -> new CNZBossElectricBall(ballSpawn, this));
     }
 
     // ========================================================================
@@ -694,9 +785,17 @@ public class Sonic2CNZBossInstance extends AbstractBossInstance {
     // ========================================================================
 
     /**
-     * Get the current boss countdown value for electric ball timing.
+     * Returns the Boss_Countdown value Obj51's attached ball should observe in
+     * this object pass.
+     *
+     * <p>ROM Obj51 executes the parent slot before its allocated child. If the
+     * engine reaches the child first, expose the post-parent decrement that the
+     * later ROM slot would have read instead of delaying BALL_FALL by one pass.</p>
      */
-    public int getBossCountdown() {
+    public int getBossCountdownVisibleToBall(int objectFrameCounter) {
+        if (state.routine == ROUTINE_POST_TRIGGER && lastVIntRunCount != objectFrameCounter) {
+            return bossCountdown - 1;
+        }
         return bossCountdown;
     }
 
@@ -713,15 +812,62 @@ public class Sonic2CNZBossInstance extends AbstractBossInstance {
 
     @Override
     public int getCollisionFlags() {
-        // Main boss collision
         if (state.routine >= ROUTINE_DEFEAT_EXPLODE || state.defeated) {
             return 0;
         }
         if (state.invulnerable) {
             return 0;
         }
-        // Category BOSS (0xC0) + size index 0x0F
-        return 0xC0 | 0x0F;
+        return BODY_COLLISION_FLAGS;
+    }
+
+    @Override
+    public TouchResponseProvider.TouchRegion[] getMultiTouchRegions() {
+        if (state.routine >= ROUTINE_DEFEAT_EXPLODE || state.defeated) {
+            return null;
+        }
+        if (bossCollisionRoutine == COLLISION_OFF) {
+            int bodyFlags = getCollisionFlags();
+            if (postTriggerBodyCollisionX != Integer.MIN_VALUE && bodyFlags != 0) {
+                return new TouchResponseProvider.TouchRegion[] {
+                        new TouchResponseProvider.TouchRegion(postTriggerBodyCollisionX, getPreUpdateY(), bodyFlags)
+                };
+            }
+            return null;
+        }
+
+        int bodyFlags = getCollisionFlags();
+        TouchResponseProvider.TouchRegion electricRegion;
+        if (bossCollisionRoutine == COLLISION_LOWER) {
+            // ROM: player-slot Touch_Boss runs before Obj51 updates this frame;
+            // use the previous object-slot x/y, not the post-update diagnostic position.
+            // BossCollision_CNZ checks y_pos+$28 with d1=$80010,
+            // then falls through to the Obj51 collision_flags byte.
+            electricRegion = new TouchResponseProvider.TouchRegion(
+                    touchCollisionX,
+                    touchCollisionY + 0x28,
+                    LOWER_ELECTRIC_HURT_FLAGS);
+        } else {
+            electricRegion = new TouchResponseProvider.TouchRegion(
+                    touchCollisionX + 4,
+                    touchCollisionY + 0x20,
+                    ZAP_ELECTRIC_HURT_FLAGS);
+        }
+
+        if (bodyFlags == 0) {
+            return new TouchResponseProvider.TouchRegion[] { electricRegion };
+        }
+        return new TouchResponseProvider.TouchRegion[] {
+                electricRegion,
+                new TouchResponseProvider.TouchRegion(touchCollisionX, touchCollisionY, bodyFlags)
+        };
+    }
+
+    @Override
+    public boolean requiresRenderFlagForTouch() {
+        // S2 Touch_Boss scans collision_flags directly when Current_Boss_ID is
+        // nonzero; it does not apply the render/on-screen gate used by S1.
+        return false;
     }
 
     /**
@@ -776,11 +922,9 @@ public class Sonic2CNZBossInstance extends AbstractBossInstance {
 
         boolean flipped = (state.renderFlags & 1) != 0;
 
-        // Update propeller animation (ROM: Anim 3 - delay 7, cycles frames 6,7)
-        // Delay 7 means change every 8 frames (delay + 1)
-        if ((lastFrameCounter & 0x07) == 0) {
-            propellerFrame = (propellerFrame == FRAME_PROPELLER_1) ? FRAME_PROPELLER_2 : FRAME_PROPELLER_1;
-        }
+        // ROM: sub4_mapframe starts at frame 6 and animates to frame 7 on the 8-frame cadence.
+        int currentPropellerFrame = ((lastVIntRunCount >> 3) & 1) == 0
+                ? FRAME_PROPELLER_1 : FRAME_PROPELLER_2;
 
         // Note: electrode/generator frames are controlled by collision mode in updatePeriodicModeToggle()
         // - LOWER mode: electrode small (3), generator left (1)
@@ -788,24 +932,21 @@ public class Sonic2CNZBossInstance extends AbstractBossInstance {
 
         // ROM renders 4 child sub-sprites at the boss position in this order:
         // (Rendering order matters for proper layering)
-        // - sub2 = frame 5 (ROM) = electrode extended (ROM cycles frames 4,5 via Anim 1)
-        // - sub3 = frame 1 (ROM) = main body with Eggman
-        // - sub4 = frame 6 (ROM) = propeller (animates between frames 6,7)
-        // - sub5 = frame 2 (ROM) = generator arm (second electrode)
+        // - sub2 = frame 5 (electrode extended; cycles frames 4,5 via Anim 1)
+        // - sub3 = frame 1 (main body with Eggman)
+        // - sub4 = frame 6 (propeller; animates between frames 6,7)
+        // - sub5 = frame 2 (generator arm; cycles frames 2,3 via Anim 2)
         //
         // Additionally, mainspr_mapframe holds the electricity overlay frame (or 0 for none)
         //
-        // ROM frame indices are 1-indexed in mappings, Java is 0-indexed
-        // ROM frame 1 = Java frame 0, ROM frame 5 = Java frame 4, etc.
-
-        // 1. Render sub2: electrode/claws (animated between frames 4-5 in ROM = 3-4 in Java)
+        // 1. Render sub2: electrode/claws (animated between frames 4-5)
         renderer.drawFrameIndex(electrodeFrame, state.x, state.y, flipped, false);
 
-        // 2. Render sub3: main boss body (frame 1 in ROM = frame 0 in Java)
+        // 2. Render sub3: main boss body (frame 1)
         renderer.drawFrameIndex(FRAME_BOSS_BODY, state.x, state.y, flipped, false);
 
-        // 3. Render sub4: propeller animation (frames 6-7 in ROM = 5-6 in Java)
-        renderer.drawFrameIndex(propellerFrame, state.x, state.y, flipped, false);
+        // 3. Render sub4: propeller animation (frames 6-7)
+        renderer.drawFrameIndex(currentPropellerFrame, state.x, state.y, flipped, false);
 
         // 4. Render sub5: generator arm (separate from electrode)
         // ROM: sub5 uses generator frames (1-2), not electrode frames (3-4)
@@ -815,8 +956,7 @@ public class Sonic2CNZBossInstance extends AbstractBossInstance {
         }
 
         // 5. Render mainspr_mapframe: electricity overlay if active
-        // ROM frames $0C-$0E = lower electricity, $0F-$11 = wide zap
-        // Java frames 11-13 = lower, 14-16 = wide zap
+        // ROM frames $0C-$0E = lower electricity, $0F-$11 = wide zap.
         if (mainMapFrame >= FRAME_ELEC_LOWER_1 && mainMapFrame <= FRAME_ZAP_WIDE_3) {
             renderer.drawFrameIndex(mainMapFrame, state.x, state.y, flipped, false);
         }
@@ -856,5 +996,10 @@ public class Sonic2CNZBossInstance extends AbstractBossInstance {
     @Override
     protected int getBossExplosionSfxId() {
         return Sonic2Sfx.BOSS_EXPLOSION.id;
+    }
+
+    @Override
+    protected int getBossExplosionObjectId() {
+        return com.openggf.game.sonic2.constants.Sonic2ObjectIds.BOSS_EXPLOSION;
     }
 }

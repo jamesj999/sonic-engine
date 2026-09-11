@@ -8,8 +8,9 @@ import com.openggf.level.objects.ObjectAnimationState;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 
-import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.animation.SpriteAnimationEndAction;
@@ -26,7 +27,7 @@ import java.util.List;
  * orbit angle reaches 0x40 during the body animation frame 2.
  * Based on disassembly Obj95.
  */
-public class SolBadnikInstance extends AbstractBadnikInstance {
+public class SolBadnikInstance extends AbstractBadnikInstance implements RewindRecreatable {
     private enum State {
         WAIT_FOR_PLAYER, // Routine 2
         AFTER_FIRE       // Routine 4
@@ -40,14 +41,15 @@ public class SolBadnikInstance extends AbstractBadnikInstance {
     private static final SpriteAnimationSet BODY_ANIMATIONS = createBodyAnimations();
     private static final SpriteAnimationSet FIREBALL_ANIMATIONS = createFireballAnimations();
 
-    private final boolean xFlip;
-    private final int orbitDirection;
+    private boolean xFlip;
+    private int orbitDirection;
     private final ObjectAnimationState bodyAnimation;
     private final ObjectAnimationState afterAnimation;
     private final List<SolFireballObjectInstance> fireballs = new ArrayList<>();
     private int fireballsRemaining;
     private final SubpixelMotion.State motionState;
     private State state;
+    private boolean fireballsSpawned;
 
     public SolBadnikInstance(ObjectSpawn spawn) {
         super(spawn, "Sol", Sonic2BadnikConfig.DESTRUCTION);
@@ -59,11 +61,16 @@ public class SolBadnikInstance extends AbstractBadnikInstance {
         this.afterAnimation = new ObjectAnimationState(FIREBALL_ANIMATIONS, 0, 3);
         this.state = resolveInitialState(spawn.subtype());
         this.motionState = new SubpixelMotion.State(spawn.x(), spawn.y(), 0, 0, 0, 0);
-        spawnFireballs();
     }
 
     @Override
-    protected void updateMovement(int frameCounter, PlayableEntity playerEntity) {
+    public SolBadnikInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new SolBadnikInstance(ctx.spawn());
+    }
+
+    @Override
+    protected void updateMovement(int vIntRunCount, PlayableEntity playerEntity) {
+        ensureFireballsSpawned();
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         switch (state) {
             case WAIT_FOR_PLAYER -> {
@@ -75,7 +82,7 @@ public class SolBadnikInstance extends AbstractBadnikInstance {
     }
 
     @Override
-    protected void updateAnimation(int frameCounter) {
+    protected void updateAnimation(int vIntRunCount) {
         // In AFTER_FIRE state, use fast flashing animation (duration 5 = ~5 Hz)
         // In WAIT_FOR_PLAYER state, use slower body animation (duration 15)
         ObjectAnimationState animationState = (state == State.AFTER_FIRE) ? afterAnimation : bodyAnimation;
@@ -111,17 +118,17 @@ public class SolBadnikInstance extends AbstractBadnikInstance {
         currentX = motionState.x;
     }
 
-    private void spawnFireballs() {
-        ObjectManager objectManager = services().objectManager();
-        if (objectManager == null) {
+    private void ensureFireballsSpawned() {
+        if (fireballsSpawned || services().objectManager() == null) {
             return;
         }
+        fireballsSpawned = true;
         int[] angles = { 0x00, 0x40, 0x80, 0xC0 };
         for (int angle : angles) {
-            SolFireballObjectInstance fireball = new SolFireballObjectInstance(spawn, this, angle);
+            SolFireballObjectInstance fireball = spawnChild(
+                    () -> new SolFireballObjectInstance(spawn, this, angle));
             fireballs.add(fireball);
             fireballsRemaining++;
-            objectManager.addDynamicObject(fireball);
         }
     }
 
@@ -134,6 +141,12 @@ public class SolBadnikInstance extends AbstractBadnikInstance {
         fireballsRemaining--;
         if (fireballsRemaining <= 0) {
             state = State.AFTER_FIRE;
+        }
+    }
+
+    void attachFireballForRewind(SolFireballObjectInstance fireball) {
+        if (fireball != null && !fireballs.contains(fireball)) {
+            fireballs.add(fireball);
         }
     }
 

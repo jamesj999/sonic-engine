@@ -7,10 +7,17 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
+import com.openggf.level.objects.ObjectInstance;
 import com.openggf.level.objects.ObjectManager;
+import com.openggf.level.objects.ObjectPlayerParticipationPolicy;
+import com.openggf.level.objects.ObjectPlayerQuery;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.objects.SolidContact;
+import com.openggf.level.objects.SolidExecutionMode;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
@@ -42,7 +49,7 @@ import java.util.logging.Logger;
  */
 public class Sonic1FalseFloorInstance extends AbstractObjectInstance
         implements SolidObjectProvider, SolidObjectListener,
-        Sonic1ScrapEggmanInstance.Disintegratable {
+        Sonic1ScrapEggmanInstance.Disintegratable, SpawnRewindRecreatable {
 
     private static final Logger LOGGER = Logger.getLogger(Sonic1FalseFloorInstance.class.getName());
 
@@ -74,6 +81,8 @@ public class Sonic1FalseFloorInstance extends AbstractObjectInstance
     private static final int ROUTINE_SOLID_WAITING = 2;
     private static final int ROUTINE_DISINTEGRATING = 4;
     private static final int ROUTINE_CLEANUP = 6;
+    private static final ObjectPlayerParticipationPolicy CLEANUP_PARTICIPATION =
+            ObjectPlayerParticipationPolicy.ALL_ENGINE_PLAYERS;
 
     // ---- Instance state ----
     private int routine = ROUTINE_INIT;
@@ -133,7 +142,7 @@ public class Sonic1FalseFloorInstance extends AbstractObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) {
             return;
@@ -145,6 +154,10 @@ public class Sonic1FalseFloorInstance extends AbstractObjectInstance
             case ROUTINE_DISINTEGRATING -> updateDisintegrating();
             case ROUTINE_CLEANUP -> updateCleanup(player);
         }
+
+        if (!isDestroyed() && (routine == ROUTINE_SOLID_WAITING || routine == ROUTINE_DISINTEGRATING)) {
+            super.checkpointAll();
+        }
     }
 
     // ---- Routine 0: FFloor_Main (initialization) ----
@@ -153,17 +166,16 @@ public class Sonic1FalseFloorInstance extends AbstractObjectInstance
         currentY = MASTER_Y;
         updateDynamicSpawn(currentX, currentY);
 
-        ObjectManager objectManager = services().objectManager();
-        if (objectManager == null) {
+        if (services().objectManager() == null) {
             return;
         }
 
         // Spawn 8 child blocks (ROM: moveq #7,d6 -> dbf loop = 8 iterations)
         for (int i = 0; i < CHILD_COUNT; i++) {
-            int childX = CHILD_START_X + (i * CHILD_SPACING);
-            FalseFloorBlock block = new FalseFloorBlock(childX, CHILD_Y, i);
+            final int childX = CHILD_START_X + (i * CHILD_SPACING);
+            final int slot = i;
+            FalseFloorBlock block = spawnFreeChild(() -> new FalseFloorBlock(childX, CHILD_Y, slot));
             childBlocks.add(block);
-            objectManager.addDynamicObject(block);
         }
 
         routine = ROUTINE_SOLID_WAITING;
@@ -219,10 +231,11 @@ public class Sonic1FalseFloorInstance extends AbstractObjectInstance
     private void updateCleanup(AbstractPlayableSprite player) {
         ObjectManager objectManager = services().objectManager();
         if (objectManager != null) {
-            objectManager.clearRidingObject(player);
-
-            for (PlayableEntity sidekick : services().sidekicks()) {
-                objectManager.clearRidingObject(sidekick);
+            ObjectPlayerQuery query = new ObjectPlayerQuery(
+                    () -> player,
+                    () -> services().playerQuery().sidekicks());
+            for (PlayableEntity participant : query.playersFor(CLEANUP_PARTICIPATION)) {
+                objectManager.clearRidingObject(participant);
             }
         }
 
@@ -271,13 +284,48 @@ public class Sonic1FalseFloorInstance extends AbstractObjectInstance
     public SolidObjectParams getSolidParams() {
         // ROM: d1 = 0x0B + d0, d2 = 0x10, d3 = 0x11
         int halfWidth = 0x0B + currentHalfWidth;
-        return new SolidObjectParams(halfWidth, MASTER_HALF_HEIGHT, MASTER_HALF_HEIGHT + 1,
+        return SolidObjectParams.of(halfWidth, MASTER_HALF_HEIGHT, MASTER_HALF_HEIGHT + 1,
                 solidOffsetX, 0);
     }
 
     @Override
     public boolean isTopSolidOnly() {
         return true;
+    }
+
+    /**
+     * The floor's SST {@code obActWid}, which {@code Sonic_Balance} reads off
+     * the stood-on object (docs/s1disasm/_incObj/01 Sonic.asm:423).
+     *
+     * <p>{@code FFloor_Solid} computes the remaining half-width in {@code d0},
+     * stores it with {@code move.b d0,obActWid(a0)}, and only then passes
+     * {@code d1 = sonic_solid_width + d0} to {@code SolidObject}
+     * (docs/s1disasm/_incObj/82, 83 SBZ Eggman Cutscene and Crumbling
+     * Floor.asm:265-280). So {@code obActWid} is {@link #currentHalfWidth}
+     * itself, and the collision width modelled by {@link #getSolidParams()} is
+     * that plus {@code $B} — the two differ by exactly Sonic's solid width.
+     *
+     * <p>Required rather than tidy: the base {@code getBalanceWidthPixels()}
+     * returns {@code getSolidParams().halfWidth()} for top-solid objects, so
+     * without this override the balance test received {@code d0 + $B} where the
+     * ROM uses {@code d0}.
+     *
+     * <p><b>This value is dynamic and must stay dynamic.</b> {@code d0} is
+     * {@code (8 - blocks_broken) << 4}, recomputed in
+     * {@link #updateSolidDimensions()} as the floor crumbles, so it walks from
+     * {@code 0x80} down to zero across the fight. A constant would match the
+     * ROM at exactly one width and be wrong at every other, while still looking
+     * like a fix.
+     *
+     * <p>Note, and deliberately not addressed here: this class declares
+     * {@link #isTopSolidOnly()} {@code true} while {@code FFloor_Solid} ends in
+     * {@code jmp (SolidObject).l}, a full solid. That is a separate question
+     * from the width, recorded in the trace frontier log, and changing it here
+     * would make this commit alter two decisions instead of one.
+     */
+    @Override
+    public int getBalanceWidthPixels() {
+        return currentHalfWidth;
     }
 
     @Override
@@ -292,6 +340,32 @@ public class Sonic1FalseFloorInstance extends AbstractObjectInstance
         // Handled by ObjectManager
     }
 
+    @Override
+    public SolidExecutionMode solidExecutionMode() {
+        return SolidExecutionMode.MANUAL_CHECKPOINT;
+    }
+
+    /**
+     * Rewind-restore hook: re-registers a recreated {@link FalseFloorBlock} into
+     * {@code childBlocks} so the disintegration sequence
+     * ({@code childBlocks.get(currentFrame).signalBreak()}) still resolves after a
+     * held rewind. Inserts ordered by {@link FalseFloorBlock#blockIndex} so the
+     * left-to-right collapse order matches the ROM regardless of restore order.
+     */
+    public void reattachChildBlock(FalseFloorBlock block) {
+        if (block == null) {
+            return;
+        }
+        int insertAt = childBlocks.size();
+        for (int i = 0; i < childBlocks.size(); i++) {
+            if (childBlocks.get(i).blockIndex > block.blockIndex) {
+                insertAt = i;
+                break;
+            }
+        }
+        childBlocks.add(insertAt, block);
+    }
+
     // =========================================================================
     // Inner class: FalseFloorBlock - child block (routine 8)
     // =========================================================================
@@ -303,7 +377,7 @@ public class Sonic1FalseFloorInstance extends AbstractObjectInstance
      * <p>
      * ROM: routine 8 = waiting, routine 0xA = falling fragment.
      */
-    public static class FalseFloorBlock extends AbstractObjectInstance {
+    public static class FalseFloorBlock extends AbstractObjectInstance implements RewindRecreatable {
 
         private static final int BLOCK_HALF_WIDTH = 0x10;  // 16 pixels
         private static final int BLOCK_HALF_HEIGHT = 0x10; // 16 pixels
@@ -322,11 +396,18 @@ public class Sonic1FalseFloorInstance extends AbstractObjectInstance
         // Fragment mapping frame indices (1-4 for quarter pieces)
         private static final int[] FRAGMENT_FRAMES = {1, 2, 3, 4};
 
-        private final int blockIndex;
-        private final int currentX;
-        private final int currentY;
+        // Non-final so the generic rewind field capturer can reapply the captured
+        // values after RewindRecreatable recreates the block with placeholder
+        // (0, 0, 0) ctor args.
+        private int blockIndex;
+        private int currentX;
+        private int currentY;
         private boolean broken = false;
         private boolean goSignal = false;
+
+        FalseFloorBlock() {
+            this(0, 0, 0);
+        }
 
         public FalseFloorBlock(int x, int y, int blockIndex) {
             super(new ObjectSpawn(x, y, 0x83, 0, 0, false, 0), "FalseFloorBlock");
@@ -337,6 +418,27 @@ public class Sonic1FalseFloorInstance extends AbstractObjectInstance
 
         void signalBreak() {
             this.goSignal = true;
+        }
+
+        @Override
+        public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+            if (ctx == null || ctx.objectServices() == null
+                    || ctx.objectServices().objectManager() == null) {
+                return null;
+            }
+            Sonic1FalseFloorInstance master = null;
+            for (ObjectInstance inst : ctx.objectServices().objectManager().getActiveObjects()) {
+                if (inst instanceof Sonic1FalseFloorInstance falseFloor) {
+                    master = falseFloor;
+                    break;
+                }
+            }
+            if (master == null) {
+                return null;
+            }
+            FalseFloorBlock block = new FalseFloorBlock(0, 0, 0);
+            master.reattachChildBlock(block);
+            return block;
         }
 
         @Override
@@ -355,7 +457,7 @@ public class Sonic1FalseFloorInstance extends AbstractObjectInstance
         }
 
         @Override
-        public void update(int frameCounter, PlayableEntity playerEntity) {
+        public void update(int vIntRunCount, PlayableEntity playerEntity) {
             AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
             if (isDestroyed() || broken) {
                 return;
@@ -369,8 +471,7 @@ public class Sonic1FalseFloorInstance extends AbstractObjectInstance
         private void breakApart() {
             broken = true;
 
-            ObjectManager objectManager = services().objectManager();
-            if (objectManager == null) {
+            if (services().objectManager() == null) {
                 setDestroyed(true);
                 return;
             }
@@ -378,14 +479,13 @@ public class Sonic1FalseFloorInstance extends AbstractObjectInstance
             // ROM: FFloor_Break - first fragment reuses parent, remaining 3 are new objects.
             // We create all 4 as new objects since our architecture differs.
             for (int i = 0; i < 4; i++) {
-                int fragX = currentX + FRAGMENT_OFFSETS[i][0];
-                int fragY = currentY + FRAGMENT_OFFSETS[i][1];
-                int fragYVel = FRAGMENT_Y_VEL[i];
-                int fragFrame = FRAGMENT_FRAMES[i];
+                final int fragX = currentX + FRAGMENT_OFFSETS[i][0];
+                final int fragY = currentY + FRAGMENT_OFFSETS[i][1];
+                final int fragYVel = FRAGMENT_Y_VEL[i];
+                final int fragFrame = FRAGMENT_FRAMES[i];
 
-                FalseFloorFragment fragment = new FalseFloorFragment(
-                        fragX, fragY, fragYVel, fragFrame);
-                objectManager.addDynamicObject(fragment);
+                spawnFreeChild(() -> new FalseFloorFragment(
+                        fragX, fragY, fragYVel, fragFrame));
             }
 
             // ROM: move.w #sfx_WallSmash,d0; jsr (QueueSound2).l
@@ -426,16 +526,16 @@ public class Sonic1FalseFloorInstance extends AbstractObjectInstance
      * <p>
      * ROM: routine $A - ObjectFall + DisplaySprite, deleted when off-screen.
      */
-    public static class FalseFloorFragment extends AbstractObjectInstance {
+    public static class FalseFloorFragment extends AbstractObjectInstance implements RewindRecreatable {
 
         // ROM: ObjectFall gravity = addi.w #$38,obVelY(a0)
         private static final int GRAVITY = 0x38;
 
-        private final int currentX;
+        private int currentX;
         private int currentY;
         private int subY; // 16.8 fixed-point Y position
         private int yVel; // 8.8 fixed-point Y velocity
-        private final int mappingFrame;
+        private int mappingFrame;
 
         public FalseFloorFragment(int x, int y, int initialYVel, int frame) {
             super(new ObjectSpawn(x, y, 0x83, 0, 0, false, 0), "FalseFloorFragment");
@@ -444,6 +544,11 @@ public class Sonic1FalseFloorInstance extends AbstractObjectInstance
             this.subY = y << 8;
             this.yVel = initialYVel;
             this.mappingFrame = frame;
+        }
+
+        @Override
+        public FalseFloorFragment recreateForRewind(RewindRecreateContext ctx) {
+            return new FalseFloorFragment(ctx.spawn().x(), ctx.spawn().y(), 0, 0);
         }
 
         @Override
@@ -462,7 +567,7 @@ public class Sonic1FalseFloorInstance extends AbstractObjectInstance
         }
 
         @Override
-        public void update(int frameCounter, PlayableEntity playerEntity) {
+        public void update(int vIntRunCount, PlayableEntity playerEntity) {
             AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
             if (isDestroyed()) {
                 return;

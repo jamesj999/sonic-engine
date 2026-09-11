@@ -1,9 +1,9 @@
 package com.openggf.level.scroll;
 
-import org.junit.Before;
+import org.junit.jupiter.api.BeforeEach;
 import com.openggf.game.sonic2.scroll.ParallaxTables;
 import com.openggf.game.sonic2.scroll.SwScrlCnz;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import com.openggf.game.sonic2.scroll.ParallaxTables;
 import com.openggf.game.sonic2.scroll.SwScrlCnz;
 
@@ -16,7 +16,7 @@ import com.openggf.game.sonic2.scroll.SwScrlCnz;
 import com.openggf.game.sonic2.scroll.ParallaxTables;
 import com.openggf.game.sonic2.scroll.SwScrlCnz;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import com.openggf.game.sonic2.scroll.ParallaxTables;
 import com.openggf.game.sonic2.scroll.SwScrlCnz;
 import static com.openggf.level.scroll.M68KMath.*;
@@ -60,7 +60,7 @@ public class SwScrlCnzTest {
             0x01, 0x02
     };
 
-    @Before
+    @BeforeEach
     public void setUp() throws IOException {
         mockRom = new MockCnzRom();
         ParallaxTables tables = new ParallaxTables(mockRom);
@@ -72,11 +72,11 @@ public class SwScrlCnzTest {
     @Test
     public void testRowHeightsLoaded() {
         int[] heights = handler.getRowHeights();
-        assertEquals("CNZ must have exactly 10 row heights", 10, heights.length);
+        assertEquals(10, heights.length, "CNZ must have exactly 10 row heights");
 
         // Verify the values match expected
         for (int i = 0; i < 10; i++) {
-            assertEquals("Row height " + i, CNZ_ROW_HEIGHTS[i] & 0xFF, heights[i]);
+            assertEquals(CNZ_ROW_HEIGHTS[i] & 0xFF, heights[i], "Row height " + i);
         }
     }
 
@@ -84,20 +84,20 @@ public class SwScrlCnzTest {
     public void testFirst8SegmentsAre16Lines() {
         int[] heights = handler.getRowHeights();
         for (int i = 0; i < 8; i++) {
-            assertEquals("Segment " + i + " should be 16 lines", 16, heights[i]);
+            assertEquals(16, heights[i], "Segment " + i + " should be 16 lines");
         }
     }
 
     @Test
     public void testRippleSegmentMarker() {
         int[] heights = handler.getRowHeights();
-        assertEquals("Segment 8 should have height 0 (ripple marker)", 0, heights[8]);
+        assertEquals(0, heights[8], "Segment 8 should have height 0 (ripple marker)");
     }
 
     @Test
     public void testFinalSegmentHeight() {
         int[] heights = handler.getRowHeights();
-        assertEquals("Segment 9 should have height 240", 240, heights[9]);
+        assertEquals(240, heights[9], "Segment 9 should have height 240");
     }
 
     // ==================== Scroll Value Generation Tests ====================
@@ -113,7 +113,7 @@ public class SwScrlCnzTest {
         int[] expected = {256, 228, 200, 172, 144, 116, 88, 16, 16, 32};
 
         for (int i = 0; i < 10; i++) {
-            assertEquals("scrollValues[" + i + "] at cameraX=256", expected[i], values[i]);
+            assertEquals(expected[i], values[i], "scrollValues[" + i + "] at cameraX=256");
         }
     }
 
@@ -128,7 +128,7 @@ public class SwScrlCnzTest {
         int[] expected = {1024, 912, 800, 688, 576, 464, 352, 64, 64, 128};
 
         for (int i = 0; i < 10; i++) {
-            assertEquals("scrollValues[" + i + "] at cameraX=1024", expected[i], values[i]);
+            assertEquals(expected[i], values[i], "scrollValues[" + i + "] at cameraX=1024");
         }
     }
 
@@ -141,7 +141,7 @@ public class SwScrlCnzTest {
         short[] values = handler.generateScrollValuesForTest((short) 0);
 
         for (int i = 0; i < 10; i++) {
-            assertEquals("scrollValues[" + i + "] at cameraX=0", 0, values[i]);
+            assertEquals(0, values[i], "scrollValues[" + i + "] at cameraX=0");
         }
     }
 
@@ -157,7 +157,7 @@ public class SwScrlCnzTest {
         int[] expected = {-256, -228, -200, -172, -144, -116, -88, -16, -16, -32};
 
         for (int i = 0; i < 10; i++) {
-            assertEquals("scrollValues[" + i + "] at cameraX=-256", expected[i], values[i]);
+            assertEquals(expected[i], values[i], "scrollValues[" + i + "] at cameraX=-256");
         }
     }
 
@@ -172,19 +172,19 @@ public class SwScrlCnzTest {
 
         // Test cameraY = 0
         handler.update(hScroll, 0, 0, 0, 0);
-        assertEquals("vscrollFactorBG at cameraY=0", (short) 0, handler.getVscrollFactorBG());
+        assertEquals((short) 0, handler.getVscrollFactorBG(), "vscrollFactorBG at cameraY=0");
 
         // Test cameraY = 64 -> bgY = 64 >>> 6 = 1
         handler.update(hScroll, 0, 64, 0, 0);
-        assertEquals("vscrollFactorBG at cameraY=64", (short) 1, handler.getVscrollFactorBG());
+        assertEquals((short) 1, handler.getVscrollFactorBG(), "vscrollFactorBG at cameraY=64");
 
         // Test cameraY = 128 -> bgY = 128 >>> 6 = 2
         handler.update(hScroll, 0, 128, 0, 0);
-        assertEquals("vscrollFactorBG at cameraY=128", (short) 2, handler.getVscrollFactorBG());
+        assertEquals((short) 2, handler.getVscrollFactorBG(), "vscrollFactorBG at cameraY=128");
 
         // Test cameraY = 1024 -> bgY = 1024 >>> 6 = 16
         handler.update(hScroll, 0, 1024, 0, 0);
-        assertEquals("vscrollFactorBG at cameraY=1024", (short) 16, handler.getVscrollFactorBG());
+        assertEquals((short) 16, handler.getVscrollFactorBG(), "vscrollFactorBG at cameraY=1024");
     }
 
     // ==================== Per-Scanline Buffer Tests ====================
@@ -196,7 +196,7 @@ public class SwScrlCnzTest {
 
         // Verify all 224 lines are filled (non-zero when cameraX != 0)
         for (int i = 0; i < VISIBLE_LINES; i++) {
-            assertTrue("Line " + i + " should be filled", hScroll[i] != 0);
+            assertTrue(hScroll[i] != 0, "Line " + i + " should be filled");
         }
     }
 
@@ -210,7 +210,7 @@ public class SwScrlCnzTest {
         short expectedFg = (short) -cameraX;
         for (int i = 0; i < VISIBLE_LINES; i++) {
             short fg = unpackFG(hScroll[i]);
-            assertEquals("Line " + i + " FG scroll", expectedFg, fg);
+            assertEquals(expectedFg, fg, "Line " + i + " FG scroll");
         }
     }
 
@@ -224,12 +224,12 @@ public class SwScrlCnzTest {
         // scrollValues[0] = 256 (at cameraX=256)
         // BG scroll = -scrollValues[0] = -256
         short bg0 = unpackBG(hScroll[0]);
-        assertEquals("Line 0 BG scroll (segment 0)", (short) -256, bg0);
+        assertEquals((short) -256, bg0, "Line 0 BG scroll (segment 0)");
 
         // First 16 lines should all be segment 0
         for (int i = 0; i < 16; i++) {
             short bg = unpackBG(hScroll[i]);
-            assertEquals("Line " + i + " BG scroll (segment 0)", (short) -256, bg);
+            assertEquals((short) -256, bg, "Line " + i + " BG scroll (segment 0)");
         }
     }
 
@@ -244,7 +244,7 @@ public class SwScrlCnzTest {
         // BG scroll = -228
         for (int i = 16; i < 32; i++) {
             short bg = unpackBG(hScroll[i]);
-            assertEquals("Line " + i + " BG scroll (segment 1)", (short) -228, bg);
+            assertEquals((short) -228, bg, "Line " + i + " BG scroll (segment 1)");
         }
     }
 
@@ -269,11 +269,9 @@ public class SwScrlCnzTest {
             if (seg == 8) {
                 // Segment 8 is the ripple segment - value includes ripple offset
                 // Base value is -16, ripple adds small offsets (typically 0-3)
-                assertTrue("Segment 8 (ripple) start (line " + line + ") should be near -16",
-                        Math.abs(bg + 16) <= 5);
+                assertTrue(Math.abs(bg + 16) <= 5, "Segment 8 (ripple) start (line " + line + ") should be near -16");
             } else {
-                assertEquals("Segment " + seg + " start (line " + line + ")",
-                        (short) expectedBgScroll[seg], bg);
+                assertEquals((short) expectedBgScroll[seg], bg, "Segment " + seg + " start (line " + line + ")");
             }
         }
     }
@@ -298,10 +296,8 @@ public class SwScrlCnzTest {
         // The ripple data should cause slight variation
         // (with our mock data, it's subtle)
         // At minimum, verify these lines are close to base value of -16
-        assertTrue("Line 128 BG should be near -16",
-                Math.abs(line128Bg + 16) <= 5);
-        assertTrue("Line 129 BG should be near -16",
-                Math.abs(line129Bg + 16) <= 5);
+        assertTrue(Math.abs(line128Bg + 16) <= 5, "Line 128 BG should be near -16");
+        assertTrue(Math.abs(line129Bg + 16) <= 5, "Line 129 BG should be near -16");
     }
 
     @Test
@@ -325,7 +321,7 @@ public class SwScrlCnzTest {
             }
         }
 
-        assertTrue("Ripple animation should vary with frameCounter", foundDifference);
+        assertTrue(foundDifference, "Ripple animation should vary with frameCounter");
     }
 
     // ==================== Starting Segment Tests (based on bgY) ====================
@@ -342,11 +338,11 @@ public class SwScrlCnzTest {
 
         // Lines 0-7: segment 0 (scrollValues[0] = 256)
         short bg0 = unpackBG(hScroll[0]);
-        assertEquals("Line 0 BG at bgY=8", (short) -256, bg0);
+        assertEquals((short) -256, bg0, "Line 0 BG at bgY=8");
 
         // Line 8: segment 1 (scrollValues[1] = 228)
         short bg8 = unpackBG(hScroll[8]);
-        assertEquals("Line 8 BG at bgY=8", (short) -228, bg8);
+        assertEquals((short) -228, bg8, "Line 8 BG at bgY=8");
     }
 
     @Test
@@ -361,11 +357,11 @@ public class SwScrlCnzTest {
 
         // Lines 0-11: segment 1 (scrollValues[1] = 228)
         short bg0 = unpackBG(hScroll[0]);
-        assertEquals("Line 0 BG at bgY=20", (short) -228, bg0);
+        assertEquals((short) -228, bg0, "Line 0 BG at bgY=20");
 
         // Line 12: segment 2 (scrollValues[2] = 200)
         short bg12 = unpackBG(hScroll[12]);
-        assertEquals("Line 12 BG at bgY=20", (short) -200, bg12);
+        assertEquals((short) -200, bg12, "Line 12 BG at bgY=20");
     }
 
     // ==================== 68000 Algorithm Detail Tests ====================
@@ -399,7 +395,7 @@ public class SwScrlCnzTest {
         // 256 - 228 = 28, 228 - 200 = 28, etc.
         for (int i = 0; i < 6; i++) {
             int delta = values[i] - values[i + 1];
-            assertEquals("Delta between values[" + i + "] and values[" + (i + 1) + "]", 28, delta);
+            assertEquals(28, delta, "Delta between values[" + i + "] and values[" + (i + 1) + "]");
         }
     }
 
@@ -411,11 +407,11 @@ public class SwScrlCnzTest {
         short[] values = handler.generateScrollValuesForTest((short) 256);
 
         // values[9] = cameraX >> 3 = 256 >> 3 = 32
-        assertEquals("values[9] = X >> 3", 32, values[9]);
+        assertEquals(32, values[9], "values[9] = X >> 3");
 
         // values[7] = values[8] = cameraX >> 4 = 256 >> 4 = 16
-        assertEquals("values[7] = X >> 4", 16, values[7]);
-        assertEquals("values[8] = X >> 4", 16, values[8]);
+        assertEquals(16, values[7], "values[7] = X >> 4");
+        assertEquals(16, values[8], "values[8] = X >> 4");
     }
 
     // ==================== Offset Tracking Tests ====================
@@ -437,8 +433,8 @@ public class SwScrlCnzTest {
         // Min: -256 + 256 = 0
         // Max: -16 + 256 = 240
 
-        assertTrue("minOffset should be <= 0", minOffset <= 0);
-        assertTrue("maxOffset should be >= 0", maxOffset >= 0);
+        assertTrue(minOffset <= 0, "minOffset should be <= 0");
+        assertTrue(maxOffset >= 0, "maxOffset should be >= 0");
     }
 
     // ==================== Mock ROM ====================
@@ -465,3 +461,5 @@ public class SwScrlCnzTest {
         }
     }
 }
+
+

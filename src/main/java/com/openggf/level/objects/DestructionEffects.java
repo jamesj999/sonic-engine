@@ -26,19 +26,42 @@ public final class DestructionEffects {
     }
 
     /**
+     * Functional interface for game-specific animal creation.
+     * Sonic 1 uses the ROM-ported {@code Sonic1AnimalsObjectInstance}, while
+     * Sonic 2 and S3K use the shared generic animal object.
+     */
+    @FunctionalInterface
+    public interface AnimalFactory {
+        ObjectInstance create(ObjectSpawn spawn, ObjectServices services);
+    }
+
+    /**
+     * Functional interface for game-specific badnik replacement explosions.
+     * Sonic 1 uses a custom ExplosionItem object that later spawns the animal.
+     */
+    @FunctionalInterface
+    public interface ExplosionFactory {
+        ObjectInstance create(int x, int y, ObjectServices services, int pointsValue);
+    }
+
+    /**
      * Immutable configuration record capturing what varies between games.
      *
      * @param sfxId              explosion SFX ID (game-specific)
-     * @param spawnAnimal        whether to spawn an {@link AnimalObjectInstance}
+     * @param animalFactory      game-specific animal factory, or {@code null} to skip
      * @param useRespawnTracking if true, uses {@code markRemembered} for respawn-tracked spawns;
      *                           if false, always uses {@code removeFromActiveSpawns}
      * @param pointsFactory      factory for the floating points popup, or {@code null} to skip
+     * @param explosionFactory   factory for a custom replacement explosion object, or {@code null}
+     * @param pointsAllocatedBeforeAnimal if true, allocate the points popup before the animal object
      */
     public record DestructionConfig(
             int sfxId,
-            boolean spawnAnimal,
+            AnimalFactory animalFactory,
             boolean useRespawnTracking,
-            PointsFactory pointsFactory
+            PointsFactory pointsFactory,
+            ExplosionFactory explosionFactory,
+            boolean pointsAllocatedBeforeAnimal
     ) {
     }
 
@@ -47,9 +70,8 @@ public final class DestructionEffects {
      * <ol>
      *   <li>Handle respawn tracking (mark remembered or remove from active spawns)</li>
      *   <li>Spawn explosion (inheriting the badnik's slot for ROM parity)</li>
-     *   <li>Optionally spawn animal</li>
      *   <li>Calculate and award chain score</li>
-     *   <li>Optionally spawn points popup</li>
+     *   <li>Optionally let the explosion routine allocate animal/points children</li>
      *   <li>Play explosion SFX</li>
      * </ol>
      *
@@ -71,33 +93,10 @@ public final class DestructionEffects {
         var objectManager = services != null ? services.objectManager() : null;
         if (objectManager != null) {
             if (config.useRespawnTracking() && spawn.respawnTracked()) {
-                objectManager.markRemembered(spawn);
+                ObjectLifetimeOps.markSpawnRemembered(objectManager, spawn);
             } else {
-                objectManager.removeFromActiveSpawns(spawn);
+                ObjectLifetimeOps.removeSpawnFromActive(objectManager, spawn);
             }
-        }
-
-        // --- Spawn explosion ---
-        // ROM parity: the ROM changes the badnik's obID to ExplosionItem (0x27)
-        // in-place, keeping the same SST slot. We replicate this by spawning
-        // the explosion at the badnik's slot via addDynamicObjectAtSlot.
-        ObjectRenderManager renderManager = services != null
-                ? services.renderManager() : null;
-        if (objectManager != null && renderManager != null) {
-            ExplosionObjectInstance explosion = new ExplosionObjectInstance(
-                    0x27, x, y, renderManager);
-            if (badnikSlot >= 0) {
-                objectManager.addDynamicObjectAtSlot(explosion, badnikSlot);
-            } else {
-                objectManager.addDynamicObject(explosion);
-            }
-        }
-
-        // --- Optionally spawn animal ---
-        if (config.spawnAnimal() && objectManager != null) {
-            AnimalObjectInstance animal = new AnimalObjectInstance(
-                    new ObjectSpawn(x, y, 0x28, 0, 0, false, 0), services);
-            objectManager.addDynamicObject(animal);
         }
 
         // --- Calculate and award chain score ---
@@ -109,12 +108,24 @@ public final class DestructionEffects {
             }
         }
 
-        // --- Optionally spawn points popup ---
-        if (config.pointsFactory() != null && objectManager != null) {
-            ObjectInstance points = config.pointsFactory().create(
-                    new ObjectSpawn(x, y, 0x29, 0, 0, false, 0),
-                    services, pointsValue);
-            objectManager.addDynamicObject((AbstractObjectInstance) points);
+        // --- Spawn explosion ---
+        // ROM parity: the ROM changes the badnik's obID to ExplosionItem (0x27)
+        // in-place, keeping the same SST slot. We replicate this by spawning
+        // the replacement explosion at the badnik's slot via addDynamicObjectAtSlot.
+        ObjectRenderManager renderManager = services != null ? services.renderManager() : null;
+        if (objectManager != null) {
+            ObjectInstance explosion = config.explosionFactory() != null
+                    ? config.explosionFactory().create(x, y, services, pointsValue)
+                    : new ExplosionObjectInstance(
+                            0x27,
+                            x,
+                            y,
+                            renderManager,
+                            config.animalFactory(),
+                            config.pointsFactory(),
+                            pointsValue,
+                            config.pointsAllocatedBeforeAnimal());
+            ObjectLifetimeOps.addReplacementAtTransferredSlot(objectManager, explosion, badnikSlot);
         }
 
         // --- Play explosion SFX ---

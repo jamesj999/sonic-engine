@@ -2,7 +2,13 @@ package com.openggf.game;
 
 import static org.lwjgl.opengl.GL11.glClearColor;
 
+import com.openggf.audio.GameMusic;
+import com.openggf.game.resources.PlcLifecyclePhase;
+import com.openggf.game.rewind.RewindSnapshottable;
+
 import java.io.IOException;
+import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Interface for special stage implementations that award Chaos Emeralds.
@@ -17,6 +23,43 @@ import java.io.IOException;
  * </ul>
  */
 public interface SpecialStageProvider extends MiniGameProvider {
+    String SPECIAL_STAGE_REWIND_KEY = "special-stage-runtime";
+
+    /**
+     * Returns the optional developer controls owned by this special stage.
+     *
+     * <p>Providers opt in to each control explicitly. The game loop consults
+     * this profile before routing a debug key, so an omitted capability is
+     * unavailable rather than a silent default-method call.</p>
+     */
+    default SpecialStageDebugCapabilities debugCapabilities() {
+        return SpecialStageDebugCapabilities.NONE;
+    }
+
+    /**
+     * Selects the special-stage index for a new entry and advances any
+     * game-owned cursor state. The default matches the S1/S2 sequential
+     * cursor; games with different ROM selection policy override here.
+     */
+    default int consumeStageIndexForEntry(GameStateManager gameState) {
+        return gameState.consumeCurrentSpecialStageIndexAndAdvance();
+    }
+
+    /**
+     * The PLC/V-int lifecycle phase the special stage's current represented
+     * row belongs to.
+     *
+     * <p>A special stage is not one V-int handler for its whole duration: the
+     * ROM's entry sequence runs other handlers before it installs its own. The
+     * phase decides which owner services the row -- including whether the row
+     * is a DMA-queue service boundary -- so a provider whose entry sequence
+     * runs a different handler reports that handler's phase here. The default
+     * is the stage's own handler.</p>
+     */
+    default PlcLifecyclePhase specialStagePlcLifecyclePhase() {
+        return PlcLifecyclePhase.SPECIAL_STAGE;
+    }
+
     /**
      * Gets the SFX ID to play when entering/exiting the special stage flow.
      *
@@ -24,6 +67,16 @@ public interface SpecialStageProvider extends MiniGameProvider {
      */
     default int getTransitionSfxId() {
         return -1;
+    }
+
+    /**
+     * Returns whether this game's special-stage entry queues a music fade
+     * after its transition SFX. The default retains the shared entry behavior;
+     * providers whose ROM uses a different entry command override this
+     * semantic entry policy.
+     */
+    default boolean fadesMusicOnEntry() {
+        return true;
     }
 
     /**
@@ -36,12 +89,48 @@ public interface SpecialStageProvider extends MiniGameProvider {
     }
 
     /**
+     * Gets the shared music cue to play while the special stage is active.
+     *
+     * @return generic music cue, or null to use {@link #getStageMusicId()}
+     */
+    default GameMusic getStageMusic() {
+        return null;
+    }
+
+    /**
      * Gets the music ID to play for special stage results.
      *
      * @return game-specific music ID, or -1 to use the engine fallback
      */
     default int getResultsMusicId() {
         return -1;
+    }
+
+    /**
+     * Gets the shared music cue to play for special stage results.
+     *
+     * @return generic music cue, or null to use {@link #getResultsMusicId()}
+     */
+    default GameMusic getResultsMusic() {
+        return null;
+    }
+
+    default boolean supportsRewind() {
+        return false;
+    }
+
+    default Optional<RewindSnapshottable<?>> rewindAdapter() {
+        return Optional.empty();
+    }
+
+    /**
+     * Handles input plus the debug movement speed modifiers used by normal
+     * gameplay. Providers without gameplay debug movement retain the ordinary
+     * two-mask behavior.
+     */
+    default void handleInput(int heldButtons, int pressedButtons,
+                             boolean debugSpeedUp, boolean debugSlowDown) {
+        handleInput(heldButtons, pressedButtons);
     }
 
     /**
@@ -65,6 +154,44 @@ public interface SpecialStageProvider extends MiniGameProvider {
      * @throws IOException if initialization fails
      */
     void initializeStage(int stageIndex) throws IOException;
+
+    /**
+     * Initializes a stage with an explicit startup pacing policy. Providers
+     * without observable startup phases use their normal initialization path.
+     */
+    default void initializeStage(int stageIndex, SpecialStageStartupPolicy policy) throws IOException {
+        Objects.requireNonNull(policy, "policy");
+        initializeStage(stageIndex);
+    }
+
+    /** Returns whether entry presentation may reveal the initialized stage. */
+    default boolean isEntryPresentationReady() {
+        return true;
+    }
+
+    /**
+     * Returns whether the stage is still inside the ROM's entry fade-to-white.
+     * {@code Pal_FadeToWhite} (docs/s2disasm/s2.asm:6547), {@code PaletteWhiteOut}
+     * (docs/s1disasm/sonic.asm:3226) and S3K's {@code Pal_FadeToWhite}
+     * (docs/skdisasm/sonic3k.asm:10591) are synchronous wait loops that run
+     * before the stage is loaded, so the display still shows the level's last
+     * frame while its palette steps to white. The engine keeps rendering the
+     * frozen level under that fade for as long as this is true and only then
+     * hands the frame to the stage's own draw.
+     */
+    default boolean isEntryFadeToWhiteActive() {
+        return false;
+    }
+
+    /** Called at the native one-player special-stage results setup boundary. */
+    default void onEnterResults() {
+    }
+
+    /** Resets the stage and publishes its game-owned results PLC producer. */
+    default void resetForResults() {
+        reset();
+        onEnterResults();
+    }
 
     /**
      * Gets the current stage index.
@@ -124,6 +251,18 @@ public interface SpecialStageProvider extends MiniGameProvider {
     }
 
     default void handlePlayer2Input(int heldButtons, int logicalButtons) {
+        // No-op by default.
+    }
+
+    /**
+     * Binds physical controller input to the recurring ROM object pass the next
+     * {@link #update()} executes, for a stage whose object pass is a separate
+     * pacing unit from the V-blank observation (S2's {@code SS_MainLoop} /
+     * {@code RunObjects} split, docs/s2disasm/s2.asm:6694-6721). Stages with no
+     * such split ignore it.
+     */
+    default void bindPendingRecurringPassInput(
+            int p1Held, int p1Pressed, int p2Held, int p2Logical) {
         // No-op by default.
     }
 
@@ -238,16 +377,28 @@ public interface SpecialStageProvider extends MiniGameProvider {
     void renderLagCompensationOverlay(int viewportWidth, int viewportHeight);
 
     /**
-     * Gets the current lag compensation factor.
+     * Checks whether the lag compensation debug display is enabled.
      *
-     * @return the lag compensation factor
+     * @return true if the read-only lag-model diagnostics are visible
      */
-    double getLagCompensation();
+    default boolean isLagCompensationDisplayEnabled() {
+        return false;
+    }
 
     /**
-     * Sets the lag compensation factor.
+     * Toggles the lag compensation debug display on/off.
+     */
+    default void toggleLagCompensationDisplay() {
+        // No-op by default.
+    }
+
+    /**
+     * External-pacing control for providers with an interactive lag or slowdown
+     * simulation. Zero disables that local simulation so recorded lag outcomes
+     * can be admitted only by the hardware-timing port; providers without a
+     * local simulation may ignore the value.
      *
-     * @param factor the new lag compensation factor
+     * @param factor zero for external pacing; positive for normal live pacing
      */
     void setLagCompensation(double factor);
 

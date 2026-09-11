@@ -1,50 +1,63 @@
 package com.openggf.tests;
 
+import com.openggf.game.session.SessionManager;
+import com.openggf.game.session.EngineServices;
+import com.openggf.game.session.EngineContext;
 import com.openggf.game.GameServices;
-import com.openggf.game.RuntimeManager;
+import com.openggf.game.PlayerCharacter;
 import com.openggf.game.sonic3k.Sonic3kLoadBootstrap;
 import com.openggf.game.sonic3k.Sonic3kZoneFeatureProvider;
 import com.openggf.game.sonic3k.constants.Sonic3kZoneIds;
 import com.openggf.game.sonic3k.events.Sonic3kAIZEvents;
+import com.openggf.game.sonic3k.runtime.AizZoneRuntimeState;
 import com.openggf.graphics.RenderPriority;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static com.openggf.level.scroll.M68KMath.packScrollWords;
 
 public class TestSonic3kZoneFeatureProvider {
 
-    @After
+    @BeforeEach
+    public void setUp() {
+        EngineServices.configure(EngineContext.fromLegacySingletonsForBootstrap());
+        TestEnvironment.activeGameplayMode();
+    }
+
+    @AfterEach
     public void tearDown() {
-        RuntimeManager.destroyCurrent();
+        SessionManager.clear();
     }
 
     @Test
-    public void forestFrontPhaseForcesPlayerInFrontOfForestMask() {
+    public void forestFrontPhaseMovesPlayerBucketWithoutOwningPathPriority() {
         TestZoneFeatureProvider provider = new TestZoneFeatureProvider();
         TestablePlayableSprite player = new TestablePlayableSprite("sonic", (short) 0, (short) 0);
         FakeAizEvents aizEvents = new FakeAizEvents();
         aizEvents.setForestFrontPhaseActive(true);
         provider.setAizEvents(aizEvents);
 
+        // Obj_PathSwap subtype $22 at x=$3F68 sets this before the late forest.
+        player.setHighPriority(true);
         provider.update(player, 0x44D0, Sonic3kZoneIds.ZONE_AIZ);
 
-        assertTrue("AIZ forest handoff should force Sonic in front of the forest mask",
-                player.isHighPriority());
-        org.junit.Assert.assertEquals("AIZ forest handoff should also move Sonic into the front display bucket",
-                RenderPriority.MIN, player.getPriorityBucket());
+        assertTrue(player.isHighPriority(), "The forest override must preserve Obj_PathSwap priority");
+        assertEquals(RenderPriority.MIN, player.getPriorityBucket(),
+                "AIZ forest handoff should also move Sonic into the front display bucket");
     }
 
     @Test
-    public void forestFrontPriorityReleaseWaitsUntilHurtStateEnds() {
+    public void forestFrontBucketReleaseWaitsUntilHurtStateEnds() {
         TestZoneFeatureProvider provider = new TestZoneFeatureProvider();
         TestablePlayableSprite player = new TestablePlayableSprite("sonic", (short) 0, (short) 0);
         FakeAizEvents aizEvents = new FakeAizEvents();
         provider.setAizEvents(aizEvents);
 
+        player.setHighPriority(true);
         aizEvents.setForestFrontPhaseActive(true);
         provider.update(player, 0x44D0, Sonic3kZoneIds.ZONE_AIZ);
         assertTrue(player.isHighPriority());
@@ -52,15 +65,63 @@ public class TestSonic3kZoneFeatureProvider {
         player.setHurt(true);
         aizEvents.setForestFrontPhaseActive(false);
         provider.update(player, 0x4670, Sonic3kZoneIds.ZONE_AIZ);
-        assertTrue("Forced forest priority should not clear while hurt/death priority is still valid",
-                player.isHighPriority());
+        assertEquals(RenderPriority.MIN, player.getPriorityBucket(),
+                "The forest bucket should not clear while hurt/death priority is still valid");
 
         player.setHurt(false);
         provider.update(player, 0x4670, Sonic3kZoneIds.ZONE_AIZ);
-        assertFalse("Forced forest priority should clear once the protected state ends",
-                player.isHighPriority());
-        org.junit.Assert.assertEquals("Forced forest display bucket should reset once the protected state ends",
-                RenderPriority.PLAYER_DEFAULT, player.getPriorityBucket());
+        assertTrue(player.isHighPriority(),
+                "Releasing the forest bucket must retain the late path switch's art_tile priority");
+        assertEquals(RenderPriority.PLAYER_DEFAULT, player.getPriorityBucket(),
+                "Forced forest display bucket should reset once the protected state ends");
+    }
+
+    @Test
+    public void aizMinibossResultsDoNotTakeOwnershipFromPathSwitcher() {
+        TestZoneFeatureProvider provider = new TestZoneFeatureProvider();
+        TestablePlayableSprite player = new TestablePlayableSprite("sonic", (short) 0, (short) 0);
+        FakeAizEvents aizEvents = new FakeAizEvents();
+        provider.setAizEvents(aizEvents);
+
+        // Obj_PathSwap subtype $22 at x=$10E0 sets art_tile's high-priority bit
+        // when Sonic crosses to its right side.
+        player.setHighPriority(true);
+        aizEvents.setBossFlag(true);
+        provider.update(player, 0x10E0, Sonic3kZoneIds.ZONE_AIZ);
+        assertTrue(player.isHighPriority());
+        assertEquals(RenderPriority.PLAYER_DEFAULT, player.getPriorityBucket(),
+                "The AIZ miniboss should leave path-switch priority under Obj_PathSwap ownership");
+
+        aizEvents.setBossFlag(false);
+        GameServices.gameState().setEndOfLevelActive(true);
+        provider.update(player, 0x10E0, Sonic3kZoneIds.ZONE_AIZ);
+        GameServices.gameState().setEndOfLevelActive(false);
+        provider.update(player, 0x10E0, Sonic3kZoneIds.ZONE_AIZ);
+
+        assertTrue(player.isHighPriority(),
+                "Ending the miniboss/results sequence must not clear Obj_PathSwap's art_tile priority bit");
+        assertEquals(RenderPriority.PLAYER_DEFAULT, player.getPriorityBucket());
+    }
+
+    @Test
+    public void forestFrontPhaseAlsoMovesCpuSidekickBucketWithoutOwningPathPriority() {
+        TestZoneFeatureProvider provider = new TestZoneFeatureProvider();
+        TestablePlayableSprite player = new TestablePlayableSprite("sonic", (short) 0, (short) 0);
+        TestablePlayableSprite sidekick = new TestablePlayableSprite("tails", (short) 0, (short) 0);
+        sidekick.setCpuControlled(true);
+        sidekick.setHighPriority(true);
+        GameServices.sprites().addSprite(sidekick, "tails");
+
+        FakeAizEvents aizEvents = new FakeAizEvents();
+        aizEvents.setForestFrontPhaseActive(true);
+        provider.setAizEvents(aizEvents);
+
+        provider.update(player, 0x44D0, Sonic3kZoneIds.ZONE_AIZ);
+
+        assertTrue(sidekick.isHighPriority(),
+                "The forest override must preserve CPU Tails's Obj_PathSwap priority");
+        assertEquals(RenderPriority.MIN, sidekick.getPriorityBucket(),
+                "AIZ forest handoff should also move CPU Tails into the front display bucket");
     }
 
     @Test
@@ -74,15 +135,13 @@ public class TestSonic3kZoneFeatureProvider {
 
         provider.update(player, 0x44D0, Sonic3kZoneIds.ZONE_AIZ);
 
-        assertFalse("AIZ1 should not inherit the AIZ2 forest-front priority override",
-                player.isHighPriority());
-        org.junit.Assert.assertEquals("AIZ1 should keep the normal player display bucket",
-                RenderPriority.PLAYER_DEFAULT, player.getPriorityBucket());
+        assertFalse(player.isHighPriority(), "AIZ1 should not inherit the AIZ2 forest-front priority override");
+        assertEquals(RenderPriority.PLAYER_DEFAULT, player.getPriorityBucket(),
+                "AIZ1 should keep the normal player display bucket");
     }
 
     @Test
     public void slotDisplayOriginUsesForegroundPlaneSpaceForSlotsPanel() throws Exception {
-        RuntimeManager.createGameplay();
         TestZoneFeatureProvider provider = new TestZoneFeatureProvider();
 
         GameServices.camera().setX((short) 0x3C0);
@@ -97,12 +156,31 @@ public class TestSonic3kZoneFeatureProvider {
         assertEquals(0x3E0, provider.slotDisplayOriginY());
     }
 
+    @Test
+    public void s3kWaterlineSplitUsesRomWaterLevelDirectly() {
+        Sonic3kZoneFeatureProvider provider = new Sonic3kZoneFeatureProvider();
+
+        assertEquals(0.0f, provider.getWaterlineOffset(Sonic3kZoneIds.ZONE_AIZ, 1),
+                "S3K Handle_Onscreen_Water_Height uses Water_level directly");
+        assertEquals(0.0f, provider.getWaterlineOffset(Sonic3kZoneIds.ZONE_HCZ, 0),
+                "S3K Handle_Onscreen_Water_Height uses Water_level directly");
+        assertEquals(0.0f, provider.getWaterlineOffset(Sonic3kZoneIds.ZONE_CNZ, 1),
+                "S3K Handle_Onscreen_Water_Height uses Water_level directly");
+        assertEquals(0.0f, provider.getWaterlineOffset(Sonic3kZoneIds.ZONE_ICZ, 1),
+                "S3K Handle_Onscreen_Water_Height uses Water_level directly");
+        assertEquals(0.0f, provider.getWaterlineOffset(Sonic3kZoneIds.ZONE_LBZ, 1),
+                "S3K Handle_Onscreen_Water_Height uses Water_level directly");
+    }
+
     private static final class TestZoneFeatureProvider extends Sonic3kZoneFeatureProvider {
-        private Sonic3kAIZEvents aizEvents;
+        private AizZoneRuntimeState aizState;
+        private int featureZoneId = Sonic3kZoneIds.ZONE_AIZ;
         private int featureActId = 1;
 
         void setAizEvents(Sonic3kAIZEvents aizEvents) {
-            this.aizEvents = aizEvents;
+            this.aizState = aizEvents != null
+                    ? new AizZoneRuntimeState(1, PlayerCharacter.SONIC_AND_TAILS, aizEvents)
+                    : null;
         }
 
         void setFeatureActId(int featureActId) {
@@ -110,8 +188,13 @@ public class TestSonic3kZoneFeatureProvider {
         }
 
         @Override
-        protected Sonic3kAIZEvents getAizEvents() {
-            return aizEvents;
+        protected AizZoneRuntimeState getAizState() {
+            return aizState;
+        }
+
+        @Override
+        protected int getFeatureZoneId() {
+            return featureZoneId;
         }
 
         @Override

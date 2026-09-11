@@ -1,6 +1,7 @@
 package com.openggf.game.sonic1;
 
 import com.openggf.data.Rom;
+import com.openggf.game.GameServices;
 import com.openggf.game.sonic1.constants.Sonic1Constants;
 import com.openggf.graphics.GraphicsManager;
 import com.openggf.level.*;
@@ -8,9 +9,9 @@ import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.resources.PlcParser.PlcEntry;
 import com.openggf.level.rings.RingSpawn;
 import com.openggf.level.rings.RingSpriteSheet;
-import com.openggf.tools.EnigmaReader;
-import com.openggf.tools.KosinskiReader;
-import com.openggf.tools.NemesisReader;
+import com.openggf.data.compression.EnigmaReader;
+import com.openggf.data.compression.KosinskiReader;
+import com.openggf.data.compression.NemesisReader;
 
 import java.io.IOException;
 import java.nio.channels.FileChannel;
@@ -170,7 +171,7 @@ public class Sonic1Level extends AbstractLevel {
      */
     private void loadPalettes(Rom rom, int sonicPaletteId, int levelPaletteId) throws IOException {
         palettes = new Palette[PALETTE_COUNT];
-        GraphicsManager graphicsMan = GraphicsManager.getInstance();
+        GraphicsManager graphicsMan = GameServices.graphics();
 
         for (int i = 0; i < PALETTE_COUNT; i++) {
             palettes[i] = new Palette();
@@ -235,7 +236,7 @@ public class Sonic1Level extends AbstractLevel {
      * <p>Any gaps between entries are filled with empty patterns.
      */
     private void loadPatterns(Rom rom, List<PlcEntry> cues) throws IOException {
-        GraphicsManager graphicsMan = GraphicsManager.getInstance();
+        GraphicsManager graphicsMan = GameServices.graphics();
 
         // Sort cues by tile offset
         List<PlcEntry> sorted = new ArrayList<>(cues);

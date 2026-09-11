@@ -10,6 +10,17 @@ import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.ObjectServices;
+import com.openggf.level.objects.SpawnRewindRecreatable;
+import com.openggf.level.objects.TouchActorContextPolicy;
+import com.openggf.level.objects.TouchAttackBouncePolicy;
+import com.openggf.level.objects.TouchCategory;
+import com.openggf.level.objects.TouchCategoryDecodeMode;
+import com.openggf.level.objects.TouchOverlapStopPolicy;
+import com.openggf.level.objects.TouchResponseListener;
+import com.openggf.level.objects.TouchResponseProvider;
+import com.openggf.level.objects.TouchResponseProfile;
+import com.openggf.level.objects.TouchResponseResult;
+import com.openggf.level.objects.TouchShieldDeflectCapability;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -36,9 +47,8 @@ import java.util.List;
  *   <li>Anim 1 (hit): frames 1,2,1,2 at duration 3, then change to anim 0</li>
  * </ul>
  * <p>
- * <b>Collision:</b> obColType $D7 — size index $17 (16x16 box from center).
- * Uses obColProp to detect Sonic touch. Engine uses direct collision check
- * since this object bounces rather than hurting/being destroyed.
+ * <b>Collision:</b> obColType $D7 — {@code React_Special} increments
+ * obColProp, and Bump_Hit consumes that signal.
  * <p>
  * <b>Physics (Bump_Hit):</b>
  * <pre>
@@ -50,7 +60,8 @@ import java.util.List;
  * y_vel = -$700 * sin >> 8
  * </pre>
  */
-public class Sonic1BumperObjectInstance extends AbstractObjectInstance {
+public class Sonic1BumperObjectInstance extends AbstractObjectInstance
+        implements TouchResponseProvider, TouchResponseListener, SpawnRewindRecreatable {
 
     // ---- ROM Constants ----
 
@@ -63,9 +74,21 @@ public class Sonic1BumperObjectInstance extends AbstractObjectInstance {
     // From disassembly: move.b #$10,obActWid(a0) — active width 16 pixels
     private static final int ACTIVE_WIDTH = 0x10;
 
-    // obColType $D7 — size index $17 = 8x8 half-widths (16x16 box)
+    // obColType $D7 — React_Special property route + size index $17 = 8x8 half-widths.
+    private static final int COLLISION_FLAGS = 0xD7;
+    private static final int COLLISION_SIZE_INDEX = 0x17;
     private static final int COLLISION_HALF_WIDTH = 8;
     private static final int COLLISION_HALF_HEIGHT = 8;
+    private static final TouchResponseProfile TOUCH_RESPONSE_PROFILE = new TouchResponseProfile(
+            TouchCategoryDecodeMode.S1_SPECIAL_PROPERTY,
+            true,
+            false,
+            false,
+            TouchShieldDeflectCapability.NONE,
+            0,
+            TouchAttackBouncePolicy.STANDARD_ENEMY_KILL,
+            TouchActorContextPolicy.MAIN_FULL_SIDEKICK_HURT_ONLY,
+            TouchOverlapStopPolicy.STOP_AFTER_FIRST_OVERLAP_FOR_ALL_ACTORS);
 
     // From disassembly: cmpi.b #$8A,2(a2,d0.w) — max 10 hits ($80 + 10 = $8A)
     private static final int MAX_HIT_COUNT = 10;
@@ -85,23 +108,37 @@ public class Sonic1BumperObjectInstance extends AbstractObjectInstance {
     private static final int[] HIT_FRAMES = {1, 2, 1, 2};
     private static final int HIT_FRAME_DURATION = 4; // dc.b 3 = 3+1 frames per step
 
-    // Cooldown to prevent repeated hits while overlapping
-    private static final int BOUNCE_COOLDOWN = 8;
-
     // ---- Instance State ----
 
     private int mappingFrame = FRAME_IDLE;
     private int hitAnimIndex = -1;  // -1 = not playing hit anim
     private int hitAnimTimer = 0;
-    private int bounceCooldown = 0;
+    private int collisionProperty = 0;
+    private transient AbstractPlayableSprite pendingTouchedPlayer;
+    private int pendingTouchCentreX;
+    private int pendingTouchCentreY;
+    private int hitCount = 0;
 
     public Sonic1BumperObjectInstance(ObjectSpawn spawn) {
         super(spawn, "Bumper");
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
+        // ROM Bump_Hit consumes obColProp after ReactToItem increments it for
+        // $D7: docs/s1disasm/_incObj/47 Bumper.asm:24-40 and
+        // docs/s1disasm/_incObj/sub ReactToItem.asm:377-427.
+        if (collisionProperty != 0 && pendingTouchedPlayer != null) {
+            collisionProperty = 0;
+            AbstractPlayableSprite touchedPlayer = pendingTouchedPlayer;
+            int touchCentreX = pendingTouchCentreX;
+            int touchCentreY = pendingTouchCentreY;
+            pendingTouchedPlayer = null;
+            if (!touchedPlayer.isHurt() && !touchedPlayer.getDead()) {
+                applyBounce(touchedPlayer, touchCentreX, touchCentreY);
+            }
+        }
+
         // Update hit animation sequence
         if (hitAnimIndex >= 0) {
             if (hitAnimTimer > 0) {
@@ -119,35 +156,14 @@ public class Sonic1BumperObjectInstance extends AbstractObjectInstance {
             }
         }
 
-        // Update bounce cooldown
-        if (bounceCooldown > 0) {
-            bounceCooldown--;
+        // ROM Bump_Hit .display uses out_of_range.s, then .resetcount clears
+        // obRespawnNo's v_objstate bit before DeleteObject:
+        // docs/s1disasm/_incObj/47 Bumper.asm:66-79. ObjPosLoad streams
+        // bumpers far ahead of the visible screen, so this must use the
+        // chunk-aligned out_of_range window rather than the visible-X gate.
+        if (!isInRange()) {
+            setDestroyedByOffscreen();
         }
-
-        // Check collision with player
-        if (player != null && !player.isHurt() && !player.getDead() && bounceCooldown == 0) {
-            if (checkCollision(player)) {
-                applyBounce(player);
-            }
-        }
-
-        // out_of_range check — delete if too far from camera
-        if (!isOnScreenX(0x80)) {
-            setDestroyed(true);
-        }
-    }
-
-    /**
-     * Check rectangular collision using obColType $D7 size index $17.
-     * ROM collision box: 8x8 half-widths = 16x16 total.
-     */
-    private boolean checkCollision(AbstractPlayableSprite player) {
-        int dx = Math.abs(player.getCentreX() - spawn.x());
-        int dy = Math.abs(player.getCentreY() - spawn.y());
-        int playerHalfWidth = 8;
-        int playerHalfHeight = player.getYRadius();
-        return dx < (COLLISION_HALF_WIDTH + playerHalfWidth)
-                && dy < (COLLISION_HALF_HEIGHT + playerHalfHeight);
     }
 
     /**
@@ -167,12 +183,29 @@ public class Sonic1BumperObjectInstance extends AbstractObjectInstance {
      * Note: CalcAngle takes (dx, dy) and returns angle.
      * CalcSine returns (sin, cos) in (d0, d1).
      * The negation pushes Sonic AWAY from the bumper.
+     * <p>
+     * ROM's ReactToItem (Sonic's own slot) and Bump_Hit (the bumper's slot) both
+     * run within the SAME frame's ExecuteObjects pass — Bump_Hit reads obX/obY
+     * of the position Sonic was AT WHEN THE TOUCH WAS DETECTED, docs/s1disasm/
+     * _incObj/47 Bumper.asm:29-30 (docs/s1disasm/_incObj/sub ReactToItem.asm:
+     * 377-427 sets obColProp that same frame). Our engine defers the bumper's
+     * own consuming update() to the FOLLOWING frame (ObjectManager runs every
+     * object's update() before the touch-response pass, so a touch armed this
+     * frame is only consumed on the object's NEXT update() call). A fast-moving
+     * player (e.g. one just launched by a spring) can cross clean through the
+     * bumper's position during that single deferred frame, so re-reading the
+     * player's LIVE position at consumption time can sample him already on the
+     * opposite side of the bumper and compute a bounce in the wrong direction
+     * entirely (observed: a player approaching from below gets launched further
+     * UP instead of reflected back down). Use the position captured at the
+     * moment of the actual touch (onTouchResponse) instead of the live,
+     * one-frame-stale player position.
      */
-    private void applyBounce(AbstractPlayableSprite player) {
+    private void applyBounce(AbstractPlayableSprite player, int touchCentreX, int touchCentreY) {
         // ROM: sub.w obX(a1),d1 / sub.w obY(a1),d2 (d1=bumper.X - sonic.X, d2=bumper.Y - sonic.Y)
         // Then CalcAngle (d1, d2) and CalcSine to get sin/cos as 8-bit fixed-point.
-        int dx = spawn.x() - player.getCentreX();
-        int dy = spawn.y() - player.getCentreY();
+        int dx = spawn.x() - touchCentreX;
+        int dy = spawn.y() - touchCentreY;
 
         // ROM CalcAngle takes raw (dx, dy) — not speed. We reuse the same logic
         // since it's just atan2 over the 256-entry lookup table.
@@ -207,8 +240,6 @@ public class Sonic1BumperObjectInstance extends AbstractObjectInstance {
         mappingFrame = HIT_FRAMES[0];
         hitAnimTimer = HIT_FRAME_DURATION - 1;
 
-        bounceCooldown = BOUNCE_COOLDOWN;
-
         // ROM: move.w #sfx_Bumper,d0 / jsr (QueueSound2).l
         try {
             services().playSfx(Sonic1Sfx.BUMPER.id);
@@ -234,8 +265,6 @@ public class Sonic1BumperObjectInstance extends AbstractObjectInstance {
      * The engine doesn't expose the respawn state byte directly,
      * so we use a local hit counter as equivalent behavior.
      */
-    private int hitCount = 0;
-
     private void awardPoints() {
         if (hitCount >= MAX_HIT_COUNT) {
             return;
@@ -246,15 +275,66 @@ public class Sonic1BumperObjectInstance extends AbstractObjectInstance {
         services().gameState().addScore(POINTS_PER_HIT);
 
         // Spawn points popup (id_Points = 0x29)
-        ObjectServices svc = tryServices();
+        final ObjectServices svc = tryServices();
         ObjectManager objectManager = svc != null ? svc.objectManager() : null;
         if (objectManager != null) {
-            ObjectSpawn pointsSpawn = new ObjectSpawn(
-                    spawn.x(), spawn.y(), 0x29, 0, 0, false, 0);
-            Sonic1PointsObjectInstance pointsObj = new Sonic1PointsObjectInstance(
-                    pointsSpawn, svc, POINTS_PER_HIT);
-            pointsObj.setScoreFrameIndex(POINTS_FRAME_INDEX);
-            objectManager.addDynamicObject(pointsObj);
+            spawnFreeChild(() -> {
+                ObjectSpawn pointsSpawn = new ObjectSpawn(
+                        spawn.x(), spawn.y(), 0x29, 0, 0, false, 0);
+                Sonic1PointsObjectInstance pointsObj = new Sonic1PointsObjectInstance(
+                        pointsSpawn, svc, POINTS_PER_HIT);
+                pointsObj.setScoreFrameIndex(POINTS_FRAME_INDEX);
+                return pointsObj;
+            });
+        }
+    }
+
+    @Override
+    public int getCollisionFlags() {
+        return isDestroyed() ? 0 : COLLISION_FLAGS;
+    }
+
+    @Override
+    public int getCollisionProperty() {
+        return collisionProperty;
+    }
+
+    @Override
+    public TouchResponseProfile getTouchResponseProfile() {
+        return TOUCH_RESPONSE_PROFILE;
+    }
+
+    @Override
+    public TouchResponseProfile getTouchResponseProfile(boolean multiRegionSource) {
+        return TOUCH_RESPONSE_PROFILE;
+    }
+
+    @Override
+    public boolean usesSonic1TouchSpecialPropertyResponse() {
+        return true;
+    }
+
+    @Override
+    public boolean requiresContinuousTouchCallbacks() {
+        return true;
+    }
+
+    @Override
+    public void onTouchResponse(PlayableEntity playerEntity, TouchResponseResult result, int frameCounter) {
+        if (result.category() != TouchCategory.SPECIAL || result.sizeIndex() != COLLISION_SIZE_INDEX) {
+            return;
+        }
+        if (playerEntity instanceof AbstractPlayableSprite player) {
+            // ROM React_Special .D7orE1: addq.b #1,obColProp(a1). Bump_Hit
+            // consumes the property from the object's own slot later this frame.
+            collisionProperty = (collisionProperty + 1) & 0xFF;
+            pendingTouchedPlayer = player;
+            // Capture position at the moment of the touch (see applyBounce's
+            // Javadoc): our update() defers consumption to the object's NEXT
+            // update() call, one frame after ROM's same-frame Bump_Hit would
+            // have read it, so the live position must not be re-sampled then.
+            pendingTouchCentreX = player.getCentreX();
+            pendingTouchCentreY = player.getCentreY();
         }
     }
 
@@ -278,8 +358,8 @@ public class Sonic1BumperObjectInstance extends AbstractObjectInstance {
     @Override
     public void appendDebugRenderCommands(DebugRenderContext ctx) {
         // Draw collision box (16x16 from center)
-        float r = bounceCooldown > 0 ? 1f : 0f;
-        float g = bounceCooldown > 0 ? 0.5f : 1f;
+        float r = collisionProperty != 0 ? 1f : 0f;
+        float g = collisionProperty != 0 ? 0.5f : 1f;
         float b = 0f;
         ctx.drawRect(spawn.x(), spawn.y(), COLLISION_HALF_WIDTH, COLLISION_HALF_HEIGHT, r, g, b);
     }

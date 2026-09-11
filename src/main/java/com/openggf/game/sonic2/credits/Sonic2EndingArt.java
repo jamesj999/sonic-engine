@@ -7,6 +7,7 @@ import com.openggf.game.PlayerCharacter;
 import com.openggf.game.sonic2.Sonic2LevelEventManager;
 import com.openggf.game.sonic2.constants.Sonic2Constants;
 import com.openggf.graphics.GraphicsManager;
+import com.openggf.graphics.PatternAtlasRange;
 import com.openggf.level.Palette;
 import com.openggf.level.Pattern;
 import com.openggf.util.PatternDecompressor;
@@ -54,22 +55,22 @@ public class Sonic2EndingArt {
      * Uses 0xF0000 range to avoid collision with credits text (0xE0000),
      * title screen (0x60000-0x80000), and level patterns.
      */
-    static final int PATTERN_BASE_CHARACTER = 0xF0000;
+    static final int PATTERN_BASE_CHARACTER = PatternAtlasRange.SONIC2_ENDING_CHARACTER.base();
 
     /** Pattern base for ending final tornado closeup. */
-    static final int PATTERN_BASE_FINAL_TORNADO = 0xF1000;
+    static final int PATTERN_BASE_FINAL_TORNADO = PatternAtlasRange.SONIC2_ENDING_FINAL_TORNADO.base();
 
     /** Pattern base for ending photo frame art. */
-    static final int PATTERN_BASE_PICS = 0xF2000;
+    static final int PATTERN_BASE_PICS = PatternAtlasRange.SONIC2_ENDING_PICS.base();
 
     /** Pattern base for ending mini tornado sprites. */
-    static final int PATTERN_BASE_MINI_TORNADO = 0xF3000;
+    static final int PATTERN_BASE_MINI_TORNADO = PatternAtlasRange.SONIC2_ENDING_MINI_TORNADO.base();
 
     /** Pattern base for cloud art. */
-    static final int PATTERN_BASE_CLOUDS = 0xF4000;
+    static final int PATTERN_BASE_CLOUDS = PatternAtlasRange.SONIC2_ENDING_CLOUDS.base();
 
     /** Pattern base for animal art (flicky/eagle/chicken). */
-    static final int PATTERN_BASE_ANIMAL = 0xF5000;
+    static final int PATTERN_BASE_ANIMAL = PatternAtlasRange.SONIC2_ENDING_ANIMAL.base();
 
     /**
      * Unified VRAM-relative pattern base for ObjCF sprite mapping rendering.
@@ -77,7 +78,7 @@ public class Sonic2EndingArt {
      * ROM mapping pieces (which contain absolute VRAM tile indices) resolve
      * directly to GPU pattern IDs when using this as the base.
      */
-    static final int PATTERN_BASE_VRAM = 0xF8000;
+    static final int PATTERN_BASE_VRAM = PatternAtlasRange.SONIC2_ENDING_VRAM.base();
 
     // ========================================================================
     // Loaded art
@@ -130,7 +131,9 @@ public class Sonic2EndingArt {
 
         // Query actual PlayerCharacter from level event manager (matches ROM's Player_mode check)
         boolean tailsAlone = false;
-        Sonic2LevelEventManager lem = Sonic2LevelEventManager.getInstance();
+        Sonic2LevelEventManager lem = GameServices.hasRuntime()
+                ? (Sonic2LevelEventManager) GameServices.module().getLevelEventProvider()
+                : null;
         if (lem != null) {
             tailsAlone = (lem.getPlayerCharacter() == PlayerCharacter.TAILS_ALONE);
         }
@@ -299,7 +302,7 @@ public class Sonic2EndingArt {
      * Must be called after {@link #loadArt} and {@link #loadPalettes}.
      */
     public void cacheToGpu() {
-        GraphicsManager gm = GraphicsManager.getInstance();
+        GraphicsManager gm = GameServices.graphics();
         if (gm == null || gm.isHeadlessMode()) {
             return;
         }

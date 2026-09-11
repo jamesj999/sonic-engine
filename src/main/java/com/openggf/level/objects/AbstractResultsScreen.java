@@ -46,6 +46,10 @@ public abstract class AbstractResultsScreen extends AbstractObjectInstance imple
     protected static final int SCREEN_HEIGHT = 224;
     protected static final int SCREEN_CENTER_X = SCREEN_WIDTH / 2;
 
+    // Widescreen support — set by setViewportWidth() (used when services() is unavailable);
+    // level-object subclasses read the live projection width from GraphicsManager instead.
+    private int viewportWidth = SCREEN_WIDTH;
+
     // State tracking
     protected int state = STATE_SLIDE_IN;
     protected int stateTimer = 0;
@@ -65,9 +69,41 @@ public abstract class AbstractResultsScreen extends AbstractObjectInstance imple
         super(null, code);
     }
 
+    /**
+     * Sets the projection-space viewport width for widescreen centering.
+     *
+     * <p>At native width 320 the {@link #xOffset()} returns 0 — byte-identical output.
+     */
     @Override
-    public void update(int frameCounter, PlayableEntity player) {
-        this.frameCounter = frameCounter;
+    public void setViewportWidth(int width) {
+        this.viewportWidth = Math.max(SCREEN_WIDTH, width);
+    }
+
+    /**
+     * Horizontal pixel offset to apply to every X position so that native-320 content
+     * is centred within the current viewport. Returns 0 at native width 320.
+     *
+     * <p>When {@link #services()} provides a live {@code GraphicsManager}, uses its
+     * projection width (updated by Engine each frame) so level-object results screens
+     * react to resolution changes without a per-frame {@link #setViewportWidth} call.
+     * Falls back to the explicitly-set {@link #viewportWidth} (used by the
+     * SPECIAL_STAGE_RESULTS path which gets the width from Engine before each draw).
+     */
+    protected int xOffset() {
+        try {
+            com.openggf.graphics.GraphicsManager gm = services().graphicsManager();
+            if (gm != null) {
+                return (gm.getProjectionWidth() - SCREEN_WIDTH) / 2;
+            }
+        } catch (Exception ignored) {
+            // services() may throw if called outside a valid context (e.g. tests)
+        }
+        return (viewportWidth - SCREEN_WIDTH) / 2;
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity player) {
+        this.frameCounter = vIntRunCount;
         stateTimer++;
         totalFrames++;
 

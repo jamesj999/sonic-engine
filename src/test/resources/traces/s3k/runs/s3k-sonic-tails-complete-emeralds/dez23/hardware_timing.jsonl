@@ -1,0 +1,4 @@
+{"event":"hardware_work_completed","raw_frame":0,"boundary":"pre_main_loop","kind":"kos_decompression_queue","ordinal":529,"submission_fingerprint":"sha256:996d8a039d5c1748d72acc5c56485ea1aea3da39978761e9139601f60c28919a"}
+{"event":"hardware_work_completed","raw_frame":1,"boundary":"post_objects","kind":"kos_module_queue","ordinal":364,"submission_fingerprint":"sha256:7693aa6df865bad1e27dc781a64428c71c6427766abb35b721e6342ae5ccac05"}
+{"event":"hardware_work_completed","raw_frame":2,"boundary":"pre_main_loop","kind":"kos_decompression_queue","ordinal":530,"submission_fingerprint":"sha256:afa286190837ad2213f2a1a2bfedd682c89f3ac58c16113b25c62c16c8494ae0"}
+{"event":"hardware_work_completed","raw_frame":3,"boundary":"post_objects","kind":"kos_module_queue","ordinal":365,"submission_fingerprint":"sha256:6598bb4ec93bc788f02876934a8a78f511402ed38bc7bf0e5715e24bae2eefca"}

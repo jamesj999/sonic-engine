@@ -1,0 +1,22 @@
+{
+  "game": "s1",
+  "zone": "ghz",
+  "zone_id": 0,
+  "act": 3,
+  "bk2_frame_offset": 17686,
+  "trace_frame_count": 798,
+  "start_x": "0x054E",
+  "start_y": "0x06C3",
+  "characters": ["sonic"],
+  "main_character": "sonic",
+  "sidekicks": [],
+  "rng_seed": "0x6354A37A",
+  "recording_date": "2026-08-04",
+  "recorder": "native-bizhawk-headless",
+  "recorder_version": "3.0",
+  "trace_schema": 5,
+  "aux_schema_extras": ["s1_obj64_state_per_frame", "object_near_obj_frame", "v_objstate_per_frame", "camera_boundary_per_frame", "object_near_routine2_objoff3c", "object_near_objoff_34_36_38", "v_oscillate_per_frame", "lag_state_per_frame", "object_near_objoff_32", "load_queue_state_per_frame", "dynamic_art_transfer_state_per_frame"],
+  "rom_checksum": "",
+  "notes": "",
+  "source_bk2": "sonic1-complete-withemeralds.bk2"
+}

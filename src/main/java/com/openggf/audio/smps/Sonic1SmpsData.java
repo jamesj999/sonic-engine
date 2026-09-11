@@ -46,7 +46,7 @@ package com.openggf.audio.smps;
  *   Bytes 17-20: (D1L&lt;&lt;4)|RR for operators 4, 3, 2, 1
  *   Bytes 21-24: TL for operators 4, 3, 2, 1
  * </pre>
- * S2 uses Op4,Op2,Op3,Op1 per group. The engine expects S2 format, so
+ * The S1 sequencer profile consumes a normalized Op4,Op2,Op3,Op1 layout, so
  * {@link #getVoice(int)} swaps the middle two bytes of each group on load.
  */
 public class Sonic1SmpsData extends AbstractSmpsData {
@@ -162,7 +162,7 @@ public class Sonic1SmpsData extends AbstractSmpsData {
         }
 
         // S1 voice bytes per 4-byte group are in order Op4,Op3,Op2,Op1 (InsMode=DEFAULT).
-        // The engine (Ym2612Chip.setInstrument) expects S2 order: Op4,Op2,Op3,Op1.
+        // The S1 sequencer profile consumes normalized order: Op4,Op2,Op3,Op1.
         // The difference: bytes at positions [g+1] and [g+2] are swapped.
         // Convert S1 → S2 format by swapping the middle two bytes in each group.
         byte[] voice = new byte[stride];

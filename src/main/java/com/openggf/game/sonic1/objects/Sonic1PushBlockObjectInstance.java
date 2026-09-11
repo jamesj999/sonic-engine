@@ -2,6 +2,9 @@ package com.openggf.game.sonic1.objects;
 
 import com.openggf.game.PlayableEntity;
 import com.openggf.debug.DebugRenderContext;
+import com.openggf.game.solid.ContactKind;
+import com.openggf.game.solid.PlayerSolidContactResult;
+import com.openggf.game.solid.SolidCheckpointBatch;
 import com.openggf.game.sonic1.audio.Sonic1Sfx;
 import com.openggf.game.sonic1.constants.Sonic1Constants;
 import com.openggf.game.sonic1.constants.Sonic1ObjectIds;
@@ -12,14 +15,19 @@ import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.SolidContact;
+import com.openggf.level.objects.SolidExecutionMode;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
+import com.openggf.level.objects.SolidRoutineProfile;
+import com.openggf.level.objects.SpawnRewindRecreatable;
+import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.Direction;
 import com.openggf.physics.ObjectTerrainUtils;
 import com.openggf.physics.TerrainCheckResult;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
+import com.openggf.sprites.NativePositionOps;
 
 import com.openggf.debug.DebugColor;
 import java.util.Collection;
@@ -52,7 +60,7 @@ import java.util.List;
  * Reference: docs/s1disasm/_incObj/33 Pushable Blocks.asm
  */
 public class Sonic1PushBlockObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, SpawnRewindRecreatable {
 
     // From disassembly: move.b #$F,obHeight(a0) / move.b #$F,obWidth(a0)
     private static final int HALF_HEIGHT = 0x0F;
@@ -104,14 +112,14 @@ public class Sonic1PushBlockObjectInstance extends AbstractObjectInstance
     private int y;
 
     // Saved spawn position (objoff_34, objoff_36) for reset
-    private final int spawnX;
-    private final int spawnY;
+    private int spawnX;
+    private int spawnY;
 
     // Active width from PushB_Var (obActWid)
-    private final int activeWidth;
+    private int activeWidth;
 
     // Mapping frame (0=single, 1=four)
-    private final int frameIndex;
+    private int frameIndex;
 
     // Routine state (0=init, 2=active, 4=offscreen/reset)
     private int routine;
@@ -129,13 +137,16 @@ public class Sonic1PushBlockObjectInstance extends AbstractObjectInstance
     // Push momentum (objoff_30) - stored when block decelerates on 16px grid
     private int pushMomentum;
 
-    // 16.16 fixed-point sub-pixel accumulators for SpeedToPos
-    private int xSubpixel;
-    private int ySubpixel;
+    /** Subpixel accumulators (xSub / ySub) for ROM-accurate 16.16 SpeedToPos integration. */
+    private final SubpixelMotion.State motion = new SubpixelMotion.State(0, 0, 0, 0, 0, 0);
 
     // Solid collision state machine (obSolid): 0/2/4/6
     // 0 = idle (Solid_ChkEnter), 2 = riding, 4 = falling, 6 = aligning
     private int solidState;
+
+    // A state-2 ExitPlatform frame skips Solid_ChkCollision, so the object's
+    // native Status_Push bit remains available to the next state-0 checkpoint.
+    private boolean pushReleasePendingAfterRideExit;
 
     // MZ Act 1: whether block is chained to stomper (bit 7 of obSubtype)
     private boolean chainedToStomper;
@@ -160,8 +171,10 @@ public class Sonic1PushBlockObjectInstance extends AbstractObjectInstance
     private static final int PUSH_SOUND_DURATION = 31;
     private int lastPushSoundFrame = -PUSH_SOUND_DURATION;
 
-    // Last X position where a geyser maker was spawned (prevents repeated spawns)
-    private int lastGeyserSpawnX = Integer.MIN_VALUE;
+    // Set when the ROM's second out_of_range check falls through to DeleteObject.
+    // ObjectManager then performs the actual unload so counter-based respawn state
+    // is cleared through the normal manager path.
+    private boolean deletePending;
 
     private boolean initialized;
 
@@ -187,6 +200,7 @@ public class Sonic1PushBlockObjectInstance extends AbstractObjectInstance
 
         this.routine = 2; // Skip init, go straight to active
         this.solidState = 0;
+        this.pushReleasePendingAfterRideExit = false;
         this.inMotion = false;
         // ROM keeps obSubtype intact after init; bit 7 gates the ledge/floor
         // check in the push handler (tst.b obSubtype / bmi.s locret_C2E4).
@@ -194,6 +208,7 @@ public class Sonic1PushBlockObjectInstance extends AbstractObjectInstance
         // frame (bclr then conditional bset), so the init value is overwritten.
         // In all other acts/zones bit 7 retains its spawn value.
         this.chainedToStomper = (subtype & 0x80) != 0;
+        this.deletePending = false;
 
         updateDynamicSpawn(x, y);
     }
@@ -221,11 +236,12 @@ public class Sonic1PushBlockObjectInstance extends AbstractObjectInstance
         return y;
     }
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         ensureInitialized();
+        deletePending = false;
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         switch (routine) {
-            case 2 -> updateActive(frameCounter, player);
+            case 2 -> updateActive(vIntRunCount, player);
             case 4 -> updateOffscreen();
             default -> { }
         }
@@ -247,7 +263,24 @@ public class Sonic1PushBlockObjectInstance extends AbstractObjectInstance
      * States 0 and 2 are delegated to the engine's SolidContacts system
      * (which calls onSolidContact). States 4 and 6 are handled here directly.
      */
-    private void updateActive(int frameCounter, AbstractPlayableSprite player) {
+    private void updateActive(int vIntRunCount, AbstractPlayableSprite player) {
+        // ROM parity: snapshot the entering solidState so we know which loc_C186
+        // branch ROM would have taken this frame. ROM's state-4 (loc_C1AA) and
+        // state-6 (loc_C1F2) paths return WITHOUT ever calling Solid_ChkEnter,
+        // so the engine must skip the inline solid-contact resolution that frame
+        // — otherwise it establishes a riding state one frame too early and the
+        // platform-rider carry (processInlineRidingObject's shiftX(deltaX)) fires
+        // on the very next frame. ROM's MvSonicOnPtfm only runs once obSolid==2,
+        // which is set by Solid_Landed inside Solid_ChkEnter — and that happens
+        // on a DIFFERENT frame from the state-4 lava landing.
+        //
+        // Reference: docs/s1disasm/_incObj/33 Pushable Blocks.asm
+        //   loc_C1AA (state 4): bsr SpeedToPos / ObjFloorDist / ... / rts
+        //   loc_C1F2 (state 6): bsr SpeedToPos / andi ... / subq #2,obSolid / rts
+        //   loc_C218 (state 0): bsr Solid_ChkEnter (the only path that calls it)
+        int enteringSolidState = solidState;
+        int preMoveX = x;
+
         if (inMotion) {
             // loc_C046: lava sliding physics (only when objoff_32 != 0)
             if (updateLavaMotion(player)) {
@@ -276,10 +309,89 @@ public class Sonic1PushBlockObjectInstance extends AbstractObjectInstance
             checkLavaGeyser();
         }
 
-        // loc_BFC6: out_of_range check
-        if (!isOnScreen(128)) {
-            handleOutOfRange();
+        // State 0 owns Solid_ChkCollision. A top landing changes obSolid to 2,
+        // which must remain distinct from the player's Status_OnObj bit: another
+        // earlier routine can clear Status_OnObj before this object's later slot,
+        // but Obj33 still enters its state-2 ExitPlatform branch and returns
+        // without falling through to Solid_ChkCollision/Solid_NoCollision.
+        if (enteringSolidState == 0) {
+            SolidCheckpointBatch batch = checkpointAll();
+            pushReleasePendingAfterRideExit = false;
+            if (solidState == 0 && !inMotion) {
+                applyPushContacts(batch, vIntRunCount);
+            }
+            if (solidState == 0
+                    && hasStandingContact(batch)
+                    && isPlayerRidingThisBlock()) {
+                solidState = 2;
+            }
+        } else if (enteringSolidState == 2) {
+            int halfWidth = getSolidParams().halfWidth();
+            int relativeX = player.getCentreX() - x;
+            boolean nativeStandingBitSurvives = player.isOnObject()
+                    && !player.getAir()
+                    && relativeX >= -halfWidth
+                    && relativeX < halfWidth;
+            if (!nativeStandingBitSurvives) {
+                // PushB_SolidAction.sonicOnBlock calls ExitPlatform, then tests
+                // Sonic's live global Status_OnObj. ExitPlatform clears that bit
+                // for air/range exits, then Obj33 returns without a same-slot
+                // Solid_ChkCollision, leaving its Status_Push bit for the next
+                // state-0 checkpoint.
+                player.setOnObject(false);
+                if (isPlayerRidingThisBlock() && services().objectManager() != null) {
+                    services().objectManager().clearRidingObject(player);
+                }
+                solidState = 0;
+                pushReleasePendingAfterRideExit = true;
+            } else {
+                // PushB_OnLava saves pre-move X in d4, moves the block, then
+                // PushB_SolidAction state 2 calls MvSonicOnPtfm. The native
+                // routine deliberately relies only on the global OnObj bit: a
+                // later Obj52 may own Sonic's stand-on slot while Obj33 still
+                // carries him from its own retained obSolid=2 state.
+                int deltaX = x - preMoveX;
+                if (deltaX != 0) {
+                    player.shiftX(deltaX);
+                }
+                int centreY = y - getSolidParams().groundHalfHeight() - player.getYRadius();
+                NativePositionOps.writeYPosPreserveSubpixel(player, centreY);
+            }
         }
+
+        // PushB_Display: first out_of_range on the current obX; if that fails,
+        // fall into PushB_ChkWithinOrigin
+        // (docs/s1disasm/_incObj/"33 MZ, LZ Pushable Blocks.asm":92-96).
+        if (isOutOfRangeCurrentX()) {
+            chkWithinOrigin();
+        }
+    }
+
+    /**
+     * ROM {@code PushB_ChkWithinOrigin}
+     * (docs/s1disasm/_incObj/"33 MZ, LZ Pushable Blocks.asm":96-113).
+     * <p>
+     * A second {@code out_of_range} against {@code pblock_origX}: when the ORIGIN is
+     * also outside the window the block reaches {@code .deleteAndAllowRespawn}, which
+     * clears the respawn bit and calls {@code DeleteObject}. Only an origin still
+     * inside the window is snapped home and parked on routine 4
+     * ({@code PushB_ChkVisible}, ibid.:116-127), which runs {@code ChkPartiallyVisible}
+     * and {@code rts} with no {@code out_of_range} test of its own.
+     * <p>
+     * Both ROM entry points reach this: {@code PushB_Display}'s fall-through, and
+     * {@code PushB_Sunken}'s {@code bra.w} after a block finishes sinking in lava
+     * (ibid.:213-219). Taking the routine-4 half unconditionally on the sunken path
+     * parks an out-of-range block in a routine that can never delete it, so it holds
+     * its SST slot for the rest of the act and shifts every later {@code ObjPosLoad}
+     * placement -- and with it the {@code FindFreeObj} slots the Obj37 scattered-ring
+     * chain claims, whose {@code d7}-derived bounce phase then diverges.
+     */
+    private void chkWithinOrigin() {
+        if (isOutOfRangeSpawnX()) {
+            deletePending = true;
+            return;
+        }
+        handleOutOfRange();
     }
 
     /**
@@ -317,7 +429,7 @@ public class Sonic1PushBlockObjectInstance extends AbstractObjectInstance
                 // Floor hit: snap to surface, clear airborne
                 // add.w d1,obY(a0)
                 y += result.distance();
-                ySubpixel = 0;
+                motion.ySub = 0;
                 // bclr #1,obStatus(a0)
                 airborne = false;
                 // clr.w obVelY(a0)
@@ -347,18 +459,23 @@ public class Sonic1PushBlockObjectInstance extends AbstractObjectInstance
             }
         } else {
             // loc_C0D6: slow sink - addi.l #$2001,obY(a0)
-            int yPos32 = (y << 16) | (ySubpixel & 0xFFFF);
+            // This is a direct 16.16 add (not a velocity-driven move), so update the
+            // accumulator on the State directly.
+            int yPos32 = (y << 16) | (motion.ySub & 0xFFFF);
             yPos32 += SLOW_SINK_INCREMENT;
             y = yPos32 >> 16;
-            ySubpixel = yPos32 & 0xFFFF;
+            motion.ySub = yPos32 & 0xFFFF;
 
-            // cmpi.b #$A0,obY+3(a0) / bhs.s loc_C104
-            if ((ySubpixel & 0xFF) >= SLOW_SINK_DELETE_THRESHOLD) {
-                // loc_C104: unlink player and go to out-of-range
+            // cmpi.b #$A0,obY+3(a0) / bhs.s PushB_Sunken
+            if ((motion.ySub & 0xFF) >= SLOW_SINK_DELETE_THRESHOLD) {
+                // PushB_Sunken: unlink Sonic, clear the stood-on flag, then
+                // bra.w PushB_ChkWithinOrigin -- NOT an unconditional park at
+                // the origin (docs/s1disasm/_incObj/"33 MZ, LZ Pushable
+                // Blocks.asm":209-219).
                 if (player != null) {
                     player.setOnObject(false);
                 }
-                handleOutOfRange();
+                chkWithinOrigin();
                 return true;
             }
         }
@@ -395,7 +512,7 @@ public class Sonic1PushBlockObjectInstance extends AbstractObjectInstance
 
         // andi.w #-$10,obX(a0) — force-align to 16px grid
         x &= ~0xF;
-        xSubpixel = 0;
+        motion.xSub = 0;
 
         // move.w obVelX(a0),objoff_30(a0) — save velocity as push momentum
         pushMomentum = xVelocity;
@@ -444,13 +561,14 @@ public class Sonic1PushBlockObjectInstance extends AbstractObjectInstance
 
         // Floor hit: add.w d1,obY(a0) — snap to surface
         y += result.distance();
-        ySubpixel = 0;
+        motion.ySub = 0;
 
         // clr.w obVelY(a0)
         yVelocity = 0;
 
         // clr.b obSolid(a0) — transition to state 0
         solidState = 0;
+        pushReleasePendingAfterRideExit = false;
 
         // Check lava tile: move.w (a1),d0 / andi.w #$3FF,d0 / cmpi.w #$16A,d0
         int tileIndex = result.tileIndex() & 0x3FF;
@@ -461,7 +579,7 @@ public class Sonic1PushBlockObjectInstance extends AbstractObjectInstance
             // move.b #1,objoff_32(a0) — THIS is the only place objoff_32 gets set
             inMotion = true;
             // clr.w obY+2(a0)
-            ySubpixel = 0;
+            motion.ySub = 0;
         }
     }
 
@@ -525,7 +643,7 @@ public class Sonic1PushBlockObjectInstance extends AbstractObjectInstance
             xVelocity = 0;
             yVelocity = 0;
             solidState = 0;
-            lastGeyserSpawnX = Integer.MIN_VALUE;
+            pushReleasePendingAfterRideExit = false;
         }
     }
 
@@ -547,12 +665,12 @@ public class Sonic1PushBlockObjectInstance extends AbstractObjectInstance
         inMotion = false;
         airborne = false;
         solidState = 0;
+        pushReleasePendingAfterRideExit = false;
         xVelocity = 0;
         yVelocity = 0;
-        xSubpixel = 0;
-        ySubpixel = 0;
+        motion.xSub = 0;
+        motion.ySub = 0;
         pushMomentum = 0;
-        lastGeyserSpawnX = Integer.MIN_VALUE;
         updateDynamicSpawn(x, y);
     }
 
@@ -574,6 +692,29 @@ public class Sonic1PushBlockObjectInstance extends AbstractObjectInstance
         if (contact.touchSide()) {
             handlePush(player, contact.sideDistX(), frameCounter);
         }
+    }
+
+    @Override
+    public SolidExecutionMode solidExecutionMode() {
+        return SolidExecutionMode.MANUAL_CHECKPOINT;
+    }
+
+    @Override
+    public boolean usesInstanceSolidStateLatchKey() {
+        // Push/fall movement rebuilds dynamicSpawn, but obStatus belongs to the
+        // same live Obj33 SST until its next Solid_ChkEnter call.
+        return true;
+    }
+
+    @Override
+    public boolean preservesNativePushLatchAcrossSkippedSolidCheckpoints() {
+        // PushB_OnLava can carry the object's native push bit across movement
+        // frames for which the engine has no immediately preceding checkpoint.
+        // State 2 also skips Solid_ChkCollision on its ExitPlatform release
+        // frame; the following state-0 checkpoint still owns the retained bit.
+        // Outside those states an ordinary state-0 block checkpoints every
+        // frame, so a stale engine latch must not synthesize a later write.
+        return inMotion || pushReleasePendingAfterRideExit;
     }
 
     /**
@@ -706,6 +847,28 @@ public class Sonic1PushBlockObjectInstance extends AbstractObjectInstance
         updateDynamicSpawn(x, y);
     }
 
+    protected SolidCheckpointBatch checkpointAll() {
+        return services().solidExecution().resolveSolidNowAll();
+    }
+
+    protected boolean isPlayerRidingThisBlock() {
+        var objectManager = services().objectManager();
+        return objectManager != null && objectManager.isAnyPlayerRiding(this);
+    }
+
+    private void applyPushContacts(SolidCheckpointBatch batch, int vIntRunCount) {
+        for (PlayableEntity entity : batch.perPlayer().keySet()) {
+            if (!(entity instanceof AbstractPlayableSprite player)) {
+                continue;
+            }
+            PlayerSolidContactResult result = batch.perPlayer().get(entity);
+            if (result == null || result.kind() != ContactKind.SIDE) {
+                continue;
+            }
+            handlePush(player, result.sideDistX(), vIntRunCount);
+        }
+    }
+
     /**
      * PushB_ChkLava: Check if block is at a lava geyser spawn position.
      * <p>
@@ -750,13 +913,14 @@ public class Sonic1PushBlockObjectInstance extends AbstractObjectInstance
             return;
         }
 
-        // Guard: prevent spawning multiple makers at the same X position.
-        // The ROM relies on object slot exhaustion to limit this; our engine
-        // has dynamic object lists so we must guard explicitly.
-        if (x == lastGeyserSpawnX) {
-            return;
-        }
-        lastGeyserSpawnX = x;
+        // No de-duplication here. PushB_SpawnLavaGeysers runs every frame from
+        // PushB_LavaPlatform and spawns a GeyserMaker whenever obX equals one of
+        // the hardcoded X-positions exactly (docs/s1disasm/_incObj/33 MZ, LZ
+        // Pushable Blocks.asm:229-269). A block drifting on lava moves at
+        // pblock_lavaspeed>>3 = +/-$80 (half a pixel per frame, same file
+        // lines 157-159/329-331), so obX holds each integer value for two
+        // consecutive frames and the ROM spawns a maker on both of them. The
+        // only thing that stops it is FindFreeObj failing.
 
         // PushB_LoadLava: spawn GeyserMaker object
         // _move.b #id_GeyserMaker,obID(a1)
@@ -766,9 +930,8 @@ public class Sonic1PushBlockObjectInstance extends AbstractObjectInstance
         // move.w obX(a0),obX(a1) / add.w d2,obX(a1)
         // move.w obY(a0),obY(a1) / addi.w #$10,obY(a1)
         // move.l a0,objoff_3C(a1)
-        Sonic1LavaGeyserMakerObjectInstance maker = new Sonic1LavaGeyserMakerObjectInstance(
-                x + xOffset, y + 0x10, 0, this);
-        services().objectManager().addDynamicObject(maker);
+        spawnFreeChild(() -> new Sonic1LavaGeyserMakerObjectInstance(
+                x + xOffset, y + 0x10, 0, this));
     }
 
     /**
@@ -785,7 +948,11 @@ public class Sonic1PushBlockObjectInstance extends AbstractObjectInstance
     void applyLavaGeyserLaunch(int velY) {
         // bset #1,obStatus(a1) -> airborne flag (separate from obSolid)
         airborne = true;
-        // move.w #-$580,obVelY(a1)
+        // move.w #-$580,obVelY(a1) -- a plain velocity store, no subpixel touch
+        // (docs/s1disasm/_incObj/4C, 4D MZ Lava Geyser and Maker.asm:83-87).
+        // PushB_OnLava's airborne branch already runs SpeedToPos before the
+        // +$18 gravity add (same order as loc_C056), so no phase compensation
+        // is required here.
         yVelocity = (short) velY;
     }
 
@@ -797,11 +964,12 @@ public class Sonic1PushBlockObjectInstance extends AbstractObjectInstance
      */
     private void applySpeedToPosX() {
         if (xVelocity == 0) return;
-        int xPos32 = (x << 16) | (xSubpixel & 0xFFFF);
-        int vel32 = (int) (short) xVelocity;
-        xPos32 += vel32 << 8;
-        x = xPos32 >> 16;
-        xSubpixel = xPos32 & 0xFFFF;
+        // SpeedToPos (X-only, 16.16 fixed-point). Inlined to avoid touching ySub/yVel.
+        int xVel32 = (int) (short) xVelocity;
+        int x32 = (x << 16) | (motion.xSub & 0xFFFF);
+        x32 += xVel32 << 8;
+        x = x32 >> 16;
+        motion.xSub = x32 & 0xFFFF;
     }
 
     /**
@@ -809,18 +977,49 @@ public class Sonic1PushBlockObjectInstance extends AbstractObjectInstance
      */
     private void applySpeedToPosY() {
         if (yVelocity == 0) return;
-        int yPos32 = (y << 16) | (ySubpixel & 0xFFFF);
-        int vel32 = (int) (short) yVelocity;
-        yPos32 += vel32 << 8;
-        y = yPos32 >> 16;
-        ySubpixel = yPos32 & 0xFFFF;
+        // SpeedToPos (Y-only, 16.16 fixed-point) using shared helper.
+        motion.y = y;
+        motion.yVel = yVelocity;
+        SubpixelMotion.speedToPosY(motion);
+        y = motion.y;
     }
 
     @Override
     public SolidObjectParams getSolidParams() {
         // d1 = obActWid + $B
         int halfWidth = activeWidth + 0x0B;
-        return new SolidObjectParams(halfWidth, SOLID_AIR_HALF_HEIGHT, SOLID_GROUND_HALF_HEIGHT);
+        return SolidObjectParams.of(halfWidth, SOLID_AIR_HALF_HEIGHT, SOLID_GROUND_HALF_HEIGHT);
+    }
+
+    /**
+     * The block's ROM {@code obActWid}, read out of {@code PushB_Var}.
+     *
+     * <p>{@code PushB_Main} indexes the subtype into {@code PushB_Var} and stores
+     * the first byte of the pair straight into {@code obActWid} -- {@code #32/2}
+     * = 16 for the 1x1 block, {@code #128/2} = 64 for the 4x1
+     * (docs/s1disasm/_incObj/33 MZ, LZ Pushable Blocks.asm:22-24,48-49). This is
+     * the same {@link #activeWidth} the class already derives for the collision
+     * width, which {@code PushB_Action} forms by padding it
+     * ({@code addi.w #sonic_solid_width,d1}) without writing the padded value
+     * back to {@code obActWid}.
+     *
+     * <p>Supplied here rather than at {@link #getBalanceWidthPixels()} because
+     * both ROM consumers want the raw byte -- {@code BuildSprites}' horizontal
+     * cull (docs/s1disasm/_inc/BuildSprites.asm:49-58) and {@code Sonic_Balance}
+     * (docs/s1disasm/_incObj/01 Sonic.asm:423). {@link #isTopSolidOnly()} is
+     * false for this class, so the balance accessor does inherit this one rather
+     * than intercepting at {@code getSolidParams().halfWidth()}.
+     */
+    @Override
+    public int getOnScreenHalfWidth() {
+        return activeWidth;
+    }
+
+    @Override
+    public SolidRoutineProfile getSolidRoutineProfile() {
+        // Solid_ChkEnter rejects positions beyond the right edge with BHI, so
+        // equality remains a valid side contact for loc_C230's push-status path.
+        return SolidRoutineProfile.fullSolid(false, true, false);
     }
 
     @Override
@@ -850,9 +1049,45 @@ public class Sonic1PushBlockObjectInstance extends AbstractObjectInstance
     }
 
     @Override
+    public boolean isHighPriority() {
+        return frameIndex == 1;
+    }
+
+    @Override
     public boolean isPersistent() {
-        // Keep alive while spawn position is within extended range
-        return !isDestroyed() && isOnScreenX(320);
+        // Obj33 has NO camera-window persistence rule. Its only lifetime rule is
+        // PushB_Display's pair of out_of_range checks -- current obX, then
+        // pblock_origX -- reaching .deleteAndAllowRespawn / DeleteObject
+        // (docs/s1disasm/_incObj/"33 MZ, LZ Pushable Blocks.asm":92-113).
+        // Routine 4 (PushB_ChkVisible, ibid.:116-127) runs ChkPartiallyVisible
+        // and rts without ANY out_of_range test, so a block parked at its origin
+        // survives indefinitely off-screen. deletePending is therefore the sole
+        // gate: it is latched only when updateActive has just failed BOTH checks.
+        //
+        // A camera-window term here (previously isOnScreenX(320)) is an invented
+        // rule with more left slack than the ROM's chunk-aligned window, and it
+        // kept blocks alive past the frame ROM freed their SST slot -- which
+        // desynced every subsequent MZ2 ObjPosLoad placement by one slot.
+        return !isDestroyed() && !deletePending;
+    }
+
+    /**
+     * ROM parity: PushB_Action runs PushB_SolidAction and the MZ1 stomper
+     * alignment BEFORE reaching PushB_Display's out_of_range
+     * (docs/s1disasm/_incObj/"33 MZ, LZ Pushable Blocks.asm":66-93), so the
+     * check must observe the position this frame's routine produced. The
+     * counter lane honours this flag at ObjectManager.java:914-934, which also
+     * lets the deletePending latch set at the tail of updateActive be consumed
+     * on the same frame instead of one frame late.
+     */
+    @Override
+    public boolean checksOutOfRangeAfterRoutine() {
+        return true;
+    }
+
+    @Override
+    public int getOutOfRangeReferenceX() {
+        return deletePending ? spawnX : x;
     }
 
     @Override
@@ -903,5 +1138,13 @@ public class Sonic1PushBlockObjectInstance extends AbstractObjectInstance
             stateLabel = "PushBlk:IDLE";
         }
         ctx.drawWorldLabel(x, y, -2, stateLabel, DebugColor.ORANGE);
+    }
+
+    private boolean isOutOfRangeCurrentX() {
+        return !isInRangeAt(x);
+    }
+
+    private boolean isOutOfRangeSpawnX() {
+        return !isInRangeAt(spawnX);
     }
 }

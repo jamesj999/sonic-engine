@@ -1,16 +1,21 @@
 package com.openggf.game.sonic2.specialstage;
 
 import com.openggf.data.Rom;
+import com.openggf.data.RomByteReader;
 import com.openggf.level.Pattern;
-import com.openggf.tools.EnigmaReader;
-import com.openggf.tools.KosinskiReader;
-import com.openggf.tools.NemesisReader;
+import com.openggf.level.render.SpriteDplcFrame;
+import com.openggf.level.render.TileLoadRequest;
+import com.openggf.data.compression.EnigmaReader;
+import com.openggf.data.compression.KosinskiReader;
+import com.openggf.data.compression.NemesisReader;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.logging.Logger;
 
 /**
@@ -35,6 +40,7 @@ public class Sonic2SpecialStageDataLoader {
     private byte[] ringRequirementsTeam;
     private byte[] ringRequirementsSolo;
     private byte[] animDurationTable;
+    private PlayerDplcPlans playerDplcPlans;
 
     private Pattern[] backgroundArtPatterns;
     private Pattern[] trackArtPatterns;
@@ -45,6 +51,7 @@ public class Sonic2SpecialStageDataLoader {
     private Pattern[] shadowDiagPatterns;
     private Pattern[] shadowVertPatterns;
     private Pattern[] hudArtPatterns;
+    private Pattern[] tailsTextArtPatterns;
     private Pattern[] startArtPatterns;
     private Pattern[] messagesArtPatterns;
     private Pattern[] explosionArtPatterns;
@@ -54,6 +61,127 @@ public class Sonic2SpecialStageDataLoader {
 
     public Sonic2SpecialStageDataLoader(Rom rom) {
         this.rom = rom;
+    }
+
+    /**
+     * ROM-decoded special-stage player DPLC plans. Tile sources are normalized
+     * to {@link Sonic2SpecialStageConstants#PLAYER_DPLC_RAM_BASE}, matching the
+     * RAM source domain used by the native special-stage DMA routines.
+     */
+    public record PlayerDplcPlans(
+            List<SpriteDplcFrame> sonic,
+            List<SpriteDplcFrame> tails,
+            List<SpriteDplcFrame> tailsTails) {
+        public PlayerDplcPlans {
+            sonic = List.copyOf(sonic);
+            tails = List.copyOf(tails);
+            tailsTails = List.copyOf(tailsTails);
+        }
+    }
+
+    /**
+     * Decodes and caches Obj09's special-stage DPLC records and their source
+     * section pointers directly from the supplied Sonic 2 ROM.
+     */
+    public PlayerDplcPlans getPlayerDplcPlans() throws IOException {
+        if (playerDplcPlans == null) {
+            RomByteReader reader = RomByteReader.fromRom(rom);
+            playerDplcPlans = new PlayerDplcPlans(
+                    decodeCountedDplcFrames(reader, 0,
+                            Sonic2SpecialStageConstants.SONIC_PLAYER_DPLC_FRAME_COUNT,
+                            Sonic2SpecialStageConstants.SONIC_PLAYER_DPLC_SOURCE_TABLE_OFFSET,
+                            4, 12, 16),
+                    decodeCountedDplcFrames(reader,
+                            Sonic2SpecialStageConstants.SONIC_PLAYER_DPLC_FRAME_COUNT,
+                            Sonic2SpecialStageConstants.TAILS_PLAYER_DPLC_FRAME_COUNT,
+                            Sonic2SpecialStageConstants.TAILS_PLAYER_DPLC_SOURCE_TABLE_OFFSET,
+                            4, 12, 16),
+                    decodeCompactDplcFrames(reader,
+                            Sonic2SpecialStageConstants.SONIC_PLAYER_DPLC_FRAME_COUNT
+                                    + Sonic2SpecialStageConstants.TAILS_PLAYER_DPLC_FRAME_COUNT,
+                            Sonic2SpecialStageConstants.TAILS_TAILS_DPLC_FRAME_COUNT,
+                            Sonic2SpecialStageConstants.TAILS_TAILS_DPLC_SOURCE_TABLE_OFFSET,
+                            7, 14));
+            LOGGER.fine("Loaded ROM-decoded special-stage player DPLC plans");
+        }
+        return playerDplcPlans;
+    }
+
+    private static List<SpriteDplcFrame> decodeCountedDplcFrames(
+            RomByteReader reader,
+            int tableFrameOffset,
+            int frameCount,
+            int sourceTableOffset,
+            int... sectionStartFrames) {
+        List<SpriteDplcFrame> frames = new ArrayList<>(frameCount);
+        for (int frame = 0; frame < frameCount; frame++) {
+            int recordAddress = dplcRecordAddress(reader, tableFrameOffset + frame);
+            int entryCount = reader.readU16BE(recordAddress);
+            frames.add(new SpriteDplcFrame(decodeDplcEntries(reader,
+                    recordAddress + 2, entryCount,
+                    sourceTileBase(reader, sourceTableOffset,
+                            sectionForFrame(frame, sectionStartFrames)))));
+        }
+        return List.copyOf(frames);
+    }
+
+    private static List<SpriteDplcFrame> decodeCompactDplcFrames(
+            RomByteReader reader,
+            int tableFrameOffset,
+            int frameCount,
+            int sourceTableOffset,
+            int... sectionStartFrames) {
+        List<SpriteDplcFrame> frames = new ArrayList<>(frameCount);
+        for (int frame = 0; frame < frameCount; frame++) {
+            int recordAddress = dplcRecordAddress(reader, tableFrameOffset + frame);
+            frames.add(new SpriteDplcFrame(decodeDplcEntries(reader,
+                    recordAddress, 1,
+                    sourceTileBase(reader, sourceTableOffset,
+                            sectionForFrame(frame, sectionStartFrames)))));
+        }
+        return List.copyOf(frames);
+    }
+
+    private static int dplcRecordAddress(RomByteReader reader, int frameIndex) {
+        return reader.readPointer16(
+                Sonic2SpecialStageConstants.PLAYER_DPLC_TABLE_OFFSET,
+                frameIndex);
+    }
+
+    private static int sourceTileBase(
+            RomByteReader reader, int sourceTableOffset, int section) {
+        int sourceAddress = reader.readU32BE(sourceTableOffset + section * 4)
+                & 0x00FF_FFFF;
+        int byteOffset = sourceAddress
+                - Sonic2SpecialStageConstants.PLAYER_DPLC_RAM_BASE;
+        if (byteOffset < 0 || byteOffset % 0x20 != 0) {
+            throw new IllegalArgumentException(String.format(
+                    "invalid special-stage DPLC RAM source $%06X", sourceAddress));
+        }
+        return byteOffset / 0x20;
+    }
+
+    private static int sectionForFrame(int frame, int... sectionStartFrames) {
+        int section = 0;
+        for (int boundary : sectionStartFrames) {
+            if (frame < boundary) {
+                return section;
+            }
+            section++;
+        }
+        return section;
+    }
+
+    private static List<TileLoadRequest> decodeDplcEntries(
+            RomByteReader reader, int address, int count, int sourceTileBase) {
+        List<TileLoadRequest> requests = new ArrayList<>(count);
+        for (int entry = 0; entry < count; entry++) {
+            int encoded = reader.readU16BE(address + entry * 2);
+            requests.add(new TileLoadRequest(
+                    sourceTileBase + ((encoded & 0x0FFF) >>> 4),
+                    (encoded >>> 12) + 1));
+        }
+        return List.copyOf(requests);
     }
 
     /**
@@ -393,6 +521,17 @@ public class Sonic2SpecialStageDataLoader {
         return hudArtPatterns;
     }
 
+    /** Loads the five dedicated overseas TAILS HUD patterns. */
+    public Pattern[] getTailsTextArtPatterns() throws IOException {
+        if (tailsTextArtPatterns == null) {
+            byte[] compressed = rom.readBytes(Sonic2SpecialStageConstants.TAILS_TEXT_ART_OFFSET,
+                    Sonic2SpecialStageConstants.TAILS_TEXT_ART_SIZE);
+            tailsTextArtPatterns = decompressNemesisToPatterns(compressed);
+            LOGGER.fine("Loaded TAILS text art: " + tailsTextArtPatterns.length + " patterns");
+        }
+        return tailsTextArtPatterns;
+    }
+
     /**
      * Loads START banner art patterns (Nemesis compressed).
      * Contains the "START" text and checkered flag graphics.
@@ -519,4 +658,3 @@ public class Sonic2SpecialStageDataLoader {
         return patterns;
     }
 }
-

@@ -9,6 +9,13 @@ import com.openggf.control.InputHandler;
  */
 public interface TitleScreenProvider {
 
+    enum TitleScreenAction {
+        ONE_PLAYER,
+        TWO_PLAYER,
+        OPTIONS,
+        OTHER
+    }
+
     enum State {
         /** Screen is not active */
         INACTIVE,
@@ -18,6 +25,8 @@ public interface TitleScreenProvider {
         INTRO_TEXT_HOLD,
         /** Intro text fading out to black */
         INTRO_TEXT_FADE_OUT,
+        /** Pre-title SEGA boot logo screen */
+        SEGA_LOGO,
         /** Fading in from black */
         FADE_IN,
         /** Main interactive state */
@@ -86,5 +95,13 @@ public interface TitleScreenProvider {
      */
     default void drawFrozenForLevelSelect() {
         // Default: no-op (Sonic 2 etc. have a completely different level select)
+    }
+
+    default TitleScreenAction consumeExitAction() {
+        return TitleScreenAction.OTHER;
+    }
+
+    default void setExitToLevelHandler(Runnable handler) {
+        // Default: no-op.
     }
 }

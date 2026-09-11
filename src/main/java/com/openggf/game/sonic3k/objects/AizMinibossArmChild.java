@@ -4,6 +4,9 @@ import com.openggf.game.sonic3k.Sonic3kObjectArtKeys;
 import com.openggf.game.PlayableEntity;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.ObjectRenderManager;
+import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.boss.AbstractBossChild;
 import com.openggf.level.objects.boss.AbstractBossInstance;
 import com.openggf.level.render.PatternSpriteRenderer;
@@ -19,13 +22,23 @@ import java.util.List;
  * - mapping_frame=6
  * - purely visual (no collision)
  */
-public class AizMinibossArmChild extends AbstractBossChild {
+public class AizMinibossArmChild extends AbstractBossChild implements RewindRecreatable {
     private static final int X_OFFSET = -0x24;
     private static final int Y_OFFSET = 8;
 
     public AizMinibossArmChild(AbstractBossInstance parent) {
         // ROM: word_69012 priority $0200 → $200/$80 = bucket 4
         super(parent, "AIZMinibossArm", 4, 0x90);
+    }
+
+    private AizMinibossArmChild(ObjectSpawn spawn, AizMinibossInstance parent) {
+        this(parent);
+    }
+
+    @Override
+    public AizMinibossArmChild recreateForRewind(RewindRecreateContext ctx) {
+        AbstractBossInstance boss = AizMinibossRewindLinks.nearestSharedBoss(ctx);
+        return boss == null ? null : new AizMinibossArmChild(boss);
     }
 
     @Override
@@ -38,9 +51,9 @@ public class AizMinibossArmChild extends AbstractBossChild {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        if (!shouldUpdate(frameCounter)) {
+        if (!shouldUpdate(vIntRunCount)) {
             return;
         }
         syncPositionWithParent();

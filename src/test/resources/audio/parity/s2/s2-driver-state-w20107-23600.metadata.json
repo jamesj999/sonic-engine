@@ -1,0 +1,61 @@
+{
+  "schema": "openggf.s2_audio_driver_state_reference_fixture.v1",
+  "reference": "s2-driver-state-w20107-23600.reference-v2.jsonl.gz",
+  "reference_gzip_sha256": "1fa3d0bdb032b0f23d84d807833878b0ea6cd491830e408d28e0a8c8315bf786",
+  "reference_uncompressed_sha256": "725fcd97a752cce8836637d2537abc9bda844e3d0c01b3d3e09415ba86f1e875",
+  "payload_schema": "openggf.s2-driver-state-reference.v2",
+  "rom": {
+    "name": "Sonic 2 World REV01",
+    "sha1": "8bca5dcef1af3e00098666fd892dc1c2a76333f9",
+    "crc32": "7b905383"
+  },
+  "movie": {
+    "name": "sonic-2-sonic-tails-complete-emeralds.bk2",
+    "path": "docs/BizHawk-2.11-linux-x64/Movies/sonic-2-sonic-tails-complete-emeralds.bk2",
+    "sha256": "e850798f882b8c580aad148bc97cb50f260cae1d336dd649fe2f4dfae6796aa5",
+    "rows": 259593
+  },
+  "window": {
+    "first_row": 20107,
+    "exclusive_end": 23600,
+    "frames": 3493
+  },
+  "ticks": 3484,
+  "write_count": 388486,
+  "frame_shape": {
+    "frames": 3493,
+    "ticks": 3484,
+    "zero_service_frames": 9,
+    "multi_service_frames": 0
+  },
+  "why_this_window": "The first committed S2 window that contains a 1-up jingle and its restore. The window opens at a ROM epoch and not at a hand-chosen frame: row 20107 is the service on which zCurSong becomes 82h, the level music load, with zAbsVar.1upPlaying already zero because zPlayMusic's .bgmnot1up branch clears it on an ordinary load (s2.sounddriver.asm:1728-1731). MusID_ExtraLife (98h, s2.constants.asm:856) is requested on the service ending row 22991, where zPlayMusic backs up zAbsVar and every track into zTracksSaveStart and sets 1upPlaying to 80h (s2.sounddriver.asm:1675-1724). cfFadeInToPrevious runs on the service ending row 23201, restoring the region and fading the level music back in (s2.sounddriver.asm:3083-3163). The window carries 399 further services so the whole 28h-step fade-in is inside it. zCurSong stays 98h across the restore because it lives at 1300h, outside the backed-up zAbsVar region, so the song byte is not evidence of the restore; 1upPlaying is.",
+  "epoch": "Level music load. Tick 0 is the service on which zCurSong = 82h and 1upPlaying = 00h.",
+  "one_up": {
+    "request_id": "98h (MusID_ExtraLife)",
+    "backup_tick": 2875,
+    "backup_row": 22991,
+    "restore_tick": 3085,
+    "restore_row": 23201,
+    "jingle_services": 210
+  },
+  "rom_restore_contract": "Measured at tick 3085 and stated by cfFadeInToPrevious (s2.sounddriver.asm:3083-3163). Every playing FM and PSG music track carries PlaybackControl bit 1 -- track at rest (:3107, :3131). The DAC track carries PlaybackControl bit 2, the SFX-overriding bit the routine sets so the DAC stays silent through the fade (:3094). Track volumes carry the 28h - FadeInCounter attenuation (:3098-3099, :3109, :3134). zAbsVar.FadeInFlag is 80h and FadeInCounter is 28h (:3151-3153), and 1upPlaying is back to 00h (:3155). The next service, tick 3086, already shows FadeInCounter 27h with every track volume one lower, so the first fade step is immediate.",
+  "sampling": "driver RAM 12FEh..2000h captured by the observer core as a completion snapshot on the driver's own service boundaries, identical in shape and bounds to the committed w10150-12400 and CPZ references.",
+  "observer": {
+    "patch": "0001-buffer-z80-audio-events",
+    "core_compressed_sha256": "25ee305d8bcac2567d60fd04c14238784ddd018808d4dafe7d5ef2b8372677b6",
+    "core_decompressed_sha256": "177fb4b04e73fa12edc2fdcb097d6f11a8850a8cdf86fabeaaf8b374d62e4464",
+    "build_id": "9ded8f477abe193d",
+    "observer_identity_sha256": "95188e3c2cbb433188bce06e995d497afd290246ee6123da6f0060a5463893e7",
+    "lock": "tools/tracechaser/bizhawk-headless/native/gpgx-audio-observer/artifact-lock.json",
+    "manifest": "fixtures/gpgx-audio-service-manifest-s2-oracle-v2.json (game s2)",
+    "manifest_sha256": "3f37de6751229f3b9ff1d93f78b3b370e316c0e936b10fdfd3db88b5fd57ab99",
+    "tracechaser_producer_commit": "24b009fa99f301724080517e84f5009c7b6f05c0",
+    "core_provenance": "The core was not rebuilt for this capture. The build the widen lane produced was checked against artifact-lock.json on all four values -- compressed digest, decompressed digest, build id and observer identity -- before use, and installed beside the stock distribution."
+  },
+  "capture_command": "tools/tracechaser/bizhawk-headless/run-s2-request-window.sh --request-window-mode driver-state --rom <s2.gen> --movie <sonic-2-sonic-tails-complete-emeralds.bk2> --movie-sha256 e850798f882b8c580aad148bc97cb50f260cae1d336dd649fe2f4dfae6796aa5 --service-manifest fixtures/gpgx-audio-service-manifest-s2-oracle-v2.json --bizhawk-home <observer install> --first-row 20107 --exclusive-end 23600 --output <absent file>",
+  "window_discovery": "The 1-up was located by a chunked driver-state sweep of the whole 259593-row recording that reduced each chunk to the transitions of zCurSong (1300h) and zAbsVar.1upPlaying (1B91h) and then discarded the payload. Nine 1-up jingles occur in the recording; this is the first whose restore returns to level music that is still loaded, rather than being followed immediately by a new music load.",
+  "duplicate_capture": "met: two serial captures to distinct absent external paths, byte-identical at sha256 725fcd97a752cce8836637d2537abc9bda844e3d0c01b3d3e09415ba86f1e875",
+  "postprocess": "gzip -9 -n",
+  "production_bound": false,
+  "production_bound_meaning": "Comparison-only reference data. Nothing here hydrates engine state and no compared value comes from this file; the engine produces every value it is checked against."
+}

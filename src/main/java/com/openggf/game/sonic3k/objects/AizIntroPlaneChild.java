@@ -5,6 +5,8 @@ import com.openggf.camera.Camera;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.SwingMotion;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
@@ -24,7 +26,7 @@ import java.util.logging.Logger;
  *
  * Spawns 2 AizIntroBoosterChild sub-objects for the booster flame animation.
  */
-public class AizIntroPlaneChild extends AbstractObjectInstance {
+public class AizIntroPlaneChild extends AbstractObjectInstance implements RewindRecreatable {
     private static final Logger LOG = Logger.getLogger(AizIntroPlaneChild.class.getName());
 
     // Swing parameters from ROM (Swing_UpAndDown acceleration / max)
@@ -37,7 +39,6 @@ public class AizIntroPlaneChild extends AbstractObjectInstance {
 
     /** X threshold below which walk-left self-deletes. */
     private static final int DELETE_X = 0x20;
-
     private final AizPlaneIntroInstance parent;
     private int currentX;
     private int currentY;
@@ -52,10 +53,6 @@ public class AizIntroPlaneChild extends AbstractObjectInstance {
     private AizIntroEmeraldGlowChild glowChild1;
     private AizIntroEmeraldGlowChild glowChild2;
 
-    // Booster flame children
-    private AizIntroBoosterChild booster1;
-    private AizIntroBoosterChild booster2;
-
     public AizIntroPlaneChild(ObjectSpawn spawn, AizPlaneIntroInstance parent) {
         super(spawn, "AIZIntroPlane");
         this.parent = parent;
@@ -63,8 +60,12 @@ public class AizIntroPlaneChild extends AbstractObjectInstance {
         this.currentY = spawn.y();
         this.ySub = 0;
 
-        // Spawn booster flame children
-        spawnBoosters();
+    }
+
+    @Override
+    public AbstractObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        AizPlaneIntroInstance liveParent = AizIntroRewindLinks.liveIntroParent(ctx);
+        return liveParent == null ? null : new AizIntroPlaneChild(ctx.spawn(), liveParent);
     }
 
     @Override
@@ -84,11 +85,12 @@ public class AizIntroPlaneChild extends AbstractObjectInstance {
 
     @Override
     public int getPriorityBucket() {
-        return 4;
+        // ROM: loc_6777A writes priority(a0) = $280.
+        return 5;
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) {
             return;
@@ -118,37 +120,6 @@ public class AizIntroPlaneChild extends AbstractObjectInstance {
             currentY = parent.getY() + PARENT_Y_OFFSET;
         }
 
-        // Update booster flame children
-        if (booster1 != null) {
-            booster1.update(frameCounter, player);
-        }
-        if (booster2 != null) {
-            booster2.update(frameCounter, player);
-        }
-
-        // Update emerald glow children
-        if (glowChild1 != null) {
-            glowChild1.update(frameCounter, player);
-        }
-        if (glowChild2 != null) {
-            glowChild2.update(frameCounter, player);
-        }
-    }
-
-    /**
-     * Spawns the two booster flame sub-children.
-     * ROM: loc_45C00 booster at (+0x38,+4), loc_45C3E booster at (+0x18,+0x18).
-     */
-    private void spawnBoosters() {
-        // Booster 1: animation sequence from byte_45E6B (timer=0, frames: 1,2,3,4,3,2)
-        // ROM Animate_RawNoSST skips data[1] on first iter, then AnimateRaw_Restart
-        // sets mapping_frame = data[1] = 1 on subsequent loops.
-        booster1 = new AizIntroBoosterChild(this, 0x38, 4,
-                new int[]{1, 2, 3, 4, 3, 2});
-
-        // Booster 2: animation sequence {5, 6} (byte_45E73)
-        booster2 = new AizIntroBoosterChild(this, 0x18, 0x18,
-                new int[]{5, 6});
     }
 
     /**
@@ -181,7 +152,7 @@ public class AizIntroPlaneChild extends AbstractObjectInstance {
 
     @Override
     public void appendRenderCommands(List<GLCommand> commands) {
-        PatternSpriteRenderer renderer = AizIntroArtLoader.getPlaneRenderer();
+        PatternSpriteRenderer renderer = AizIntroArtLoader.getPlaneRenderer(services());
         if (renderer == null || !renderer.isReady()) return;
         // Screen-space coordinates use the ROM +128 sprite-table bias.
         int renderX = currentX;
@@ -198,17 +169,7 @@ public class AizIntroPlaneChild extends AbstractObjectInstance {
         }
         renderer.drawFrameIndex(mappingFrame, renderX, renderY, false, false);
 
-        // Render booster flames
-        if (booster1 != null) {
-            booster1.appendRenderCommands(commands, camera);
-        }
-        if (booster2 != null) {
-            booster2.appendRenderCommands(commands, camera);
-        }
-
-        // Emerald glow children are NOT rendered here — their positions
-        // overlap Tails' face on the plane sprite and their partially-
-        // transparent pixels bleed through.  The ROM's glow effect uses
-        // VDP link chain ordering that suppresses this; for now, omit them.
+        // The two animated pieces render from their own SST objects after this
+        // parent, matching CreateChild1_Normal allocation/render order.
     }
 }

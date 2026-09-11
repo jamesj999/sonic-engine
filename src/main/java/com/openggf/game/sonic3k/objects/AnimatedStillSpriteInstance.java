@@ -7,6 +7,8 @@ import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.PlaceholderObjectInstance;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -29,7 +31,7 @@ import java.util.List;
  * <p>
  * ROM reference: sonic3k.asm lines 60377-60427
  */
-public class AnimatedStillSpriteInstance extends AbstractObjectInstance {
+public class AnimatedStillSpriteInstance extends AbstractObjectInstance implements RewindRecreatable {
 
     /**
      * Animation scripts from Ani_AnimatedStillSprites.
@@ -72,12 +74,11 @@ public class AnimatedStillSpriteInstance extends AbstractObjectInstance {
 
     private final SubtypeInfo info;
     private final int[] animFrames;
-    private final int animDelay;
+    private int animDelay;
 
     private int animScriptIndex;
     private int animTimer;
     private int currentGlobalFrame;
-
     private PlaceholderObjectInstance placeholder;
 
     public AnimatedStillSpriteInstance(ObjectSpawn spawn) {
@@ -105,6 +106,11 @@ public class AnimatedStillSpriteInstance extends AbstractObjectInstance {
     }
 
     @Override
+    public AnimatedStillSpriteInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new AnimatedStillSpriteInstance(ctx.spawn());
+    }
+
+    @Override
     public int getPriorityBucket() {
         return info != null ? info.priorityBucket : 6;
     }
@@ -115,7 +121,7 @@ public class AnimatedStillSpriteInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (animFrames.length == 0) {
             return;

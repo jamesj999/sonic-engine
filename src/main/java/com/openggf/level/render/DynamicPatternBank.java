@@ -79,4 +79,15 @@ public class DynamicPatternBank {
             }
         }
     }
+
+    /**
+     * Applies an already-decided runtime art state. Lifecycle identity,
+     * duplicate suppression, and completion are owned by the production
+     * dynamic-art service rather than this presentation bank.
+     */
+    public void consumeRuntimeArtState(
+            List<TileLoadRequest> requests,
+            Pattern[] source) {
+        applyRequests(requests, source);
+    }
 }

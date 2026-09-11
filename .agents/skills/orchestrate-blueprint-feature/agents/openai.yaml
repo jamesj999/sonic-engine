@@ -1,0 +1,4 @@
+interface:
+  display_name: "Orchestrate Blueprint Feature"
+  short_description: "Blueprint to reviewed feature"
+  default_prompt: "Use this skill to turn a high-level blueprint into an implemented feature through requirements extraction, paired exploration, reviewed architecture and design, implementation planning, parallel development, end-to-end review, human approval, and merge to develop."

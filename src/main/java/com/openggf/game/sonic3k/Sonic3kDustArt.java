@@ -2,6 +2,7 @@ package com.openggf.game.sonic3k;
 
 import com.openggf.data.RomByteReader;
 import com.openggf.game.sonic3k.constants.Sonic3kConstants;
+import com.openggf.graphics.PatternAtlasRange;
 import com.openggf.level.Pattern;
 import com.openggf.level.render.SpriteDplcFrame;
 import com.openggf.level.render.SpriteMappingFrame;
@@ -18,16 +19,16 @@ import java.util.List;
  * for all characters.
  *
  * <p>The original VDP VRAM tile is {@code ArtTile_DashDust = $07E0}, but the
- * engine uses virtual pattern base {@code 0x34000} to avoid collision with ring
+ * engine uses a water-surface sub-range base to avoid collision with ring
  * patterns that are placed right after level tiles in the atlas.
  */
 public class Sonic3kDustArt {
 
     /**
-     * Virtual pattern base for dust DPLC bank, placed in the free range
-     * between water surface (0x30000) and sidekick banks (0x38000).
+     * Virtual pattern base for dust DPLC bank, placed in the free part of
+     * the water-surface range before sidekick banks.
      */
-    private static final int DUST_PATTERN_BASE = 0x34000;
+    private static final int DUST_PATTERN_BASE = PatternAtlasRange.WATER_SURFACE.base() + 0x4000;
 
     private final RomByteReader reader;
     private SpriteArtSet cached;

@@ -1,56 +1,135 @@
 package com.openggf.game;
 
+import com.openggf.TraceSessionLauncher;
 import com.openggf.control.InputHandler;
-import com.openggf.Engine;
 import com.openggf.configuration.SonicConfiguration;
 import com.openggf.configuration.SonicConfigurationService;
+import com.openggf.game.launch.LaunchProfile;
+import com.openggf.game.launch.LaunchProfileStore;
 import com.openggf.graphics.PngTextureLoader;
 import com.openggf.graphics.PixelFont;
 import com.openggf.graphics.TexturedQuadRenderer;
+import com.openggf.game.recording.UserRecordingCatalog;
+import com.openggf.game.recording.menu.UserRecordingMenu;
+import com.openggf.game.recording.menu.UserRecordingMenuState;
+import com.openggf.testmode.TestModeTracePicker;
+import com.openggf.trace.catalog.TraceCatalog;
+import com.openggf.trace.catalog.TraceEntry;
+import com.openggf.version.AppVersion;
 
 import org.lwjgl.system.MemoryUtil;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Random;
 import java.util.logging.Logger;
 
 import static org.lwjgl.opengl.GL11.*;
+import static org.lwjgl.glfw.GLFW.GLFW_KEY_TAB;
 
 /**
  * Master title screen shown on startup for game selection.
  * Runs before any ROM is loaded, using its own PNG-based rendering path.
+ *
+ * <p>Widescreen layout: the background and clouds fill the full projection width
+ * ({@link #setViewportWidth(int)} driven by Engine's {@code realWidth}). All foreground
+ * elements (emblem, title text, subtitle, game menu, nav hints, error overlay) are
+ * centered on the viewport midpoint so they remain visually centered at any width.
+ * At native width 320 every value collapses to the original literals — byte-identical.
  */
 public class MasterTitleScreen {
 
     private static final Logger LOGGER = Logger.getLogger(MasterTitleScreen.class.getName());
-    private static final int SCREEN_W = 320;
+    static final int SCREEN_W = 320;
     private static final int SCREEN_H = 224;
+    private static final String MISSING_ROM_PROMPT = "Requires the following ROM:";
+    private static final int TITLE_LOGO_BASE_SCALE_NUMERATOR = 35;
+    private static final int TITLE_LOGO_BASE_SCALE_DENOMINATOR = 100;
+    private static final int TITLE_LOGO_SCALE_NUMERATOR = 9;
+    private static final int TITLE_LOGO_SCALE_DENOMINATOR = 10;
+    private static final int TOP_UI_MATTE_HEIGHT = 0;
+    private static final int BOTTOM_UI_MATTE_HEIGHT = 56;
+    private static final float BOTTOM_UI_MATTE_ALPHA = 0.68f;
+    static final int LAUNCH_HOVER_Y = 178;
+    static final float LAUNCH_HOVER_SCALE = 0.55f;
+    static final float LAUNCH_PANEL_OVERLAY_ALPHA = 0.72f;
+    private static final int FITTED_TEXT_SIDE_PADDING = 4;
+
+    record PreviewLayout(int width, int height, float x, float y) {
+    }
 
     // Short labels for the menu (fit within 320px when laid out horizontally)
     private static final String[] MENU_LABELS = { "Sonic 1", "Sonic 2", "Sonic 3K" };
 
     public enum GameEntry {
-        SONIC_1("Sonic The Hedgehog", "s1", SonicConfiguration.SONIC_1_ROM),
-        SONIC_2("Sonic The Hedgehog 2", "s2", SonicConfiguration.SONIC_2_ROM),
-        SONIC_3K("Sonic 3 & Knuckles", "s3k", SonicConfiguration.SONIC_3K_ROM);
+        SONIC_1("Sonic The Hedgehog", "s1", SonicConfiguration.SONIC_1_ROM,
+                "s1.gen"),
+        SONIC_2("Sonic The Hedgehog 2", "s2", SonicConfiguration.SONIC_2_ROM,
+                "s2.gen"),
+        SONIC_3K("Sonic 3 & Knuckles", "s3k", SonicConfiguration.SONIC_3K_ROM,
+                "s3k.gen");
 
         public final String displayName;
         public final String gameId;
         public final SonicConfiguration romConfigKey;
+        public final String expectedRomFilename;
 
-        GameEntry(String displayName, String gameId, SonicConfiguration romConfigKey) {
+        GameEntry(String displayName,
+                  String gameId,
+                  SonicConfiguration romConfigKey,
+                  String expectedRomFilename) {
             this.displayName = displayName;
             this.gameId = gameId;
             this.romConfigKey = romConfigKey;
+            this.expectedRomFilename = expectedRomFilename;
+        }
+
+        public static GameEntry fromGameId(String gameId) {
+            for (GameEntry entry : values()) {
+                if (entry.gameId.equalsIgnoreCase(gameId)) {
+                    return entry;
+                }
+            }
+            throw new IllegalArgumentException("Unknown game id: " + gameId);
         }
     }
 
     public enum State {
         INACTIVE, FADE_IN, ACTIVE, ERROR_DISPLAY, CONFIRMING, EXITING
+    }
+
+    /**
+     * Host-owned feedback events for the bootstrap menu. These deliberately
+     * have no game-ROM sound id: the master title runs before a game profile
+     * or ROM is selected.
+     */
+    public enum AudioCue {
+        NAVIGATE("UI_NAVIGATE"),
+        CONFIRM("UI_CONFIRM"),
+        ERROR("UI_ERROR");
+
+        private final String sfxName;
+
+        AudioCue(String sfxName) {
+            this.sfxName = sfxName;
+        }
+
+        public String sfxName() {
+            return sfxName;
+        }
+    }
+
+    @FunctionalInterface
+    public interface AudioSink {
+        AudioSink NO_OP = cue -> {
+        };
+
+        void play(AudioCue cue);
     }
 
     // Cloud sprite for parallax animation
@@ -71,15 +150,15 @@ public class MasterTitleScreen {
             this.height = height;
         }
 
-        void update() {
+        void update(int vpWidth) {
             x += speed;
             // Wrap when fully off the right edge
-            if (x > SCREEN_W) {
+            if (x > vpWidth) {
                 x = -width;
             }
             // Wrap when fully off the left edge (negative speed)
             if (x + width < 0) {
-                x = SCREEN_W;
+                x = vpWidth;
             }
         }
     }
@@ -95,28 +174,73 @@ public class MasterTitleScreen {
     // GL resources
     private TexturedQuadRenderer renderer;
     private PixelFont font;
+    // Loaded lazily when TEST_MODE_ENABLED fires. Matches the rest
+    // of the debug overlay (no drop shadow).
+    private PixelFont pickerFont;
+    private TestModeTracePicker tracePicker;
+    private UserRecordingMenu userRecordingMenu;
+    private UserRecordingMenuFactory userRecordingMenuFactory = this::createUserRecordingMenu;
+    private UserRecordingMenu.PlaybackStarter userRecordingPlaybackStarter =
+            (entry, options) -> LOGGER.info("User recording playback callback not configured.");
     private int bgTextureId;
     private int solidWhiteTextureId; // 1x1 white texture for solid color overlays
-    private int emblemTextureId;
-    private int emblemWidth, emblemHeight;
     private int titleTextId;
     private int titleTextWidth, titleTextHeight;
     private int cloudLargeTextureId;
     private int cloudLargeWidth, cloudLargeHeight;
     private int cloudSmallTextureId;
     private int cloudSmallWidth, cloudSmallHeight;
+    private final int[] romPreviewTextureIds = new int[GameEntry.values().length];
+    private final int[] romPreviewWidths = new int[GameEntry.values().length];
+    private final int[] romPreviewHeights = new int[GameEntry.values().length];
+    private final int[] romPreviewFrameTokens = new int[GameEntry.values().length];
+    private final MasterTitleRomPreview.PreviewSequence[] romPreviewSequences =
+            new MasterTitleRomPreview.PreviewSequence[GameEntry.values().length];
+    private int previewAnimationFrame = 0;
 
     private final List<CloudSprite> clouds = new ArrayList<>();
+    private final SonicConfigurationService configService;
+    private final LaunchProfileStore launchProfileStore;
+    private final AudioSink audioSink;
+    private LaunchConfigPanel launchConfigPanel;
+    private boolean programmaticSelection;
+
+    /**
+     * Projection width supplied by Engine each frame. Defaults to SCREEN_W (320)
+     * so the screen behaves identically to native when no explicit width is set.
+     * At widescreen (e.g. 400, 528) the background/clouds expand to fill the full
+     * width while foreground elements stay centered.
+     */
+    private int viewportWidth = SCREEN_W;
 
     private boolean gameSelected = false;
 
-    public void initialize() {
-        SonicConfigurationService config = SonicConfigurationService.getInstance();
+    public MasterTitleScreen() {
+        this(GameServices.configuration());
+    }
 
+    public MasterTitleScreen(SonicConfigurationService configService) {
+        this(configService, new LaunchProfileStore(configService));
+    }
+
+    public MasterTitleScreen(SonicConfigurationService configService,
+                             LaunchProfileStore launchProfileStore) {
+        this(configService, launchProfileStore, AudioSink.NO_OP);
+    }
+
+    public MasterTitleScreen(SonicConfigurationService configService,
+                             LaunchProfileStore launchProfileStore,
+                             AudioSink audioSink) {
+        this.configService = Objects.requireNonNull(configService, "configService");
+        this.launchProfileStore = Objects.requireNonNull(launchProfileStore, "launchProfileStore");
+        this.audioSink = Objects.requireNonNull(audioSink, "audioSink");
+    }
+
+    public void initialize() {
         // Check ROM availability
         for (int i = 0; i < GameEntry.values().length; i++) {
             GameEntry entry = GameEntry.values()[i];
-            String romPath = config.getString(entry.romConfigKey);
+            String romPath = configService.getString(entry.romConfigKey);
             romAvailable[i] = romPath != null && !romPath.isEmpty() && new File(romPath).exists();
         }
 
@@ -133,11 +257,6 @@ public class MasterTitleScreen {
 
             // Create 1x1 solid white texture for overlays
             solidWhiteTextureId = createSolidWhiteTexture();
-
-            // Load emblem
-            emblemTextureId = PngTextureLoader.loadTexture("titlescreen/title-emblem.png");
-            emblemWidth = PngTextureLoader.getLastWidth();
-            emblemHeight = PngTextureLoader.getLastHeight();
 
             // Load title text
             titleTextId = PngTextureLoader.loadTexture("titlescreen/titletext.png");
@@ -166,6 +285,9 @@ public class MasterTitleScreen {
                 float speed = 0.08f + rng.nextFloat() * 0.4f; // speed 0.08-0.48
                 clouds.add(new CloudSprite(texId, x, y, speed, cw, ch));
             }
+
+            loadRomPreviews();
+            resetRomPreviewTextureFrames();
 
             state = State.FADE_IN;
             LOGGER.info("Master title screen initialized");
@@ -197,10 +319,11 @@ public class MasterTitleScreen {
      */
     public void update(InputHandler inputHandler) {
         frameCounter++;
+        advancePreviewAnimationFrame();
 
         // Update cloud animation
         for (CloudSprite cloud : clouds) {
-            cloud.update();
+            cloud.update(viewportWidth);
         }
 
         if (state == State.FADE_IN) {
@@ -228,24 +351,97 @@ public class MasterTitleScreen {
             return;
         }
 
-        // Handle input
-        SonicConfigurationService config = SonicConfigurationService.getInstance();
-        int leftKey = config.getInt(SonicConfiguration.LEFT);
-        int rightKey = config.getInt(SonicConfiguration.RIGHT);
-        int jumpKey = config.getInt(SonicConfiguration.JUMP);
-
-        if (inputHandler.isKeyPressed(leftKey)) {
-            selectedIndex = Math.max(0, selectedIndex - 1);
-            playNavigateSound();
+        if (configService.getBoolean(SonicConfiguration.TEST_MODE_ENABLED)) {
+            userRecordingMenu = null;
+            if (tracePicker == null) {
+                Path root = Path.of(System.getProperty("user.dir"))
+                        .resolve(configService.getString(SonicConfiguration.TRACE_CATALOG_DIR))
+                        .normalize();
+                tracePicker = new TestModeTracePicker(
+                        TraceCatalog.scan(root), ensurePickerFont());
+            }
+            tracePicker.update(inputHandler);
+            switch (tracePicker.consumeResult()) {
+                case LAUNCH -> {
+                    TraceEntry entry = tracePicker.selectedEntry();
+                    if (entry != null) {
+                        if (TraceSessionLauncher.launch(entry)) {
+                            tracePicker = null;
+                        } else {
+                            tracePicker.launchFailed();
+                        }
+                    }
+                }
+                case BACK -> {
+                    // Disable test mode for this session so normal game-select runs
+                    configService.setConfigValue(SonicConfiguration.TEST_MODE_ENABLED, false);
+                    tracePicker = null;
+                }
+                case NONE -> { }
+            }
+            return;
         }
-        if (inputHandler.isKeyPressed(rightKey)) {
-            selectedIndex = Math.min(GameEntry.values().length - 1, selectedIndex + 1);
-            playNavigateSound();
+
+        if (userRecordingMenu != null) {
+            userRecordingMenu.update(inputHandler);
+            if (userRecordingMenu.consumeCloseRequested()) {
+                userRecordingMenu = null;
+            }
+            return;
+        }
+
+        if (launchConfigPanel != null) {
+            launchConfigPanel.update(inputHandler);
+            if (launchConfigPanel.consumeResult() == LaunchConfigPanel.Result.CLOSED) {
+                GameEntry entry = GameEntry.values()[selectedIndex];
+                launchProfileStore.save(entry, launchConfigPanel.currentProfile());
+                launchConfigPanel = null;
+            }
+            return;
+        }
+
+        // Handle input
+        int leftKey = configService.getInt(SonicConfiguration.LEFT);
+        int rightKey = configService.getInt(SonicConfiguration.RIGHT);
+        int jumpKey = configService.getInt(SonicConfiguration.JUMP);
+        boolean leftPressed = inputHandler.isKeyPressed(leftKey) || inputHandler.logical().menuLeft();
+        boolean rightPressed = inputHandler.isKeyPressed(rightKey) || inputHandler.logical().menuRight();
+        boolean confirmPressed = inputHandler.isKeyPressed(jumpKey)
+                || inputHandler.isKeyPressed(org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER)
+                || inputHandler.logical().menuAccept();
+
+        int recordKey = configService.getInt(SonicConfiguration.RECORDING_RECORD_KEY);
+        boolean recordingMenuRequested = inputHandler.isKeyPressed(recordKey) && inputHandler.isShiftDown();
+        if (handleUserRecordingMenuRequest(recordingMenuRequested) || recordingMenuRequested) {
+            return;
+        }
+
+        if ((inputHandler.isKeyPressed(GLFW_KEY_TAB) || inputHandler.isGamepadBackButtonPressed())
+                && romAvailable[selectedIndex]) {
+            GameEntry entry = GameEntry.values()[selectedIndex];
+            launchConfigPanel = new LaunchConfigPanel(
+                    entry,
+                    launchProfileStore.load(entry),
+                    launchProfileStore,
+                    configService,
+                    font,
+                    renderer);
+            return;
+        }
+
+        if (leftPressed) {
+            if (setSelectedIndex(selectedIndex - 1)) {
+                playNavigateSound();
+            }
+        }
+        if (rightPressed) {
+            if (setSelectedIndex(selectedIndex + 1)) {
+                playNavigateSound();
+            }
         }
 
         // Confirm with Jump or Enter
-        if (inputHandler.isKeyPressed(jumpKey) ||
-            inputHandler.isKeyPressed(org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER)) {
+        if (confirmPressed) {
             if (!romAvailable[selectedIndex]) {
                 state = State.ERROR_DISPLAY;
                 errorFrameCounter = 0;
@@ -253,6 +449,7 @@ public class MasterTitleScreen {
             } else {
                 state = State.CONFIRMING;
                 playConfirmSound();
+                programmaticSelection = false;
                 gameSelected = true;
             }
         }
@@ -264,44 +461,57 @@ public class MasterTitleScreen {
     public void draw() {
         if (renderer == null) return;
 
-        // Set projection matrix from Engine
-        Engine engine = Engine.getInstance();
-        if (engine != null) {
-            renderer.setProjectionMatrix(engine.getProjectionMatrixBuffer());
-        }
-
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-        // 1. Background (full screen)
-        renderer.drawTexture(bgTextureId, 0, 0, SCREEN_W, SCREEN_H);
+        if (tracePicker != null) {
+            // Paint solid black behind the picker so the regular master-title
+            // artwork doesn't bleed through. Fill the full projection width.
+            renderer.drawTexture(solidWhiteTextureId, 0, 0, viewportWidth, SCREEN_H,
+                    0f, 0f, 0f, 1f);
+            tracePicker.render();
+            return;
+        }
 
-        // 2. Clouds (behind emblem)
+        if (userRecordingMenu != null) {
+            renderer.drawTexture(solidWhiteTextureId, 0, 0, viewportWidth, SCREEN_H,
+                    0f, 0f, 0f, 1f);
+            userRecordingMenu.render();
+            return;
+        }
+
+        // 1. Background — fills the full projection width so it expands at widescreen.
+        //    At native 320 this is identical to the original drawTexture(bg, 0, 0, 320, 224).
+        renderer.drawTexture(bgTextureId, 0, 0, viewportWidth, SCREEN_H);
+
+        // 2. Clouds (behind emblem) — cloud x/y already tracks viewportWidth via update().
         for (CloudSprite cloud : clouds) {
             float glY = SCREEN_H - cloud.y - cloud.height;
             renderer.drawTexture(cloud.textureId, cloud.x, glY, cloud.width, cloud.height,
                 1f, 1f, 1f, 0.85f);
         }
 
-        // 3. Compute title text position (needed for emblem placement)
-        float titleScale = 0.35f;
-        int scaledTitleW = (int)(titleTextWidth * titleScale);
-        int scaledTitleH = (int)(titleTextHeight * titleScale);
-        float titleX = (SCREEN_W - scaledTitleW) / 2f;
-        float titleGlY = SCREEN_H - 10 - scaledTitleH; // 10px from top
+        // 3. Compute title text position.
+        //    Foreground elements are centered on viewportWidth/2.
+        //    At native 320: centerX(w, 320) == (320-w)/2 == existing literal. Byte-identical.
+        int scaledTitleW = titleLogoScaledWidth(titleTextWidth);
+        int scaledTitleH = titleLogoScaledHeight(titleTextHeight);
+        float titleX = centerX(scaledTitleW, viewportWidth);
+        float titleGlY = titleLogoY(scaledTitleH);
 
-        // 4. Emblem (centered, below title text) - drawn before title so title appears in front
-        float emblemScale = 0.7f;
-        int scaledEmblemW = (int)(emblemWidth * emblemScale);
-        int scaledEmblemH = (int)(emblemHeight * emblemScale);
-        float emblemX = (SCREEN_W - scaledEmblemW) / 2f;
-        float emblemGlY = titleGlY - scaledEmblemH + 12;
-        renderer.drawTexture(emblemTextureId, emblemX, emblemGlY, scaledEmblemW, scaledEmblemH);
+        // 4. ROM-derived title preview, shown only when the selected ROM exists.
+        drawSelectedRomPreview();
+        drawRomPreviewUiMattes();
 
-        // 5. Title text "OpenGGF" (centered, top) - drawn after emblem so it appears in front
+        // 5. Title text "OpenGGF" (centered, top) - drawn after preview so it appears in front
         renderer.drawTexture(titleTextId, titleX, titleGlY, scaledTitleW, scaledTitleH);
 
-        // 6. Subtitle text, right-aligned to title's right edge - drawn after title (no overlap)
+        // All foreground text (subtitle + game menu + nav hints) shares the font atlas,
+        // so mega-batch into a single GL draw call.
+        font.beginMegaBatch();
+
+        // 6. Subtitle text, right-aligned to title's right edge - drawn after title (no overlap).
+        //    titleX is already centered on viewportWidth, so the right edge auto-follows.
         int titleRightEdge = (int)(titleX + scaledTitleW)-8;
         int subtitleY = (int)(SCREEN_H - titleGlY) - 6;
         int line1X = titleRightEdge - font.measureWidth("Open-Source");
@@ -309,31 +519,47 @@ public class MasterTitleScreen {
         font.drawText("Open-Source", line1X, subtitleY-8, 0.8f, 0.8f, 0.8f, 0.9f);
         font.drawText("Sonic Engine", line2X, subtitleY + 2, 0.8f, 0.8f, 0.8f, 0.9f);
 
-        // 5. Game selection menu at bottom
+        // 7. Missing-ROM prompt occupies the old emblem area when no ROM preview is available.
+        drawSelectedMissingRomPrompt();
+        drawLaunchHoverLine();
+
+        // 7. Game selection menu at bottom — centered on viewportWidth.
         drawGameMenu();
 
-        // 6. Navigation hints
-        font.drawTextCentered("< >  Select    Enter  Confirm", SCREEN_W, 210,
+        // 8. Navigation hints — centered on viewportWidth.
+        font.drawTextCentered("< >  Select    Enter  Confirm", viewportWidth, 210,
             0.6f, 0.6f, 0.7f, 0.8f);
 
-        // 7. Error message overlay
+        font.endMegaBatch();
+
+        if (launchConfigPanel != null) {
+            renderer.drawTexture(solidWhiteTextureId, 0, 0, viewportWidth, SCREEN_H,
+                    0f, 0f, 0f, LAUNCH_PANEL_OVERLAY_ALPHA);
+            launchConfigPanel.render(viewportWidth);
+            return;
+        }
+
+        // 9. Error message overlay — semi-transparent overlay fills full width;
+        //    error text is centered on viewportWidth.
         if (state == State.ERROR_DISPLAY) {
             // Semi-transparent black overlay using solid white texture tinted black
-            renderer.drawTexture(solidWhiteTextureId, 0, 0, SCREEN_W, SCREEN_H, 0f, 0f, 0f, 0.5f);
+            // (separate texture; not batched with font).
+            renderer.drawTexture(solidWhiteTextureId, 0, 0, viewportWidth, SCREEN_H, 0f, 0f, 0f, 0.5f);
 
-            // Error text
+            // Error text - second batch (overlay texture sits between the two batches).
+            font.beginMegaBatch();
             GameEntry entry = GameEntry.values()[selectedIndex];
-            font.drawTextCentered("ROM NOT FOUND", SCREEN_W, 90, 1f, 0.3f, 0.3f, 1f);
-            font.drawTextCentered(entry.displayName, SCREEN_W, 105, 0.8f, 0.8f, 0.8f, 1f);
+            font.drawTextCentered("ROM NOT FOUND", viewportWidth, 90, 1f, 0.3f, 0.3f, 1f);
+            font.drawTextCentered(entry.displayName, viewportWidth, 105, 0.8f, 0.8f, 0.8f, 1f);
 
-            SonicConfigurationService config = SonicConfigurationService.getInstance();
-            String romFile = config.getString(entry.romConfigKey);
+            String romFile = configService.getString(entry.romConfigKey);
             if (romFile == null || romFile.isEmpty()) {
                 romFile = "(not configured)";
             } else if (romFile.length() > 35) {
                 romFile = "..." + romFile.substring(romFile.length() - 32);
             }
-            font.drawTextCentered(romFile, SCREEN_W, 125, 0.5f, 0.5f, 0.5f, 0.8f);
+            font.drawTextCentered(romFile, viewportWidth, 125, 0.5f, 0.5f, 0.5f, 0.8f);
+            font.endMegaBatch();
         }
     }
 
@@ -349,44 +575,107 @@ public class MasterTitleScreen {
         }
         totalWidth += spacing * (entries.length - 1);
 
-        int startX = (SCREEN_W - totalWidth) / 2;
+        // Center the menu block on the viewport midpoint.
+        // At native 320: (320 - totalWidth) / 2 == original literal.
+        int startX = (viewportWidth - totalWidth) / 2;
         int menuY = 190;
         int cursorX = startX;
 
         for (int i = 0; i < entries.length; i++) {
-            float r, g, b, a;
+            float[] color = menuTextColor(romAvailable[i], i == selectedIndex, frameCounter);
 
-            if (i == selectedIndex) {
-                // Pulsing brightness for selected item
-                float pulse = 0.5f + 0.5f * (float) Math.sin(frameCounter * 0.05);
-                float brightness = 1.0f + 0.3f * pulse;
-                r = brightness;
-                g = brightness;
-                b = brightness;
-                a = 1.0f;
-            } else if (!romAvailable[i]) {
-                // Greyed out for unavailable
-                r = 0.4f;
-                g = 0.4f;
-                b = 0.4f;
-                a = 0.7f;
-            } else {
-                // Normal unselected
-                r = 0.8f;
-                g = 0.8f;
-                b = 0.8f;
-                a = 1.0f;
-            }
-
-            font.drawText(MENU_LABELS[i], cursorX, menuY, r, g, b, a);
+            font.drawText(MENU_LABELS[i], cursorX, menuY, color[0], color[1], color[2], color[3]);
             cursorX += widths[i] + spacing;
         }
     }
 
-    // Audio stubs
-    private void playNavigateSound() { /* TODO: ROM-independent SFX */ }
-    private void playConfirmSound()  { /* TODO: ROM-independent SFX */ }
-    private void playErrorSound()    { /* TODO: ROM-independent SFX */ }
+    private void loadRomPreviews() {
+        GameEntry[] entries = GameEntry.values();
+        for (int i = 0; i < entries.length; i++) {
+            if (!romAvailable[i]) {
+                continue;
+            }
+            GameEntry entry = entries[i];
+            Path path = Path.of(configService.getString(entry.romConfigKey));
+            MasterTitleRomPreview.loadSequenceFor(entry, path).ifPresent(sequence -> {
+                int index = entry.ordinal();
+                romPreviewSequences[index] = sequence;
+                MasterTitleRomPreview.Image firstFrame = sequence.imageAt(0);
+                romPreviewTextureIds[index] = MasterTitleRomPreview.uploadTexture(firstFrame);
+                romPreviewWidths[index] = firstFrame.width();
+                romPreviewHeights[index] = firstFrame.height();
+            });
+        }
+    }
+
+    private void drawSelectedRomPreview() {
+        updateSelectedRomPreviewTexture();
+        int textureId = romPreviewTextureIds[selectedIndex];
+        if (textureId == 0) {
+            return;
+        }
+        int previewW = romPreviewWidths[selectedIndex];
+        int previewH = romPreviewHeights[selectedIndex];
+        PreviewLayout layout = romPreviewLayout(previewW, previewH, viewportWidth);
+        renderer.drawTexture(textureId, layout.x(), layout.y(), layout.width(), layout.height());
+    }
+
+    private void drawRomPreviewUiMattes() {
+        if (romPreviewTextureIds[selectedIndex] == 0) {
+            return;
+        }
+        PreviewLayout bottom = bottomUiMatteLayout(viewportWidth);
+        drawMatte(bottom, BOTTOM_UI_MATTE_ALPHA);
+    }
+
+    private void drawMatte(PreviewLayout layout, float alpha) {
+        if (layout.height() <= 0 || layout.width() <= 0) {
+            return;
+        }
+        renderer.drawTexture(solidWhiteTextureId, layout.x(), layout.y(), layout.width(), layout.height(),
+                0f, 0f, 0f, alpha);
+    }
+
+    private void updateSelectedRomPreviewTexture() {
+        MasterTitleRomPreview.PreviewSequence sequence = romPreviewSequences[selectedIndex];
+        int textureId = romPreviewTextureIds[selectedIndex];
+        if (sequence == null || textureId == 0) {
+            return;
+        }
+        int token = sequence.frameTokenAt(previewAnimationFrame);
+        if (romPreviewFrameTokens[selectedIndex] == token) {
+            return;
+        }
+        MasterTitleRomPreview.Image frame = sequence.imageAt(previewAnimationFrame);
+        MasterTitleRomPreview.updateTexture(textureId, frame);
+        romPreviewFrameTokens[selectedIndex] = token;
+    }
+
+    private void drawSelectedMissingRomPrompt() {
+        if (romAvailable[selectedIndex]) {
+            return;
+        }
+        GameEntry entry = GameEntry.values()[selectedIndex];
+        font.drawTextCentered(MISSING_ROM_PROMPT, viewportWidth, 82, 1f, 0.25f, 0.25f, 1f);
+
+        String filename = missingRomFilenameLine(entry);
+        float filenameScale = Math.min(0.72f, (viewportWidth - 36f) / Math.max(1, font.measureWidth(filename)));
+        int filenameWidth = font.measureWidth(filename, filenameScale);
+        float filenameX = centerX(filenameWidth, viewportWidth);
+        font.drawText(filename, filenameX, 98, filenameScale, 1f, 0.55f, 0.55f, 1f);
+    }
+
+    private void playNavigateSound() {
+        audioSink.play(AudioCue.NAVIGATE);
+    }
+
+    private void playConfirmSound() {
+        audioSink.play(AudioCue.CONFIRM);
+    }
+
+    private void playErrorSound() {
+        audioSink.play(AudioCue.ERROR);
+    }
 
     /**
      * Returns true when the user has selected a game and confirmed.
@@ -396,25 +685,328 @@ public class MasterTitleScreen {
     }
 
     /**
+     * Programmatic selection used by {@link com.openggf.TraceSessionLauncher}
+     * to force a game without user input. Must be called while state is
+     * {@code ACTIVE}. Seeds the internal "selected" state so
+     * {@link #isGameSelected()} returns true on the next tick.
+     */
+    public void selectEntry(GameEntry entry) {
+        Objects.requireNonNull(entry, "entry");
+        setSelectedIndex(entry.ordinal());
+        if (!romAvailable[selectedIndex]) {
+            throw new IllegalStateException("Selected ROM is unavailable: " + entry.gameId);
+        }
+        this.state = State.CONFIRMING;
+        playConfirmSound();
+        this.programmaticSelection = true;
+        this.gameSelected = true;
+    }
+
+    public void showRomLoadError(String gameId) {
+        if (gameId != null) {
+            for (GameEntry entry : GameEntry.values()) {
+                if (entry.gameId.equalsIgnoreCase(gameId)) {
+                    setSelectedIndex(entry.ordinal());
+                    break;
+                }
+            }
+        }
+        if (this.state != State.ERROR_DISPLAY) {
+            playErrorSound();
+        }
+        this.state = State.ERROR_DISPLAY;
+        this.errorFrameCounter = 0;
+        this.gameSelected = false;
+    }
+
+    /**
+     * Sets the projection (viewport) width for widescreen-aware layout.
+     * Must be called each frame before {@link #draw()} when the engine is
+     * running at a width other than native 320. At native width (320) this is
+     * a no-op because the default already equals SCREEN_W.
+     *
+     * @param width projection width in pixels (e.g. 320, 400, 528)
+     */
+    public void setViewportWidth(int width) {
+        this.viewportWidth = Math.max(SCREEN_W, width);
+    }
+
+    /**
+     * Returns the horizontal center of an element of {@code elementWidth} pixels
+     * within a viewport of {@code vpWidth} pixels.
+     *
+     * <p>At native width (vpWidth == 320) this collapses to the existing literals:
+     * {@code (320 - w) / 2}.
+     */
+    static float centerX(int elementWidth, int vpWidth) {
+        return (vpWidth - elementWidth) / 2f;
+    }
+
+    static PreviewLayout romPreviewLayout(int previewW, int previewH, int vpWidth) {
+        int width = Math.max(1, previewW);
+        int height = Math.max(1, previewH);
+        return new PreviewLayout(width, height, centerX(width, vpWidth), 0);
+    }
+
+    static PreviewLayout topUiMatteLayout(int vpWidth) {
+        int width = Math.max(SCREEN_W, vpWidth);
+        return new PreviewLayout(width, TOP_UI_MATTE_HEIGHT, 0, SCREEN_H - TOP_UI_MATTE_HEIGHT);
+    }
+
+    static PreviewLayout bottomUiMatteLayout(int vpWidth) {
+        int width = Math.max(SCREEN_W, vpWidth);
+        return new PreviewLayout(width, BOTTOM_UI_MATTE_HEIGHT, 0, 0);
+    }
+
+    static float titleLogoY(int titleHeight) {
+        return SCREEN_H - 2 - titleHeight;
+    }
+
+    static int titleLogoScaledWidth(int sourceWidth) {
+        return scaledTitleLogoDimension(sourceWidth);
+    }
+
+    static int titleLogoScaledHeight(int sourceHeight) {
+        return scaledTitleLogoDimension(sourceHeight);
+    }
+
+    private static int scaledTitleLogoDimension(int sourceDimension) {
+        int scaled = sourceDimension
+                * TITLE_LOGO_BASE_SCALE_NUMERATOR
+                * TITLE_LOGO_SCALE_NUMERATOR
+                / TITLE_LOGO_BASE_SCALE_DENOMINATOR
+                / TITLE_LOGO_SCALE_DENOMINATOR;
+        return Math.max(1, scaled);
+    }
+
+    static String expectedRomFilename(GameEntry entry) {
+        return entry.expectedRomFilename;
+    }
+
+    static String missingRomPromptLine() {
+        return MISSING_ROM_PROMPT;
+    }
+
+    static String missingRomFilenameLine(GameEntry entry) {
+        return expectedRomFilename(entry);
+    }
+
+    static String launchHoverLine(int enabledCount) {
+        if (enabledCount <= 0) {
+            return "Stock launch - Tab to configure";
+        }
+        String noun = enabledCount == 1 ? " option enabled" : " options enabled";
+        return enabledCount + noun + " - Tab to configure";
+    }
+
+    static int scaledCenteredTextX(String text, int screenWidth, float scale) {
+        int textWidth = Math.round(text.length() * PixelFont.glyphWidth() * scale);
+        return Math.round((screenWidth - textWidth) / 2f);
+    }
+
+    static float[] menuTextColor(boolean available, boolean selected, int frameCounter) {
+        if (!available) {
+            if (selected) {
+                return new float[] { 0.72f, 0.72f, 0.72f, 0.85f };
+            }
+            return new float[] { 0.4f, 0.4f, 0.4f, 0.7f };
+        }
+        if (selected) {
+            float pulse = 0.5f + 0.5f * (float) Math.sin(frameCounter * 0.05);
+            float brightness = 1.0f + 0.3f * pulse;
+            return new float[] { brightness, brightness, brightness, 1.0f };
+        }
+        return new float[] { 0.8f, 0.8f, 0.8f, 1.0f };
+    }
+
+    boolean setSelectedIndex(int newIndex) {
+        int clamped = Math.max(0, Math.min(GameEntry.values().length - 1, newIndex));
+        if (clamped == selectedIndex) {
+            return false;
+        }
+        selectedIndex = clamped;
+        previewAnimationFrame = 0;
+        return true;
+    }
+
+    void advancePreviewAnimationFrame() {
+        if (previewAnimationFrame < Integer.MAX_VALUE) {
+            previewAnimationFrame++;
+        }
+    }
+
+    int previewAnimationFrameForTest() {
+        return previewAnimationFrame;
+    }
+
+    public void setSelectedIndexForTest(int newIndex) {
+        setSelectedIndex(newIndex);
+    }
+
+    public void setStateForTest(State state) {
+        this.state = state;
+    }
+
+    public boolean isLaunchConfigPanelOpenForTest() {
+        return launchConfigPanel != null;
+    }
+
+    LaunchProfile currentLaunchProfileForTest() {
+        if (launchConfigPanel != null) {
+            return launchConfigPanel.currentProfile();
+        }
+        return launchProfileStore.load(GameEntry.values()[selectedIndex]);
+    }
+
+    public void setRomAvailableForTest(GameEntry entry, boolean available) {
+        romAvailable[entry.ordinal()] = available;
+    }
+
+    public void setUserRecordingMenuFactoryForTest(UserRecordingMenuFactory userRecordingMenuFactory) {
+        this.userRecordingMenuFactory = Objects.requireNonNull(userRecordingMenuFactory, "userRecordingMenuFactory");
+    }
+
+    public void setUserRecordingPlaybackStarter(UserRecordingMenu.PlaybackStarter playbackStarter) {
+        this.userRecordingPlaybackStarter = Objects.requireNonNull(playbackStarter, "playbackStarter");
+    }
+
+    public boolean isUserRecordingMenuOpenForTest() {
+        return userRecordingMenu != null;
+    }
+
+    public UserRecordingMenuState userRecordingMenuStateForTest() {
+        return userRecordingMenu == null ? null : userRecordingMenu.state();
+    }
+
+    void setTracePickerForTest(TestModeTracePicker tracePicker) {
+        this.tracePicker = tracePicker;
+    }
+
+    private void resetRomPreviewTextureFrames() {
+        java.util.Arrays.fill(romPreviewFrameTokens, Integer.MIN_VALUE);
+    }
+
+    public void setProjectionMatrix(float[] projectionMatrix) {
+        if (renderer != null && projectionMatrix != null) {
+            renderer.setProjectionMatrix(projectionMatrix);
+        }
+    }
+
+    /**
      * Returns the game ID ("s1", "s2", "s3k") of the selected entry.
      */
     public String getSelectedGameId() {
         return GameEntry.values()[selectedIndex].gameId;
     }
 
+    public boolean isProgrammaticSelection() {
+        return programmaticSelection;
+    }
+
+    public boolean tryOpenUserRecordingMenuForSelectedGame() {
+        if (state != State.ACTIVE
+                || configService.getBoolean(SonicConfiguration.TEST_MODE_ENABLED)
+                || launchConfigPanel != null) {
+            return false;
+        }
+        GameEntry entry = GameEntry.values()[selectedIndex];
+        try {
+            userRecordingMenu = userRecordingMenuFactory.create(entry.gameId, font);
+            return true;
+        } catch (IOException ex) {
+            LOGGER.warning("Failed to open recordings menu for " + entry.gameId + ": " + ex.getMessage());
+            return false;
+        }
+    }
+
+    public boolean handleUserRecordingMenuRequest(boolean recordingMenuRequested) {
+        if (!recordingMenuRequested) {
+            return false;
+        }
+        return tryOpenUserRecordingMenuForSelectedGame();
+    }
+
+    private UserRecordingMenu createUserRecordingMenu(String gameId, PixelFont font) throws IOException {
+        Path root = Path.of(System.getProperty("user.dir", "."));
+        return new UserRecordingMenu(
+                gameId,
+                UserRecordingCatalog.scan(root, gameId, AppVersion.identity()),
+                font,
+                userRecordingPlaybackStarter);
+    }
+
+    private void drawLaunchHoverLine() {
+        if (!romAvailable[selectedIndex]) {
+            return;
+        }
+        GameEntry entry = GameEntry.values()[selectedIndex];
+        int enabledCount = launchProfileStore.load(entry).enabledCount(entry);
+        if (enabledCount == 0) {
+            drawScaledCenteredText(launchHoverLine(enabledCount), LAUNCH_HOVER_Y, LAUNCH_HOVER_SCALE,
+                    0.55f, 0.55f, 0.55f, 0.88f);
+        } else {
+            drawScaledCenteredText(launchHoverLine(enabledCount), LAUNCH_HOVER_Y, LAUNCH_HOVER_SCALE,
+                    1f, 0.82f, 0.28f, 1f);
+        }
+    }
+
+    private void drawScaledCenteredText(String text, int y, float preferredScale,
+                                        float r, float g, float b, float a) {
+        float scale = fittedScale(text, preferredScale, viewportWidth);
+        int width = font.measureWidth(text, scale);
+        int x = Math.round((viewportWidth - width) / 2f);
+        font.drawText(text, x, y, scale, r, g, b, a);
+    }
+
+    private static float fittedScale(String text, float preferredScale, int viewportWidth) {
+        int preferredWidth = Math.round(text.length() * PixelFont.glyphWidth() * preferredScale);
+        int maxWidth = Math.max(1, viewportWidth - FITTED_TEXT_SIDE_PADDING * 2);
+        if (preferredWidth <= maxWidth) {
+            return preferredScale;
+        }
+        return preferredScale * maxWidth / preferredWidth;
+    }
+
     /**
      * Cleans up all GL resources.
      */
+    private PixelFont ensurePickerFont() {
+        if (pickerFont == null) {
+            pickerFont = new PixelFont();
+            try {
+                pickerFont.init("pixel-font-ns.png", renderer);
+            } catch (IOException e) {
+                LOGGER.warning("Failed to load pixel-font-ns.png for trace picker, "
+                        + "falling back to master-title font: " + e.getMessage());
+                pickerFont = font;
+            }
+        }
+        return pickerFont;
+    }
+
     public void cleanup() {
         if (font != null) font.cleanup();
+        // pickerFont is only non-null AND distinct from font when the
+        // no-shadow atlas loaded successfully. Clean it up separately.
+        if (pickerFont != null && pickerFont != font) {
+            pickerFont.cleanup();
+        }
         PngTextureLoader.deleteTexture(bgTextureId);
         PngTextureLoader.deleteTexture(solidWhiteTextureId);
-        PngTextureLoader.deleteTexture(emblemTextureId);
         PngTextureLoader.deleteTexture(titleTextId);
         PngTextureLoader.deleteTexture(cloudLargeTextureId);
         PngTextureLoader.deleteTexture(cloudSmallTextureId);
+        for (int textureId : romPreviewTextureIds) {
+            PngTextureLoader.deleteTexture(textureId);
+        }
         if (renderer != null) renderer.cleanup();
+        userRecordingMenu = null;
         state = State.INACTIVE;
         LOGGER.info("Master title screen cleaned up");
+    }
+
+    @FunctionalInterface
+    public interface UserRecordingMenuFactory {
+        UserRecordingMenu create(String gameId, PixelFont font) throws IOException;
     }
 }

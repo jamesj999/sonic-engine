@@ -1,0 +1,34 @@
+{
+  "schema": "openggf.s3k_audio_oracle_reference_fixture.v1",
+  "reference": "s3k-aiz1-intro-reference-v1.jsonl.gz",
+  "reference_gzip_sha256": "ebd8373e63deb6dc91f3c7f48f808a9744fbfdb5aa0a102105eefcc828613e62",
+  "reference_uncompressed_sha256": "74492a6c5fccde0cae5c1def935bdb02574726c94b7e07a7eb7bcbd677762be9",
+  "terminal_body_sha256": "f74d5c94c3976f8640f67138acda3b5f0bdf6e1609ac81143113e88f4efc7805",
+  "rom_sha1": "cfbf98c36c776677290a872547ac47c53d2761d6",
+  "rom_crc32": "63522553",
+  "movie": {
+    "path": "src/test/resources/traces/s3k/_movies/s3k-complete-sonic-tails.bk2",
+    "sha256": "82eabfbc65e33c160ce209baa1ca3f967cb677fe22350bc100625d8c41a8e1bf",
+    "frame_count": 466334
+  },
+  "ticks": 5400,
+  "write_count": 725898,
+  "frame_range": "movie frames 0-5399 from power-on",
+  "content": "boot, SEGA chant, title music (mus 25h), file select, Knuckles intro theme (mus 1Fh), AIZ1 music (mus 01h) with gameplay SFX (>= 10 distinct SFX ids incl. 33h, 3Ch, 3Dh, 48h, 4Ah, 59h, 62h, AFh, B1h, B7h, BAh)",
+  "observer": {
+    "patch": "0001-buffer-z80-audio-events",
+    "core_zst_sha256": "e65315743a6a122843907a85314e380eee03fdc06bf0885b44c3dbc3bab88c6d",
+    "lock": "tools/tracechaser/bizhawk-headless/native/gpgx-audio-observer/artifact-lock.json",
+    "tracechaser_gitlink": "9e51ff79e7a542f3c50d96618a7e24e6fc72397e",
+    "manifest": "fixtures/gpgx-audio-service-manifests-v1.json (game s3k)"
+  },
+  "capture_command": "OGGF_BIZHAWK_STOCK=<stock 2.11> OGGF_OBSERVER_CORE=<lock-matching gpgx.wbx.zst> OGGF_WORKDIR=<scratch> OGGF_OUT=<out.jsonl> tools/audio/run_s3k_audio_oracle_reference.sh",
+  "postprocess": "gzip -9 -n out.jsonl",
+  "status": {
+    "state": "retired",
+    "retired_on": "2026-09-03",
+    "superseded_by": "s3k-aiz1-intro-reference-v2.jsonl.gz",
+    "reason": "this stream declares sampling post_invocation but reads driver RAM out of band after the emulated frame advances, so a frame whose driver work overruns it records a strict prefix of zUpdateMusic's track-iteration order, truncated at a varying point. Movie frame 252, the title-music load, is such a frame; it is what stalled the oracle at tick 138.",
+    "retained_for": "provenance. The fixture bytes are unmodified and still readable; TestS3kAudioOracleFixtureContract continues to gate them. It is not the comparison source."
+  }
+}

@@ -1,7 +1,7 @@
 package com.openggf.tests;
 import com.openggf.game.sonic2.audio.Sonic2SmpsSequencerConfig;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import com.openggf.audio.smps.AbstractSmpsData;
 import com.openggf.audio.smps.DacData;
 import com.openggf.game.sonic2.audio.smps.Sonic2SmpsData;
@@ -12,8 +12,8 @@ import java.util.HashMap;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TestSmpsFrequencyWrap {
 
@@ -86,7 +86,7 @@ public class TestSmpsFrequencyWrap {
         SmpsSequencer seq = new SmpsSequencer(smps, dac, synth, Sonic2SmpsSequencerConfig.CONFIG);
 
         short[] buf = new short[2000];
-        seq.read(buf);
+        seq.advanceSamples(buf.length);
 
         // Analyze writes
         // We expect a write to A4 (Block/FNum MSB)
@@ -102,11 +102,13 @@ public class TestSmpsFrequencyWrap {
             }
         }
 
-        assertTrue("Should have written frequency", found);
+        assertTrue(found, "Should have written frequency");
 
-        // YM2612 block field is 3 bits — octave 8 wraps to block 0 via & 7.
+        // YM2612 block field is 3 bits â€” octave 8 wraps to block 0 via & 7.
         // This matches real hardware behavior and is required for S3K tracks
         // that use extreme negative transpose to produce low "fake drum" notes.
-        assertEquals("Block should wrap to 0 for Octave 8 (3-bit hardware wrap)", 0, block);
+        assertEquals(0, block, "Block should wrap to 0 for Octave 8 (3-bit hardware wrap)");
     }
 }
+
+

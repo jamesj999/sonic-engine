@@ -2,7 +2,6 @@ package com.openggf.game.sonic1.objects;
 
 import com.openggf.audio.AudioManager;
 import com.openggf.configuration.SonicConfiguration;
-import com.openggf.configuration.SonicConfigurationService;
 import com.openggf.debug.DebugRenderContext;
 import com.openggf.game.sonic1.audio.Sonic1Sfx;
 import com.openggf.game.PlayableEntity;
@@ -10,7 +9,10 @@ import com.openggf.game.sonic1.constants.Sonic1AnimationIds;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
+import com.openggf.sprites.NativePositionOps;
+import com.openggf.sprites.playable.ObjectControlState;
 
 import com.openggf.debug.DebugColor;
 import java.util.List;
@@ -37,7 +39,7 @@ import java.util.List;
  * <p>
  * Reference: docs/s1disasm/_incObj/72 Teleporter.asm
  */
-public class Sonic1TeleporterObjectInstance extends AbstractObjectInstance {
+public class Sonic1TeleporterObjectInstance extends AbstractObjectInstance implements SpawnRewindRecreatable {
 
     // ---- Trigger detection constants ----
     // From disassembly: cmpi.w #$10,d0 (X range check)
@@ -119,7 +121,7 @@ public class Sonic1TeleporterObjectInstance extends AbstractObjectInstance {
     }
 
     private Routine routine = Routine.WAIT;
-    private final int subtype;
+    private int subtype;
 
     // ---- Waypoint tracking (objoff_3A, objoff_3B, objoff_3C, objoff_36, objoff_38) ----
     // waypointIndex corresponds to objoff_3A (byte) - current offset into waypoint data
@@ -144,11 +146,6 @@ public class Sonic1TeleporterObjectInstance extends AbstractObjectInstance {
     // These are in the ROM's velocity format: 1 unit = 1/256th of a pixel per frame.
     private int playerVelX;
     private int playerVelY;
-    // 16.8 fixed-point position accumulators for sub-pixel movement during travel.
-    // The ROM uses move.l obX to read/write 32-bit values where the top 16 bits are
-    // pixel position and the next 8 bits are subpixel. We emulate this as 24-bit (16.8).
-    private int posX_16_8;
-    private int posY_16_8;
     private AbstractPlayableSprite controlledPlayer;
 
     public Sonic1TeleporterObjectInstance(ObjectSpawn spawn) {
@@ -195,7 +192,7 @@ public class Sonic1TeleporterObjectInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (player == null) {
             return;
@@ -261,7 +258,7 @@ public class Sonic1TeleporterObjectInstance extends AbstractObjectInstance {
 
         // move.b #$81,(f_playerctrl).w
         // Bit 0 = control lock, bit 7 = disable object interaction
-        player.setObjectControlled(true);
+        ObjectControlState.nativeBit7FullControl().applyTo(player);
         player.setControlLocked(true);
 
         // move.b #id_Roll,obAnim(a1)
@@ -282,10 +279,15 @@ public class Sonic1TeleporterObjectInstance extends AbstractObjectInstance {
         // bset #1,obStatus(a1) - set player airborne
         player.setAir(true);
 
-        // move.w obX(a0),obX(a1)
-        player.setCentreX((short) getX());
-        // move.w obY(a0),obY(a1)
-        player.setCentreY((short) getY());
+        // ROM SBZ teleporter capture writes `move.w obX(a0),obX(a1)` /
+        // `move.w obY(a0),obY(a1)` (docs/s1disasm/_incObj/72 SBZ Teleporter.asm:
+        // 73-74): it sets only the player's x_pos/y_pos PIXEL words to the
+        // teleporter's pixel position -- the sub-pixel words (x_sub/y_sub) are
+        // UNTOUCHED. setCentreX/setCentreY zero the sub-pixel; use the
+        // preserve-subpixel setters so the captured player keeps his accumulated
+        // fraction, matching the ROM move.w.
+        NativePositionOps.writeXPosPreserveSubpixel(player, getX());
+        NativePositionOps.writeYPosPreserveSubpixel(player, getY());
 
         // clr.b objoff_32(a0)
         sineAngle = 0;
@@ -312,8 +314,13 @@ public class Sonic1TeleporterObjectInstance extends AbstractObjectInstance {
         // move.w obY(a0),d2
         // sub.w d0,d2
         // move.w d2,obY(a1)
+        // ROM writes only the y_pos PIXEL word (move.w) -- the 16-bit y_sub is
+        // left untouched, so the player keeps the sub-pixel fraction he carried
+        // into the teleporter. Use the preserve-subpixel setter (setCentreY would
+        // zero y_sub, dropping the carried fraction and shifting the eventual
+        // travel landing by up to 1px -- SBZ2 trace f2920).
         int newY = getY() - yOffset;
-        player.setCentreY((short) newY);
+        NativePositionOps.writeYPosPreserveSubpixel(player, newY);
 
         // cmpi.b #$80,objoff_32(a0) / bne.s locret_16796
         if ((sineAngle & 0xFF) != SINE_COMPLETE_ANGLE) {
@@ -346,9 +353,13 @@ public class Sonic1TeleporterObjectInstance extends AbstractObjectInstance {
             return;
         }
 
-        // Waypoint reached - snap player to target and advance
-        player.setCentreX((short) targetX);
-        player.setCentreY((short) targetY);
+        // Waypoint reached - snap player to target and advance.
+        // ROM loc_167C2: move.w objoff_36(a0),obX(a1) / move.w objoff_38(a0),obY(a1)
+        // snaps only the x_pos/y_pos PIXEL words, preserving the 16-bit sub-pixels
+        // (which Tele_Move then reads as pixel words, but loc_167DA keeps accumulating
+        // through the next segment). setCentreX/Y would zero the sub-pixel here.
+        NativePositionOps.writeXPosPreserveSubpixel(player, targetX);
+        NativePositionOps.writeYPosPreserveSubpixel(player, targetY);
 
         // moveq #0,d1
         // move.b objoff_3A(a0),d1
@@ -395,18 +406,13 @@ public class Sonic1TeleporterObjectInstance extends AbstractObjectInstance {
      * vel = $1000 means 16 pixels per frame ($10.00 in 8.8 format).
      */
     private void movePlayerByVelocity(AbstractPlayableSprite player) {
-        // Update 16.8 accumulators: pos_16_8 += velocity (velocity IS in 16.8 scale
-        // because the ROM does pos_32 += vel << 8, but our accumulators are already
-        // in 16.8 format, and vel << 8 in 32-bit maps to vel in 24-bit = vel in 16.8)
-        posX_16_8 += signExtend16(playerVelX);
-        posY_16_8 += signExtend16(playerVelY);
-
-        // Extract pixel position from 16.8 format (arithmetic shift right 8)
-        int pixelX = posX_16_8 >> 8;
-        int pixelY = posY_16_8 >> 8;
-
-        player.setCentreX((short) pixelX);
-        player.setCentreY((short) pixelY);
+        // ROM loc_167DA performs the standard 16.16 fixed-point position update on the
+        // player's FULL position words (pixel:16 | sub:16), reading obVelX/obVelY and
+        // adding vel<<8. AbstractSprite.move() implements exactly that 32-bit add, so it
+        // preserves and accumulates the player's 16-bit sub-pixel fraction. A separate
+        // 16.8 accumulator seeded from the pixel-only position silently dropped the
+        // carried sub-pixel and landed the player 1px off (SBZ2 trace f2920).
+        player.move((short) playerVelX, (short) playerVelY);
     }
 
     /**
@@ -422,8 +428,9 @@ public class Sonic1TeleporterObjectInstance extends AbstractObjectInstance {
      */
     private void releasePlayer(AbstractPlayableSprite player) {
         // andi.w #$7FF,obY(a1)
+        // Masks only the y_pos PIXEL word, preserving the 16-bit y_sub.
         int maskedY = player.getCentreY() & Y_COORDINATE_MASK;
-        player.setCentreY((short) maskedY);
+        NativePositionOps.writeYPosPreserveSubpixel(player, maskedY);
 
         // clr.b obRoutine(a0) - reset to wait state
         routine = Routine.WAIT;
@@ -433,7 +440,7 @@ public class Sonic1TeleporterObjectInstance extends AbstractObjectInstance {
         targetY = signExtend16(waypointData[1]);
 
         // clr.b (f_playerctrl).w
-        player.setObjectControlled(false);
+        ObjectControlState.none().applyTo(player);
         player.setControlLocked(false);
         player.setForcedAnimationId(-1);
         controlledPlayer = null;
@@ -461,10 +468,6 @@ public class Sonic1TeleporterObjectInstance extends AbstractObjectInstance {
     private void calculateTravelVelocity(AbstractPlayableSprite player) {
         int playerX = player.getCentreX();
         int playerY = player.getCentreY();
-
-        // Initialize 16.8 fixed-point accumulators from current pixel position
-        posX_16_8 = playerX << 8;
-        posY_16_8 = playerY << 8;
 
         // moveq #0,d0
         // move.w #$1000,d2
@@ -600,7 +603,7 @@ public class Sonic1TeleporterObjectInstance extends AbstractObjectInstance {
         // prevents this during active transport. This is a safety net.
         if (routine != Routine.WAIT) {
             if (controlledPlayer != null) {
-                controlledPlayer.setObjectControlled(false);
+                ObjectControlState.none().applyTo(controlledPlayer);
                 controlledPlayer.setControlLocked(false);
                 controlledPlayer.setForcedAnimationId(-1);
             }
@@ -611,7 +614,7 @@ public class Sonic1TeleporterObjectInstance extends AbstractObjectInstance {
 
     @Override
     public void appendDebugRenderCommands(DebugRenderContext ctx) {
-        if (!SonicConfigurationService.getInstance().getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED)) {
+        if (!services().configuration().getBoolean(SonicConfiguration.DEBUG_VIEW_ENABLED)) {
             return;
         }
 

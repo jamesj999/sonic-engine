@@ -47,10 +47,11 @@ import java.util.List;
  * Index 6: X=-1, Y=-1
  * </pre>
  */
-public class GrounderWallInstance extends AbstractObjectInstance {
+public class GrounderWallInstance extends AbstractObjectInstance implements GrounderZeroIndexChildRewindRecreatable {
 
     private static final int GRAVITY = 0x38; // 0.21875 pixels/frame (from ObjectMoveAndFall)
     private static final int PALETTE_INDEX = 1;  // Level art palette (matches FallingPillar)
+    private static final int APPROX_RENDER_Y_MARGIN = 32; // BuildSprites_ApproxYCheck assumed radius
 
     // Wall mapping from word_36D9A - 32x16 using level tiles
     private static final List<SpriteMappingPiece> WALL_PIECES = List.of(
@@ -81,6 +82,8 @@ public class GrounderWallInstance extends AbstractObjectInstance {
     private int xSubpixel;
     private int ySubpixel;
     private boolean activated;
+    private boolean initialized;
+    private boolean romRenderOnScreen;
     private final GrounderBadnikInstance parent;
 
     /**
@@ -97,6 +100,8 @@ public class GrounderWallInstance extends AbstractObjectInstance {
         this.currentY = y;
         this.parent = parent;
         this.activated = false;
+        this.initialized = false;
+        this.romRenderOnScreen = true;
         this.xSubpixel = 0;
         this.ySubpixel = 0;
 
@@ -105,6 +110,10 @@ public class GrounderWallInstance extends AbstractObjectInstance {
         int[] vel = WALL_VELOCITIES[idx];
         this.xVelocity = vel[0];
         this.yVelocity = vel[1];
+    }
+
+    private GrounderWallInstance() {
+        this(0, 0, 0, null);
     }
 
     private static ObjectSpawn createWallSpawn(int x, int y) {
@@ -118,34 +127,61 @@ public class GrounderWallInstance extends AbstractObjectInstance {
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
+        if (!initialized) {
+            initialized = true;
+            return;
+        }
+
         // Wait for parent's activation flag
         if (!activated) {
             if (parent == null || parent.isActivated()) {
                 activated = true;
+                // ROM Obj8F loc_36BA6 only advances routine 2->4 and latches
+                // velocities when objoff_2B is set; Obj8F_Move runs next frame.
+                // docs/s2disasm/s2.asm:73424-73437
+                return;
             } else {
                 return;
             }
         }
 
-        // Apply gravity to Y velocity
-        yVelocity += GRAVITY;
+        // Obj8F_Move shares Obj90_Move's render-flag delete gate: it tests the
+        // previous BuildSprites on-screen bit before ObjectMoveAndFall
+        // (s2.asm:73490-73494).
+        if (!romRenderOnScreen) {
+            setDestroyed(true);
+            return;
+        }
 
         // Update X position with fixed-point math
         xSubpixel += xVelocity;
         currentX += (xSubpixel >> 8);
         xSubpixel &= 0xFF;
 
-        // Update Y position with fixed-point math
+        // ObjectMoveAndFall moves with the old y_vel, then applies gravity.
+        // docs/s2disasm/s2.asm:30163-30177
         ySubpixel += yVelocity;
         currentY += (ySubpixel >> 8);
         ySubpixel &= 0xFF;
+        yVelocity += GRAVITY;
 
-        // Off-screen cleanup
-        if (!isOnScreen(64)) {
-            setDestroyed(true);
-        }
+        // The shared ObjectManager MarkObjGone tail handles X-range cleanup
+        // after movement, matching the ROM jump at the end of Obj8F_Move.
+    }
+
+    @Override
+    public void refreshPostCameraRenderState() {
+        romRenderOnScreen = isWithinRenderSpriteBounds(getOnScreenHalfWidth(), getOnScreenHalfHeight());
+    }
+
+    @Override
+    public int getOnScreenHalfHeight() {
+        // Obj8F_SubObjData does not set render_flags.explicit_height, so S2
+        // BuildSprites uses its approximate +/-32px Y band before setting
+        // render_flags.on_screen (docs/s2disasm/s2.asm:30569-30588).
+        return APPROX_RENDER_Y_MARGIN;
     }
 
     @Override
@@ -196,4 +232,3 @@ public class GrounderWallInstance extends AbstractObjectInstance {
         }
     }
 }
-

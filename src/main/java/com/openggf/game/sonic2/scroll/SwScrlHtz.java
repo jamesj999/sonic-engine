@@ -1,9 +1,10 @@
 package com.openggf.game.sonic2.scroll;
 
 import com.openggf.game.GameServices;
-import com.openggf.game.sonic2.Sonic2LevelEventManager;
+import com.openggf.game.sonic2.runtime.HtzRuntimeState;
 import com.openggf.level.scroll.AbstractZoneScrollHandler;
 import com.openggf.level.scroll.M68KMath;
+import com.openggf.level.scroll.compose.ScrollEffectComposer;
 
 /**
  * ROM-accurate implementation of SwScrl_HTZ (Hill Top Zone scroll routine).
@@ -37,13 +38,17 @@ public class SwScrlHtz extends AbstractZoneScrollHandler {
     private int shakeOffsetX = 0;
     private int shakeOffsetY = 0;
 
-    // Cloud animation counter (TempArray_LayerDef+$22 equivalent)
-    // Incremented by 4 each frame
-    private int cloudCounter = 0;
+    // Cloud animation counter (TempArray_LayerDef+$22 equivalent), +4 each frame.
+    // Derived from the frame counter (not the update-call count) so it rewinds
+    // correctly — see FrameScrollAccumulator. Offset 0 = read-then-increment.
+    private final com.openggf.level.scroll.FrameScrollAccumulator cloudCounter =
+            new com.openggf.level.scroll.FrameScrollAccumulator(4, 0);
 
     // TempArray_LayerDef values for Dynamic_HTZ cloud art streaming
     // 16 word values at offsets 0-30 (indices 0-15)
     private final short[] tempArrayLayerDef = new short[16];
+
+    private final ScrollEffectComposer composer = new ScrollEffectComposer();
 
     private static final int VISIBLE_LINES = 224;
     private static final int STATIC_LINES = 128;  // First 128 lines use constant scroll
@@ -53,12 +58,18 @@ public class SwScrlHtz extends AbstractZoneScrollHandler {
         this.bgCamera = bgCamera;
     }
 
+    private HtzRuntimeState htzRuntimeState() {
+        return GameServices.zoneRuntimeRegistry()
+                .currentAs(HtzRuntimeState.class)
+                .orElseThrow(() -> new IllegalStateException("HTZ runtime state not installed"));
+    }
+
     /**
      * Initialize HTZ scroll state.
      * Called when entering HTZ to reset the cloud counter.
      */
     public void init() {
-        cloudCounter = 0;
+        cloudCounter.reset();
         for (int i = 0; i < 16; i++) {
             tempArrayLayerDef[i] = 0;
         }
@@ -99,9 +110,10 @@ public class SwScrlHtz extends AbstractZoneScrollHandler {
                        int actId) {
 
         resetScrollTracking();
+        composer.reset();
 
         // Default vertical factors for normal mode.
-        vscrollFactorBG = (short) bgCamera.getBgYPos();
+        composer.setVscrollFactorBG((short) bgCamera.getBgYPos());
         vscrollFactorFG = (short) cameraY;
 
         // Reset shake offsets - quake mode may overwrite.
@@ -109,7 +121,7 @@ public class SwScrlHtz extends AbstractZoneScrollHandler {
         shakeOffsetY = 0;
 
         // ROM: SwScrl_HTZ branches on Screen_Shaking_Flag_HTZ, not Screen_Shaking_Flag.
-        if (GameServices.gameState().isHtzScreenShakeActive()) {
+        if (htzRuntimeState().earthquakeActive()) {
             updateEarthquakeMode(horizScrollBuf, cameraX, cameraY, frameCounter);
         } else {
             updateNormal(horizScrollBuf, cameraX, cameraY, frameCounter);
@@ -130,38 +142,57 @@ public class SwScrlHtz extends AbstractZoneScrollHandler {
         int d0_long = ((d2 & 0xFFFF) << 16) | ((d2 >> 3) & 0xFFFF);
 
         // Lines 15802-15805: Fill first 128 lines with constant scroll
-        for (int i = 0; i < STATIC_LINES; i++) {
-            horizScrollBuf[i] = d0_long;
-        }
-        trackOffsetFromPacked(d0_long);
+        composer.fillPackedScrollWords(0, STATIC_LINES, d0_long);
 
         // Line 15808: move.l d0,d4 (save the packed value for later)
         int d4 = d0_long;
 
         // Line 15809-15810: Read cloud counter and increment by 4
         // move.w (TempArray_LayerDef+$22).w,d0 / addq.w #4,(TempArray_LayerDef+$22).w
-        short cloudScrollValue = (short) cloudCounter;
-        cloudCounter = (cloudCounter + 4) & 0xFFFF;
+        short cloudScrollValue = (short) cloudCounter.valueAt(frameCounter);
 
         // Line 15813: sub.w d0,d2 (delta = -cameraX - cloudScrollValue)
         d2 = (short) (d2 - cloudScrollValue);
 
-        // Lines 15820-15835: Calculate increment value d0
-        // This complex calculation creates d0 which is the per-"step" increment
-        // move.w d2,d0
+        // Lines 15851-15866: reduce the delta to 44% (100/2 - 100/16).
+        //
+        // fixBugs=0 path -- the shipped REV01 behaviour, which is what the traces
+        // record and therefore what the engine models. `d1` is NOT cleared first
+        // (the `moveq #0,d1` lives inside the `if fixBugs`), but `move.w d0,d1`,
+        // `asr.w #4,d1` and `sub.w d1,d0` only ever touch d1's low word, so the
+        // stale upper word cannot reach the result.
+        //
+        //     move.w  d2,d0
+        //     move.w  d0,d1
+        //     asr.w   #1,d0     ; d0 = delta / 2
+        //     asr.w   #4,d1     ; d1 = delta / 16, REMAINDER DISCARDED (word shift)
+        //     sub.w   d1,d0     ; d0 = 44% of delta
+        //
+        // The fixBugs=1 path instead preserves that remainder, by widening the
+        // divide to a longword so the fraction survives in the low half:
+        //
+        //     moveq   #0,d1
+        //     move.w  d0,d1
+        //     asr.w   #1,d0
+        //     swap    d1        ; delta into the high half
+        //     asr.l   #4,d1     ; long shift keeps the remainder in the low half
+        //     swap    d1        ; d1.low = integer part, d1.high = fraction
+        //     sub.w   d1,d0
+        //
+        // Taking the fixed path makes the clouds scroll smoothly instead of with
+        // the ROM's periodic 2-frame stutter, which is why it was once chosen here
+        // -- but the stutter is shipped behaviour and the fixed path desyncs any
+        // trace column that observes this accumulator. See the FixBugs note in
+        // CLAUDE.md / AGENTS.md.
         d0 = d2;
-        // moveq #0,d1; move.w d0,d1 - d1 = delta in low word
-        int d1_full = d0 & 0xFFFF;
+        // move.w d0,d1 (d1 takes the delta before d0 is halved)
+        short d1w = d0;
         // asr.w #1,d0
         d0 = (short) (d0 >> 1);
-        // swap d1 - d1 = delta << 16
-        d1_full = d1_full << 16;
-        // asr.l #4,d1 - d1 = delta << 12 (preserving fractional bits)
-        d1_full = d1_full >> 4;
-        // swap d1 - d1.low = integer part, d1.high = fractional part
-        d1_full = ((d1_full & 0xFFFF) << 16) | ((d1_full >> 16) & 0xFFFF);
-        // sub.w d1,d0 (d0 = d0 - d1.low, the integer part)
-        d0 = (short) (d0 - (short) (d1_full & 0xFFFF));
+        // asr.w #4,d1 -- remainder discarded
+        d1w = (short) (d1w >> 4);
+        // sub.w d1,d0
+        d0 = (short) (d0 - d1w);
         // ext.l d0
         int d0_ext = d0;  // sign-extended to 32 bits
         // asl.l #8,d0
@@ -178,9 +209,18 @@ public class SwScrlHtz extends AbstractZoneScrollHandler {
         // Line 15847: lea (TempArray_LayerDef).w,a2
         int a2_idx = 0;
 
-        // Lines 15849-15860: Initialize d3 accumulator
-        // For fixBugs version: move.l d1,d3 (d1 is the full 32-bit fixed-point value)
-        long d3 = d1_full;  // Use long for 32-bit with overflow handling
+        // Lines 15881-15891: initialise the d3 fixed-point accumulator, whose upper
+        // 16 bits are the integer part and lower 16 bits the fraction.
+        //
+        // fixBugs=0 (shipped): `moveq #0,d3 / move.w d1,d3` -- d1's low word is
+        // zero-extended into d3, so the accumulator starts with NO fractional part.
+        // The disassembly's own comment names this as the cause of the visible
+        // cloud jerkiness; it is nevertheless the behaviour the ROM ships and the
+        // traces record.
+        //
+        // fixBugs=1 would be `move.l d1,d3`, carrying the full 32-bit value whose
+        // low half holds the fraction preserved by the long shift above.
+        long d3 = d1w & 0xFFFFL;
 
         // Lines 15862-15867: First 3 entries (rept 3)
         // Each: swap d3; add.l d0,d3; swap d3; move.w d3,(a2)+
@@ -223,8 +263,7 @@ public class SwScrlHtz extends AbstractZoneScrollHandler {
         // move.w d3,d4; move.l d4,(a1)+ (3 times)
         d4 = (d4 & 0xFFFF0000) | ((int) d3 & 0xFFFF);
         for (int i = 0; i < 3 && line < VISIBLE_LINES; i++, line++) {
-            horizScrollBuf[line] = d4;
-            trackOffsetFromPacked(d4);
+            composer.writePackedScrollWord(line, d4);
         }
         // swap d3; add.l d0,d3; swap d3; move.w d3,d4; move.l d4,(a1)+ (5 times)
         d3 = swap32(d3);
@@ -232,8 +271,7 @@ public class SwScrlHtz extends AbstractZoneScrollHandler {
         d3 = swap32(d3);
         d4 = (d4 & 0xFFFF0000) | ((int) d3 & 0xFFFF);
         for (int i = 0; i < 5 && line < VISIBLE_LINES; i++, line++) {
-            horizScrollBuf[line] = d4;
-            trackOffsetFromPacked(d4);
+            composer.writePackedScrollWord(line, d4);
         }
 
         // Lines 15902-15910: Do 7 lines
@@ -242,8 +280,7 @@ public class SwScrlHtz extends AbstractZoneScrollHandler {
         d3 = swap32(d3);
         d4 = (d4 & 0xFFFF0000) | ((int) d3 & 0xFFFF);
         for (int i = 0; i < 7 && line < VISIBLE_LINES; i++, line++) {
-            horizScrollBuf[line] = d4;
-            trackOffsetFromPacked(d4);
+            composer.writePackedScrollWord(line, d4);
         }
 
         // Lines 15912-15921: Do 8 lines (2 adds)
@@ -253,8 +290,7 @@ public class SwScrlHtz extends AbstractZoneScrollHandler {
         d3 = swap32(d3);
         d4 = (d4 & 0xFFFF0000) | ((int) d3 & 0xFFFF);
         for (int i = 0; i < 8 && line < VISIBLE_LINES; i++, line++) {
-            horizScrollBuf[line] = d4;
-            trackOffsetFromPacked(d4);
+            composer.writePackedScrollWord(line, d4);
         }
 
         // Lines 15923-15932: Do 10 lines (2 adds)
@@ -264,8 +300,7 @@ public class SwScrlHtz extends AbstractZoneScrollHandler {
         d3 = swap32(d3);
         d4 = (d4 & 0xFFFF0000) | ((int) d3 & 0xFFFF);
         for (int i = 0; i < 10 && line < VISIBLE_LINES; i++, line++) {
-            horizScrollBuf[line] = d4;
-            trackOffsetFromPacked(d4);
+            composer.writePackedScrollWord(line, d4);
         }
 
         // Lines 15934-15944: Do 15 lines (3 adds)
@@ -276,8 +311,7 @@ public class SwScrlHtz extends AbstractZoneScrollHandler {
         d3 = swap32(d3);
         d4 = (d4 & 0xFFFF0000) | ((int) d3 & 0xFFFF);
         for (int i = 0; i < 15 && line < VISIBLE_LINES; i++, line++) {
-            horizScrollBuf[line] = d4;
-            trackOffsetFromPacked(d4);
+            composer.writePackedScrollWord(line, d4);
         }
 
         // Lines 15946-15966: Do 48 lines in 3 groups of 16 (3 adds before first, 4 adds between)
@@ -290,8 +324,7 @@ public class SwScrlHtz extends AbstractZoneScrollHandler {
         for (int group = 0; group < 3; group++) {
             d4 = (d4 & 0xFFFF0000) | ((int) d3 & 0xFFFF);
             for (int i = 0; i < 16 && line < VISIBLE_LINES; i++, line++) {
-                horizScrollBuf[line] = d4;
-                trackOffsetFromPacked(d4);
+                composer.writePackedScrollWord(line, d4);
             }
             // 4 adds between groups
             d3 = swap32(d3);
@@ -301,6 +334,11 @@ public class SwScrlHtz extends AbstractZoneScrollHandler {
             d3 = (d3 + d0_ext) & 0xFFFFFFFFL;
             d3 = swap32(d3);
         }
+
+        composer.copyPackedScrollWordsTo(horizScrollBuf);
+        vscrollFactorBG = composer.getVscrollFactorBG();
+        minScrollOffset = composer.getMinScrollOffset();
+        maxScrollOffset = composer.getMaxScrollOffset();
     }
 
     /**
@@ -324,9 +362,9 @@ public class SwScrlHtz extends AbstractZoneScrollHandler {
      * address BG map rows 0-1 containing lava/cave tile data (256px); VDP wraps vertically.
      */
     private void updateEarthquakeMode(int[] horizScrollBuf, int cameraX, int cameraY, int frameCounter) {
-        Sonic2LevelEventManager levelEvents = Sonic2LevelEventManager.getInstance();
-        int bgYOffset = levelEvents.getCameraBgYOffset();
-        int bgXOffset = levelEvents.getHtzBgXOffset();
+        HtzRuntimeState htzState = htzRuntimeState();
+        int bgYOffset = htzState.cameraBgYOffset();
+        int bgXOffset = htzState.cameraBgXOffset();
 
         // Camera_BG positions used by HTZ_Screen_Shake.
         int bgXPos = cameraX - bgXOffset;
@@ -351,20 +389,19 @@ public class SwScrlHtz extends AbstractZoneScrollHandler {
         // Vscroll_Factor_FG = Camera_Y_pos (+ optional ripple)
         vscrollFactorFG = (short) (cameraY + shakeOffsetV);
         // Vscroll_Factor_BG = Camera_BG_Y_pos (+ optional ripple)
-        vscrollFactorBG = (short) (bgYPos + shakeOffsetV);
+        composer.setVscrollFactorBG((short) (bgYPos + shakeOffsetV));
 
         // Horizontal scroll uses Camera_X_pos and Camera_BG_X_pos (+ optional ripple).
         short fgScroll = M68KMath.negWord(cameraX + shakeOffsetH);
         short bgScroll = M68KMath.negWord(bgXPos + shakeOffsetH);
 
-        int packed = M68KMath.packScrollWords(fgScroll, bgScroll);
-
         // Fill all 224 lines with same value (no parallax during earthquake mode).
-        for (int i = 0; i < VISIBLE_LINES; i++) {
-            horizScrollBuf[i] = packed;
-        }
+        composer.fillPackedScrollWords(0, VISIBLE_LINES, fgScroll, bgScroll);
 
-        trackOffsetFromPacked(packed);
+        composer.copyPackedScrollWordsTo(horizScrollBuf);
+        vscrollFactorBG = composer.getVscrollFactorBG();
+        minScrollOffset = composer.getMinScrollOffset();
+        maxScrollOffset = composer.getMaxScrollOffset();
     }
 
     public short getVscrollFactorFG() {

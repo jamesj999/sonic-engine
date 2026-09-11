@@ -1,6 +1,7 @@
 package com.openggf.game.sonic2.objects.badniks;
 
 import com.openggf.level.objects.AbstractBadnikInstance;
+import com.openggf.level.objects.PerObjectRewindSnapshot;
 
 import com.openggf.game.sonic2.Sonic2ObjectArtKeys;
 import com.openggf.game.PlayableEntity;
@@ -8,6 +9,9 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
+import com.openggf.level.objects.RomObjectSnapshot;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
@@ -17,7 +21,7 @@ import java.util.List;
  * Coconuts (0x9D) - Monkey Badnik from EHZ.
  * Climbs up and down a tree and throws coconut projectiles at the player.
  */
-public class CoconutsBadnikInstance extends AbstractBadnikInstance {
+public class CoconutsBadnikInstance extends AbstractBadnikInstance implements RewindRecreatable {
     private static final int COLLISION_SIZE_INDEX = 0x09;
     private static final int IDLE_TIMER_INIT = 0x10;
     private static final int ATTACK_TIMER_RESET = 0x20;
@@ -68,7 +72,57 @@ public class CoconutsBadnikInstance extends AbstractBadnikInstance {
     }
 
     @Override
-    protected void updateMovement(int frameCounter, PlayableEntity playerEntity) {
+    public CoconutsBadnikInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new CoconutsBadnikInstance(ctx.spawn());
+    }
+
+    /**
+     * Decodes the ROM's Obj9D state machine fields onto the engine's enum/int view.
+     *
+     * <p>Field mapping:
+     * <ul>
+     *   <li>{@code routine ($24)} → {@link State}
+     *       (0/2 → IDLE, 4 → CLIMBING, 6 → THROWING).</li>
+     *   <li>{@code routine_secondary ($25)} → {@link ThrowState}
+     *       (0 → HAND_RAISED, non-zero → HAND_LOWERED).</li>
+     *   <li>{@code Obj9D_timer ($2A, byte)} → {@link #timer}.</li>
+     *   <li>{@code Obj9D_climb_table_index ($2C, word)} → {@link #climbTableIndex}.
+     *       ROM stores byte-pair offset (0, 2, 4, …, $C wrapping); engine stores
+     *       the entry index (0..5), so divide by 2 and wrap.</li>
+     *   <li>{@code Obj9D_attack_timer ($2E, byte)} → {@link #attackTimer}.</li>
+     * </ul>
+     *
+     * <p>{@code yVelocity} is re-assigned here because {@code CoconutsBadnikInstance}
+     * shadows the inherited field; the parent class wrote to its own field, not this one.
+     * Reference: {@code s2.asm} Obj9D_Idle / Obj9D_Climbing / Obj9D_Throwing
+     * (ClimbData writes y_vel high byte via {@code move.b}, producing word 0xFF00 = -256).
+     */
+    @Override
+    public void hydrateFromRomSnapshot(RomObjectSnapshot snapshot) {
+        super.hydrateFromRomSnapshot(snapshot);
+
+        int routine = snapshot.routine() & 0xFF;
+        this.state = switch (routine) {
+            case 0x04 -> State.CLIMBING;
+            case 0x06 -> State.THROWING;
+            default -> State.IDLE;   // 0x00 (Init) and 0x02 (Idle) both land here
+        };
+
+        this.throwState = (snapshot.routineSecondary() & 0xFF) == 0
+                ? ThrowState.HAND_RAISED
+                : ThrowState.HAND_LOWERED;
+
+        this.timer = snapshot.byteAt(0x2A) & 0xFF;
+        int romClimbIdx = snapshot.wordAt(0x2C) & 0xFFFF;
+        this.climbTableIndex = (romClimbIdx / 2) % CLIMB_DATA.length;
+        this.attackTimer = snapshot.byteAt(0x2E) & 0xFF;
+
+        // Shadows AbstractBadnikInstance.yVelocity - must be set explicitly.
+        this.yVelocity = snapshot.yVel();
+    }
+
+    @Override
+    protected void updateMovement(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         currentX = spawn.x();
         switch (state) {
@@ -156,27 +210,66 @@ public class CoconutsBadnikInstance extends AbstractBadnikInstance {
             xVel = THROW_X_VEL;
         }
 
-        BadnikProjectileInstance projectile = new BadnikProjectileInstance(
-                spawn,
-                BadnikProjectileInstance.ProjectileType.COCONUT,
-                currentX + xOffset,
-                currentY + THROW_Y_OFFSET,
-                xVel,
-                THROW_Y_VEL,
-                true,
-                !facingLeft);
-
-        services().objectManager().addDynamicObject(projectile);
+        final int spawnX = currentX + xOffset;
+        final int spawnY = currentY + THROW_Y_OFFSET;
+        final int fireXVel = xVel;
+        spawnFreeChild(() -> {
+            // ROM Obj98_Init (s2.asm:74665-74666) just branches into
+            // LoadSubObject, which sets up render/collision state and bumps
+            // routine 0->2 then rts -- it never calls Obj98_Main this frame.
+            // A freshly-created coconut therefore runs ONLY that init pass on
+            // whichever frame allocates it and does not start
+            // Obj98_CoconutFall movement until the following frame. Mirrors
+            // CluckerBadnikInstance/NebulaBadnikInstance/AsteronBadnikInstance;
+            // without the defer the coconut moves one frame early and can
+            // arrive in/out of the player's touchbox a frame ahead of ROM.
+            BadnikProjectileInstance coconut = new BadnikProjectileInstance(
+                    spawn,
+                    BadnikProjectileInstance.ProjectileType.COCONUT,
+                    spawnX,
+                    spawnY,
+                    fireXVel,
+                    THROW_Y_VEL,
+                    true,
+                    !facingLeft);
+            coconut.deferFirstMovementForLoadSubObjectInit();
+            return coconut;
+        });
     }
 
     @Override
-    protected void updateAnimation(int frameCounter) {
+    protected void updateAnimation(int vIntRunCount) {
         if (state == State.THROWING) {
             animFrame = (throwState == ThrowState.HAND_RAISED) ? 1 : 2;
             return;
         }
         if (state == State.CLIMBING) {
-            animFrame = ((frameCounter / CLIMB_ANIM_SPEED) & 1);
+            animFrame = ((vIntRunCount / CLIMB_ANIM_SPEED) & 1);
+        }
+    }
+
+    @Override
+    public PerObjectRewindSnapshot captureRewindState() {
+        PerObjectRewindSnapshot base = super.captureRewindState();
+        return base.withBadnikSubclassExtra(new PerObjectRewindSnapshot.CoconutsRewindExtra(
+                state.ordinal(),
+                throwState.ordinal(),
+                timer,
+                climbTableIndex,
+                attackTimer,
+                yVelocity));
+    }
+
+    @Override
+    public void restoreRewindState(PerObjectRewindSnapshot snapshot) {
+        super.restoreRewindState(snapshot);
+        if (snapshot.badnikSubclassExtra() instanceof PerObjectRewindSnapshot.CoconutsRewindExtra extra) {
+            state = State.values()[extra.stateOrdinal()];
+            throwState = ThrowState.values()[extra.throwStateOrdinal()];
+            timer = extra.timer();
+            climbTableIndex = extra.climbTableIndex();
+            attackTimer = extra.attackTimer();
+            yVelocity = extra.yVelocity();
         }
     }
 

@@ -1,14 +1,12 @@
 package com.openggf.level.resources;
 
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import com.openggf.data.Rom;
 import com.openggf.game.sonic2.Sonic2LevelResourcePlans;
 import com.openggf.game.sonic2.constants.Sonic2Constants;
 import com.openggf.tests.rules.RequiresRom;
-import com.openggf.tests.rules.RequiresRomRule;
 import com.openggf.tests.rules.SonicGame;
 
 import java.io.IOException;
@@ -16,7 +14,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Tests for the level resource overlay loading system.
@@ -43,15 +41,11 @@ import static org.junit.Assert.*;
  */
 @RequiresRom(SonicGame.SONIC_2)
 public class LevelResourceOverlayTest {
-
-    @Rule
-    public RequiresRomRule romRule = new RequiresRomRule();
-
     private Rom rom;
 
-    @Before
+    @BeforeEach
     public void setUp() {
-        rom = romRule.rom();
+        rom = com.openggf.tests.TestEnvironment.currentRom();
     }
 
     // ===== Unit Tests (no ROM required) =====
@@ -67,6 +61,12 @@ public class LevelResourceOverlayTest {
         assertEquals(0x67890, overlay.romAddr());
         assertEquals(CompressionType.KOSINSKI, overlay.compressionType());
         assertEquals(0x3F80, overlay.destOffsetBytes());
+
+        LoadOp appended = LoadOp.kosinskiAppend(0x24680);
+        assertEquals(0x24680, appended.romAddr());
+        assertEquals(CompressionType.KOSINSKI, appended.compressionType());
+        assertEquals(LoadOp.APPEND_TO_PREVIOUS, appended.destOffsetBytes());
+        assertTrue(appended.appendsToPrevious());
     }
 
     @Test
@@ -100,28 +100,28 @@ public class LevelResourceOverlayTest {
         assertFalse(plan.hasBlockOverlays());
     }
 
-    @Test(expected = IllegalStateException.class)
+    @Test
     public void testPlanBuilderRequiresPatternOp() {
-        LevelResourcePlan.builder()
+        assertThrows(IllegalStateException.class, () -> LevelResourcePlan.builder()
                 .addBlockOp(LoadOp.kosinskiBase(0x1000))
                 .addChunkOp(LoadOp.kosinskiBase(0x2000))
-                .build();
+                .build());
     }
 
-    @Test(expected = IllegalStateException.class)
+    @Test
     public void testPlanBuilderRequiresBlockOp() {
-        LevelResourcePlan.builder()
+        assertThrows(IllegalStateException.class, () -> LevelResourcePlan.builder()
                 .addPatternOp(LoadOp.kosinskiBase(0x1000))
                 .addChunkOp(LoadOp.kosinskiBase(0x2000))
-                .build();
+                .build());
     }
 
-    @Test(expected = IllegalStateException.class)
+    @Test
     public void testPlanBuilderRequiresChunkOp() {
-        LevelResourcePlan.builder()
+        assertThrows(IllegalStateException.class, () -> LevelResourcePlan.builder()
                 .addPatternOp(LoadOp.kosinskiBase(0x1000))
                 .addBlockOp(LoadOp.kosinskiBase(0x2000))
-                .build();
+                .build());
     }
 
     @Test
@@ -191,19 +191,33 @@ public class LevelResourceOverlayTest {
         byte[] composedChunks = loader.loadWithOverlays(htzPlan.getChunkOps(), 0x10000);
 
         // The composed chunks should be different from base-only
-        assertFalse("Composed HTZ chunks should differ from base EHZ chunks",
-                Arrays.equals(ehzChunks, composedChunks));
+        assertFalse(Arrays.equals(ehzChunks, composedChunks), "Composed HTZ chunks should differ from base EHZ chunks");
 
         // The overlay should have been applied at offset 0x0980
         int overlayOffset = Sonic2Constants.HTZ_CHUNKS_OVERLAY_OFFSET;
-        assertTrue("Composed chunks should be at least as large as overlay offset + overlay size",
-                composedChunks.length >= overlayOffset + htzOverlayChunks.length);
+        assertTrue(composedChunks.length >= overlayOffset + htzOverlayChunks.length, "Composed chunks should be at least as large as overlay offset + overlay size");
 
         // Verify the overlay bytes match
         byte[] overlayRegion = Arrays.copyOfRange(composedChunks, overlayOffset,
                 overlayOffset + htzOverlayChunks.length);
-        assertArrayEquals("Overlay region should match HTZ chunk data",
-                htzOverlayChunks, overlayRegion);
+        assertArrayEquals(htzOverlayChunks, overlayRegion, "Overlay region should match HTZ chunk data");
+    }
+
+    @Test
+    public void testAppendOverlayMatchesExplicitOffsetForChunks() throws IOException {
+        ResourceLoader loader = new ResourceLoader(rom);
+
+        byte[] ehzChunks = loader.loadSingle(LoadOp.kosinskiBase(Sonic2Constants.HTZ_CHUNKS_BASE_ADDR));
+
+        byte[] explicit = loader.loadWithOverlays(Arrays.asList(
+                LoadOp.kosinskiBase(Sonic2Constants.HTZ_CHUNKS_BASE_ADDR),
+                LoadOp.kosinskiOverlay(Sonic2Constants.HTZ_CHUNKS_OVERLAY_ADDR, ehzChunks.length)), 0x10000);
+
+        byte[] appended = loader.loadWithOverlays(Arrays.asList(
+                LoadOp.kosinskiBase(Sonic2Constants.HTZ_CHUNKS_BASE_ADDR),
+                LoadOp.kosinskiAppend(Sonic2Constants.HTZ_CHUNKS_OVERLAY_ADDR)), 0x10000);
+
+        assertArrayEquals(explicit, appended, "Append-mode overlays should match explicit-offset composition");
     }
 
     @Test
@@ -224,19 +238,16 @@ public class LevelResourceOverlayTest {
         // The composed patterns should be different from base-only
         String baseHash = computeHash(basePatterns);
         String composedHash = computeHash(composedPatterns);
-        assertNotEquals("Composed HTZ patterns should differ from base patterns",
-                baseHash, composedHash);
+        assertNotEquals(baseHash, composedHash, "Composed HTZ patterns should differ from base patterns");
 
         // The overlay should have been applied at offset 0x3F80
         int overlayOffset = Sonic2Constants.HTZ_PATTERNS_OVERLAY_OFFSET;
-        assertTrue("Composed patterns should be at least as large as overlay offset + overlay size",
-                composedPatterns.length >= overlayOffset + htzSuppPatterns.length);
+        assertTrue(composedPatterns.length >= overlayOffset + htzSuppPatterns.length, "Composed patterns should be at least as large as overlay offset + overlay size");
 
         // Verify the overlay bytes match
         byte[] overlayRegion = Arrays.copyOfRange(composedPatterns, overlayOffset,
                 overlayOffset + htzSuppPatterns.length);
-        assertArrayEquals("Overlay region should match HTZ supplement pattern data",
-                htzSuppPatterns, overlayRegion);
+        assertArrayEquals(htzSuppPatterns, overlayRegion, "Overlay region should match HTZ supplement pattern data");
     }
 
     @Test
@@ -256,8 +267,7 @@ public class LevelResourceOverlayTest {
         byte[] ehzChunksAfter = loader.loadSingle(LoadOp.kosinskiBase(Sonic2Constants.HTZ_CHUNKS_BASE_ADDR));
 
         // The EHZ chunks should still match the original (no mutation)
-        assertArrayEquals("EHZ chunk data should not be mutated by HTZ loading",
-                ehzChunksCopy, ehzChunksAfter);
+        assertArrayEquals(ehzChunksCopy, ehzChunksAfter, "EHZ chunk data should not be mutated by HTZ loading");
     }
 
     @Test
@@ -267,16 +277,14 @@ public class LevelResourceOverlayTest {
         // (0x3F80 / 32 bytes per tile = 0x1FC)
         int patternOffset = Sonic2Constants.HTZ_PATTERNS_OVERLAY_OFFSET;
         int tileIndex = patternOffset / 32;  // 32 bytes per 8x8 tile (4bpp)
-        assertEquals("Pattern overlay should start at tile index 0x01FC",
-                0x01FC, tileIndex);
+        assertEquals(0x01FC, tileIndex, "Pattern overlay should start at tile index 0x01FC");
 
         // Chunk overlay offset 0x0980 bytes corresponds to chunk index 0x0130
         // (0x0980 / 8 bytes per chunk = 0x130)
         // Note: SonLVL calls these "blocks" (16x16), but engine calls them "chunks"
         int chunkOffset = Sonic2Constants.HTZ_CHUNKS_OVERLAY_OFFSET;
         int chunkIndex = chunkOffset / 8;  // 8 bytes per chunk (based on SonLVL comment)
-        assertEquals("Chunk overlay should start at chunk index 0x0130",
-                0x0130, chunkIndex);
+        assertEquals(0x0130, chunkIndex, "Chunk overlay should start at chunk index 0x0130");
     }
 
     @Test
@@ -292,8 +300,7 @@ public class LevelResourceOverlayTest {
         byte[] sharedBlocks = loader.loadSingle(LoadOp.kosinskiBase(Sonic2Constants.HTZ_BLOCKS_ADDR));
 
         // They should be identical (no overlay applied for blocks)
-        assertArrayEquals("HTZ and shared EHZ_HTZ blocks (128x128) should be identical",
-                sharedBlocks, htzBlocks);
+        assertArrayEquals(sharedBlocks, htzBlocks, "HTZ and shared EHZ_HTZ blocks (128x128) should be identical");
     }
 
     private String computeHash(byte[] data) {
@@ -310,3 +317,5 @@ public class LevelResourceOverlayTest {
         }
     }
 }
+
+

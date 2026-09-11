@@ -6,8 +6,9 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
-import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SlopedSolidProvider;
 import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
@@ -31,7 +32,7 @@ import java.util.List;
  * Disassembly reference: docs/s1disasm/_incObj/5E Seesaw.asm
  */
 public class Sonic1SeesawObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, SlopedSolidProvider {
+        implements SolidObjectProvider, SolidObjectListener, SlopedSolidProvider, RewindRecreatable {
 
     // From disassembly: move.b #$30,obActWid(a0)
     private static final int COLLISION_HALF_WIDTH = 0x30;
@@ -69,7 +70,7 @@ public class Sonic1SeesawObjectInstance extends AbstractObjectInstance
     };
 
     // Saved original X position (see_origX = objoff_30)
-    private final int origX;
+    private int origX;
 
     // Current target frame (see_frame = objoff_3A)
     // 0 = tilted left (left side up), 1 = flat, 2 = tilted right (right side up)
@@ -109,7 +110,12 @@ public class Sonic1SeesawObjectInstance extends AbstractObjectInstance
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public Sonic1SeesawObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new Sonic1SeesawObjectInstance(ctx.spawn());
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isDestroyed()) {
             return;
@@ -124,6 +130,47 @@ public class Sonic1SeesawObjectInstance extends AbstractObjectInstance
         // move.w obVelY(a1),see_speed(a0)
         if (player != null && !playerStanding) {
             storedPlayerYVel = player.getYSpeed();
+        }
+
+        // See_Slope2 (routine 4): when a player is standing, ROM runs See_ChkSide
+        // (which sets see_frame from the player's CURRENT x, then falls into
+        // See_ChgFrame) -- all inside ExecuteObjects, AFTER the player slot has
+        // moved (docs/s1disasm/_incObj/5E SLZ Seesaw.asm:71-118). The engine runs
+        // S1 objects after player physics (objectsExecuteAfterPlayerPhysics=true),
+        // so this update() already observes Sonic's post-move x. Computing the
+        // tilt target HERE -- immediately before See_ChgFrame -- keeps the
+        // ChkSide->ChgFrame order atomic and post-move, matching ROM. Previously
+        // the target was latched in onSolidContact (which runs during the player's
+        // solid pass, BEFORE this update), so See_ChgFrame advanced obFrame using
+        // the PREVIOUS frame's target -> the tilt flip lagged ROM by a frame
+        // (SLZ3 f745: ROM flips obFrame 2->1 when the rocking player crosses
+        // within 8px of centre; the engine flipped a frame late, re-seating the
+        // rider on the wrong slope).
+        //
+        // ROM See_ChkSide runs in routine 4 (See_Slope2), which the seesaw enters
+        // when SlopeObject lands a player on it (addq.b #2,obRoutine -- docs/
+        // s1disasm/_incObj/sub PlatformObject.asm:66) and leaves when ExitPlatform
+        // unseats them; the resulting see_frame then LATCHES while routine 2
+        // (See_Slope) keeps animating obFrame toward it (5E SLZ Seesaw.asm:55-68).
+        // The faithful engine proxy for "seesaw is in routine 4 (a player is
+        // standing on it)" is the SolidContacts riding state -- NOT the narrower
+        // playerStanding flag, which validateStandingPlayer clears the moment the
+        // rider's centre drifts 1px past the strict slope x-range (matching ROM
+        // SlopeObject's own bmi.s Plat_Exit, sub PlatformObject.asm:136). At SLZ3
+        // f9862 the rider sits at the seesaw's left edge (centre 1px off the range)
+        // while still riding: playerStanding was already cleared, so the engine
+        // never set see_frame=2 and the seesaw stayed at frame 0 (raised left end).
+        // Three frames later (f9866) that raised end caught the player who had
+        // correctly fallen off at f9863, re-landing him -- while ROM, whose seesaw
+        // had latched to frame 2 (dropped left end) by f9863, let him free-fall
+        // past it. Drive the tilt target from the riding state so it tracks the
+        // rider's side and latches after they leave, matching ROM obFrame 0->1->2.
+        boolean tiltTracking = player != null && !player.getAir()
+                && (playerStanding
+                        || (services().objectManager() != null
+                                && services().objectManager().isRidingObject(player, this)));
+        if (tiltTracking) {
+            targetFrame = calculateTargetAngle(player);
         }
 
         // Animate mapping frame toward target (See_ChgFrame)
@@ -143,13 +190,13 @@ public class Sonic1SeesawObjectInstance extends AbstractObjectInstance
             return;
         }
 
-        // Player is standing on seesaw - track it
-        // From See_Slope2: bsr.w See_ChkSide
+        // Player is standing on seesaw - track it. The See_ChkSide tilt-target
+        // computation is deferred to update() (which runs after player physics)
+        // so it observes Sonic's post-move x and stays atomic with See_ChgFrame,
+        // matching ROM See_Slope2 ordering. onSolidContact only maintains the
+        // standing bit here (it fires during the player's solid pass, before the
+        // post-physics object update).
         playerStanding = true;
-
-        // Calculate which side the player is on (See_ChkSide)
-        int targetAngle = calculateTargetAngle(player);
-        targetFrame = targetAngle;
     }
 
     /**
@@ -302,21 +349,39 @@ public class Sonic1SeesawObjectInstance extends AbstractObjectInstance
             return;
         }
 
-        boolean flipped = (spawn.renderFlags() & 0x01) != 0;
+        final boolean flipped = (spawn.renderFlags() & 0x01) != 0;
 
-        ball = new Sonic1SeesawBallObjectInstance(this, spawn.x(), spawn.y(), flipped);
-
-        ObjectManager objectManager = services().objectManager();
-        if (objectManager != null) {
-            objectManager.addDynamicObject(ball);
+        if (services().objectManager() != null) {
+            // ROM See_Main uses FindNextFreeObj (docs/s1disasm/_incObj/5E SLZ
+            // Seesaw.asm:38), which allocates the spikeball a slot AFTER the
+            // seesaw. ExecuteObjects then runs the seesaw first, so the ball's
+            // See_MoveSpike reads the seesaw's see_frame (objoff_3A) that the
+            // seesaw already updated this frame via See_Slope2/See_ChgFrame.
+            // Using spawnFreeChild (FindFreeObj, lowest free slot) put the ball
+            // at a LOWER slot than the seesaw, so it launched off the previous
+            // frame's target -> the spring that launches the standing player
+            // fired one frame late (SLZ3 f814).
+            ball = spawnChild(() -> new Sonic1SeesawBallObjectInstance(
+                    this, spawn.x(), spawn.y(), flipped));
+        } else {
+            ball = new Sonic1SeesawBallObjectInstance(this, spawn.x(), spawn.y(), flipped);
         }
+    }
+
+    boolean hasLiveBallForRewind() {
+        return ball != null && !ball.isDestroyed();
+    }
+
+    void adoptBallForRewind(Sonic1SeesawBallObjectInstance restoredBall) {
+        ball = restoredBall;
+        ballSpawned = true;
     }
 
     // ---- SolidObjectProvider ----
 
     @Override
     public SolidObjectParams getSolidParams() {
-        return new SolidObjectParams(COLLISION_HALF_WIDTH, COLLISION_HEIGHT, COLLISION_HEIGHT);
+        return SolidObjectParams.of(COLLISION_HALF_WIDTH, COLLISION_HEIGHT, COLLISION_HEIGHT);
     }
 
     @Override
@@ -325,9 +390,46 @@ public class Sonic1SeesawObjectInstance extends AbstractObjectInstance
     }
 
     @Override
+    public boolean rejectsZeroDistanceTopSolidLanding() {
+        // ROM See_Slope (routine 2) lands the falling player via SlopeObject,
+        // which falls into Plat_NoXCheck_AltY (docs/s1disasm/_incObj/sub
+        // PlatformObject.asm:128-152,52-66). That landing band is gated by the
+        // UNSIGNED `cmpi.w #-16,d0 / blo` test, so the exact-touch case d0=0
+        // (player bottom flush with the slope surface) is REJECTED — the standable
+        // band is d0 in [-16,-1] (strict penetration), the same gate Obj 18 and the
+        // SLZ circling platform use. Without this, a player falling onto the seesaw
+        // was caught one frame early on the flush-contact frame (SLZ3 f1416: a
+        // rolling-jump Sonic falls onto the seesaw — ROM keeps him airborne at
+        // f1416 and lands him at f1417 when he penetrates, the engine seated him at
+        // f1416). The seesaw surface comes from the heightmap (obY - heightByte) in
+        // both the landing (SlopeObject) and continued-ride (SlopeObject_AssumeStoodOn)
+        // paths, so no obY-8 vs obY-9 detect/ride split is needed (unlike Obj 18).
+        return true;
+    }
+
+    @Override
     public boolean isSolidFor(PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         return !isDestroyed();
+    }
+
+    @Override
+    public boolean usesCollisionHalfWidthForTopLanding() {
+        // ROM See_Slope / See_Slope2 pass #96/2 (= 0x30) directly as SlopeObject's
+        // / SlopeObject_AssumeStoodOn's d1 (docs/s1disasm/_incObj/5E SLZ
+        // Seesaw.asm:66-67,79-83), and obActWid is itself #96/2 (line 33). SlopeObject
+        // does its X-range check on that d1 with no narrowing (docs/s1disasm/_incObj/
+        // sub PlatformObject.asm:133-139), then bra's to Plat_NoXCheck_AltY which skips
+        // any further X check. COLLISION_HALF_WIDTH (0x30) is therefore already the
+        // standable top-landing width and must NOT receive the generic SolidObjectFull
+        // +$B narrowing (which would shrink it to 0x25). Without this, a player falling
+        // onto the raised end of the seesaw near its edge is rejected as out-of-width and
+        // never lands (SLZ3 f6364: a rolling-jump Sonic arcs back down onto the seesaw at
+        // relX=90 -- 42px right of centre, inside the full +/-0x30 range but outside the
+        // narrowed +/-0x25 -- so ROM re-lands him while the engine kept him falling).
+        // Matches the sibling SlopeObject users Sonic1CollapsingLedgeObjectInstance and
+        // Sonic1CollapsingFloorObjectInstance, which opt in for the same reason.
+        return true;
     }
 
     // ---- SlopedSolidProvider ----
@@ -341,7 +443,14 @@ public class Sonic1SeesawObjectInstance extends AbstractObjectInstance
 
     @Override
     public int getSlopeBaseline() {
-        return COLLISION_HEIGHT;
+        // ROM See_Slope (docs/s1disasm/_incObj/5E SLZ Seesaw.asm:67) lands the
+        // player via SlopeObject, which uses ABSOLUTE slope values:
+        // SlopeObject (sub PlatformObject.asm:150-152) computes the surface as
+        // d0 = obY(a0) - heightmapByte with no baseline subtraction. Returning a
+        // non-zero baseline pushes the sampled surface down by that amount,
+        // delaying the landing by ~1 frame (SLZ3 trace f718). Match the sibling
+        // SlopeObject user (Sonic1CollapsingLedgeObjectInstance) and return 0.
+        return 0;
     }
 
     @Override
@@ -390,18 +499,7 @@ public class Sonic1SeesawObjectInstance extends AbstractObjectInstance
     @Override
     public boolean isPersistent() {
         // From main object loop: uses see_origX for range check
-        return !isDestroyed() && isOrigXOnScreen();
-    }
-
-    private boolean isOrigXOnScreen() {
-        var camera = services().camera();
-        if (camera == null) {
-            return true;
-        }
-        int objRounded = origX & 0xFF80;
-        int camRounded = (camera.getX() - 128) & 0xFF80;
-        int distance = (objRounded - camRounded) & 0xFFFF;
-        return distance <= (128 + 320 + 192);
+        return !isDestroyed() && isInRangeAt(origX);
     }
 
     // ---- Debug rendering ----

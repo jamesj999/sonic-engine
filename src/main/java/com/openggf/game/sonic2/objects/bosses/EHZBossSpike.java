@@ -7,6 +7,8 @@ import com.openggf.game.sonic2.constants.Sonic2ObjectIds;
 import com.openggf.level.objects.ObjectAnimationState;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.ObjectRenderManager;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.TouchResponseProvider;
 import com.openggf.level.objects.boss.AbstractBossChild;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
@@ -17,7 +19,7 @@ import java.util.List;
  * EHZ Boss - Retractable spike hazard.
  * ROM Reference: s2.asm:63415-63496 (loc_2F7F4 - Obj56_Spike)
  */
-public class EHZBossSpike extends AbstractBossChild implements TouchResponseProvider {
+public class EHZBossSpike extends AbstractBossChild implements TouchResponseProvider, RewindRecreatable {
     private static final int CAMERA_GATE_X = 0x28F0;
     private static final int APPROACH_TARGET_X = 0x299A;
     private static final int OBJOFF_FLAGS = 0x2D;
@@ -33,7 +35,12 @@ public class EHZBossSpike extends AbstractBossChild implements TouchResponseProv
     private boolean collisionEnabled;
 
     public EHZBossSpike(Sonic2EHZBossInstance parent) {
-        super(parent, "EHZ Boss Spike", 4, Sonic2ObjectIds.EHZ_BOSS);  // Behind Sonic (2), same as body
+        // ROM: s2.asm:63194 Obj56_Init sets the spike's priority(a0) = 2 (same as the
+        // front wheels), one in front of the ground vehicle's priority = 3. Lower priority
+        // draws on top, so the drillcone renders in front of the car body. Mirror that with
+        // engine bucket 3 (the front wheels' bucket); sharing the vehicle's bucket 4 left the
+        // spike behind it on the within-bucket slot tiebreak.
+        super(parent, "EHZ Boss Spike", 3, Sonic2ObjectIds.EHZ_BOSS);
         this.animationState = new ObjectAnimationState(
                 EHZBossAnimations.getVehicleAnimations(),
                 0,
@@ -48,9 +55,15 @@ public class EHZBossSpike extends AbstractBossChild implements TouchResponseProv
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public EHZBossSpike recreateForRewind(RewindRecreateContext ctx) {
+        Sonic2EHZBossInstance boss = EhzBossRewindLinks.requireNearestBoss(ctx, "EHZ boss spike");
+        return new EHZBossSpike(boss);
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        if (isDestroyed() || !shouldUpdate(frameCounter)) {
+        if (isDestroyed() || !shouldUpdate(vIntRunCount)) {
             return;
         }
         if (parent == null || parent.isDestroyed()) {

@@ -7,9 +7,15 @@
   "trace_frame_count": 7936,
   "start_x": "0x0030",
   "start_y": "0x0266",
-  "recording_date": "2026-03-31",
-  "lua_script_version": "2.2",
-  "csv_version": 4,
+  "characters": ["sonic"],
+  "main_character": "sonic",
+  "sidekicks": [],
+  "rng_seed": "0x00000000",
+  "recording_date": "2026-08-04",
+  "recorder": "native-bizhawk-headless",
+  "recorder_version": "3.0",
+  "trace_schema": 5,
+  "aux_schema_extras": ["s1_obj64_state_per_frame", "load_queue_state_per_frame", "dynamic_art_transfer_state_per_frame"],
   "rom_checksum": "",
   "notes": ""
 }

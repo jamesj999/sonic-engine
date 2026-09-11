@@ -12,6 +12,8 @@ import com.openggf.graphics.RenderPriority;
 import com.openggf.physics.Direction;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
+import com.openggf.level.objects.RewindRecreateContext;
+import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
@@ -43,7 +45,7 @@ import java.util.List;
  * as the player passes underneath through the tube.
  */
 public class PipeExitSpringObjectInstance extends BoxObjectInstance
-        implements SolidObjectProvider, SolidObjectListener {
+        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
 
     // Animation IDs matching Ani_obj7B in the disassembly
     private static final int ANIM_IDLE = 0;
@@ -54,7 +56,7 @@ public class PipeExitSpringObjectInstance extends BoxObjectInstance
     private static final int PROXIMITY_X_RANGE = 0x10;  // ± 16 pixels from center
     private static final int PROXIMITY_Y_BELOW = 0x30;  // 48 pixels below spring
 
-    private final boolean fullStrength;
+    private boolean fullStrength;
     private ObjectAnimationState animationState;
     private int mappingFrame;
     private boolean initialized;
@@ -65,6 +67,11 @@ public class PipeExitSpringObjectInstance extends BoxObjectInstance
         // ROM: bit 1 of subtype: 0=full strength (-$1000), 1=reduced (-$A80)
         this.fullStrength = (spawn.subtype() & 0x02) == 0;
         this.mappingFrame = 0;
+    }
+
+    @Override
+    public PipeExitSpringObjectInstance recreateForRewind(RewindRecreateContext ctx) {
+        return new PipeExitSpringObjectInstance(ctx.spawn(), getName());
     }
 
     private void ensureInitialized() {
@@ -118,7 +125,14 @@ public class PipeExitSpringObjectInstance extends BoxObjectInstance
 
         // ROM: bset #status.player.in_air
         player.setAir(true);
-        player.setGSpeed((short) 0);
+        // ROM: bclr #status.player.on_object,status(a1) (s2.asm:56461). The launch
+        // detaches the character from the spring in the same frame SolidObject set
+        // the standing bit, so status must not still carry on_object on the bounce
+        // frame (seg8_cpz1 f2700/f2797: rom 0x03, engine was 0x0B).
+        player.setOnObject(false);
+        // ROM loc_296C2 (s2.asm:56394-56435) never writes inertia in the non-twirl
+        // path. Do NOT zero g_speed here - the landing-frame inertia must be preserved
+        // exactly as the ROM does (e.g. CPZ pipe-exit f2038: inertia stays -03B4).
 
         // ROM: bit 7 of subtype - if set, clear X velocity
         if ((spawn.subtype() & 0x80) != 0) {
@@ -149,10 +163,11 @@ public class PipeExitSpringObjectInstance extends BoxObjectInstance
                 inertia = -1;  // ROM: neg.w inertia(a1)
             }
             player.setGSpeed(inertia);
-        } else {
-            // ROM: No twirl - clear inertia
-            player.setGSpeed((short) 0);
         }
+        // ROM: non-twirl path (beq.s loc_29736 at s2.asm:56407) jumps straight to the
+        // collision-bit setup at loc_29736 (s2.asm:56422-56435) and leaves inertia
+        // untouched - identical to the regular vertical spring Obj41 (s2.asm:33801+).
+        // Do NOT clear g_speed in the non-twirl branch.
 
         // ROM: loc_29736-29768 - Set collision layer based on subtype bits 2-3
         SpringHelper.applyCollisionLayerBits(player, subtype);
@@ -208,11 +223,22 @@ public class PipeExitSpringObjectInstance extends BoxObjectInstance
     @Override
     public SolidObjectParams getSolidParams() {
         // Width radius = 27, height (air) = 8, height (ground) = 8
-        return new SolidObjectParams(27, 8, 8);
+        return SolidObjectParams.of(27, 8, 8);
     }
 
     @Override
-    public void update(int frameCounter, PlayableEntity playerEntity) {
+    public boolean bypassesOffscreenSolidGate() {
+        // ROM Obj7B reaches SolidObject_cont through
+        // SolidObject_Always_SingleCharacter (s2.asm:56335/56343), bypassing the
+        // SolidObject_OnScreenTest render_flags(a0) gate at s2.asm:35330-35336.
+        // Off-screen pipe-exit springs still resolve solid contact in ROM.
+        // Required so enabling CollisionRules.solidObjectOffscreenGate for S2
+        // keeps OOZ pipe-exit launches behaving as before.
+        return true;
+    }
+
+    @Override
+    public void update(int vIntRunCount, PlayableEntity playerEntity) {
         ensureInitialized();
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // ROM: loc_29648 - Check if player is in the tube below the spring
@@ -236,8 +262,8 @@ public class PipeExitSpringObjectInstance extends BoxObjectInstance
     private boolean isPlayerInTubeBelow(AbstractPlayableSprite player) {
         int springX = spawn.x();
         int springY = spawn.y();
-        int playerX = player.getX();
-        int playerY = player.getY();
+        int playerX = player.getCentreX();
+        int playerY = player.getCentreY();
 
         // ROM: d4 = x_pos - $10, d5 = x_pos + $10
         int xMin = springX - PROXIMITY_X_RANGE;

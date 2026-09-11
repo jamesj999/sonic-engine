@@ -1,0 +1,20 @@
+{
+  "dynamic_art_gap_transitions": [],
+  "game": "s2",
+  "recorder": "native-bizhawk-headless",
+  "recorder_version": "3.0",
+  "rom_checksum": "synthetic-no-rom",
+  "run_id": "bad-transitions-shape",
+  "segments": [
+    {
+      "bk2_frame_offset": 10,
+      "dir": "seg0",
+      "kind": "level",
+      "trace_frame_count": 1,
+      "trace_profile": "complete_run"
+    }
+  ],
+  "source_bk2": "synthetic-input.bk2",
+  "trace_schema": 5,
+  "transitions": {}
+}
