@@ -1419,6 +1419,8 @@ execution order, SST slot ownership, and routines that read their state once per
 
 #### Oil Ocean and Metropolis
 
+- **MTZ barriers (Obj2D):** all three acts render the one-way barriers with their ROM
+  level tiles and palette, matching the solid barrier's position and movement.
 - **OOZ oil surface (Obj07):** the surface executes in its reserved object-RAM band before the
   dynamic level objects, matching the ROM's aliasing of `Oil` onto `WaterSurface1`. It sequences
   submersion, hurt landings, and dead sidekick fall against the ROM routine and follows the ROM move
