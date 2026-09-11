@@ -307,8 +307,9 @@ in [the 0.6 changelog](CHANGELOG.0.6.md).
 
 #### Current release status
 
-The 0.6 release build is prepared for tagging after GitHub native builds
-complete. Recorded validation and remaining limitations are maintained in the
+A push to `master` automatically tags and publishes the 0.6 release after
+GitHub validation and native/JAR builds succeed. Recorded validation and
+remaining limitations are maintained in the
 [release summary](docs/changelog/v0.6-release-summary.md).
 
 Level loads no longer intermittently fail or detect the wrong game. The ROM is
@@ -446,6 +447,8 @@ outside the primary release slice or are still under active development.
 
 #### Release documentation
 
+- [Publishing a GitHub release](docs/project/release-publishing.md) — pushes to
+  `master` automatically publish after validation and builds succeed.
 - [0.6 changelog](CHANGELOG.0.6.md)
 - [Release Summary for website and GitHub](docs/changelog/v0.6-release-summary.md)
 - [Detailed development ledger](docs/changelog/v0.6-prerelease-detailed.md)

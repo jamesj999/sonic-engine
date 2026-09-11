@@ -2004,7 +2004,9 @@ stays comparison-only: nothing in this release hydrates gameplay from a recorded
   and universal JAR; validation evidence remains a workflow artifact, and missing distribution
   files fail publication. Native builds and their ordinary/guard validation run on GitHub-hosted
   runners again; ROM-equipped validation is an opt-in evidence job rather than a prerequisite for
-  Windows, macOS, Linux, or universal-JAR builds.
+  Windows, macOS, Linux, or universal-JAR builds. A push to `master` automatically publishes after
+  validation and builds succeed, tags the exact tested commit, and rejects an existing version
+  tag. Manual dispatch remains available for validation without publication.
 - **Trace tooling owner:** the recording, emulator, and probe tooling described under Architecture
   and Runtime now lives in the TraceChaser submodule.
 

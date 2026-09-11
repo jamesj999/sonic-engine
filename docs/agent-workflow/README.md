@@ -18,6 +18,9 @@ Seven `com.openggf.tools` CLIs. All invocations are PowerShell-quoted (quote eac
 
 ## Docs
 
+- [Release publishing](../project/release-publishing.md) — automatic publication on
+  `master` push, skipped-job diagnosis, and publication verification;
+  use the mirrored `release-publishing` skill for this task.
 - [runbooks/README.md](runbooks/README.md) — step-by-step runbooks per task type
 - [ci-guard-failure-explainer.md](ci-guard-failure-explainer.md) — guard test → correct fix
 - [pitfall-catalogue-index.md](pitfall-catalogue-index.md) — known ROM pitfalls grouped by bug class

@@ -1363,30 +1363,20 @@ class TestBuildToolingGuard {
     }
 
     @Test
-    void releaseWorkflowShouldNotPublishStaticPrereleaseOnEveryMasterPush() throws Exception {
+    void releaseWorkflowShouldPublishOnlyOnMasterPush() throws Exception {
         String workflow = normalizeLineEndings(Files.readString(Path.of(".github/workflows/release.yml")));
-        List<String> violations = new ArrayList<>();
-
-        if (!workflow.contains("release:\n    needs: [build, universal-jar]\n    if: github.event_name == 'workflow_dispatch'")) {
-            violations.add(".github/workflows/release.yml release job must be gated to manual workflow_dispatch");
-        }
-        if (workflow.contains("release:\n    needs: [build, universal-jar]\n    if: github.event_name == 'push'")) {
-            violations.add(".github/workflows/release.yml still publishes releases automatically on every master push");
-        }
-        if (!workflow.contains("release:\n    needs: [build, universal-jar]\n    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master'")) {
-            violations.add(".github/workflows/release.yml manual publishing must be restricted to refs/heads/master");
-        }
-        if (!workflow.contains("Check release tag does not already exist")) {
-            violations.add(".github/workflows/release.yml does not fail before publishing an already-existing release tag");
-        }
-        if (!workflow.contains("git ls-remote --exit-code --tags origin \"refs/tags/v${VERSION}\"")) {
-            violations.add(".github/workflows/release.yml does not check whether the version tag already exists on origin");
-        }
-
-        if (!violations.isEmpty()) {
-            fail("release publishing must be deliberate while the pom version is a static prerelease tag:\n  "
-                    + String.join("\n  ", new TreeSet<>(violations)));
-        }
+        String release = yamlJobBlocks(workflow).get("release");
+        assertNotNull(release);
+        assertTrue(release.contains("needs: [build, universal-jar]"),
+                "publication must wait for all native builds and the universal jar");
+        assertTrue(release.contains("if: github.event_name == 'push' && github.ref == 'refs/heads/master' && github.event.deleted == false"),
+                "publish on a non-deletion master push, never on pull requests or manual validation runs");
+        assertTrue(release.contains("Check release tag does not already exist"),
+                "reject an existing version tag before publication");
+        assertTrue(release.contains("git ls-remote --exit-code --tags origin \"refs/tags/v${VERSION}\""),
+                "check the version tag on origin");
+        assertTrue(release.contains("target_commitish: ${{ github.sha }}"),
+                "tag the exact master commit whose artifacts passed validation");
     }
 
     @Test

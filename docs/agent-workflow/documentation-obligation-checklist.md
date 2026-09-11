@@ -34,6 +34,14 @@ it must say `n/a`. So "lying" in either direction fails the hook.
 
 ## Release and artifact destinations
 
+Release procedure changes must keep
+[release publishing](../project/release-publishing.md),
+[release rollover](../project/release-rollover.md), `AGENTS.md`/`CLAUDE.md`,
+and the mirrored `release-publishing` skill consistent. Pushes to `master`
+automatically publish after successful validation and builds. Manual dispatch
+is validation-only. Confirm the actual release before reporting it shipped;
+do not instruct maintainers to create the version tag before the workflow.
+
 ### Which version am I writing for?
 
 `pom.xml`'s `<version>` is the authority: it names the version `develop`
