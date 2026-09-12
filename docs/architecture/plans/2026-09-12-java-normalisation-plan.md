@@ -1,6 +1,7 @@
 # Java normalisation review and proposed work
 
-Status: implementation in progress, authorised by the user on 12 September 2026.
+Status: implementation complete, with validation limitations recorded below.
+Authorised by the user on 12 September 2026.
 Reviewed on `develop` at `3e56cfb246`, 12 September 2026. Work stays directly
 on `develop`, without worktrees, as requested.
 
@@ -16,7 +17,7 @@ This was a broad static pass over the 2,989 production Java files, using file-si
 register-name and exact-block duplication searches, followed by targeted source
 and caller inspection. The clone search used windows of 20 noncomment lines; it
 is a candidate finder, not a semantic equivalence proof. This is not a line-by-line
-audit of every class. No tests were run and no runtime behavior was verified.
+audit of every class. The original review ran no tests; implementation validation is recorded below.
 
 ## Recommended first tranche
 
@@ -252,22 +253,130 @@ behavior or trace results actually change.
 
 ## Implementation record
 
-The integration base remains `3e56cfb246` on `develop`. Implementation is in
-progress; the numbered requirements above remain the completion checklist.
+The integration base remains `3e56cfb246` on `develop`. All eleven items are
+implemented within their stated boundaries; item 11 is the single diagnostic
+pilot and ownership assessment, not a general controller rewrite.
 
-- Item 1: live debug actions now use `GameLoopDebugShortcuts`, with explicit
-  teleport dependencies and a result-transition callback. The loop retains
-  provider-aware reward publication and fade ownership; the unused helper's
-  obsolete unconditional reward path was removed. Focused command
-  `mvn -Dmse=off '-Dtest=TestGameLoop,TestGameLoopDebugShortcuts' test` completed
-  on the dirty `develop` tree based at `3e56cfb246`: 87 tests, zero failures,
-  errors or skips (`target/java-normalisation-debug-tests.log`).
-- Items 3, 4, 5, 7 and 9: implementation underway; combined validation pending.
-  The initial combined run failed compilation on the extracted native-slot
-  record's private component access in HCZ; accessors now replace those accesses.
-- Items 2, 6 and 8: independent implementation work in progress.
-- Items 10–11: compatibility review and narrower state-ownership designs remain
-  outstanding, after first-tranche validation.
-- Final category/guard validation against the pinned base, ROM/trace coverage,
-  graphics capture, documentation and independently reviewable commits remain
-  outstanding. No full-suite or route-parity claim is made yet.
+| Item | Implementation and evidence |
+| --- | --- |
+| 1 | `ec6a4f4998`, `dbc5d2f436`: live helper wiring with narrow dependencies; loop retains provider-aware rewards and fade sequencing. Debug/loop focused tests pass, including live callback integration. |
+| 2 | `b40ee206a5`: coordinator owns immediate/deferred spawns, queue, reset and rewind. Added registry/slot-exhaustion tests exposed missing external-reservation restoration; `fde0567b7a` adds post-restore reconciliation; registry/slot-exhaustion regressions pass. |
+| 3 | `846537b98e`: one placeholder policy in `RewindRecreateConstructors`; four explicit marker prefixes retained. Constructor ambiguity/default/service/coordinate tests pass. |
+| 4 | `7bd16fde72`: plain S3K mapping delegates to `DplcStaticFlattener`. CNZ cannon destination `$448` and source-bank semantics remain separate. Flattener and ROM-backed S3K loading/decoding tests pass. |
+| 5 | `2738335230`: package-local native-slot adapter for pulley/conveyor, dead LBZ resolver removed, query traversal formatted. Slot identity/fallback and existing pulley/conveyor/grapple graph tests pass. |
+| 6 | `db0a80d789`: composed shield animation/art lifecycle; same-call advance/switch semantics and cursor restoration before lazy art binding covered. Shield/priority/rewind/donor tests pass. |
+| 7 | `b09026d462`: semantic SwingMotion/balance locals and one scalar tail angle; masks/arithmetic retained. Motion/tail/follow tests pass. |
+| 8 | `1ddd144708`: shared CPZ child presentation with independent child scheduling. Presentation and CPZ graph rewind tests pass. |
+| 9 | `5665fd4212`: shared render capture and asynchronous cache-task lifecycle; game manifests/targets remain local. Cache/failure/retry tests pass; actual S1/S2 GL captures verified. |
+| 10 | `6c812cd1a2`, `055c98f2b9`: canonical mechanics behind unchanged public facades. Getter order/count regression tests and Mod API pin test pass. See [compatibility review](../designs/2026-09-12-profile-adapter-compatibility-convergence.md). |
+| 11 | Diagnostic-only pilot implemented after first-tranche focused validation. Controller retains snapshot/API/gameplay ownership. Field map, ordered update contract and follow/history/AIZ assessments are in [pilot design](../designs/2026-09-12-controller-state-ownership-pilot-design.md). Pilot committed as `a84eb3e001`; scalar-format, sidekick and rewind checks pass. |
+
+### Validation evidence
+
+Java 21 is verified and `.githooks` installed. Root S1 REV01, S2 REV01 and
+locked-on S3K ROMs match the CRC32/SHA-1 values in `AGENTS.md`; tests use their
+absolute paths. The measurement-hazard table was reviewed.
+
+- Initial debug/loop run: 87 tests, no failures/errors/skips.
+- Combined focused run on the working tree based at `ec6a4f4998`: 577 tests,
+  two new queue-test expected-slot errors and one new subclass-reflection test
+  error; zero skips. All four mandatory S3K bootstrap/loading classes and the
+  Mod API signature checks passed.
+- Correction run on the working tree at `6c812cd1a2`: 120 tests, no
+  failures/errors/skips, including shield restore-before-art/donor integration,
+  lost-ring queue tests and live debug fade/reward integration.
+- Final reservation/diagnostic correction run: 36 tests, no failures/errors/skips.
+- Subsequent pilot/graph run: getter order, API, sidekick parity/rewind and CPZ/
+  player-object graphs passed. A new formatter expectation had extra `=` signs
+  absent from the original format; expectation corrected. New registry tests
+  exposed lost-ring reservations omitted by `ObjectManager.captureOwnedUsedSlotBits`;
+  the coordinator now reclaims its own slots in a post-restore callback.
+
+Actual preview verification used the production capture service with a hidden
+OpenGL 4.1 core context matching the engine, through `HeadlessGameBoot`'s existing
+native-lifecycle seam. The default tool context requests OpenGL 2.1 and cannot
+compile the current 4.1 shaders; no production graphics change was made for this
+verification. The temporary harness is `target/PreviewCaptureVerification.java`;
+it boots each verified ROM, calls `DataSelectPreviewCapture.capture(0, 0x180,
+0x100)` on a worker while pumping render-thread tasks, and saves the framebuffer.
+Both JVMs exited zero: S1 320×224 with 14 distinct colors, S2 320×224 with 19.
+Both images were visually inspected. Outputs/logs are bounded temporary files
+`target/java-normalisation-preview-s1.*` and `...-s2.*`.
+
+### Completed integration validation and limits
+
+- `python3 tools/testing/run_categories.py --base 3e56cfb246 --run` at
+  `de893f0c07`, with release/engine-map/plan documentation edits only, selected
+  all 2,499 candidate classes and separate guards. Run
+  `20260912T145440Z-c573b892` completed **20,329 ordinary tests: 27 failures,
+  8 errors, 97 skips**. This is a completed full selection, **not a green suite**.
+  All four mandatory S3K bootstrap/loading checks and Mod API signature checks
+  passed without skips. Skip inventory was inspected: optional benchmarks and
+  captures, absent reference material, disabled editor cases, and tests using
+  legacy ROM filenames account for the skipped coverage.
+- The separate guard lane completed **656 tests, 0 failures/errors/skips**.
+- The earlier incomplete sandbox run stopped at native graphics initialization;
+  its cache warmup reflection failure was fixed in `de893f0c07`. Lua 5.4.8 and
+  PowerShell 7.6.6 were supplied from existing installations for the completed
+  guard run; native graphics access was enabled. No ROM aliases were created.
+- The ordinary failures include FBZ route/matrix failures, macOS shell/base64/
+  secure-directory incompatibilities, sample/scaffolder build prerequisites,
+  one Mod API hook fixture assertion, legacy donor-ROM setup, and GL 2.1 capture
+  helpers trying to compile 4.1 shaders. This pass does not claim that all these
+  unrelated tests are healthy. The donor/setup fixes below are test-only;
+  broader platform/tooling and FBZ repairs remain separate work.
+- Focused verification of the donor-ROM setup and GL 4.1 test-capture
+  corrections completed **85 tests, 0 failures/errors/skips** in the independent
+  export at `de893f0c07` plus those exact test-only edits. Those optional edits remain
+  only in the comparison export and are not part of this delivery. See the
+  [validation handoff](2026-09-12-java-normalisation-validation-handoff.md).
+  No production code changed after the
+  completed full selection and paired route measurements. The full suite was
+  not repeated or represented as green.
+
+The focused route comparison used an independent source export with its own
+`target/`, first at `3e56cfb246`, then rebuilt from scratch at `de893f0c07`.
+Neither measurement switched the working branch or reused another tree's build.
+Both used Java 21 and the same three verified absolute ROM paths:
+
+```text
+mvn -Dmse=off -Ptrace-replay \
+  -Dtest=TestS1Mz1LostRingCollectionOrderRegression,TestS1Sbz2CompleteRunTraceReplay,TestS3kAizTraceReplay,TestS3kHczZoneSliceTraceReplay,TestFbzAct2RouteHeadless \
+  -Dsonic1.rom.path=<verified absolute S1 REV01 path> \
+  -Dsonic2.rom.path=<verified absolute S2 REV01 path> \
+  -Ds3k.rom.path=<verified absolute locked-on S3K path> test
+```
+
+Both completed **27 tests, 5 failures, 0 errors, 0 skips**. All five failure
+messages are byte-for-byte identical across the pair:
+
+| Fixture/check | Before and after |
+| --- | --- |
+| S1 MZ lost-ring ordering | 6 tests pass |
+| S1 SBZ2 complete run | passes |
+| S3K AIZ → HCZ | 59 errors; first frame 5497, `camera_x` (expected `$0010`, actual `$0012`); two existing fire-reveal/reload camera-lock assertions also fail |
+| S3K HCZ complete run | 4571 errors; first frame 9482, `air` (expected 1, actual 0) |
+| FBZ act 2 route | same `obj74-crossing-lost-flat-control` at frame 31034 |
+
+These matched measurements supersede older log totals for this comparison.
+They show no regression in the measured routes, not full route parity. No trace
+payload, timing contract, comparison tolerance or gameplay hydration was changed.
+Temporary command/result summaries live under `target/java-normalisation-*`;
+the durable result and scope are recorded here.
+
+### Requirement audit
+
+Items 1–9 each have a production owner, focused behavioral coverage and their
+own reviewable commits. Item 10 retains public record identities and declared
+methods, with canonical internal mechanics and verified signature pins. Item 11
+has the field/rewind map, ordered update contract, follow/history and AIZ owner
+assessment, and one scalar diagnostic pilot. Read-only final review confirmed
+unchanged motion arithmetic, sampling order, sentinels and formatting.
+
+Queue reset and restore ordering, shield cursor/art restoration, provider getter
+order, CPZ child scheduling and native P1/P2 identity have explicit regressions.
+ROM loading remains authoritative; fixed-width arithmetic, clocks and RNG paths
+were retained. Engine-map and develop release-line notes describe the new owners.
+No public Mod API surface, configuration, runtime asset source, release topology,
+AGENTS/CLAUDE guidance or mirrored skill changed. The user subsequently requested committing the remaining documentation,
+integrating `origin/develop`, and pushing `develop`; no release is requested.
