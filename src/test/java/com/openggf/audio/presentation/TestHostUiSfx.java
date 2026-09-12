@@ -25,9 +25,16 @@ class TestHostUiSfx {
         SampleBackedVoice confirm = factory.fallbackSfx(2, "UI_CONFIRM", 0, 1.0f);
         SampleBackedVoice error = factory.fallbackSfx(3, "UI_ERROR", 0, 1.0f);
 
+        SampleBackedVoice cancel = factory.fallbackSfx(4, "UI_CANCEL", 0, 1.0f);
+
         String navigateAsset = ((PresentationVoiceSnapshot.Sample) navigate.snapshot()).assetId();
         String confirmAsset = ((PresentationVoiceSnapshot.Sample) confirm.snapshot()).assetId();
         String errorAsset = ((PresentationVoiceSnapshot.Sample) error.snapshot()).assetId();
+        String cancelAsset = ((PresentationVoiceSnapshot.Sample) cancel.snapshot()).assetId();
+        assertEquals("host/ui/ui_cancel", cancelAsset);
+        DecodedPcm cancelPcm = factory.resolvePcm(cancelAsset);
+        assertNotNull(cancelPcm);
+        assertSame(cancelPcm, factory.resolvePcm(cancelAsset));
         assertEquals("host/ui/ui_navigate", navigateAsset);
         assertEquals("host/ui/ui_confirm", confirmAsset);
         assertEquals("host/ui/ui_error", errorAsset);
@@ -45,7 +52,11 @@ class TestHostUiSfx {
         assertFalse(Arrays.equals(
                 confirmPcm.copySamples(), errorPcm.copySamples()));
 
-        for (SampleBackedVoice voice : new SampleBackedVoice[]{navigate, confirm, error}) {
+        for (DecodedPcm other : new DecodedPcm[]{navigatePcm, confirmPcm, errorPcm}) {
+            assertFalse(Arrays.equals(cancelPcm.copySamples(), other.copySamples()));
+        }
+
+        for (SampleBackedVoice voice : new SampleBackedVoice[]{navigate, confirm, error, cancel}) {
             long[] mixed = new long[2 * 512];
             voice.mixInto(mixed, 512);
             assertTrue(Arrays.stream(mixed).anyMatch(sample -> sample != 0),

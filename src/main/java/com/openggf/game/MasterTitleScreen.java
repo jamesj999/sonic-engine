@@ -112,6 +112,7 @@ public class MasterTitleScreen {
     public enum AudioCue {
         NAVIGATE("UI_NAVIGATE"),
         CONFIRM("UI_CONFIRM"),
+        CANCEL("UI_CANCEL"),
         ERROR("UI_ERROR");
 
         private final String sfxName;
@@ -391,7 +392,7 @@ public class MasterTitleScreen {
         if (state == State.ERROR_DISPLAY) {
             if (navigation.back() || navigation.accept()) {
                 state = State.ACTIVE;
-                playErrorSound();
+                playCancelSound();
             }
             return;
         }
@@ -413,11 +414,11 @@ public class MasterTitleScreen {
         if (settingsScreen != null) {
             settingsScreen.update(inputHandler);
             if (settingsScreen.consumeApplied()) refreshRomPreviews();
-            if (settingsScreen.consumeCloseRequested()) { settingsScreen = null; playErrorSound(); }
+            if (settingsScreen.consumeCloseRequested()) { settingsScreen = null; playCancelSound(); }
             return;
         }
         if (helpOpen) {
-            if (navigation.back()) { helpOpen = false; playErrorSound(); }
+            if (navigation.back()) { helpOpen = false; playCancelSound(); }
             return;
         }
         if (toolsOpen) {
@@ -428,7 +429,7 @@ public class MasterTitleScreen {
             modManagerScreen.update(inputHandler);
             if (modManagerScreen.consumeCloseRequested()) {
                 modManagerScreen = null;
-                playErrorSound();
+                playCancelSound();
             }
             return;
         }
@@ -463,7 +464,7 @@ public class MasterTitleScreen {
                     // Disable test mode for this session so normal game-select runs
                     configService.setConfigValue(SonicConfiguration.TEST_MODE_ENABLED, false);
                     tracePicker = null;
-                    playErrorSound();
+                    playCancelSound();
                 }
                 case NONE -> { }
             }
@@ -484,7 +485,7 @@ public class MasterTitleScreen {
             userRecordingMenu.update(inputHandler);
             if (userRecordingMenu.consumeCloseRequested()) {
                 userRecordingMenu = null;
-                playErrorSound();
+                playCancelSound();
             }
             return;
         }
@@ -497,7 +498,7 @@ public class MasterTitleScreen {
             // mid-update; re-check the field before touching it again.
             if (timeAttackMenu != null && menu.consumeCloseRequested()) {
                 timeAttackMenu = null;
-                playErrorSound();
+                playCancelSound();
             }
             return;
         }
@@ -507,7 +508,7 @@ public class MasterTitleScreen {
             LaunchConfigPanel.Result result = launchConfigPanel.consumeResult();
             if (result == LaunchConfigPanel.Result.CANCELLED) {
                 launchConfigPanel = null;
-                playErrorSound();
+                playCancelSound();
             } else if (result == LaunchConfigPanel.Result.CLOSED) {
                 MasterTitleEntry.Stock stock = (MasterTitleEntry.Stock) selectedEntry();
                 try {
@@ -553,7 +554,7 @@ public class MasterTitleScreen {
             }
             return;
         }
-        if (navigation.back()) { navigation.leave(); playErrorSound(); return; }
+        if (navigation.back()) { navigation.leave(); playCancelSound(); return; }
         if (navigation.up() && navigation.move(-1)) { playNavigateSound(); return; }
         if (navigation.down() && navigation.move(1)) { playNavigateSound(); return; }
         if (!navigation.accept()) return;
@@ -580,7 +581,7 @@ public class MasterTitleScreen {
     }
 
     private void updateQuitPrompt() {
-        if (navigation.back()) { quitPrompt = false; playErrorSound(); return; }
+        if (navigation.back()) { quitPrompt = false; playCancelSound(); return; }
         if (navigation.left() || navigation.right() || navigation.up() || navigation.down()) {
             quitSelected = !quitSelected;
             playNavigateSound();
@@ -590,7 +591,7 @@ public class MasterTitleScreen {
                 quitRequested = true;
                 state = State.EXITING;
                 playConfirmSound();
-            } else playErrorSound();
+            } else playCancelSound();
         }
     }
 
@@ -618,7 +619,7 @@ public class MasterTitleScreen {
     }
 
     private void updateTools() {
-        if (navigation.back()) { toolsOpen = false; playErrorSound(); return; }
+        if (navigation.back()) { toolsOpen = false; playCancelSound(); return; }
         if (navigation.up()) toolIndex = Math.max(0, toolIndex - 1);
         if (navigation.down()) toolIndex = Math.min(1, toolIndex + 1);
         if (!navigation.accept()) return;
@@ -675,7 +676,7 @@ public class MasterTitleScreen {
 
     private void updateStandaloneActionChooser(InputHandler input) {
         List<MasterTitleEntry.Action> actions = standaloneActionsForTest();
-        if (navigation.back()) { standaloneActionOpen = false; playErrorSound(); return; }
+        if (navigation.back()) { standaloneActionOpen = false; playCancelSound(); return; }
         if (navigation.up()) standaloneActionIndex = Math.max(0, standaloneActionIndex - 1);
         if (navigation.down()) standaloneActionIndex = Math.min(actions.size() - 1, standaloneActionIndex + 1);
         if (navigation.accept()) {
@@ -865,6 +866,9 @@ public class MasterTitleScreen {
             box(actionX, y, actionWidth, 18, 0.05f, 0.16f, 0.38f, 1f);
             if (navigation.actions() && navigation.selected() == i) focusBox(actionX, y, actionWidth, 18);
         }
+        if (preview == null && selectedEntry() instanceof MasterTitleEntry.Stock) {
+            box(8, 69, leftWidth, 61, 0.04f, 0.10f, 0.24f, 0.96f);
+        }
         font.beginMegaBatch();
         textFitted(navigation.actions() ? "ACTION MENU" : "SELECT GAME", viewportWidth - 111, 10, 103,
                 1f, 0.5f, 0.91f, 1f);
@@ -886,7 +890,7 @@ public class MasterTitleScreen {
             textFitted(action.label, actionX + 5, 43 + action.ordinal() * 20, actionWidth - 10,
                     1f, brightness, brightness, brightness);
         }
-        if (selectedEntry() instanceof MasterTitleEntry.Stock stock) {
+        if (selectedEntry() instanceof MasterTitleEntry.Stock stock && isEntryAvailable(stock)) {
             LaunchProfile profile = launchProfileStore.load(stock.game());
             if (profile != null) {
                 int count = profile.enabledCount(stock.game());
@@ -916,7 +920,7 @@ public class MasterTitleScreen {
             if (index == selectedIndex) MenuStyle.focus(font, x, 158, tabWidth - 2, 21);
             float shade = isEntryAvailable(entry) ? 1f : .45f;
             String label = entry instanceof MasterTitleEntry.Stock stock && stock.game() == GameEntry.SONIC_3K
-                    ? "S3 & K" : entry.menuLabel();
+                    ? "Sonic3K" : entry.menuLabel();
             MenuStyle.text(font, label, x + 2, 164, tabWidth - 6, shade, shade, shade);
         }
         if (entries.size() > 3) MenuStyle.text(font, (selectedIndex + 1) + " / " + entries.size()
@@ -997,6 +1001,7 @@ public class MasterTitleScreen {
 
     private void playNavigateSound() { audioSink.play(AudioCue.NAVIGATE); }
     private void playConfirmSound()  { audioSink.play(AudioCue.CONFIRM); }
+    private void playCancelSound()   { audioSink.play(AudioCue.CANCEL); }
     private void playErrorSound()    { audioSink.play(AudioCue.ERROR); }
 
     /**

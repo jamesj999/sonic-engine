@@ -67,14 +67,27 @@ class TestMasterTitleHubMessages {
             draw(screen);
             assertTrue(font.has("Sonic 1"));
             assertTrue(font.has("Sonic 2"));
-            assertTrue(font.has("S3 & K"));
+            assertTrue(font.has("Sonic3K"));
             assertTrue(font.red("Sonic 1") < font.red("Sonic 2"));
-            assertTrue(font.red("S3 & K") < font.red("Sonic 2"));
+            assertTrue(font.red("Sonic3K") < font.red("Sonic 2"));
             assertTrue(font.has("ADVANCED"));
             assertTrue(font.has("QUIT"));
             assertTrue(font.texts.stream().filter(t -> t.y == 164)
                     .allMatch(t -> t.x >= 8 && t.x + t.text.length() * 6 <= width / 2));
         }
+    }
+
+    @Test void profileStatusOnlyAppearsForAnAvailableGame() throws Exception {
+        var screen = screen(false);
+        draw(screen);
+        assertTrue(font.has("ROM NOT FOUND"));
+        assertFalse(font.has("Stock profile"));
+        screen.setRomAvailableForTest(MasterTitleScreen.GameEntry.SONIC_2, true);
+        draw(screen);
+        assertTrue(font.has("Stock profile"));
+        screen.setRomAvailableForTest(MasterTitleScreen.GameEntry.SONIC_2, false);
+        draw(screen);
+        assertFalse(font.has("Stock profile"));
     }
 
     private MasterTitleScreen screen(boolean standalone) throws Exception {

@@ -15,6 +15,7 @@ final class HostUiSfx {
     private static final Map<String, DecodedPcm> CUES = Map.of(
             "UI_NAVIGATE", tone("UI_NAVIGATE", new Note(760, 45)),
             "UI_CONFIRM", tone("UI_CONFIRM", new Note(660, 55), new Note(990, 75)),
+            "UI_CANCEL", tone("UI_CANCEL", new Note(520, 65)),
             "UI_ERROR", tone("UI_ERROR", new Note(440, 75), new Note(290, 95)));
 
     private HostUiSfx() {
