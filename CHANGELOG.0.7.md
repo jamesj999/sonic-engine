@@ -76,6 +76,9 @@ campaigns; feature/API publication remains subject to the 0.8 roadmap.
 
 ## Build and release
 
+- **Faster audio oracle validation:** buffer request-aware S2 capture reads while
+  preserving strict byte validation, digest checks, and full fixture coverage.
+
 - **Local test categories:** select related subsystem checks from changed paths, with
   common tests and structural guards retained, broad fallback for shared changes,
   and bounded diagnostics and automatic temporary-file cleanup. Tool prerequisites
