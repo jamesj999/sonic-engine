@@ -60,6 +60,39 @@ public class Sonic2RingPlacementTest {
         }
         fail(String.format("Expected ring at 0x%04X,0x%04X", x, y));
     }
-}
 
+    @Test
+    public void emeraldHillWaterfallRingIsVisibleBeforeSonicApproaches() {
+        var configuration = com.openggf.configuration.SonicConfigurationService.getInstance();
+        var widthKey = com.openggf.configuration.SonicConfiguration.SCREEN_WIDTH_PIXELS;
+        int previousWidth = configuration.getInt(widthKey);
+        try {
+            TestEnvironment.configureGameModuleFixture(SonicGame.SONIC_2);
+            configuration.setSessionOverride(widthKey, 320);
+            List<RingSpawn> rings = new Sonic2RingPlacement(reader).load(new ZoneAct(0, 0));
+            var manager = new com.openggf.level.rings.RingManager(rings, null, null, null, null);
+            // EHZ1 screenshot: Sonic's top-left X=3339, camera X=3195.
+            // (3464,948) must be drawn even while (3528,900) is outside the window.
+            manager.reset(3100);
+            manager.update(3195, null, 0);
+            assertContainsRing(List.copyOf(manager.getActiveSpawns()), 3464, 948);
+            manager.update(3212, null, 1);
+            assertContainsRing(List.copyOf(manager.getActiveSpawns()), 3464, 948);
+            manager.update(3195, null, 2);
+            assertContainsRing(List.copyOf(manager.getActiveSpawns()), 3464, 948);
+        } finally {
+            configuration.setSessionOverride(widthKey, previousWidth);
+            com.openggf.game.session.SessionManager.clear();
+        }
+    }
+
+    @Test
+    public void expandedEmeraldHillRingsAreSortedByFullX() {
+        List<RingSpawn> rings = new Sonic2RingPlacement(reader).load(new ZoneAct(0, 0));
+        for (int i = 1; i < rings.size(); i++) {
+            assertTrue(rings.get(i - 1).x() <= rings.get(i).x(),
+                    "RingsMgr_SortRings sorts full X, including rings inside the same chunk");
+        }
+    }
+}
 

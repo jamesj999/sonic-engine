@@ -80,12 +80,18 @@ mvn -Dmse=off -Pguards test -B        # separate fresh JVM for structural guards
   guidance (no POM, selection-policy, Java, workflow or hook changes), verify the Python
   safety suite and actual tool preflight. Do not run the engine suite to test its wrapper.
   Selection-policy/build/Java changes still follow change-based validation above.
-- Do not repeat completed checks on unchanged code without a concrete reason. The
-  runner retains at most two runs / 100 MiB under `target/category-tests/`: small summaries
-  on success, bounded failure logs on failure. It deletes raw XML and its per-invocation
-  temporary directories after Maven exits. Inspect summaries and relevant failures instead
-  of streaming logs into context. Do not create an unbounded validation archive.
-  It does not cache passes or enforce Git integration; the lock covers this runner only.
+- Do not repeat completed checks on unchanged code without a concrete reason. Diagnostics
+  are temporary: inspect `results.json` (including skips and failures), then run
+  `python3 tools/testing/run_categories.py --acknowledge <run-id>` before delivery to
+  delete the entire run directory. Do not leave consumed results behind. Success logs,
+  raw XML and invocation temporary directories are removed automatically after Maven exits.
+  The next run deletes unacknowledged leftovers under the runner lock. Use
+  `--keep-diagnostics` only when the user explicitly requests longer retention; opt-in
+  retention is still bounded to two runs / 100 MiB and acknowledgment deletes it too.
+  Only the small overwritten broad-attempt receipt remains by default, with outcome/counts
+  and retry information, never failure payloads. Do not archive logs elsewhere to evade
+  cleanup. Inspect summaries instead of streaming logs into context. The runner does not
+  cache passes or enforce Git integration; its lock covers this runner only.
 - CI still runs `-Psmoke` on pushes and full tests plus `-Pguards` on pull requests and
   manual dispatch. Releases retain full ordinary, guard and required ROM/trace validation.
   Category runs are partial validation, never evidence that the full suite passed.

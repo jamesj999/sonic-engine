@@ -917,6 +917,28 @@ return dy >= 0 && dy < viewportHeight;
 
 **Load-ahead window is capped (intentionally narrower than the despawn window).** The despawn/visibility windows above scale by the *full* viewport width so on-screen objects at the wider right edge are never culled. The *spawn load-ahead* window (`AbstractPlacementManager.loadAheadFor`), however, grows only by the minimum pre-load lead — `max(320 + extraAhead, viewportWidth + 128)` — NOT by `viewportWidth + extraAhead`. The object slot pool is a fixed ROM-sized table (`ObjectSlotLayout`: S1=96, S2=112, S3K=89); a window that grew by the full extra width overran the pool in dense areas, so `allocateSlot()` returned −1 and spawns were silently dropped (objects intermittently failing to load when scrolling right at widescreen, in all games). Capping the load-ahead keeps the live-object count close to native (≈+2% at ULTRA_21_9 vs +27% before) so the pool no longer overruns, while the wider despawn/visibility windows still prevent right-edge culling. This narrower load window is deliberate — do not widen it to match the despawn window. Native (320) is byte-identical (load-ahead = `0x280`).
 
+Stage rings in Sonic 2 and Sonic 3 & Knuckles use their separate raw-camera
+window: `[cameraX - 8, cameraX + viewportWidth + 8)`, with the existing left
+clamp near the level origin. This follows S2 `RingsManager_Main`'s
+`screen_width + 16` span and S3K `loc_E942`'s native `$150` span. Both drawing
+and collection use this window; widescreen admits rings visible beyond the
+native right edge, while rings behind the left margin remain excluded.
+`TestRingViewportWindow` covers native and wider widths in both scroll
+directions. Expanded ring lists must be sorted by full X, matching S2
+`RingsMgr_SortRings`, rather than object placement's chunk/table order. Otherwise
+the forward scan can stop at an off-screen ring before admitting a nearer one
+(EHZ1's ring at `(3464,948)` was hidden behind `(3528,900)`). The ROM-backed
+`Sonic2RingPlacementTest` covers that case, and ring editor reloads enforce the
+same ordering. Sonic 1's object placement remains unchanged.
+
+The September 12 rollover (`3f19fb60fc`) brought the chunk-sorted ring parser
+from `next` into the new `develop` line; the previous day's `develop`
+(`45cecf5668`) still sorted full X. An isolated comparison using the same
+pre-fix ring manager and EHZ1 ROM layout kept `(3464,948)` active at camera
+X=3195 and 3212 with the September 11 parser, but only at X=3212 with the
+rollover parser. This distinguishes the July source edit from the date the
+regression reached `develop`.
+
 ### Parity at Native Width
 
 At `DISPLAY_ASPECT = NATIVE_4_3` (viewport width 320, height 224):

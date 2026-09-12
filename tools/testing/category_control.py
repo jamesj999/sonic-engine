@@ -62,3 +62,20 @@ def record_attempt(target, run, plan, reason):
             'fingerprint': plan['working_tree_fingerprint'], 'reason': reason,
         }, indent=2) + '\n')
         temporary.replace(receipt)
+
+
+def record_outcome(target, run, status, results):
+    """Keep counts only in the existing broad-attempt receipt, never failure payloads."""
+    receipt = target / 'category-tests-last-broad.json'
+    if not receipt.exists():
+        return
+    previous = json.loads(receipt.read_text())
+    if previous.get('run') != str(run):
+        return
+    previous['status'] = status
+    previous['results'] = [{key: summary[key] for key in
+                           ('lane', 'tests', 'failures', 'errors', 'skipped', 'exit_code')
+                           if key in summary} for summary in results]
+    temporary = receipt.with_suffix('.tmp')
+    temporary.write_text(json.dumps(previous, indent=2) + '\n')
+    temporary.replace(receipt)
