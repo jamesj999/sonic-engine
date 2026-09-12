@@ -7,6 +7,9 @@ import com.openggf.debug.playback.Bk2Movie;
 import com.openggf.debug.playback.Bk2MovieLoader;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.api.AfterAll;
+import java.util.Arrays;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -78,7 +81,15 @@ import static org.junit.jupiter.api.Assertions.fail;
  * compares them to each other. No engine is constructed and no engine state is
  * hydrated from either.
  */
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class TestTraceFixtureMovieAlignmentGuard {
+    private final Map<Path, int[]> inputCache = new HashMap<>();
+
+    @AfterAll
+    void releaseInputs() {
+        inputCache.clear();
+        movieCache.clear();
+    }
 
     private static final Path PROJECT_ROOT = resolveProjectRoot();
     private static final Path FIXTURE_ROOT =
@@ -352,7 +363,15 @@ class TestTraceFixtureMovieAlignmentGuard {
      * hex ROM controller byte in a named CSV header. Returns an empty array when
      * the directory holds no physics payload at all.
      */
-    private static int[] readInputColumn(Path dir) throws IOException {
+    private int[] readInputColumn(Path dir) throws IOException {
+        int[] cached = inputCache.get(dir);
+        if (cached != null) return cached;
+        int[] inputs = loadInputColumn(dir);
+        inputCache.put(dir, inputs);
+        return inputs;
+    }
+
+    static int[] loadInputColumn(Path dir) throws IOException {
         Path payload = dir.resolve("physics.csv.gz");
         if (!Files.isRegularFile(payload)) {
             payload = dir.resolve("physics.csv");
@@ -369,21 +388,31 @@ class TestTraceFixtureMovieAlignmentGuard {
             if (column < 0) {
                 throw new IOException("physics payload has no 'input' column: " + payload);
             }
-            List<Integer> values = new ArrayList<>();
+            int[] values = new int[1024];
+            int size = 0;
             String line;
             while ((line = reader.readLine()) != null) {
                 if (line.isBlank()) {
                     continue;
                 }
-                String[] parts = line.split(",", -1);
-                values.add(Integer.parseInt(parts[column].trim(), 16));
+                if (size == values.length) values = Arrays.copyOf(values, size * 2);
+                values[size++] = inputValue(line, column);
             }
-            int[] out = new int[values.size()];
-            for (int i = 0; i < out.length; i++) {
-                out[i] = values.get(i);
-            }
-            return out;
+            return Arrays.copyOf(values, size);
         }
+    }
+
+    static int inputValue(String line, int column) {
+        int start = 0;
+        for (int index = 0; index < column; index++) {
+            int comma = line.indexOf(',', start);
+            // The former split(..., -1)[column] rejected short rows, including
+            // those with no input field. Preserve its exception category.
+            if (comma < 0) throw new ArrayIndexOutOfBoundsException(column);
+            start = comma + 1;
+        }
+        int end = line.indexOf(',', start);
+        return Integer.parseInt(line.substring(start, end < 0 ? line.length() : end).trim(), 16);
     }
 
     private static BufferedReader openText(Path path) throws IOException {

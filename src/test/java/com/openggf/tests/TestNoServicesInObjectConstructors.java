@@ -359,17 +359,6 @@ public class TestNoServicesInObjectConstructors {
         // We look for method calls (not field assignments) on a variable
         // between its construction and registration.
 
-        // Match: ClassName varName = new ClassName(...)
-        // or:    var varName = new ClassName(...)
-        Pattern construction = Pattern.compile(
-                "(?:\\w+(?:<[^>]+>)?|var)\\s+(\\w+)\\s*=\\s*new\\s+(\\w+)\\s*\\(");
-        // Match: varName.methodName(
-        Pattern methodCall = Pattern.compile(
-                "(\\w+)\\.(\\w+)\\s*\\(");
-        // Match: addDynamicObject(varName) or spawnDynamicObject(varName)
-        Pattern registration = Pattern.compile(
-                "(?:addDynamicObject|spawnDynamicObject)\\s*\\(\\s*(\\w+)\\s*\\)");
-
         List<String> violations = new ArrayList<>();
 
         try (Stream<Path> allFiles = Files.walk(srcMain)) {
@@ -378,45 +367,7 @@ public class TestNoServicesInObjectConstructors {
                         try {
                             String content = Files.readString(path);
                             String fileName = path.getFileName().toString();
-                            String[] lines = content.split("\n");
-
-                            // Track constructed-but-not-yet-registered variables
-                            // Key: varName, Value: className
-                            Map<String, String> pending = new HashMap<>();
-
-                            for (int i = 0; i < lines.length; i++) {
-                                String line = lines[i];
-
-                                // Check for construction
-                                Matcher ctorMatch = construction.matcher(line);
-                                while (ctorMatch.find()) {
-                                    pending.put(ctorMatch.group(1), ctorMatch.group(2));
-                                }
-
-                                // Check for registration â€” removes from pending
-                                Matcher regMatch = registration.matcher(line);
-                                while (regMatch.find()) {
-                                    pending.remove(regMatch.group(1));
-                                }
-
-                                // Check for method calls on pending objects
-                                Matcher callMatch = methodCall.matcher(line);
-                                while (callMatch.find()) {
-                                    String varName = callMatch.group(1);
-                                    String method = callMatch.group(2);
-                                    String className = pending.get(varName);
-                                    if (className != null) {
-                                        Set<String> dangerous = methodsCallingServices.get(className);
-                                        if (dangerous != null && dangerous.contains(method)) {
-                                            violations.add(fileName + ":" + (i + 1)
-                                                    + ": " + varName + "." + method
-                                                    + "() called before addDynamicObject â€” "
-                                                    + method + "() calls services() in "
-                                                    + className);
-                                        }
-                                    }
-                                }
-                            }
+                            violations.addAll(findPreRegistrationCalls(content, fileName, methodsCallingServices));
                         } catch (IOException ignored) {
                         }
                     });
@@ -432,13 +383,115 @@ public class TestNoServicesInObjectConstructors {
         }
     }
 
+    // Match: ClassName varName = new ClassName(...)
+    // or:    var varName = new ClassName(...)
+    private static final Pattern CONSTRUCTION = Pattern.compile(
+            "(?:\\w+(?:<[^>]+>)?|var)\\s+(\\w+)\\s*=\\s*new\\s+(\\w+)\\s*\\(");
+    // Match: varName.methodName(
+    private static final Pattern METHOD_CALL = Pattern.compile(
+            "(\\w+)\\.(\\w+)\\s*\\(");
+    // Match: addDynamicObject(varName) or spawnDynamicObject(varName)
+    private static final Pattern REGISTRATION = Pattern.compile(
+            "(?:addDynamicObject|spawnDynamicObject)\\s*\\(\\s*(\\w+)\\s*\\)");
+
+    private static List<String> findPreRegistrationCalls(String content, String fileName,
+            Map<String, Set<String>> methodsCallingServices) {
+        List<String> violations = new ArrayList<>();
+        String[] lines = content.split("\n");
+
+        // Track constructed-but-not-yet-registered variables
+        // Key: varName, Value: className
+        Map<String, String> pending = new HashMap<>();
+
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i];
+
+            // Check for construction
+            Matcher ctorMatch = CONSTRUCTION.matcher(line);
+            while (line.contains("new") && ctorMatch.find()) {
+                pending.put(ctorMatch.group(1), ctorMatch.group(2));
+            }
+
+            if (pending.isEmpty()) continue;
+
+            // Check for registration â€” removes from pending
+            Matcher regMatch = REGISTRATION.matcher(line);
+            while ((line.contains("addDynamicObject") || line.contains("spawnDynamicObject"))
+                    && regMatch.find()) {
+                pending.remove(regMatch.group(1));
+            }
+
+            // Check for method calls on pending objects
+            Matcher callMatch = METHOD_CALL.matcher(line);
+            while (line.contains(".") && callMatch.find()) {
+                String varName = callMatch.group(1);
+                String method = callMatch.group(2);
+                String className = pending.get(varName);
+                if (className != null) {
+                    Set<String> dangerous = methodsCallingServices.get(className);
+                    if (dangerous != null && dangerous.contains(method)) {
+                        violations.add(fileName + ":" + (i + 1)
+                                + ": " + varName + "." + method
+                                + "() called before addDynamicObject â€” "
+                                + method + "() calls services() in "
+                                + className);
+                    }
+                }
+            }
+        }
+        return violations;
+    }
+
+    @Test
+    void preRegistrationScanStillRejectsCallsBeforeInjection() {
+        Map<String, Set<String>> methods = Map.of("Child", Set.of("initialize"));
+        String unsafe = "Child child = new Child();\nchild.initialize();\nmanager.addDynamicObject(child);";
+        assertEquals(1, findPreRegistrationCalls(unsafe, "Example.java", methods).size());
+        String safe = "Child child = new Child();\nmanager.addDynamicObject(child);\nchild.initialize();";
+        assertEquals(List.of(), findPreRegistrationCalls(safe, "Example.java", methods));
+        String overwritten = "Child child = new Child();\nvar child = new Safe();\nchild.initialize();";
+        assertEquals(List.of(), findPreRegistrationCalls(overwritten, "Example.java", methods));
+    }
+
+    @Test
+    void analysisRetainsDirectTransitiveAndOverriddenConstructorCalls() {
+        ClassSource parent = new ClassSource("Parent.java", "Parent", null,
+                "class Parent { public Parent() { initialize(); } public void initialize() { } }");
+        ClassSource child = new ClassSource("Child.java", "Child", "Parent",
+                "class Child extends Parent { public void initialize() { later(); } "
+                        + "private void later() { services(); } }");
+        ClassSource direct = new ClassSource("Direct.java", "Direct", null,
+                "class Direct { public Direct() { services(); } }");
+        assertEquals(Set.of("Child", "Direct"), findClassesWhoseConstructorsMayReachServices(
+                Map.of("Parent", parent, "Child", child, "Direct", direct)));
+        ClassSource safeChild = new ClassSource("Child.java", "Child", "Parent",
+                "class Child extends Parent { public void initialize() { } }");
+        assertEquals(Set.of(), findClassesWhoseConstructorsMayReachServices(
+                Map.of("Parent", parent, "Child", safeChild)), "a later snapshot must not reuse stale analysis");
+    }
+
+    @Test
+    void methodClosureRetainsRegistrationAndPreRegistrationSensitivity() {
+        String source = "class Child { public void start() { middle(); } "
+                + "private void middle() { leaf(); } private void leaf() { services(); addDynamicObject(x); } "
+                + "public void unrelated() { other.leaf(); leafSuffix(); } }";
+        assertEquals(Set.of("start", "middle", "leaf"), findMethodsCallingServices(source, "Child"));
+        assertEquals(Set.of("start", "middle", "leaf"),
+                findMethodsCallingRawObjectRegistration(source, "Child"));
+    }
+
     /**
      * Returns the set of non-constructor method names in a class that call
      * {@code services()}, either directly or transitively through other
      * methods in the same class.
      */
     private static Set<String> findMethodsCallingServices(String content, String className) {
-        // Parse all methods: name -> body
+        return methodsReaching(methodBodies(content, className),
+                Pattern.compile("(?<![\\w])(?:\\w+\\.)?services\\(\\)"));
+    }
+
+    private static Map<String, String> methodBodies(String content, String className) {
+        // Preserve the existing parser's name/overload semantics.
         Map<String, String> methodBodies = new HashMap<>();
         Pattern methodDecl = Pattern.compile(
                 "(?:public|protected|private|)\\s+"
@@ -463,78 +516,30 @@ public class TestNoServicesInObjectConstructors {
             methodBodies.put(methodName, content.substring(start, end));
         }
 
-        // Seed: methods that directly call services()
-        Pattern servicesCall = Pattern.compile("(?<![\\w])(?:\\w+\\.)?services\\(\\)");
-        Set<String> callers = new HashSet<>();
-        for (var entry : methodBodies.entrySet()) {
-            if (servicesCall.matcher(entry.getValue()).find()) {
-                callers.add(entry.getKey());
-            }
-        }
-
-        // Transitive closure: methods that call methods already in the set
-        boolean changed = true;
-        while (changed) {
-            changed = false;
-            for (var entry : methodBodies.entrySet()) {
-                if (callers.contains(entry.getKey())) continue;
-                for (String caller : callers) {
-                    // Check if this method's body calls a known services-calling method
-                    if (Pattern.compile("(?<![.\\w])" + Pattern.quote(caller) + "\\s*\\(")
-                            .matcher(entry.getValue()).find()) {
-                        callers.add(entry.getKey());
-                        changed = true;
-                        break;
-                    }
-                }
-            }
-        }
-
-        return callers;
+        return methodBodies;
     }
 
     private static Set<String> findMethodsCallingRawObjectRegistration(String content, String className) {
-        Map<String, String> methodBodies = new HashMap<>();
-        Pattern methodDecl = Pattern.compile(
-                "(?:public|protected|private|)\\s+"
-                        + "(?:static\\s+)?(?:final\\s+)?(?:synchronized\\s+)?"
-                        + "\\S+\\s+(\\w+)\\s*\\([^)]*\\)\\s*"
-                        + "(?:throws\\s+[^{]+)?\\{");
+        return methodsReaching(methodBodies(content, className), Pattern.compile(
+                "(?<![\\w])(?:\\w+\\.)?(?:addDynamicObject|spawnDynamicObject)\\s*\\("));
+    }
 
-        Matcher m = methodDecl.matcher(content);
-        while (m.find()) {
-            String methodName = m.group(1);
-            if (methodName.equals(className)) continue;
-
-            int start = m.end();
-            int braceDepth = 1;
-            int end = start;
-            while (end < content.length() && braceDepth > 0) {
-                char c = content.charAt(end);
-                if (c == '{') braceDepth++;
-                else if (c == '}') braceDepth--;
-                end++;
-            }
-            methodBodies.put(methodName, content.substring(start, end));
-        }
-
-        Pattern rawRegistration = Pattern.compile(
-                "(?<![\\w])(?:\\w+\\.)?(?:addDynamicObject|spawnDynamicObject)\\s*\\(");
+    private static Set<String> methodsReaching(Map<String, String> methodBodies, Pattern seed) {
+        Map<String, Pattern> calls = new HashMap<>();
         Set<String> callers = new HashSet<>();
         for (var entry : methodBodies.entrySet()) {
-            if (rawRegistration.matcher(entry.getValue()).find()) {
-                callers.add(entry.getKey());
-            }
+            calls.put(entry.getKey(), Pattern.compile(
+                    "(?<![.\\w])" + Pattern.quote(entry.getKey()) + "\\s*\\("));
+            if (seed.matcher(entry.getValue()).find()) callers.add(entry.getKey());
         }
-
         boolean changed = true;
         while (changed) {
             changed = false;
             for (var entry : methodBodies.entrySet()) {
                 if (callers.contains(entry.getKey())) continue;
                 for (String caller : callers) {
-                    if (Pattern.compile("(?<![.\\w])" + Pattern.quote(caller) + "\\s*\\(")
-                            .matcher(entry.getValue()).find()) {
+                    if (entry.getValue().contains(caller)
+                            && calls.get(caller).matcher(entry.getValue()).find()) {
                         callers.add(entry.getKey());
                         changed = true;
                         break;
@@ -542,7 +547,6 @@ public class TestNoServicesInObjectConstructors {
                 }
             }
         }
-
         return callers;
     }
 
@@ -577,10 +581,19 @@ public class TestNoServicesInObjectConstructors {
     private static Set<String> findClassesWhoseConstructorsMayReachServices(Map<String, ClassSource> classes) {
         Set<String> result = new HashSet<>();
 
+        // Analysis is scoped to this source snapshot, never cached by class name
+        // across scans. Subclasses still supply their own virtual method closure.
+        Map<String, Set<String>> serviceMethods = new HashMap<>();
+        Map<String, List<ConstructorCall>> constructorCalls = new HashMap<>();
+        for (ClassSource source : classes.values()) {
+            serviceMethods.put(source.className(),
+                    findMethodsCallingServices(source.content(), source.className()));
+            constructorCalls.put(source.className(), findConstructorCalls(source));
+        }
         for (ClassSource source : classes.values()) {
             for (ClassSource candidate : subclassesIncludingSelf(classes, source.className())) {
-                Set<String> dangerousMethods = findMethodsCallingServices(candidate.content(), candidate.className());
-                for (ConstructorCall call : findConstructorCalls(source)) {
+                Set<String> dangerousMethods = serviceMethods.get(candidate.className());
+                for (ConstructorCall call : constructorCalls.get(source.className())) {
                     if (call.methodName().equals("services") || dangerousMethods.contains(call.methodName())) {
                         result.add(candidate.className());
                     }

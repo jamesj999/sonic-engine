@@ -100,7 +100,9 @@ campaigns; feature/API publication remains subject to the 0.8 roadmap.
 - **Faster test validation:** buffer request-aware S2 capture reads, reuse read-only
   launcher references and large-capture hash preparation, read bounded capture
   lines in bulk, reuse emitted canonical bytes for hashing, cache repeated guard
-  analysis, and advance integration-test room deadlines through a controlled clock.
+  analysis, share immutable S3K oracle captures, read only the required trace-input
+  column, consolidate equivalent FBZ traversals, and advance integration-test room
+  deadlines through a controlled clock with observed membership and publication barriers.
   Strict byte validation, digest pins, ROM configurations, stress sizes, and real
   socket exchanges remain covered.
 

@@ -7,6 +7,7 @@ import com.openggf.net.client.RaceClient;
 import com.openggf.net.client.RaceConnection;
 import com.openggf.net.identity.PlayerIdentity;
 import com.openggf.net.master.MasterServer;
+import com.openggf.net.master.ControlledMasterServer;
 import com.openggf.net.master.TestMasterServer;
 import com.openggf.net.protocol.ControlMessage;
 import org.junit.jupiter.api.AfterEach;
@@ -44,7 +45,8 @@ class TestMasterEndToEnd {
     @Test
     void relayRoomBrowsesRacesRejectsTeleportAndDissolves(@TempDir Path dir)
             throws Exception {
-        server = MasterServer.start(TestMasterServer.testConfig(), dir);
+        ControlledMasterServer controlled = new ControlledMasterServer();
+        server = controlled.start(TestMasterServer.testConfig(), dir);
         PlayerIdentity hostIdentity = PlayerIdentity.loadOrCreate(dir.resolve("host"));
         MasterClient hostMaster = connect(hostIdentity, "HOST");
         establish(hostIdentity);
@@ -56,9 +58,12 @@ class TestMasterEndToEnd {
 
         RaceConnection guest1 = join(dir.resolve("guest1"), "G1", roomId);
         RaceConnection guest2 = join(dir.resolve("guest2"), "G2", roomId);
-        Thread.sleep(1200);
         PlayerIdentity guest3Identity = PlayerIdentity.loadOrCreate(dir.resolve("guest3"));
         MasterClient guest3Master = connect(guest3Identity, "G3");
+        await(host, event -> event instanceof RaceClient.Control control
+                && control.message() instanceof ControlMessage.RoomState state
+                && state.players().size() == 3, 10_000);
+        controlled.publishPlayerCounts(roomId);
         ControlMessage.RoomListResult listed = guest3Master.listRooms("s3k", 0)
                 .get(10, TimeUnit.SECONDS);
         assertEquals(1, listed.rooms().size());
@@ -72,7 +77,7 @@ class TestMasterEndToEnd {
         awaitControl(guest1, ControlMessage.RoundStart.class, 10_000);
         awaitControl(guest2, ControlMessage.RoundStart.class, 10_000);
         awaitControl(guest3, ControlMessage.RoundStart.class, 10_000);
-        Thread.sleep(3100);
+        controlled.finishCountdown(roomId);
 
         runAttempt(host, 24, 100);
         runAttempt(guest1, 20, 104);
@@ -89,7 +94,9 @@ class TestMasterEndToEnd {
         assertEquals(4, page.rows().size());
 
         guest3.close();
-        Thread.sleep(300);
+        await(host, event -> event instanceof RaceClient.Control control
+                && control.message() instanceof ControlMessage.RoomState state
+                && state.players().size() == 3, 10_000);
         PlayerIdentity attackerIdentity = PlayerIdentity.loadOrCreate(dir.resolve("attacker"));
         MasterClient attackerMaster = connect(attackerIdentity, "BAD");
         RaceConnection attacker = attackerMaster.joinRoom(
@@ -106,7 +113,6 @@ class TestMasterEndToEnd {
 
         host.close();
         await(guest1, RaceClient.Disconnected.class::isInstance, 10_000);
-        Thread.sleep(300);
         MasterClient after = connect(
                 PlayerIdentity.loadOrCreate(dir.resolve("after")), "AFTER");
         assertTrue(after.listRooms("s3k", 0).get(10, TimeUnit.SECONDS).rooms().isEmpty());

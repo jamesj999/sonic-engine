@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openggf.tools.audio.parity.AudioParityChipWrite;
 import com.openggf.tests.RomTestUtils;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
@@ -38,7 +40,18 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * observed byte changes the engine capture, and the movie frames the reference
  * carries reach neither the engine host nor the comparator.
  */
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class TestS3kOracleRequestSidecarWiring {
+    private List<S3kAudioTick> plainReference;
+    private List<S3kAudioTick> resolvedReference;
+    private S3kOpenGgfAudioCapture.CaptureResult honestCapture;
+
+    @AfterAll
+    void releaseReference() {
+        plainReference = null;
+        resolvedReference = null;
+        honestCapture = null;
+    }
     private static final Path FIXTURE_DIR = Path.of("src/test/resources/audio/parity/s3k");
     private static final Path REFERENCE = FIXTURE_DIR.resolve("s3k-aiz1-intro-reference-v2.jsonl.gz");
     private static final Path METADATA = FIXTURE_DIR.resolve("s3k-aiz1-intro-metadata-v2.json");
@@ -86,8 +99,8 @@ class TestS3kOracleRequestSidecarWiring {
      */
     @Test
     void resolutionAgreesWithTheReferencesOwnMailboxWhereverItHasOne() {
-        List<S3kAudioTick> plain = read(S3kRequestObservationSidecar.absent());
-        List<S3kAudioTick> resolved = read(committed());
+        List<S3kAudioTick> plain = plainReference();
+        List<S3kAudioTick> resolved = resolvedReference();
         assertEquals(plain.size(), resolved.size(), "supplying inputs adds no service");
 
         Map<Integer, Integer> supplied = new java.util.LinkedHashMap<>();
@@ -109,8 +122,8 @@ class TestS3kOracleRequestSidecarWiring {
     /** Only the mailbox may differ; every other field is the reference's, untouched. */
     @Test
     void resolutionChangesNothingButTheMailbox() {
-        List<S3kAudioTick> plain = read(S3kRequestObservationSidecar.absent());
-        List<S3kAudioTick> resolved = read(committed());
+        List<S3kAudioTick> plain = plainReference();
+        List<S3kAudioTick> resolved = resolvedReference();
         for (int index = 0; index < plain.size(); index++) {
             S3kAudioTick before = plain.get(index);
             S3kAudioTick after = resolved.get(index);
@@ -141,7 +154,7 @@ class TestS3kOracleRequestSidecarWiring {
         File rom = RomTestUtils.ensureSonic3kRomAvailable();
         assumeTrue(rom != null && rom.isFile(), "S3K locked-on ROM unavailable");
 
-        List<S3kAudioTick> honest = read(committed()).subList(0, STOP_SEGA_TICK + 1);
+        List<S3kAudioTick> honest = resolvedReference().subList(0, STOP_SEGA_TICK + 1);
         String corruptedJson = Files.readString(S3kRequestObservationSidecar.COMMITTED)
                 .replace("\"row\": 242,\n      \"request\": 254",
                         "\"row\": 242,\n      \"request\": 1");
@@ -154,7 +167,7 @@ class TestS3kOracleRequestSidecarWiring {
         assertEquals(STOP_SEGA_REQUEST, honest.get(STOP_SEGA_TICK).mailbox().getFirst());
         assertEquals(0x01, corrupted.get(STOP_SEGA_TICK).mailbox().getFirst());
         assertNotEquals(
-                S3kOpenGgfAudioCapture.capture(rom.toPath(), honest, null).ticks(),
+                honestTicks(honest.size()),
                 S3kOpenGgfAudioCapture.capture(rom.toPath(), corrupted, null).ticks(),
                 "the observed byte must reach the driver as an input");
     }
@@ -170,7 +183,7 @@ class TestS3kOracleRequestSidecarWiring {
     void theFramesNeverReachTheEngineHostOrTheComparator() {
         File rom = RomTestUtils.ensureSonic3kRomAvailable();
         assumeTrue(rom != null && rom.isFile(), "S3K locked-on ROM unavailable");
-        List<S3kAudioTick> honest = read(committed()).subList(0, STOP_SEGA_TICK + 1);
+        List<S3kAudioTick> honest = resolvedReference().subList(0, STOP_SEGA_TICK + 1);
         List<S3kAudioTick> perturbed = new ArrayList<>();
         for (S3kAudioTick tick : honest) {
             perturbed.add(new S3kAudioTick(tick.ordinal(), tick.frame() + 9_000, tick.lag(),
@@ -178,12 +191,11 @@ class TestS3kOracleRequestSidecarWiring {
                     tick.producerInputEvidence()));
         }
 
-        S3kOpenGgfAudioCapture.CaptureResult fromHonest =
-                S3kOpenGgfAudioCapture.capture(rom.toPath(), honest, null);
+        List<S3kAudioTick> fromHonest = honestTicks(honest.size());
         S3kOpenGgfAudioCapture.CaptureResult fromPerturbed =
                 S3kOpenGgfAudioCapture.capture(rom.toPath(), perturbed, null);
-        assertEquals(fromHonest.ticks(), fromPerturbed.ticks());
-        assertEquals(S3kAudioParityComparator.compare(honest, fromHonest.ticks()),
+        assertEquals(fromHonest, fromPerturbed.ticks());
+        assertEquals(S3kAudioParityComparator.compare(honest, fromHonest),
                 S3kAudioParityComparator.compare(perturbed, fromPerturbed.ticks()));
     }
 
@@ -256,11 +268,10 @@ class TestS3kOracleRequestSidecarWiring {
     void theFullOraclePinsTheNextSfxWriteFrontier() {
         File rom = RomTestUtils.ensureSonic3kRomAvailable();
         assumeTrue(rom != null && rom.isFile(), "S3K locked-on ROM unavailable");
-        List<S3kAudioTick> reference = read(committed());
-        S3kOpenGgfAudioCapture.CaptureResult engine =
-                S3kOpenGgfAudioCapture.capture(rom.toPath(), reference, null);
+        List<S3kAudioTick> reference = resolvedReference();
+        List<S3kAudioTick> engine = honestTicks(reference.size());
         S3kAudioParityComparator.Report report =
-                S3kAudioParityComparator.compare(reference, engine.ticks());
+                S3kAudioParityComparator.compare(reference, engine);
 
         assertEquals(S3kAudioParityComparator.Report.Kind.TRACK_STATE_MISMATCH,
                 report.kind(), report::toString);
@@ -277,11 +288,10 @@ class TestS3kOracleRequestSidecarWiring {
     void theServiceStreamMatchesThroughCollapseAdmission() {
         File rom = RomTestUtils.ensureSonic3kRomAvailable();
         assumeTrue(rom != null && rom.isFile(), "S3K locked-on ROM unavailable");
-        List<S3kAudioTick> reference = read(committed()).subList(0, 1690);
-        S3kOpenGgfAudioCapture.CaptureResult engine =
-                S3kOpenGgfAudioCapture.capture(rom.toPath(), reference, null);
+        List<S3kAudioTick> reference = resolvedReference().subList(0, 1690);
+        List<S3kAudioTick> engine = honestTicks(reference.size());
         S3kAudioParityComparator.Report report =
-                S3kAudioParityComparator.compare(reference, engine.ticks());
+                S3kAudioParityComparator.compare(reference, engine);
 
         assertEquals(S3kAudioParityComparator.Report.Kind.MATCH, report.kind(), report::toString);
         assertEquals(1690, report.ticksCompared());
@@ -291,9 +301,8 @@ class TestS3kOracleRequestSidecarWiring {
     void firstRawRingSelectsFm5WithExactReferenceWrites() {
         File rom = RomTestUtils.ensureSonic3kRomAvailable();
         assumeTrue(rom != null && rom.isFile(), "S3K locked-on ROM unavailable");
-        List<S3kAudioTick> reference = read(committed()).subList(0, 2358);
-        List<S3kAudioTick> engine = S3kOpenGgfAudioCapture
-                .capture(rom.toPath(), reference, null).ticks();
+        List<S3kAudioTick> reference = resolvedReference().subList(0, 2358);
+        List<S3kAudioTick> engine = honestTicks(reference.size());
 
         assertEquals(nonDacServiceWrites(reference.get(2357)),
                 nonDacServiceWrites(engine.get(2357)));
@@ -322,9 +331,8 @@ class TestS3kOracleRequestSidecarWiring {
     void newlyAdmittedFlyingFm4WalksBeforeOlderCollapsePsgAtService1652() {
         File rom = RomTestUtils.ensureSonic3kRomAvailable();
         assumeTrue(rom != null && rom.isFile(), "S3K locked-on ROM unavailable");
-        List<S3kAudioTick> reference = read(committed()).subList(0, 1653);
-        List<S3kAudioTick> engine = S3kOpenGgfAudioCapture
-                .capture(rom.toPath(), reference, null).ticks();
+        List<S3kAudioTick> reference = resolvedReference().subList(0, 1653);
+        List<S3kAudioTick> engine = honestTicks(reference.size());
 
         assertEquals(List.of(0, 0x59, 0), reference.get(1569).mailbox(),
                 "the older PSG owner is the recorded Collapse request");
@@ -342,12 +350,11 @@ class TestS3kOracleRequestSidecarWiring {
     void collapseFirstWalkMatchesItsFirst48OrderedServiceWrites() {
         File rom = RomTestUtils.ensureSonic3kRomAvailable();
         assumeTrue(rom != null && rom.isFile(), "S3K locked-on ROM unavailable");
-        List<S3kAudioTick> reference = read(committed()).subList(0, 1571);
-        S3kOpenGgfAudioCapture.CaptureResult engine =
-                S3kOpenGgfAudioCapture.capture(rom.toPath(), reference, null);
+        List<S3kAudioTick> reference = resolvedReference().subList(0, 1571);
+        List<S3kAudioTick> engine = honestTicks(reference.size());
 
         List<AudioParityChipWrite> expected = first48ServiceWrites(reference.get(1570));
-        List<AudioParityChipWrite> actual = first48ServiceWrites(engine.ticks().get(1570));
+        List<AudioParityChipWrite> actual = first48ServiceWrites(engine.get(1570));
         assertEquals(48, expected.size());
         assertEquals(expected, actual,
                 "the admitted SFX's noise pair and first volume must preserve bus order");
@@ -381,11 +388,10 @@ class TestS3kOracleRequestSidecarWiring {
     void theDacByteMismatchRetainsItsDifferentRunStartServices() {
         File rom = RomTestUtils.ensureSonic3kRomAvailable();
         assumeTrue(rom != null && rom.isFile(), "S3K locked-on ROM unavailable");
-        List<S3kAudioTick> reference = read(committed());
-        S3kOpenGgfAudioCapture.CaptureResult engine =
-                S3kOpenGgfAudioCapture.capture(rom.toPath(), reference, null);
+        List<S3kAudioTick> reference = resolvedReference();
+        List<S3kAudioTick> engine = honestTicks(reference.size());
         S3kAudioParityComparator.DacStreamReport dac =
-                S3kAudioParityComparator.compareDacStream(reference, engine.ticks());
+                S3kAudioParityComparator.compareDacStream(reference, engine);
 
         assertEquals(S3kAudioParityComparator.DacStreamReport.Kind.BYTE_DIFFERENT,
                 dac.kind());
@@ -408,9 +414,8 @@ class TestS3kOracleRequestSidecarWiring {
     void aCorruptedDacByteIsReportedAtItsRunAndOffset() {
         File rom = RomTestUtils.ensureSonic3kRomAvailable();
         assumeTrue(rom != null && rom.isFile(), "S3K locked-on ROM unavailable");
-        List<S3kAudioTick> reference = read(committed());
-        S3kOpenGgfAudioCapture.CaptureResult engine =
-                S3kOpenGgfAudioCapture.capture(rom.toPath(), reference, null);
+        List<S3kAudioTick> reference = resolvedReference();
+        List<S3kAudioTick> engine = honestTicks(reference.size());
 
         List<S3kAudioTick> corrupted = new ArrayList<>(reference.size());
         boolean done = false;
@@ -443,10 +448,31 @@ class TestS3kOracleRequestSidecarWiring {
         assertTrue(done, "no DAC sample byte found to corrupt");
 
         S3kAudioParityComparator.DacStreamReport dac =
-                S3kAudioParityComparator.compareDacStream(corrupted, engine.ticks());
+                S3kAudioParityComparator.compareDacStream(corrupted, engine);
         assertEquals(S3kAudioParityComparator.DacStreamReport.Kind.BYTE_DIFFERENT,
                 dac.kind());
         assertEquals(1, dac.run());
+    }
+
+    // Only immutable comparison data is shared. Perturbed requests and frames
+    // still construct independent captures; prefixes retain their exact window.
+    private List<S3kAudioTick> plainReference() {
+        if (plainReference == null) plainReference = read(S3kRequestObservationSidecar.absent());
+        return plainReference;
+    }
+
+    private List<S3kAudioTick> resolvedReference() {
+        if (resolvedReference == null) resolvedReference = read(committed());
+        return resolvedReference;
+    }
+
+    private List<S3kAudioTick> honestTicks(int count) {
+        if (honestCapture == null) {
+            File rom = RomTestUtils.ensureSonic3kRomAvailable();
+            assumeTrue(rom != null && rom.isFile(), "S3K locked-on ROM unavailable");
+            honestCapture = S3kOpenGgfAudioCapture.capture(rom.toPath(), resolvedReference(), null);
+        }
+        return honestCapture.ticks().subList(0, count);
     }
 
     private static S3kRequestObservationSidecar committed() {
@@ -456,6 +482,6 @@ class TestS3kOracleRequestSidecarWiring {
     private static List<S3kAudioTick> read(S3kRequestObservationSidecar sidecar) {
         List<S3kAudioTick> ticks = new ArrayList<>();
         S3kAudioReferenceReader.readDriverServices(REFERENCE, sidecar, ticks::add);
-        return ticks;
+        return List.copyOf(ticks);
     }
 }

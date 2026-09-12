@@ -93,6 +93,11 @@ public final class MasterServer implements AutoCloseable {
     }
 
     public static MasterServer start(MasterConfig config, Path dataDir) throws Exception {
+        return start(config, dataDir, System::currentTimeMillis);
+    }
+
+    static MasterServer start(MasterConfig config, Path dataDir,
+                              java.util.function.LongSupplier clock) throws Exception {
         Files.createDirectories(dataDir);
         NioEventLoopGroup brokerGroup = new NioEventLoopGroup(1);
         NioEventLoopGroup relayGroup = new NioEventLoopGroup(
@@ -101,7 +106,6 @@ public final class MasterServer implements AutoCloseable {
         Channel channel = null;
         ChannelGroup clientChannels = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE);
         try {
-            var clock = (java.util.function.LongSupplier) System::currentTimeMillis;
             store = new SqliteIdentityStore(dataDir.resolve(config.dbPath()));
             NewIdentityCache cache = new NewIdentityCache(config.newIdentityCacheSize(),
                     config.newIdentityCacheTtlMinutes() * 60_000L, clock);

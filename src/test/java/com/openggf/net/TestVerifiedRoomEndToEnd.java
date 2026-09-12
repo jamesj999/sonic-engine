@@ -13,6 +13,7 @@ import com.openggf.net.identity.PlayerIdentity;
 import com.openggf.net.master.IdentityStore;
 import com.openggf.net.master.MasterConfig;
 import com.openggf.net.master.MasterServer;
+import com.openggf.net.master.ControlledMasterServer;
 import com.openggf.net.master.VerificationJobQueue;
 import com.openggf.net.protocol.ControlMessage;
 import com.openggf.net.protocol.VerdictCodec;
@@ -58,7 +59,8 @@ class TestVerifiedRoomEndToEnd {
                 verifierRegistrationToken: register-me
                 verifiedUploadDeadlineSeconds: 15
                 """);
-        MasterServer server = MasterServer.start(MasterConfig.load(yaml), dir);
+        ControlledMasterServer controlled = new ControlledMasterServer();
+        MasterServer server = controlled.start(MasterConfig.load(yaml), dir);
         MasterClient hostMaster = null;
         MasterClient newcomer = null;
         RaceConnection race = null;
@@ -97,7 +99,7 @@ class TestVerifiedRoomEndToEnd {
             race.sendControl(new ControlMessage.RoundConfigure(
                     new ControlMessage.RoundConfig("s3k", 0, 0, 5, "OPEN", null)));
             await(race, event -> message(event, ControlMessage.RoundStart.class), 10_000);
-            Thread.sleep(3_100);
+            controlled.finishCountdown(roomId);
 
             AttemptInputRecording recording = new AttemptInputRecording(
                     new AttemptStartDescriptor("s3k", 0, 0, "sonic", FINGERPRINT));

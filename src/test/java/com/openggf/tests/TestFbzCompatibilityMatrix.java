@@ -24,6 +24,8 @@ import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.spawn.PlacementViewportWidth;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
+import com.openggf.sprites.playable.Sonic;
+import com.openggf.sprites.playable.Tails;
 import com.openggf.sprites.render.PlayerSpriteRenderer;
 import com.openggf.tests.rules.RequiresRom;
 import com.openggf.tests.rules.SonicGame;
@@ -121,7 +123,12 @@ class TestFbzCompatibilityMatrix {
     @MethodSource("teamCases")
     void configuredTeamSurvivesSharedPlaneAndBossState(TeamCase team) throws Exception {
         try (ConfigurationScope ignored = ConfigurationScope.open()) {
-            configureNative(team.sidekicks(), WidescreenAspect.NATIVE_4_3);
+            boolean nativePair = team.sidekicks().equals("tails");
+            boolean donorOff = team.sidekicks().isBlank();
+            // The solo row also owns the donor-off setup/reset contract.
+            if (donorOff) configureCompatibility("", WidescreenAspect.NATIVE_4_3, "off", null);
+            else configureNative(team.sidekicks(), WidescreenAspect.NATIVE_4_3);
+            assertFalse(CrossGameFeatureProvider.isActive());
             // The matching standalone preflight covers this configuration's
             // synchronous transition. This route starts from a fresh session.
             restartFreshGameplaySession();
@@ -132,6 +139,16 @@ class TestFbzCompatibilityMatrix {
                         routedMain[0] = start.sprite();
                         routedSidekicks.addAll(GameServices.sprites().getSidekicks());
                         assertTeamGraph(start.sprite(), team);
+                        if (nativePair) {
+                            assertInstanceOf(Sonic.class, start.sprite());
+                            assertInstanceOf(Tails.class, GameServices.sprites().getSidekicks().getFirst());
+                            assertEquals(320, start.camera().getWidth() & 0xFFFF);
+                            GameServices.graphics().setViewport(0, 0, 320, 224);
+                        }
+                        if (donorOff) {
+                            assertEquals(320, start.camera().getWidth() & 0xFFFF);
+                            assertSame(GameServices.module().getRules(), start.sprite().getGameRules());
+                        }
                     });
             assertMandatoryRouteCompatibility(completion, team.label());
             assertEquals(completion.frames(), completion.sidekickAuditFrames(),
@@ -151,6 +168,13 @@ class TestFbzCompatibilityMatrix {
             assertTeamGraph(routedMain[0], team);
             assertFalse(routedMain[0].getDead(), "P1 died before the SOZ request");
 
+            if (nativePair) assertViewportCompletion(completion, 320);
+            if (donorOff) {
+                assertFalse(completion.s1DonationUpperLoopAssistConsumed(),
+                        "off must not consume the S1-only upper-loop assist");
+                assertFalse(completion.s1DonationLowerLoopAssistConsumed(),
+                        "off must not consume the S1-only lower-loop assist");
+            }
             Evidence optional = FbzCompatibilityInteractionProbe.run(320);
             assertOptionalInteractionCompatibility(optional, team.label());
 
@@ -166,11 +190,14 @@ class TestFbzCompatibilityMatrix {
             RouteSliceEvidence evidence = runStarpost6ToBoss(fixture);
             assertRouteSliceReachedBossAlive(fixture, evidence, team.label());
             assertTeamGraph(fixture.sprite(), team);
+            // Independent fixture: these width assertions observe event timing
+            // and arena bounds beyond the team slice's ownership assertions.
+            if (nativePair) assertViewportBossSlice(320);
         }
     }
 
     @ParameterizedTest(name = "widescreen complete route: {0}px")
-    @MethodSource("widthCases")
+    @MethodSource("additionalWidthCases")
     void viewportKeepsWorldThresholdsCullingAndBossContainment(
             WidescreenAspect aspect, int width) throws Exception {
         try (ConfigurationScope ignored = ConfigurationScope.open()) {
@@ -186,71 +213,14 @@ class TestFbzCompatibilityMatrix {
             assertMandatoryRouteCompatibility(completion, width + "px");
             Evidence optional = FbzCompatibilityInteractionProbe.run(width);
             assertOptionalInteractionCompatibility(optional, width + "px");
-            assertTrue(completion.minScreenX() <= 16,
-                    "the complete route must exercise the authored left horizontal extreme");
-            int placementLoadAhead = Math.max(0x280, width + 0x80);
-            assertTrue(completion.maxPlacedSpawnScreenX() >= placementLoadAhead - 0x80
-                            && completion.maxPlacedSpawnScreenX() < placementLoadAhead + 0x80,
-                    "canonical placement must materialize inside the viewport-scaled right "
-                            + "load-ahead chunks; actual=" + completion.maxPlacedSpawnScreenX());
-            assertTrue(completion.minPlacedDespawnScreenX() >= -0x180
-                            && completion.minPlacedDespawnScreenX() <= -0x80,
-                    "the same canonical placement must cull inside the ROM left unload chunks; "
-                            + "actual=" + completion.minPlacedDespawnScreenX());
-            assertTrue(completion.maxScreenX() >= 320 - 24,
-                    "the boss route must exercise the ROM-authored right player boundary");
-            assertTrue(completion.maxPlayerX() >= BOSS_CAMERA_MAX_X + 320 - 24,
-                    "the route must reach the fixed native right world edge at every width");
-
-            restartFreshGameplaySession();
-            HeadlessTestFixture fixture = buildAct2Fixture();
-            GameServices.graphics().setViewport(0, 0, width, 224);
-
-            assertEquals(width, PlacementViewportWidth.current());
-            assertEquals(width, fixture.camera().getWidth() & 0xFFFF);
-            assertEquals(width, GameServices.graphics().getViewportWidth());
-
-            RouteSliceEvidence evidence = runStarpost6ToBoss(fixture);
-            assertRouteSliceReachedBossAlive(fixture, evidence, width + "px");
-            assertTrue(evidence.observedWaitingBelowWorldTrigger(),
-                    "viewport width must not activate the plane event before P1 reaches world X $2E80");
-            assertTrue(evidence.observedTriggerAtOrBeyondWorldThreshold(),
-                    "the production event must still activate at world X $2E80");
-            assertTrue(evidence.controllerObserved() && evidence.pillarObserved(),
-                    "viewport-scaled placement/culling must retain both persistent pre-boss objects");
-            assertTrue(evidence.arenaWorldBoundaryObserved(),
-                    "the ROM $32B8 arena boundary must be observed independently of viewport width");
-            assertTrue(evidence.exactArenaWorldLockObserved(),
-                    "the arena must lock at the exact ROM $32B8 world coordinate; "
-                            + evidence.diagnostic());
-
-            int cameraLeft = fixture.camera().getX() & 0xFFFF;
-            int cameraRight = cameraLeft + width;
-            assertEquals(evidence.cameraMinX(), evidence.cameraMaxX(),
-                    "the boss arena must converge to a closed horizontal lock; "
-                            + evidence.diagnostic());
-            assertEquals(BOSS_REBASED_CAMERA_X, evidence.cameraMaxX(),
-                    "the $45C boss-load rebase must preserve the exact $32B8 world lock; "
-                            + evidence.diagnostic());
-            assertTrue(evidence.maxPlayerX() <= BOSS_CAMERA_MAX_X + 320 - 24 + 1,
-                    "P1 must remain inside the ROM-authored world edge instead of escaping into "
-                            + "widescreen-only void; " + evidence.diagnostic());
-            assertTrue(evidence.stage8Frame() > evidence.triggerFrame()
-                            && evidence.stage12Frame() > evidence.stage8Frame(),
-                    "the carrier, arena lock, and plane-refresh stages must finish in order; "
-                            + evidence.diagnostic());
-            assertTrue(cameraLeft >= GameServices.level().getCurrentLevel().getMinX());
-            assertTrue(cameraRight <= GameServices.level().getCurrentLevel().getMaxX() + width,
-                    "the visible right extreme must not wrap outside the level's world range");
-            assertTrue((fixture.sprite().getCentreY() & 0xFFFF)
-                            < (fixture.camera().getMaxY() & 0xFFFF) + 224,
-                    "neither horizontal camera extreme may expose a lethal fall below the arena");
+            assertViewportCompletion(completion, width);
+            assertViewportBossSlice(width);
 
         }
     }
 
     @ParameterizedTest(name = "donated complete mandatory route: {0}")
-    @MethodSource("donationCases")
+    @MethodSource("activeDonationCases")
     void donatedMovementProfileCanReachTheMandatoryBossEntryWithoutSpindash(
             String donor, Path donorRom) throws Exception {
         assertTrue(donor.equals("off") || donorRom != null,
@@ -300,6 +270,71 @@ class TestFbzCompatibilityMatrix {
                         "the S1-donated complete route must not depend on unavailable spindash");
             }
         }
+    }
+
+    private static void assertViewportCompletion(RouteCompletionEvidence completion, int width) {
+        assertTrue(completion.minScreenX() <= 16,
+                "the complete route must exercise the authored left horizontal extreme");
+        int placementLoadAhead = Math.max(0x280, width + 0x80);
+        assertTrue(completion.maxPlacedSpawnScreenX() >= placementLoadAhead - 0x80
+                        && completion.maxPlacedSpawnScreenX() < placementLoadAhead + 0x80,
+                "canonical placement must materialize inside the viewport-scaled right "
+                        + "load-ahead chunks; actual=" + completion.maxPlacedSpawnScreenX());
+        assertTrue(completion.minPlacedDespawnScreenX() >= -0x180
+                        && completion.minPlacedDespawnScreenX() <= -0x80,
+                "the same canonical placement must cull inside the ROM left unload chunks; "
+                        + "actual=" + completion.minPlacedDespawnScreenX());
+        assertTrue(completion.maxScreenX() >= 320 - 24,
+                "the boss route must exercise the ROM-authored right player boundary");
+        assertTrue(completion.maxPlayerX() >= BOSS_CAMERA_MAX_X + 320 - 24,
+                "the route must reach the fixed native right world edge at every width");
+
+    }
+
+    private static void assertViewportBossSlice(int width) throws Exception {
+        restartFreshGameplaySession();
+        HeadlessTestFixture fixture = buildAct2Fixture();
+        GameServices.graphics().setViewport(0, 0, width, 224);
+
+        assertEquals(width, PlacementViewportWidth.current());
+        assertEquals(width, fixture.camera().getWidth() & 0xFFFF);
+        assertEquals(width, GameServices.graphics().getViewportWidth());
+
+        RouteSliceEvidence evidence = runStarpost6ToBoss(fixture);
+        assertRouteSliceReachedBossAlive(fixture, evidence, width + "px");
+        assertTrue(evidence.observedWaitingBelowWorldTrigger(),
+                "viewport width must not activate the plane event before P1 reaches world X $2E80");
+        assertTrue(evidence.observedTriggerAtOrBeyondWorldThreshold(),
+                "the production event must still activate at world X $2E80");
+        assertTrue(evidence.controllerObserved() && evidence.pillarObserved(),
+                "viewport-scaled placement/culling must retain both persistent pre-boss objects");
+        assertTrue(evidence.arenaWorldBoundaryObserved(),
+                "the ROM $32B8 arena boundary must be observed independently of viewport width");
+        assertTrue(evidence.exactArenaWorldLockObserved(),
+                "the arena must lock at the exact ROM $32B8 world coordinate; "
+                        + evidence.diagnostic());
+
+        int cameraLeft = fixture.camera().getX() & 0xFFFF;
+        int cameraRight = cameraLeft + width;
+        assertEquals(evidence.cameraMinX(), evidence.cameraMaxX(),
+                "the boss arena must converge to a closed horizontal lock; "
+                        + evidence.diagnostic());
+        assertEquals(BOSS_REBASED_CAMERA_X, evidence.cameraMaxX(),
+                "the $45C boss-load rebase must preserve the exact $32B8 world lock; "
+                        + evidence.diagnostic());
+        assertTrue(evidence.maxPlayerX() <= BOSS_CAMERA_MAX_X + 320 - 24 + 1,
+                "P1 must remain inside the ROM-authored world edge instead of escaping into "
+                        + "widescreen-only void; " + evidence.diagnostic());
+        assertTrue(evidence.stage8Frame() > evidence.triggerFrame()
+                        && evidence.stage12Frame() > evidence.stage8Frame(),
+                "the carrier, arena lock, and plane-refresh stages must finish in order; "
+                        + evidence.diagnostic());
+        assertTrue(cameraLeft >= GameServices.level().getCurrentLevel().getMinX());
+        assertTrue(cameraRight <= GameServices.level().getCurrentLevel().getMaxX() + width,
+                "the visible right extreme must not wrap outside the level's world range");
+        assertTrue((fixture.sprite().getCentreY() & 0xFFFF)
+                        < (fixture.camera().getMaxY() & 0xFFFF) + 224,
+                "neither horizontal camera extreme may expose a lethal fall below the arena");
     }
 
     private static HeadlessTestFixture buildAct2Fixture() {
@@ -683,6 +718,16 @@ class TestFbzCompatibilityMatrix {
                 Arguments.of(WidescreenAspect.WIDE_16_9, 512),
                 Arguments.of(WidescreenAspect.ULTRA_21_9, 640),
                 Arguments.of(WidescreenAspect.SUPER_32_9, 800));
+    }
+
+    // Native 320/Sonic+Tails and donor-off/Sonic are exercised by teamCases.
+    // All synchronous preflights retain the complete original matrix.
+    private static Stream<Arguments> additionalWidthCases() {
+        return widthCases().filter(row -> (int) row.get()[1] != 320);
+    }
+
+    private static Stream<Arguments> activeDonationCases() {
+        return donationCases().filter(row -> !row.get()[0].equals("off"));
     }
 
     private static Stream<Arguments> donationCases() {
