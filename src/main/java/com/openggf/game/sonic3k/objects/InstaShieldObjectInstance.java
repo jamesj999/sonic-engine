@@ -9,8 +9,6 @@ import com.openggf.level.objects.ShieldObjectInstance;
 import com.openggf.game.sonic3k.Sonic3kObjectArtKeys;
 import com.openggf.game.sonic3k.Sonic3kObjectArtProvider;
 import com.openggf.graphics.GLCommand;
-import com.openggf.sprites.animation.SpriteAnimationScript;
-import com.openggf.sprites.animation.SpriteAnimationSet;
 import com.openggf.sprites.art.SpriteArtSet;
 import com.openggf.physics.Direction;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
@@ -30,21 +28,12 @@ public class InstaShieldObjectInstance extends ShieldObjectInstance implements I
     private static final int ATTACK_ANIM = 1;
     private static final int FINAL_FRAME = 7;
 
-    private PlayerSpriteRenderer dplcRenderer;
-    private SpriteAnimationSet animSet;
-    private int currentAnimId;
-    private int frameIndex;
-    private int delayCounter;
-    private int currentMappingFrame;
+    private final ShieldAnimationArtLifecycle animationLifecycle =
+            new ShieldAnimationArtLifecycle(IDLE_ANIM);
 
     public InstaShieldObjectInstance(AbstractPlayableSprite player) {
         super(player);
-        acquireArt();
-        currentAnimId = IDLE_ANIM;
-        frameIndex = 0;
-        delayCounter = 0;
-        currentMappingFrame = 0;
-        initAnimation(IDLE_ANIM);
+        animationLifecycle.ensureArtLoaded(this::loadShieldArt);
     }
 
     /**
@@ -52,33 +41,34 @@ public class InstaShieldObjectInstance extends ShieldObjectInstance implements I
      * Called at construction and lazily on first triggerAttack() if art wasn't
      * available at construction time (sprite created before level load).
      */
-    private void acquireArt() {
+    private ShieldAnimationArtLifecycle.Art loadShieldArt() {
         Sonic3kObjectArtProvider artProvider = getS3kArtProvider();
         if (artProvider != null) {
-            PlayerSpriteRenderer r = artProvider.getShieldDplcRenderer(Sonic3kObjectArtKeys.INSTA_SHIELD);
-            if (r != null) {
-                this.dplcRenderer = r;
+            PlayerSpriteRenderer renderer = artProvider.getShieldDplcRenderer(Sonic3kObjectArtKeys.INSTA_SHIELD);
+            if (renderer != null) {
                 SpriteArtSet artSet = artProvider.getShieldArtSet(Sonic3kObjectArtKeys.INSTA_SHIELD);
-                this.animSet = artSet != null ? artSet.animationSet() : null;
-                return;
+                return new ShieldAnimationArtLifecycle.Art(
+                        renderer, artSet != null ? artSet.animationSet() : null);
             }
         }
         // Cross-game donation is exposed through ObjectServices directly, not the host module's
         // gameService() registry. S2/S1 modules won't return CrossGameFeatureProvider here.
         CrossGameFeatureProvider donor = services().crossGameFeatures();
         if (donor != null) {
-            this.dplcRenderer = donor.getInstaShieldRenderer();
+            PlayerSpriteRenderer renderer = donor.getInstaShieldRenderer();
             SpriteArtSet artSet = donor.getInstaShieldArtSet();
-            this.animSet = artSet != null ? artSet.animationSet() : null;
+            return new ShieldAnimationArtLifecycle.Art(
+                    renderer, artSet != null ? artSet.animationSet() : null);
         }
+        return null;
     }
 
     @Override
     public void update(int vIntRunCount, PlayableEntity playerEntity) {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         if (isShieldDestroyed()) return;
-        stepAnimation();
-        if (currentMappingFrame == FINAL_FRAME && player.getDoubleJumpFlag() == 1) {
+        animationLifecycle.stepAnimation();
+        if (animationLifecycle.mappingFrame() == FINAL_FRAME && player.getDoubleJumpFlag() == 1) {
             player.setDoubleJumpFlag(2);
         }
     }
@@ -86,19 +76,15 @@ public class InstaShieldObjectInstance extends ShieldObjectInstance implements I
     /** Invalidates the DPLC tile cache, forcing re-upload on the next draw.
      *  Must be called after seamless level transitions that reload the pattern buffer. */
     public void invalidateDplcCache() {
-        if (dplcRenderer != null) {
-            dplcRenderer.invalidateDplcCache();
-        }
+        animationLifecycle.invalidateDplcCache();
     }
 
     /** Triggers the insta-shield attack animation. */
     public void triggerAttack() {
         // Lazy init: art may not have been loaded at construction time
         // (sprite created before level load). Acquire it now if needed.
-        if (animSet == null) {
-            acquireArt();
-        }
-        initAnimation(ATTACK_ANIM);
+        animationLifecycle.ensureArtLoaded(this::loadShieldArt);
+        animationLifecycle.restartAnimation(ATTACK_ANIM);
     }
 
     @Override
@@ -114,14 +100,16 @@ public class InstaShieldObjectInstance extends ShieldObjectInstance implements I
         if (player.getShieldType() != null) {
             return;
         }
-        if (currentAnimId == IDLE_ANIM) {
+        if (animationLifecycle.animationId() == IDLE_ANIM) {
             return;
         }
+        animationLifecycle.ensureArtLoaded(this::loadShieldArt);
+        PlayerSpriteRenderer dplcRenderer = animationLifecycle.renderer();
         if (dplcRenderer != null) {
             int cx = player.getCentreX();
             int cy = player.getCentreY();
             boolean hFlip = player.getDirection() == Direction.LEFT;
-            dplcRenderer.drawFrame(currentMappingFrame, cx, cy, hFlip, false);
+            dplcRenderer.drawFrame(animationLifecycle.mappingFrame(), cx, cy, hFlip, false);
             return;
         }
         if (hasRenderer()) {
@@ -132,43 +120,6 @@ public class InstaShieldObjectInstance extends ShieldObjectInstance implements I
         int cx = player.getCentreX();
         int cy = player.getCentreY();
         appendWireDiamond(commands, cx, cy, 18, 1.0f, 1.0f, 1.0f);
-    }
-
-    private void initAnimation(int animId) {
-        currentAnimId = animId;
-        frameIndex = 0;
-        if (animSet != null) {
-            SpriteAnimationScript script = animSet.getScript(animId);
-            if (script != null) {
-                delayCounter = script.delay();
-                if (!script.frames().isEmpty()) {
-                    currentMappingFrame = script.frames().get(0);
-                }
-            }
-        }
-    }
-
-    private void stepAnimation() {
-        if (animSet == null) return;
-        SpriteAnimationScript script = animSet.getScript(currentAnimId);
-        if (script == null || script.frames().isEmpty()) return;
-
-        if (delayCounter > 0) {
-            delayCounter--;
-            return;
-        }
-        delayCounter = script.delay();
-
-        frameIndex++;
-        if (frameIndex >= script.frames().size()) {
-            switch (script.endAction()) {
-                case LOOP -> frameIndex = 0;
-                case LOOP_BACK -> frameIndex = Math.max(0, script.frames().size() - script.endParam());
-                case SWITCH -> { initAnimation(script.endParam()); return; }
-                case HOLD -> frameIndex = script.frames().size() - 1;
-            }
-        }
-        currentMappingFrame = script.frames().get(frameIndex);
     }
 
     private void appendWireDiamond(List<GLCommand> commands,

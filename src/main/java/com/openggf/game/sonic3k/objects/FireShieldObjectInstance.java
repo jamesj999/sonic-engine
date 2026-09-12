@@ -9,8 +9,6 @@ import com.openggf.game.sonic3k.Sonic3kObjectArtKeys;
 import com.openggf.game.sonic3k.Sonic3kObjectArtProvider;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
-import com.openggf.sprites.animation.SpriteAnimationScript;
-import com.openggf.sprites.animation.SpriteAnimationSet;
 import com.openggf.sprites.art.SpriteArtSet;
 import com.openggf.physics.Direction;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
@@ -25,22 +23,10 @@ import java.util.List;
 public class FireShieldObjectInstance extends ShieldObjectInstance {
     private static final int REAR_FRAME_THRESHOLD = 0x0F;
 
-    private PlayerSpriteRenderer dplcRenderer;
-    private SpriteAnimationSet animSet;
-    private PlayerSpriteRenderer boundRenderer;
-    private boolean artRefreshPending;
-    private int currentAnimId;
-    private int frameIndex;
-    private int delayCounter;
-    private int currentMappingFrame;
+    private final ShieldAnimationArtLifecycle animationLifecycle = new ShieldAnimationArtLifecycle(0);
 
     public FireShieldObjectInstance(AbstractPlayableSprite player) {
         super(player);
-        currentAnimId = 0;
-        frameIndex = 0;
-        delayCounter = 0;
-        currentMappingFrame = 0;
-        initAnimation(0);
     }
 
     @Override
@@ -50,11 +36,7 @@ public class FireShieldObjectInstance extends ShieldObjectInstance {
 
     @Override
     public void refreshArtAfterRewindRestore() {
-        artRefreshPending = true;
-        boundRenderer = null;
-        if (dplcRenderer != null) {
-            dplcRenderer.invalidateDplcCache();
-        }
+        animationLifecycle.refreshArtAfterRewindRestore();
     }
 
     @Override
@@ -62,8 +44,8 @@ public class FireShieldObjectInstance extends ShieldObjectInstance {
         AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         super.update(vIntRunCount, player);
         if (isShieldDestroyed()) return;
-        ensureShieldArtLoaded();
-        stepAnimation();
+        animationLifecycle.ensureArtLoaded(this::loadShieldArt);
+        animationLifecycle.stepAnimation();
     }
 
     @Override
@@ -71,14 +53,15 @@ public class FireShieldObjectInstance extends ShieldObjectInstance {
         if (isShieldDestroyed() || !isShieldVisible()) {
             return;
         }
-        ensureShieldArtLoaded();
+        animationLifecycle.ensureArtLoaded(this::loadShieldArt);
+        PlayerSpriteRenderer dplcRenderer = animationLifecycle.renderer();
         if (dplcRenderer != null) {
             AbstractPlayableSprite player = ((AbstractPlayableSprite) getPlayer());
             if (player == null) return;
             int cx = player.getCentreX();
             int cy = player.getCentreY();
             boolean hFlip = player.getDirection() == Direction.LEFT;
-            dplcRenderer.drawFrame(currentMappingFrame, cx, cy, hFlip, false);
+            dplcRenderer.drawFrame(animationLifecycle.mappingFrame(), cx, cy, hFlip, false);
             return;
         }
         if (hasRenderer()) {
@@ -97,8 +80,8 @@ public class FireShieldObjectInstance extends ShieldObjectInstance {
 
     /** Sets the current animation and resets playback state. */
     public void setAnimation(int animId) {
-        if (animId != currentAnimId) {
-            initAnimation(animId);
+        if (animId != animationLifecycle.animationId()) {
+            animationLifecycle.setAnimation(animId);
         }
     }
 
@@ -111,75 +94,18 @@ public class FireShieldObjectInstance extends ShieldObjectInstance {
     public int getPriorityBucket() {
         // ROM Obj_FireShield_Main switches from priority $80 to $200 once the mapping
         // frame reaches $0F, putting the rear half of the dash animation behind Sonic.
-        return RenderPriority.clamp(currentMappingFrame >= REAR_FRAME_THRESHOLD ? 4 : 1);
+        return RenderPriority.clamp(animationLifecycle.mappingFrame() >= REAR_FRAME_THRESHOLD ? 4 : 1);
     }
 
-    private void initAnimation(int animId) {
-        currentAnimId = animId;
-        frameIndex = 0;
-        if (animSet != null) {
-            SpriteAnimationScript script = animSet.getScript(animId);
-            if (script != null) {
-                delayCounter = script.delay();
-                if (!script.frames().isEmpty()) {
-                    currentMappingFrame = script.frames().get(0);
-                }
-            }
-        }
-    }
-
-    private void stepAnimation() {
-        if (animSet == null) return;
-        SpriteAnimationScript script = animSet.getScript(currentAnimId);
-        if (script == null || script.frames().isEmpty()) return;
-
-        if (delayCounter > 0) {
-            delayCounter--;
-            return;
-        }
-        delayCounter = script.delay();
-
-        frameIndex++;
-        if (frameIndex >= script.frames().size()) {
-            switch (script.endAction()) {
-                case LOOP -> frameIndex = 0;
-                case LOOP_BACK -> frameIndex = Math.max(0, script.frames().size() - script.endParam());
-                case SWITCH -> { initAnimation(script.endParam()); return; }
-                case HOLD -> frameIndex = script.frames().size() - 1;
-            }
-        }
-        currentMappingFrame = script.frames().get(frameIndex);
-    }
-
-    private void ensureShieldArtLoaded() {
-        if (artRefreshPending) {
-            boundRenderer = null;
-            if (dplcRenderer != null) {
-                dplcRenderer.invalidateDplcCache();
-            }
-            artRefreshPending = false;
-        }
-        if (dplcRenderer != null && animSet != null) {
-            return;
-        }
+    private ShieldAnimationArtLifecycle.Art loadShieldArt() {
         Sonic3kObjectArtProvider artProvider = getS3kArtProvider();
         if (artProvider == null) {
-            return;
+            return null;
         }
-        if (dplcRenderer == null) {
-            dplcRenderer = artProvider.getShieldDplcRenderer(Sonic3kObjectArtKeys.FIRE_SHIELD);
-            if (dplcRenderer != null && dplcRenderer != boundRenderer) {
-                dplcRenderer.invalidateDplcCache();
-                boundRenderer = dplcRenderer;
-            }
-        }
-        if (animSet == null) {
-            SpriteArtSet artSet = artProvider.getShieldArtSet(Sonic3kObjectArtKeys.FIRE_SHIELD);
-            if (artSet != null && artSet.animationSet() != null) {
-                animSet = artSet.animationSet();
-                initAnimation(currentAnimId);
-            }
-        }
+        SpriteArtSet artSet = artProvider.getShieldArtSet(Sonic3kObjectArtKeys.FIRE_SHIELD);
+        return new ShieldAnimationArtLifecycle.Art(
+                artProvider.getShieldDplcRenderer(Sonic3kObjectArtKeys.FIRE_SHIELD),
+                artSet != null ? artSet.animationSet() : null);
     }
 
     private void appendWireDiamond(List<GLCommand> commands,
