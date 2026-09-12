@@ -15,6 +15,7 @@ import com.openggf.level.Level;
 import com.openggf.level.Palette;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectLifetimeOps;
+import com.openggf.level.objects.ObjectRangeOps;
 import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.SpawnRewindRecreatable;
@@ -399,9 +400,7 @@ public class CutsceneKnucklesCnz2AInstance extends AbstractObjectInstance
     }
 
     private boolean isOutsideNativeDeleteRange(Camera camera) {
-        int objectRounded = currentX & 0xFF80;
-        int cameraCoarseBack = (((camera.getX() & 0xFFFF) - 0x80) & 0xFF80);
-        return ((objectRounded - cameraCoarseBack) & 0xFFFF) > 0x280;
+        return ObjectRangeOps.outOfRangeX(currentX, camera.getX());
     }
 
     private void startJump(int newXVel, int newYVel) {

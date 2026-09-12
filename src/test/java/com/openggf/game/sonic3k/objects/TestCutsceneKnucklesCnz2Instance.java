@@ -481,6 +481,31 @@ class TestCutsceneKnucklesCnz2Instance {
                 "loc_6261A writes left into Ctrl_1_logical so Sonic/Tails walks into the vacuum tube");
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({
+            "4608,4096,false", "4736,4096,true", "3967,4096,true",
+            "4735,4223,false", "4736,4224,false",
+            "512,0,false", "640,0,true", "384,-128,false", "512,-128,true"
+    })
+    void bothCutscenesPreserveCoarseRangeEdgesAndWordWrap(int objectX, int cameraX, boolean deleted) {
+        Camera camera = new Camera();
+        camera.setX((short) cameraX);
+        camera.setY((short) 0); // Outside both activation rectangles.
+        AbstractObjectInstance[] objects = {
+                new CutsceneKnucklesCnz2AInstance(new ObjectSpawn(objectX, 0x280,
+                        Sonic3kObjectIds.CUTSCENE_KNUCKLES, 12, 0, false, 0)),
+                new CutsceneKnucklesCnz2BInstance(new ObjectSpawn(objectX, 0x720,
+                        Sonic3kObjectIds.CUTSCENE_KNUCKLES, 16, 0, false, 0))
+        };
+        for (AbstractObjectInstance object : objects) {
+            object.setServices(new TestObjectServices().withCamera(camera));
+            object.update(0, null);
+            assertEquals(deleted, object.isDestroyed(), object.getClass().getSimpleName());
+            assertEquals(deleted, object.isDestroyedRespawnable(),
+                    "out-of-range deletion must release the respawn placement");
+        }
+    }
+
     @Test
     void cnzCutscenesSkipDispatchOutsideNativeWindowButOnlyDeleteAtNativeXRange() {
         Camera camera = new Camera();

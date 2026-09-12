@@ -332,3 +332,31 @@ Validation on the candidate working tree:
 - Inspected skips cover legacy ROM paths, absent audio/reference data, optional
   capture/benchmark/soak measurements, EGL, and the spin-tube assumption.
   Category diagnostics were acknowledged after inspection. No trace frontier changed.
+
+### Candidate 8 — CNZ coarse deletion range
+
+Both CNZ rival objects use `ObjectRangeOps.outOfRangeX` for their native deletion
+predicate. Activation rectangles and respawn-aware lifetime actions stay local.
+The existing unsigned word/masked-camera contract is unchanged; boundary tests
+cover equality at $280, left-of-window values and wraparound for both objects.
+Validation base: `c4ba7189df` (candidate 4).
+
+Validation on the candidate working tree:
+- Focused CNZ/range and mandatory S3K checks: 94 tests passed, no skips, with the
+  absolute locked-on ROM property. Java 21/Lua 5.4.8/PowerShell preflight passed.
+- Native macOS `run_categories.py --base c4ba7189df --run --repeat-reason
+  "New pass-2 candidate 8: CNZ coarse range delegation and boundary tests;
+  previous completed selection covered candidate 4."`: run
+  `20260912T170929Z-6f0d359c`, 2,168 selected classes; ordinary 16,606 tests,
+  17 failures, 5 errors, 71 skips (481 seconds); guards 656 passed, no skips
+  (577 seconds). This partial category selection is not green.
+- Matched baseline `1cd1175e` check: `mvn -Dmse=off
+  -Dtest=TestFbzAct2RouteHeadless,TestFbzCompatibilityMatrix test`, with the same
+  absolute S1/S2/S3K ROM properties and native access, ran 28 tests with 14
+  failures and no errors/skips. All 14 full XML failure messages match this
+  candidate exactly; FBZ route failures predate this pass. The display, placement
+  and lives-HUD failures were already matched in candidate 3. Remaining errors
+  are donor lookup and GL 2.1 capture helpers, not newly baseline-attributed.
+- Skips were inspected: legacy ROM paths, optional captures/measurements/soaks,
+  unavailable EGL/reference data and the spin-tube assumption. Consumed diagnostics
+  were acknowledged and removed. No trace frontier changed.

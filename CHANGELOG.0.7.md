@@ -76,6 +76,8 @@ campaigns; feature/API publication remains subject to the 0.8 roadmap.
 
 ## Build and release
 
+  CNZ rival cutscene deletion reuses the shared coarse range predicate while keeping
+  activation and respawn cleanup local.
 - **Local test categories:** select related subsystem checks from changed paths, with
   common tests and structural guards retained, broad fallback for shared changes,
   and bounded diagnostics and automatic temporary-file cleanup. Tool prerequisites

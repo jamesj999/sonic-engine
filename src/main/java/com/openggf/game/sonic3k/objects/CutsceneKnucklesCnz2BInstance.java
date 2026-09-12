@@ -11,6 +11,7 @@ import com.openggf.game.sonic3k.runtime.S3kRuntimeStates;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectLifetimeOps;
+import com.openggf.level.objects.ObjectRangeOps;
 import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.SpawnRewindRecreatable;
@@ -360,9 +361,7 @@ public class CutsceneKnucklesCnz2BInstance extends AbstractObjectInstance
     }
 
     private boolean isOutsideNativeDeleteRange(Camera camera) {
-        int objectRounded = currentX & 0xFF80;
-        int cameraCoarseBack = (((camera.getX() & 0xFFFF) - 0x80) & 0xFF80);
-        return ((objectRounded - cameraCoarseBack) & 0xFFFF) > 0x280;
+        return ObjectRangeOps.outOfRangeX(currentX, camera.getX());
     }
 
     private void restoreCnzPaletteLine1() {
