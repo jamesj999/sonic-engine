@@ -573,6 +573,8 @@ public class TestFbzAct2TraversalPreboss {
         private boolean horizontalCageWasHeld;
         private boolean horizontalCageEgressJumpActive;
         private boolean earlySpikeGapRecovery;
+        private int earlySpikeRollDirection;
+        private int earlySpikeRollClearX;
 
         private FixedInputRunner(
                 HeadlessTestFixture fixture, ObjectManager objects, FrameObserver observer) {
@@ -632,7 +634,41 @@ public class TestFbzAct2TraversalPreboss {
                                 && !player.getInvulnerable()
                                 && GameServices.level().getLevelGamestate().getRings() == 0
                                 && playerY + player.getStandYRadius() + 2 >= spikeTop - 1;
-                        if (chainThreat) {
+                        if (player.getSpindash() && !player.getAir()
+                                && (riding == earlyLeftSpike || riding == earlyRightSpike)
+                                && GameServices.level().getLevelGamestate().getRings() == 0) {
+                            int direction = player.getDirection() == com.openggf.physics.Direction.LEFT ? -1 : 1;
+                            Sonic3kSpikeObjectInstance spike = (Sonic3kSpikeObjectInstance) riding;
+                            int clearX = spike.getX() + direction * (spike.getSolidParams().halfWidth() + 1);
+                            short[] speeds = player.getGameRules().playerCapability().spindashSpeedTable();
+                            int releaseSpeed = speeds[Math.min(player.getSpindashCounter() >> 8, speeds.length - 1)];
+                            int distance = Math.abs(clearX - playerX) << 8;
+                            int releaseLead = 2 + (distance + releaseSpeed - 1) / releaseSpeed;
+                            if (player.getInvulnerableFrames() <= releaseLead) {
+                                earlySpikeRollDirection = direction;
+                                earlySpikeRollClearX = clearX;
+                            }
+                        }
+                        if (earlySpikeRollDirection != 0) {
+                            // Tails_Spindash releases the charged ground speed on
+                            // the neutral frame; rolling displacement starts next
+                            // frame. A jump here would freeze air steering through
+                            // the ROM rolling-jump flag, so let that roll clear the
+                            // current spike's live inclusive horizontal edge first.
+                            mask = 0;
+                            if ((playerX - earlySpikeRollClearX) * earlySpikeRollDirection >= 0) {
+                                earlySpikeRollDirection = 0;
+                            } else if (!player.getAir() && !player.getRolling() && !player.getSpindash()) {
+                                // Solid contact can stop the released roll before
+                                // the edge. Wait for native unrolling before the
+                                // jump so ordinary air steering remains available.
+                                earlySpikeRollDirection = 0;
+                                earlySpikeGapRecovery = true;
+                                mask = AbstractPlayableSprite.INPUT_JUMP
+                                        | (playerX < gapX ? AbstractPlayableSprite.INPUT_RIGHT
+                                        : AbstractPlayableSprite.INPUT_LEFT);
+                            }
+                        } else if (chainThreat) {
                             // Obj_FBZChainLink loc_3A860 moves a held chain by
                             // its initialized two pixels; loc_3A910 releases on
                             // a normal jump edge with directional +/-$200 X speed.
