@@ -37,6 +37,11 @@ Companion references:
 ## Entry point and packages
 
 `com.openggf.Engine` — GLFW window with a manual timing loop (`display()` → `update()` → `draw()`).
+`GameLoopDebugShortcuts` owns debug modifier resolution, checkpoint teleport,
+preview-position logging and special-stage completion requests. It receives the
+current mode/provider and a results callback; `GameLoop` retains provider-aware
+reward publication and the fade/results transition.
+
 Running the engine needs LWJGL (OpenGL/OpenAL/GLFW bindings) and JOML, both already in `pom.xml`.
 
 Package names under `src/main/java/com/openggf` are mostly self-describing. The
