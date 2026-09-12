@@ -4,6 +4,10 @@ import com.openggf.sprites.playable.AbstractPlayableSprite;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 import java.util.Objects;
 
 import static org.lwjgl.glfw.GLFW.GLFW_GAMEPAD_BUTTON_A;
@@ -30,6 +34,10 @@ public class GamepadInputManager {
     private boolean backButtonPressed;
     private boolean previousFrameStepButtonHeld;
     private boolean frameStepTogglePressed;
+    // Presentation history is per physical device, independent of gameplay mappings
+    // and replay overrides. Connecting a pad establishes a baseline, not an action.
+    private final Map<Integer, Long> presentationHeld = new HashMap<>();
+    private boolean presentationPress;
 
     public GamepadInputManager(GamepadStateSource stateSource) {
         this.stateSource = Objects.requireNonNull(stateSource, "stateSource");
@@ -42,6 +50,7 @@ public class GamepadInputManager {
         }
 
         List<GamepadStateSource.DeviceState> connected = connectedDevices();
+        trackPresentation(connected, bindings.controllerDeadzone());
         int nextPad = 0;
 
         PlayerInputState p1 = PlayerInputState.neutral();
@@ -107,6 +116,42 @@ public class GamepadInputManager {
      */
     public boolean isFrameStepTogglePressed() {
         return frameStepTogglePressed;
+    }
+
+    boolean hasPresentationPress() {
+        return presentationPress;
+    }
+
+    private void trackPresentation(List<GamepadStateSource.DeviceState> connected, double deadzone) {
+        presentationPress = false;
+        Set<Integer> connectedIds = new HashSet<>();
+        for (GamepadStateSource.DeviceState device : connected) {
+            int id = device.joystickId();
+            connectedIds.add(id);
+            Long previous = presentationHeld.get(id);
+            long held = 0;
+            boolean[] buttons = device.buttons();
+            for (int i = 0; i < Math.min(buttons.length, 32); i++) {
+                if (buttons[i]) {
+                    held |= 1L << i;
+                }
+            }
+            // Hysteresis requires returning toward centre before the same stick
+            // direction can count again, avoiding prompt flicker at the deadzone.
+            float[] axes = { -device.leftY(), device.leftY(), -device.leftX(), device.leftX() };
+            for (int i = 0; i < axes.length; i++) {
+                long bit = 1L << (32 + i);
+                double threshold = previous != null && (previous & bit) != 0 ? deadzone * 0.5 : deadzone;
+                if (axes[i] > threshold) {
+                    held |= bit;
+                }
+            }
+            if (previous != null && (held & ~previous) != 0) {
+                presentationPress = true;
+            }
+            presentationHeld.put(id, held);
+        }
+        presentationHeld.keySet().retainAll(connectedIds);
     }
 
     private List<GamepadStateSource.DeviceState> connectedDevices() {
@@ -176,6 +221,8 @@ public class GamepadInputManager {
     }
 
     private void resetPreviousStates() {
+        presentationHeld.clear();
+        presentationPress = false;
         previousP1 = PlayerInputState.neutral();
         previousP2 = PlayerInputState.neutral();
         previousDebugModeButtonHeld = false;

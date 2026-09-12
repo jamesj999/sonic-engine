@@ -1,6 +1,7 @@
 package com.openggf.game.recording.menu;
 
 import com.openggf.control.InputHandler;
+import com.openggf.control.MenuInput;
 import com.openggf.game.recording.RecordingLaunchContext;
 import com.openggf.game.recording.RecordingVersionWarning;
 import com.openggf.game.recording.UserRecordingEntry;
@@ -53,20 +54,24 @@ public final class UserRecordingMenuState {
 
     public void update(InputHandler input) {
         Objects.requireNonNull(input, "input");
+        if ((!input.isAnyModifierDown() && MenuInput.back(input))) {
+            pressEscape();
+            return;
+        }
         if (promptingForTargetFrame) {
             updatePrompt(input);
             return;
         }
-        if (input.isKeyPressedWithoutModifiers(GLFW_KEY_DOWN)) {
+        if ((!input.isAnyModifierDown() && MenuInput.down(input))) {
             pressDown();
         }
-        if (input.isKeyPressedWithoutModifiers(GLFW_KEY_UP)) {
+        if ((!input.isAnyModifierDown() && MenuInput.up(input))) {
             pressUp();
         }
-        if (input.isKeyPressedWithoutModifiers(GLFW_KEY_LEFT)) {
+        if ((!input.isAnyModifierDown() && MenuInput.left(input))) {
             pressLeft();
         }
-        if (input.isKeyPressedWithoutModifiers(GLFW_KEY_RIGHT)) {
+        if ((!input.isAnyModifierDown() && MenuInput.right(input))) {
             pressRight();
         }
         if (input.isKeyPressedWithoutModifiers(GLFW_KEY_P)) {
@@ -75,15 +80,21 @@ public final class UserRecordingMenuState {
         if (input.isKeyPressedWithoutModifiers(GLFW_KEY_F)) {
             pressF();
         }
-        if (input.isKeyPressedWithoutModifiers(GLFW_KEY_ENTER)) {
+        if ((!input.isAnyModifierDown() && MenuInput.accept(input))) {
             pressEnter();
         }
-        if (input.isKeyPressedWithoutModifiers(GLFW_KEY_ESCAPE)) {
+        if ((!input.isAnyModifierDown() && MenuInput.back(input))) {
             pressEscape();
         }
     }
 
     private void updatePrompt(InputHandler input) {
+        if ((!input.isAnyModifierDown() && MenuInput.left(input)) || (!input.isAnyModifierDown() && MenuInput.right(input))) {
+            int frame = promptBuffer.isBlank() ? options.targetFrame() : parsePromptBuffer();
+            promptBuffer = Integer.toString(clampTargetFrame(frame + ((!input.isAnyModifierDown() && MenuInput.right(input)) ? 1 : -1)));
+        }
+        if ((!input.isAnyModifierDown() && MenuInput.up(input)) || input.isKeyPressedWithoutModifiers(GLFW_KEY_P)) pressP();
+        if ((!input.isAnyModifierDown() && MenuInput.down(input)) || input.isKeyPressedWithoutModifiers(GLFW_KEY_F)) pressF();
         for (int key = GLFW_KEY_0; key <= GLFW_KEY_9; key++) {
             if (input.isKeyPressedWithoutModifiers(key)) {
                 typeDigit((char) ('0' + key - GLFW_KEY_0));
@@ -92,10 +103,10 @@ public final class UserRecordingMenuState {
         if (input.isKeyPressedWithoutModifiers(GLFW_KEY_BACKSPACE)) {
             pressBackspace();
         }
-        if (input.isKeyPressedWithoutModifiers(GLFW_KEY_ENTER)) {
+        if ((!input.isAnyModifierDown() && MenuInput.accept(input))) {
             pressEnter();
         }
-        if (input.isKeyPressedWithoutModifiers(GLFW_KEY_ESCAPE)) {
+        if ((!input.isAnyModifierDown() && MenuInput.back(input))) {
             pressEscape();
         }
     }
@@ -217,7 +228,7 @@ public final class UserRecordingMenuState {
         return new UserRecordingPlaybackOptions(frameCount - 1, false, false);
     }
 
-    private void setTargetFrame(int targetFrame) {
+    void setTargetFrame(int targetFrame) {
         options = new UserRecordingPlaybackOptions(
                 clampTargetFrame(targetFrame),
                 options.pauseOnDesync(),

@@ -76,8 +76,11 @@ Linux terminal example:
 
 When the engine starts, you will see:
 
-1. **Master title screen** -- An engine-wide title screen with animated clouds and a game
-   selection menu. Use the arrow keys to highlight a game and press Space to select it.
+1. **Master title screen** -- Choose a game with left/right, then press Enter (controller
+   A) to open its action menu. Up/down selects Start Game, Launch Options, Time Attack,
+   Recordings, Mods, Settings, or Tools. Enter/A opens the selected action; Esc/B returns
+   one level. Prompts follow the last keyboard/controller input. The original animated
+   game logos remain, scaled proportionally into the game pane.
    When audio is enabled, navigation, confirmation, and missing-ROM errors use short
    host-owned cues that do not depend on the selected game's ROM.
 2. **Game title screen** -- The selected game's original title screen (e.g., the Sonic 2
@@ -87,6 +90,12 @@ When the engine starts, you will see:
 If a ROM file is missing for the game you selected, the engine will show an error.
 
 ## Quick Configuration
+
+Choose **Settings** on the master title for a controller-accessible editor with
+visible categories, onscreen text/key editing, and draft Apply/Cancel. Non-default
+settings are amber. Restart the engine after saving to apply all subsystem changes.
+See [configuration](../../../CONFIGURATION.md#engine-settings-from-the-title) for
+navigation and current prototype limits.
 
 The engine reads settings from `config.yaml` in the working directory. If the file
 does not exist, defaults are used. A few settings you might want to change immediately:

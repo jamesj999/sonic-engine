@@ -118,8 +118,7 @@ class TestMasterTitleSecondaryActions {
         screen.setModManagerOpenHandler(opened::incrementAndGet);
         InputHandler input = new InputHandler();
 
-        input.setLogicalOverride(logical(AbstractPlayableSprite.INPUT_DOWN, InputActionMasks.ACTION_A));
-        screen.update(input);
+        focusMods(screen, input);
         assertTrue(screen.isModsFocusedForTest());
         assertFalse(screen.isGameSelected(), "down+accept must enter the row before handling accept");
         assertEquals(0, opened.get());
@@ -135,18 +134,17 @@ class TestMasterTitleSecondaryActions {
     }
 
     @Test
-    void masterTitleLeavesMenuRightForStockGameNavigation() {
+    void masterTitleKeepsGameLockedWhileActionsAreFocused() {
         MasterTitleScreen screen = activeScreen(SonicConfigurationService.createStandalone(tempDir));
         InputHandler input = new InputHandler();
 
-        input.setLogicalOverride(logical(AbstractPlayableSprite.INPUT_DOWN, 0));
-        screen.update(input);
+        focusMods(screen, input);
         input.setLogicalOverride(LogicalInputSnapshot.neutral());
         screen.update(input);
         input.setLogicalOverride(logical(AbstractPlayableSprite.INPUT_RIGHT, 0));
         screen.update(input);
 
-        assertEquals("s3k", screen.getSelectedGameId());
+        assertEquals("s2", screen.getSelectedGameId());
         assertTrue(screen.isModsFocusedForTest());
     }
 
@@ -181,16 +179,9 @@ class TestMasterTitleSecondaryActions {
         keyboardScreen.setModManagerOpenHandler(keyboardOpened::incrementAndGet);
         InputHandler keyboard = new InputHandler(InputBindingFactory.supplier(keyboardConfig));
 
-        keyboard.handleKeyEvent(keyboardConfig.getInt(SonicConfiguration.DOWN), GLFW_PRESS);
-        keyboard.refreshLogicalSnapshot();
-        keyboardScreen.update(keyboard);
-        keyboard.handleKeyEvent(keyboardConfig.getInt(SonicConfiguration.DOWN), GLFW_RELEASE);
-        keyboard.update();
-        keyboard.refreshLogicalSnapshot();
-        keyboardScreen.update(keyboard);
-        keyboard.handleKeyEvent(keyboardConfig.getInt(SonicConfiguration.JUMP), GLFW_PRESS);
-        keyboard.refreshLogicalSnapshot();
-        keyboardScreen.update(keyboard);
+        TestMasterTitleHub.press(keyboardScreen, org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER);
+        for (int i = 0; i < 4; i++) TestMasterTitleHub.press(keyboardScreen, org.lwjgl.glfw.GLFW.GLFW_KEY_DOWN);
+        TestMasterTitleHub.press(keyboardScreen, org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER);
 
         SonicConfigurationService gamepadConfig = SonicConfigurationService.createStandalone(tempDir.resolve("gamepad"));
         gamepadConfig.setConfigValue(SonicConfiguration.CONTROLLER_ENABLED, true);
@@ -202,15 +193,15 @@ class TestMasterTitleSecondaryActions {
         FakeGamepadStateSource source = new FakeGamepadStateSource();
         InputHandler gamepad = new InputHandler(InputBindingFactory.supplier(gamepadConfig), source);
 
-        source.setButtons(GLFW_GAMEPAD_BUTTON_DPAD_DOWN);
-        gamepad.refreshLogicalSnapshot();
-        gamepadScreen.update(gamepad);
-        source.setButtons();
-        gamepad.refreshLogicalSnapshot();
-        gamepadScreen.update(gamepad);
         source.setButtons(GLFW_GAMEPAD_BUTTON_A);
         gamepad.refreshLogicalSnapshot();
         gamepadScreen.update(gamepad);
+        for (int i = 0; i < 4; i++) {
+            source.setButtons(); gamepad.refreshLogicalSnapshot(); gamepadScreen.update(gamepad);
+            source.setButtons(GLFW_GAMEPAD_BUTTON_DPAD_DOWN); gamepad.refreshLogicalSnapshot(); gamepadScreen.update(gamepad);
+        }
+        source.setButtons(); gamepad.refreshLogicalSnapshot(); gamepadScreen.update(gamepad);
+        source.setButtons(GLFW_GAMEPAD_BUTTON_A); gamepad.refreshLogicalSnapshot(); gamepadScreen.update(gamepad);
 
         assertEquals(1, keyboardOpened.get());
         assertEquals(1, gamepadOpened.get());
@@ -240,8 +231,7 @@ class TestMasterTitleSecondaryActions {
         });
         InputHandler input = new InputHandler();
 
-        input.setLogicalOverride(logical(AbstractPlayableSprite.INPUT_DOWN, 0));
-        title.update(input);
+        focusMods(title, input);
         input.setLogicalOverride(LogicalInputSnapshot.neutral());
         title.update(input);
         LogicalInputSnapshot accept = logical(0, InputActionMasks.ACTION_A);
@@ -269,6 +259,11 @@ class TestMasterTitleSecondaryActions {
         title.update(input);
         input.setLogicalOverride(logical(0, InputActionMasks.ACTION_C));
         title.update(input);
+        assertTrue(title.isModManagerOpenForTest(), "Back returns from visible actions to the mod list");
+        input.setLogicalOverride(LogicalInputSnapshot.neutral());
+        title.update(input);
+        input.setLogicalOverride(logical(0, InputActionMasks.ACTION_C));
+        title.update(input);
         assertFalse(title.isModManagerOpenForTest());
         assertFalse(title.isGameSelected());
     }
@@ -283,8 +278,7 @@ class TestMasterTitleSecondaryActions {
         title.setModManagerScreenFactory(font -> new ModManagerScreenHost(manager));
         InputHandler input = new InputHandler();
 
-        input.setLogicalOverride(logical(AbstractPlayableSprite.INPUT_DOWN, 0));
-        title.update(input);
+        focusMods(title, input);
         input.setLogicalOverride(LogicalInputSnapshot.neutral());
         title.update(input);
         input.setLogicalOverride(logical(0, InputActionMasks.ACTION_A));
@@ -297,6 +291,16 @@ class TestMasterTitleSecondaryActions {
         assertTrue(title.isModManagerOpenForTest());
         title.draw();
         assertTrue(managerFont.drawn.stream().anyMatch(line -> line.startsWith("Save failed:")));
+    }
+
+    private static void focusMods(MasterTitleScreen screen, InputHandler input) {
+        input.setLogicalOverride(logical(0, InputActionMasks.ACTION_A));
+        screen.update(input);
+        for (int i = 0; i < 4; i++) {
+            input.setLogicalOverride(LogicalInputSnapshot.neutral()); screen.update(input);
+            input.setLogicalOverride(logical(AbstractPlayableSprite.INPUT_DOWN, 0)); screen.update(input);
+        }
+        input.setLogicalOverride(LogicalInputSnapshot.neutral()); screen.update(input);
     }
 
     private static MasterTitleSecondaryActions focusedActions() {

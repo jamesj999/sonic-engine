@@ -6,6 +6,7 @@ import com.openggf.game.MasterTitleScreen;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -14,9 +15,8 @@ import static com.openggf.game.MasterTitleScreen.GameEntry.SONIC_2;
 import static com.openggf.game.MasterTitleScreen.GameEntry.SONIC_3K;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TestLaunchProfileStore {
 
@@ -89,8 +89,8 @@ class TestLaunchProfileStore {
     }
 
     @Test
-    void saveWritesOnlyLaunchKeysAndCallsSaveOnce() {
-        SonicConfigurationService config = spy(SonicConfigurationService.createStandalone(tempDir));
+    void saveChangesOnlyLaunchPreferencesAndPreservesUnrelatedValues() {
+        SonicConfigurationService config = SonicConfigurationService.createStandalone(tempDir);
         config.setConfigValue(SonicConfiguration.LIVE_REWIND_ENABLED, false);
         config.setConfigValue(SonicConfiguration.CROSS_GAME_FEATURES_ENABLED, true);
         config.setConfigValue(SonicConfiguration.CROSS_GAME_SOURCE, "s3k");
@@ -102,7 +102,6 @@ class TestLaunchProfileStore {
         new LaunchProfileStore(config).save(SONIC_1,
                 new LaunchProfile(true, "s2", true, "WIDE_16_9", "tails", "none"));
 
-        verify(config, times(1)).saveConfig();
         assertFalse(config.getBoolean(SonicConfiguration.LIVE_REWIND_ENABLED));
         assertEquals(true, config.getBoolean(SonicConfiguration.CROSS_GAME_FEATURES_ENABLED));
         assertEquals("s3k", config.getString(SonicConfiguration.CROSS_GAME_SOURCE));
@@ -110,6 +109,44 @@ class TestLaunchProfileStore {
         assertEquals("SUPER_32_9", config.getString(SonicConfiguration.DISPLAY_ASPECT));
         assertEquals("sonic", config.getString(SonicConfiguration.MAIN_CHARACTER_CODE));
         assertEquals("tails", config.getString(SonicConfiguration.SIDEKICK_CHARACTER_CODE));
+    }
+
+    @Test
+    void failedSaveReportsErrorWithoutChangingAnyLiveProfileFieldsAndCanRetry() throws Exception {
+        SonicConfigurationService config = SonicConfigurationService.createStandalone(tempDir);
+        LaunchProfileStore store = new LaunchProfileStore(config);
+        LaunchProfile original = store.load(SONIC_1);
+        LaunchProfile edited = new LaunchProfile(true, "s2", true, "WIDE_16_9", "tails", "none");
+        Path target = tempDir.resolve("config.yaml");
+        Files.deleteIfExists(target);
+        Files.createDirectory(target);
+        Files.writeString(target.resolve("keep"), "existing content");
+
+        UncheckedIOException failure = assertThrows(UncheckedIOException.class,
+                () -> store.save(SONIC_1, edited));
+        assertTrue(failure.getMessage().contains("launch profile"));
+        assertEquals(original, store.load(SONIC_1));
+        assertEquals("existing content", Files.readString(target.resolve("keep")));
+
+        Files.delete(target.resolve("keep"));
+        Files.delete(target);
+        store.save(SONIC_1, edited);
+        assertEquals(edited, store.load(SONIC_1));
+        assertEquals(edited, new LaunchProfileStore(SonicConfigurationService.createStandalone(tempDir)).load(SONIC_1));
+    }
+
+    @Test
+    void atomicSaveDoesNotPersistSessionOverrides() {
+        SonicConfigurationService config = SonicConfigurationService.createStandalone(tempDir);
+        config.setConfigValue(SonicConfiguration.DISPLAY_ASPECT, "NATIVE_4_3");
+        config.setSessionOverride(SonicConfiguration.DISPLAY_ASPECT, "SUPER_32_9");
+        LaunchProfile edited = new LaunchProfile(true, "s2", false, "WIDE_16_9", "tails", "none");
+        new LaunchProfileStore(config).save(SONIC_1, edited);
+
+        assertEquals("SUPER_32_9", config.getString(SonicConfiguration.DISPLAY_ASPECT));
+        SonicConfigurationService reloaded = SonicConfigurationService.createStandalone(tempDir);
+        assertEquals("NATIVE_4_3", reloaded.getString(SonicConfiguration.DISPLAY_ASPECT));
+        assertEquals(edited, new LaunchProfileStore(reloaded).load(SONIC_1));
     }
 
     private void assertRoundTrip(MasterTitleScreen.GameEntry entry, LaunchProfile profile) {

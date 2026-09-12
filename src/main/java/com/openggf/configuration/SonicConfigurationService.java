@@ -489,6 +489,24 @@ public class SonicConfigurationService {
 		invalidateResolvedCaches();
 	}
 
+	/** Persisted preferences, deliberately excluding session/derived overlays. */
+	Map<SonicConfiguration, Object> settingsSnapshot() {
+		Map<SonicConfiguration, Object> values = new EnumMap<>(SonicConfiguration.class);
+		for (SonicConfiguration key : ConfigCatalog.emitOrder()) {
+			values.put(key, config.getOrDefault(key.name(), defaults.get(key.name())));
+		}
+		return values;
+	}
+
+	/** Publish a validated settings patch before making it visible to readers. */
+	void applySettings(Map<SonicConfiguration, Object> changes) throws IOException {
+		Map<String, Object> candidate = new HashMap<>(config);
+		changes.forEach((key, value) -> candidate.put(key.name(), value));
+		writeStringAtomically(resolveConfigFile().toPath(), new ConfigYamlWriter().write(candidate));
+		config = candidate;
+		invalidateResolvedCaches();
+	}
+
 	public void setSessionOverride(SonicConfiguration key, Object value) {
 		sessionOverrides.put(key.name(), value);
 		invalidateResolvedCaches();

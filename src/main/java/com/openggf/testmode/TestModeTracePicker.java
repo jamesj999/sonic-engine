@@ -1,7 +1,10 @@
 package com.openggf.testmode;
 
 import com.openggf.control.InputHandler;
+import com.openggf.control.MenuInput;
 import com.openggf.graphics.PixelFont;
+import com.openggf.game.MenuStyle;
+import java.util.ArrayList;
 import com.openggf.trace.catalog.TraceEntry;
 
 import java.util.List;
@@ -17,7 +20,7 @@ import static org.lwjgl.glfw.GLFW.GLFW_KEY_PAGE_UP;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_UP;
 
 /**
- * Trace picker screen shown when TEST_MODE_ENABLED is true. Owned by
+ * Trace picker opened through Tools or the legacy TEST_MODE_ENABLED flag. Owned by
  * MasterTitleScreen; it substitutes this screen's update/render for the
  * normal game-selection ACTIVE behaviour.
  */
@@ -27,8 +30,10 @@ public final class TestModeTracePicker {
 
     private final List<TraceEntry> entries;
     private final PixelFont font;
+    private InputHandler menuInput;
     private int cursor;
     private int firstVisible;
+    private int failurePage;
     private Result pendingResult = Result.NONE;
     private TraceEntry loadingEntry;
     private boolean loadingPresented;
@@ -40,8 +45,14 @@ public final class TestModeTracePicker {
     }
 
     public void update(InputHandler input) {
+        menuInput = input;
         if (hasHeldFailure()) {
             updateHeldFailure(input);
+            return;
+        }
+        if ((!input.isAnyModifierDown() && MenuInput.back(input))) {
+            loadingEntry = null;
+            pendingResult = Result.BACK;
             return;
         }
         if (loadingEntry != null) {
@@ -52,15 +63,15 @@ public final class TestModeTracePicker {
             return;
         }
         if (entries.isEmpty()) {
-            if (input.isKeyPressedWithoutModifiers(GLFW_KEY_ESCAPE)) {
+            if ((!input.isAnyModifierDown() && MenuInput.back(input))) {
                 pendingResult = Result.BACK;
             }
             return;
         }
-        if (input.isKeyPressedWithoutModifiers(GLFW_KEY_DOWN)) {
+        if ((!input.isAnyModifierDown() && MenuInput.down(input))) {
             cursor = Math.min(entries.size() - 1, cursor + 1);
         }
-        if (input.isKeyPressedWithoutModifiers(GLFW_KEY_UP)) {
+        if ((!input.isAnyModifierDown() && MenuInput.up(input))) {
             cursor = Math.max(0, cursor - 1);
         }
         if (input.isKeyPressedWithoutModifiers(GLFW_KEY_HOME)) {
@@ -69,28 +80,30 @@ public final class TestModeTracePicker {
         if (input.isKeyPressedWithoutModifiers(GLFW_KEY_END)) {
             cursor = entries.size() - 1;
         }
-        if (input.isKeyPressedWithoutModifiers(GLFW_KEY_PAGE_DOWN)) {
+        if (input.isKeyPressedWithoutModifiers(GLFW_KEY_PAGE_DOWN) || MenuInput.right(input)) {
             cursor = nextGroupStart(cursor);
         }
-        if (input.isKeyPressedWithoutModifiers(GLFW_KEY_PAGE_UP)) {
+        if (input.isKeyPressedWithoutModifiers(GLFW_KEY_PAGE_UP) || MenuInput.left(input)) {
             cursor = prevGroupStart(cursor);
         }
         // Keep the scroll window in sync with the cursor after any movement
         // so the selected entry is always within the visible viewport.
         firstVisible = computeFirstVisible(firstVisible, cursor);
-        if (input.isKeyPressedWithoutModifiers(GLFW_KEY_ENTER)) {
+        if ((!input.isAnyModifierDown() && MenuInput.accept(input))) {
             loadingEntry = entries.get(cursor);
             loadingPresented = false;
             launchIssued = false;
         }
-        if (input.isKeyPressedWithoutModifiers(GLFW_KEY_ESCAPE)) {
+        if ((!input.isAnyModifierDown() && MenuInput.back(input))) {
             pendingResult = Result.BACK;
         }
     }
 
     private void updateHeldFailure(InputHandler input) {
-        if (input.isKeyPressedWithoutModifiers(GLFW_KEY_ENTER)
-                || input.isKeyPressedWithoutModifiers(GLFW_KEY_ESCAPE)) {
+        if (MenuInput.left(input)) failurePage = Math.max(0, failurePage - 1);
+        if (MenuInput.right(input)) failurePage++;
+        if ((!input.isAnyModifierDown() && MenuInput.accept(input))
+                || (!input.isAnyModifierDown() && MenuInput.back(input))) {
             clearHeldFailure();
             return;
         }
@@ -98,10 +111,10 @@ public final class TestModeTracePicker {
             return;
         }
         int previousCursor = cursor;
-        if (input.isKeyPressedWithoutModifiers(GLFW_KEY_DOWN)) {
+        if ((!input.isAnyModifierDown() && MenuInput.down(input))) {
             cursor = Math.min(entries.size() - 1, cursor + 1);
         }
-        if (input.isKeyPressedWithoutModifiers(GLFW_KEY_UP)) {
+        if ((!input.isAnyModifierDown() && MenuInput.up(input))) {
             cursor = Math.max(0, cursor - 1);
         }
         if (input.isKeyPressedWithoutModifiers(GLFW_KEY_HOME)) {
@@ -122,136 +135,102 @@ public final class TestModeTracePicker {
         }
     }
 
-    private static final float SCALE = 0.5f;
-    private static final int LINE_HEIGHT = 6;
-    private static final int GROUP_GAP = 3;
-    private static final int HEADING_HEIGHT = 8;
-    // The scrollable list occupies [LIST_TOP, LIST_AREA_BOTTOM]; below that sits
-    // the selected-entry info panel (renderInfoPanel, y >= 192) on the 224px
-    // virtual screen. Entries are windowed so the list never spills into it.
-    private static final int LIST_TOP = 18;
-    private static final int LIST_AREA_BOTTOM = 184;
-    private static final int FAILURE_MAX_CHARS = 68;
+    private String confirmHint() { return menuInput == null ? "Enter" : MenuInput.confirmLabel(menuInput); }
+    private String backHint() { return menuInput == null ? "Esc" : MenuInput.backLabel(menuInput); }
+
+    private static final float SCALE = MenuStyle.COMPACT;
+    private static final int LINE_HEIGHT = 12;
+    private static final int GROUP_GAP = 2;
+    private static final int HEADING_HEIGHT = 12;
+    private static final int LIST_TOP = 47;
+    private static final int LIST_AREA_BOTTOM = 134;
+    private static final int FAILURE_MAX_CHARS = 50;
 
     public void render() {
-        // Entire screen is pure text on the font atlas — mega-batch into one GL draw.
+        if (font == null) return;
         font.beginMegaBatch();
         try {
-            Optional<TraceRunFailureStatus.Failure> failure =
-                    TraceRunFailureStatus.current();
+            MenuStyle.page(font, 320, "TRACE REPLAYS", "ROM parity playback - native 320x224");
+            Optional<TraceRunFailureStatus.Failure> failure = TraceRunFailureStatus.current();
             if (failure.isPresent()) {
-                renderFailure(failure.get());
+                var f = failure.get();
+                List<String> lines = new ArrayList<>();
+                lines.add("Segment: " + f.segmentIndex());
+                if (f.isComparison()) {
+                    lines.add("Expected: " + f.expectedIdentity());
+                    lines.add("Actual: " + f.actualIdentity());
+                } else lines.add("Reason: " + f.reason());
+                lines.add("Cursor: " + f.cursor() + "  Steps: " + f.stepCount());
+                renderFailurePage("TRACE FAILED", lines);
                 return;
             }
-            Optional<TraceLaunchStatus.Failure> launchFailure =
-                    TraceLaunchStatus.current();
+            Optional<TraceLaunchStatus.Failure> launchFailure = TraceLaunchStatus.current();
             if (launchFailure.isPresent()) {
-                renderLaunchFailure(launchFailure.get());
+                var f = launchFailure.get();
+                renderFailurePage("TRACE LAUNCH FAILED", List.of("Trace: " + f.traceLabel(), "Reason: " + f.reason()));
                 return;
             }
+            failurePage = 0;
             if (loadingEntry != null) {
-                renderLoading();
+                MenuStyle.panel(font, 9, 66, 302, 71);
+                line("LOADING TRACE...", 17, 76, 286, 1, .85f, .3f);
+                line(TraceLaunchStatus.catalogLabel(loadingEntry), 17, 94, 286, 1, 1, 1);
+                line("Parsing replay data", 17, 116, 286, .75f, .82f, 1);
+                MenuStyle.footer(font, 320, "Preparing the recorded game and team", backHint() + " Cancel");
                 loadingPresented = true;
                 return;
             }
             if (entries.isEmpty()) {
-                font.drawText("TRACE TEST MODE", 8, 6, SCALE, 1f, 1f, 1f, 1f);
-                font.drawText("No traces found.", 8, 24, SCALE, 1f, 0.5f, 0.5f, 1f);
-                font.drawText("Check debug.testMode.catalogDir in config.yaml", 8, 32, SCALE,
-                        0.8f, 0.8f, 0.8f, 1f);
-                font.drawText("(default: src/test/resources/traces)", 8, 40, SCALE,
-                        0.8f, 0.8f, 0.8f, 1f);
-                font.drawText("ESC to return to master title", 8, 56, SCALE,
-                        0.7f, 0.7f, 0.7f, 1f);
+                MenuStyle.panel(font, 9, 55, 302, 108);
+                line("No traces found", 17, 67, 286, 1, .75f, .3f);
+                line("Set the trace folder in Engine Settings", 17, 92, 286, 1, 1, 1);
+                line("Files > Trace catalog folder", 17, 108, 286, .7f, .8f, 1);
+                MenuStyle.footer(font, 320, "Return to Tools to open Settings", backHint() + " Back");
                 return;
             }
-            // Recompute defensively so rendering is correct even if update()
-            // has not run this frame (e.g. first render after construction).
             firstVisible = computeFirstVisible(firstVisible, cursor);
             int lastVisible = lastFullyVisibleIndex(firstVisible);
-
-            font.drawText(String.format("TRACE TEST MODE   (%d/%d)",
-                    cursor + 1, entries.size()), 8, 6, SCALE, 1f, 1f, 1f, 1f);
-
-            // Sticky heading for the topmost visible entry's game so the group
-            // context is never lost when scrolled into the middle of a group.
-            String topHeading = gameHeading(entries.get(firstVisible).gameId())
-                    + (firstVisible > 0 ? "   ^ more above" : "");
-            font.drawText(topHeading, 8, LIST_TOP, SCALE, 1f, 1f, 0.6f, 1f);
-
+            line(gameHeading(entries.get(firstVisible).gameId()) + "  " + (cursor + 1) + "/" + entries.size(),
+                    9, LIST_TOP, 302, 1, .82f, .3f);
             int y = LIST_TOP + HEADING_HEIGHT;
             for (int i = firstVisible; i <= lastVisible; i++) {
                 TraceEntry e = entries.get(i);
-                if (i > firstVisible
-                        && !e.gameId().equals(entries.get(i - 1).gameId())) {
+                if (i > firstVisible && !e.gameId().equals(entries.get(i - 1).gameId())) {
                     y += GROUP_GAP;
-                    font.drawText(gameHeading(e.gameId()), 8, y, SCALE, 1f, 1f, 0.6f, 1f);
+                    line(gameHeading(e.gameId()), 9, y, 302, 1, .82f, .3f);
                     y += HEADING_HEIGHT;
                 }
-                boolean selected = (i == cursor);
-                float brightness = selected ? 1.0f : 0.6f;
-                String prefix = selected ? ">" : " ";
-                String line = prefix + " " + (e.isRun()
-                        ? e.displayLabel()
-                        : e.dir().getFileName());
-                font.drawText(line, 12, y, SCALE, brightness, brightness, brightness, 1f);
+                if (i == cursor) MenuStyle.focus(font, 9, y - 2, 302, 12);
+                MenuStyle.label(font, (i == cursor ? "> " : "  ") + e.displayLabel(), 13, y, 292,
+                        i == cursor ? 1 : .72f, i == cursor ? 1 : .78f, 1);
                 y += LINE_HEIGHT;
             }
-            int below = entries.size() - 1 - lastVisible;
-            if (below > 0) {
-                font.drawText("  v " + below + " more below", 12, y, SCALE,
-                        0.7f, 0.7f, 0.4f, 1f);
-            }
             renderInfoPanel(entries.get(cursor));
+            MenuStyle.footer(font, 320, "Up/Down Select   Left/Right Game",
+                    confirmHint() + " Replay   " + backHint() + " Back");
         } finally {
             font.endMegaBatch();
         }
     }
 
-    private void renderFailure(TraceRunFailureStatus.Failure failure) {
-        int y = 28;
-        font.drawText("TRACE FAILED", 8, y, SCALE, 1f, 0.35f, 0.35f, 1f);
-        y += 16;
-        font.drawText("Segment: " + failure.segmentIndex(), 8, y, SCALE,
-                1f, 1f, 1f, 1f);
-        y += LINE_HEIGHT;
-        if (failure.isComparison()) {
-            y = drawFailureText("Expected: " + failure.expectedIdentity(), y);
-            y = drawFailureText("Actual: " + failure.actualIdentity(), y);
-        } else {
-            y = drawFailureText("Reason: " + failure.reason(), y);
+    private void renderFailurePage(String title, List<String> messages) {
+        List<String> lines = new ArrayList<>();
+        for (String message : messages) {
+            for (int start = 0; start < message.length(); start += FAILURE_MAX_CHARS)
+                lines.add(message.substring(start, Math.min(message.length(), start + FAILURE_MAX_CHARS)));
         }
-        font.drawText("Cursor: " + failure.cursor() + "   Steps: " + failure.stepCount(),
-                8, y, SCALE, 0.9f, 0.9f, 0.9f, 1f);
-        y += 18;
-        font.drawText("ENTER/ESC to acknowledge", 8, y, SCALE,
-                1f, 1f, 0.6f, 1f);
-        y += LINE_HEIGHT;
-        if (!entries.isEmpty()) {
-            font.drawText("Move selection to dismiss", 8, y, SCALE,
-                    0.7f, 0.7f, 0.7f, 1f);
-        }
+        int pages = Math.max(1, (lines.size() + 10) / 11);
+        failurePage = Math.min(failurePage, pages - 1);
+        line(title, 9, 49, 302, 1, .3f, .3f);
+        MenuStyle.panel(font, 9, 62, 302, 133);
+        for (int i = failurePage * 11, y = 67; i < Math.min(lines.size(), (failurePage + 1) * 11); i++, y += 11)
+            line(lines.get(i), 12, y, 300, 1, 1, 1);
+        MenuStyle.footer(font, 320, "Left/Right Details  " + (failurePage + 1) + "/" + pages,
+                confirmHint() + "/" + backHint() + " Acknowledge");
     }
 
-    private void renderLaunchFailure(TraceLaunchStatus.Failure failure) {
-        int y = 28;
-        font.drawText("TRACE LAUNCH FAILED", 8, y, SCALE,
-                1f, 0.35f, 0.35f, 1f);
-        y += 16;
-        y = drawFailureText("Trace: " + failure.traceLabel(), y);
-        y = drawFailureText("Reason: " + failure.reason(), y);
-        y += 12;
-        font.drawText("ENTER/ESC to acknowledge", 8, y, SCALE,
-                1f, 1f, 0.6f, 1f);
-    }
-
-    private void renderLoading() {
-        font.drawText("LOADING TRACE...", 8, 80, SCALE,
-                1f, 1f, 0.6f, 1f);
-        font.drawText(TraceLaunchStatus.catalogLabel(loadingEntry), 8, 94, SCALE,
-                1f, 1f, 1f, 1f);
-        font.drawText("Parsing replay data", 8, 108, SCALE,
-                0.75f, 0.75f, 0.75f, 1f);
+    private void line(String text, int x, int y, int width, float r, float g, float b) {
+        MenuStyle.text(font, text, x, y, width, r, g, b);
     }
 
     private static boolean hasHeldFailure() {
@@ -262,18 +241,6 @@ public final class TestModeTracePicker {
     private static void clearHeldFailure() {
         TraceRunFailureStatus.clear();
         TraceLaunchStatus.clear();
-    }
-
-    private int drawFailureText(String text, int y) {
-        int offset = 0;
-        while (offset < text.length()) {
-            int end = Math.min(text.length(), offset + FAILURE_MAX_CHARS);
-            font.drawText(text.substring(offset, end), 8, y, SCALE,
-                    0.9f, 0.9f, 0.9f, 1f);
-            offset = end;
-            y += LINE_HEIGHT;
-        }
-        return y;
     }
 
     /**
@@ -326,19 +293,12 @@ public final class TestModeTracePicker {
     }
 
     private void renderInfoPanel(TraceEntry e) {
-        int y = 192;
-        font.drawText("SELECTED: " + TraceLaunchStatus.catalogLabel(e),
-                4, y, SCALE, 1f, 1f, 1f, 1f);
-        y += LINE_HEIGHT;
-        font.drawText(String.format("%s   Frames: %d   BK2 offset: %d",
-                        e.displayLabel(), e.frameCount(), e.bk2StartOffset()),
-                4, y, SCALE, 0.9f, 0.9f, 0.9f, 1f);
-        y += LINE_HEIGHT;
-        font.drawText("Team: " + formatTeam(e) + "   Pre-osc: " + e.preTraceOscFrames(),
-                4, y, SCALE, 0.9f, 0.9f, 0.9f, 1f);
-        y += LINE_HEIGHT;
-        font.drawText("BK2: " + e.bk2Path().getFileName(),
-                4, y, SCALE, 0.7f, 0.7f, 0.7f, 1f);
+        MenuStyle.panel(font, 9, 143, 302, 51);
+        line("SELECTED: " + TraceLaunchStatus.catalogLabel(e), 13, 147, 292, 1, 1, 1);
+        line("Frames: " + e.frameCount() + "   Team: " + formatTeam(e), 13, 159, 292, .85f, .9f, 1);
+        line("BK2: " + e.bk2Path().getFileName(), 13, 171, 292, .75f, .82f, 1);
+        line("BK2 offset: " + e.bk2StartOffset() + "   Pre-osc: " + e.preTraceOscFrames(),
+                13, 183, 292, .75f, .82f, 1);
     }
 
     private static String gameHeading(String gameId) {

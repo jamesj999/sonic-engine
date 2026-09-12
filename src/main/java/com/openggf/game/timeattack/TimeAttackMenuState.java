@@ -1,6 +1,7 @@
 package com.openggf.game.timeattack;
 
 import com.openggf.control.InputHandler;
+import com.openggf.control.MenuInput;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -8,13 +9,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
-import static org.lwjgl.glfw.GLFW.GLFW_KEY_DOWN;
-import static org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER;
-import static org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE;
-import static org.lwjgl.glfw.GLFW.GLFW_KEY_LEFT;
-import static org.lwjgl.glfw.GLFW.GLFW_KEY_RIGHT;
-import static org.lwjgl.glfw.GLFW.GLFW_KEY_UP;
 
 /**
  * Pure input/selection logic for {@link TimeAttackMenu}: game &rarr; track
@@ -62,31 +56,37 @@ public final class TimeAttackMenuState {
 
     public void update(InputHandler input) {
         Objects.requireNonNull(input, "input");
-        var logical = input.logical();
-        if (input.isKeyPressedWithoutModifiers(GLFW_KEY_UP) || logical.menuUp()) {
+        if (MenuInput.back(input)) {
+            closeRequested = true;
+            return;
+        }
+        if (MenuInput.up(input)) {
             moveFocus(-1);
         }
-        if (input.isKeyPressedWithoutModifiers(GLFW_KEY_DOWN) || logical.menuDown()) {
+        if (MenuInput.down(input)) {
             moveFocus(1);
         }
-        if (input.isKeyPressedWithoutModifiers(GLFW_KEY_LEFT) || logical.menuLeft()) {
+        if (MenuInput.left(input)) {
             adjust(-1);
         }
-        if (input.isKeyPressedWithoutModifiers(GLFW_KEY_RIGHT) || logical.menuRight()) {
+        if (MenuInput.right(input)) {
             adjust(1);
         }
-        if (input.isKeyPressedWithoutModifiers(GLFW_KEY_ENTER) || logical.menuAccept()) {
+        if (MenuInput.accept(input)) {
             pressGo();
-        }
-        if (input.isKeyPressedWithoutModifiers(GLFW_KEY_ESCAPE) || logical.menuBack()) {
-            closeRequested = true;
         }
     }
 
     public void moveFocus(int delta) {
-        Row[] rows = Row.values();
-        int index = wrap(focusedRow.ordinal() + delta, rows.length);
-        focusedRow = rows[index];
+        List<Row> rows = visibleRows();
+        int index = wrap(rows.indexOf(focusedRow) + delta, rows.size());
+        focusedRow = rows.get(index);
+    }
+
+    List<Row> visibleRows() {
+        return mode() == Mode.HOST_LAN || mode() == Mode.BROWSE
+                ? List.of(Row.GAME, Row.TRACK, Row.CHARACTER, Row.MODE, Row.POLICY, Row.WINDOW)
+                : List.of(Row.GAME, Row.TRACK, Row.CHARACTER, Row.MODE);
     }
 
     public void adjust(int delta) {

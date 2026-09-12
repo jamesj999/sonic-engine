@@ -674,6 +674,7 @@ public class Engine {
 
 	private void installEditorTextInputCallback() {
 		glfwSetCharCallback(window, (windowHandle, codepoint) -> {
+			com.openggf.control.MenuInput.handleCharEvent(inputHandler, codepoint);
 			if (getCurrentGameMode() == GameMode.EDITOR) {
 				editorInputHandler.handleTextInputCodepoint(codepoint);
 			}
