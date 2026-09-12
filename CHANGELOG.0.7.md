@@ -95,6 +95,7 @@ campaigns; feature/API publication remains subject to the 0.8 roadmap.
   S2 player and dust art share the S2 mapping/DPLC decoder, with the public
   player DPLC entry point retained as a compatibility delegate.
   SBZ and Final Zone share uniform scroll mechanics with independent camera state.
+  Removed an unused radius-transition duplicate; live hurt and death paths retain their owners.
 
 ## Build and release
 

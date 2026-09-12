@@ -452,3 +452,11 @@ no failures/errors/skips. The first attempt stopped at test compilation because
 an unchanged S1 class was absent from incremental build output; rebuilding local
 class output completed the batch. Both attempts totalled 119 seconds and were
 charged to the shared task budget. Inspected focused diagnostics were removed.
+
+### Candidate 6 — remove dead radius support
+
+Deleted `PlayableResetOnFloorRadiusTransition` after confirming no production or
+test callers. `PlayableHurtRadiusTransition` remains the live hurt owner and death
+still calls `setRolling(false)` directly. No gameplay path was rewired. Compilation
+and the final combined movement/rewind coverage validate this deletion; no new
+implementation-mirroring test or separate hurt suite was added.
