@@ -87,3 +87,17 @@ measurements/soak tests, and explicitly requested captures or observations.
 No failure or skip diagnostics were omitted. The runner exited 1 because of
 that baseline failure; this is a completed category comparison, not a claim
 that the full engine suite is green.
+
+Integration into develop was conflict-free at `4d91ecf12`. The focused merged-tree
+check completed 26 tests: 23 passing, the same three optional ROM/BK2 skips,
+zero failures and errors. It used:
+
+```bash
+mvn -Dmse=off \
+  '-Dtest=TestS2RequestAwareOracleRawStream,TestS2PublishedRequestWindows' \
+  -Dopenggf.surefire.reports=target/raw-stream-integrated/reports test -B
+```
+
+Consumed category diagnostics were acknowledged and deleted. Focused-run
+diagnostics are removed after recording these results; no failure archive is
+retained. The existing unrelated disassembly changes and local note are preserved.
