@@ -1,5 +1,7 @@
 package com.openggf.game.timeattack;
 
+import com.openggf.game.MenuFeedback;
+import static com.openggf.game.MenuFeedback.Cue.*;
 import com.openggf.control.InputHandler;
 import com.openggf.control.MenuInput;
 import com.openggf.graphics.PixelFont;
@@ -47,7 +49,9 @@ public final class TimeAttackMenu {
             }
             return;
         }
-        if (MenuInput.back(input)) { state.update(input); return; }
+        if (MenuInput.back(input)) { state.update(input); MenuFeedback.emit(CANCEL); return; }
+        String before = selectionFeedbackState();
+        int beforeFocus = focus;
         int count = state.visibleRows().size();
         int go = count + (state.mode() == TimeAttackMenuState.Mode.JOIN_LAN ? 1 : 0);
         if (MenuInput.up(input)) focus = Math.floorMod(focus - 1, go + 1);
@@ -57,23 +61,38 @@ public final class TimeAttackMenu {
             if (MenuInput.left(input)) state.adjust(-1);
             if (MenuInput.right(input)) state.adjust(1);
         }
+        if (beforeFocus != focus || !before.equals(selectionFeedbackState())) MenuFeedback.emit(NAVIGATE);
         if (MenuInput.accept(input)) {
-            if (focus == go) state.pressGo();
-            else if (focus == count && state.mode() == TimeAttackMenuState.Mode.JOIN_LAN)
+            if (focus == go) {
+                state.pressGo();
+                if (state.currentTrack() == null || state.currentCharacter() == null) MenuFeedback.emit(ERROR);
+            }
+            else if (focus == count && state.mode() == TimeAttackMenuState.Mode.JOIN_LAN) {
                 editor = new MenuTextEditor("JOIN ADDRESS", joinAddress.text(), 64);
-            else focus = Math.min(focus + 1, go);
+                MenuFeedback.emit(CONFIRM);
+            } else { focus = Math.min(focus + 1, go); MenuFeedback.emit(CONFIRM); }
         }
         TimeAttackLaunchRequest request = state.consumeLaunchRequest();
         if (request != null) {
-            switch (state.mode()) {
-                case SOLO -> launchStarter.launch(request);
-                case HOST_LAN -> networkStarter.host(request,
-                        state.characterPolicy(), state.lockedCharacter(), state.windowSeconds());
-                case JOIN_LAN -> networkStarter.join(request, joinAddress.text());
-                case BROWSE -> networkStarter.browse(request,
-                        state.characterPolicy(), state.lockedCharacter(), state.windowSeconds());
-            }
+            // A void host callback may display a failure and return normally.
+            // Acknowledge the requested action before the host reports its outcome.
+            MenuFeedback.emit(CONFIRM);
+            try {
+                switch (state.mode()) {
+                    case SOLO -> launchStarter.launch(request);
+                    case HOST_LAN -> networkStarter.host(request,
+                            state.characterPolicy(), state.lockedCharacter(), state.windowSeconds());
+                    case JOIN_LAN -> networkStarter.join(request, joinAddress.text());
+                    case BROWSE -> networkStarter.browse(request,
+                            state.characterPolicy(), state.lockedCharacter(), state.windowSeconds());
+                }
+            } catch (RuntimeException failure) { MenuFeedback.emit(ERROR); throw failure; }
         }
+    }
+
+    private String selectionFeedbackState() {
+        return state.gameIndex() + ":" + state.trackIndex() + ":" + state.characterIndex()
+                + ":" + state.mode() + ":" + state.characterPolicy() + ":" + state.windowSeconds();
     }
 
     private String confirmHint() { return menuInput == null ? "Enter" : MenuInput.confirmLabel(menuInput); }
@@ -107,7 +126,7 @@ public final class TimeAttackMenu {
             case BROWSE -> "BROWSE ROOMS";
         };
         int actionY = 47 + index * 18;
-        if (focus == index) MenuStyle.focus(font, 8, actionY - 3, 304, 16);
+        if (focus == index) MenuStyle.focusLabel(font, 8, actionY, 304, 16);
         MenuStyle.label(font, action, 14, actionY, 292, 1, 1, 1);
         MenuStyle.text(font, (state.bestExists() ? "Best: saved" : "Best: none")
                 + " / Imported ghosts: " + state.importCount(), 10, 181, 300, .7f, .8f, .9f);
@@ -117,7 +136,7 @@ public final class TimeAttackMenu {
 
     private void drawRow(String label, String value, int index, boolean edit) {
         int y = 47 + index * 18;
-        if (focus == index) MenuStyle.focus(font, 8, y - 3, 304, 17);
+        if (focus == index) MenuStyle.focusLabel(font, 8, y, 304, 16);
         MenuStyle.label(font, label, 14, y, 81, .7f, .8f, .9f);
         MenuStyle.label(font, (edit ? "" : "< ") + value + (edit ? "" : " >"),
                 112, y, 198, 1, 1, 1);

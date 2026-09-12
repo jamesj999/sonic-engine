@@ -1,5 +1,7 @@
 package com.openggf.game.timeattack.mp;
 
+import com.openggf.game.MenuFeedback;
+import static com.openggf.game.MenuFeedback.Cue.*;
 import com.openggf.control.InputHandler;
 import com.openggf.control.MenuInput;
 import com.openggf.game.MenuStyle;
@@ -37,6 +39,7 @@ public final class ServerBrowserScreen {
     private volatile List<ControlMessage.RoomSummary> rooms = List.of();
     private volatile String status = "Loading rooms...";
     private volatile boolean refreshInFlight;
+    private volatile boolean refreshFailurePending;
     private int selected;
     private int page;
     private int totalPages;
@@ -60,8 +63,16 @@ public final class ServerBrowserScreen {
                 || now - lastRefreshAt >= REFRESH_INTERVAL_MILLIS) {
             refresh(now);
         }
+        // Futures may complete on the transport thread; dispatch sound on the host update thread.
+        if (refreshFailurePending) {
+            refreshFailurePending = false;
+            MenuFeedback.emit(ERROR);
+        }
         menuInput = input;
-        if (MenuInput.back(input)) { actions.back(); return; }
+        if (MenuInput.back(input)) { MenuFeedback.emit(CANCEL); actions.back(); return; }
+        Focus beforeFocus = focus;
+        int beforeSelected = selected, beforePage = page;
+        String beforeRouting = createRouting;
         if (MenuInput.up(input)) move(-1);
         if (MenuInput.down(input)) move(1);
         int delta = MenuInput.left(input) ? -1 : MenuInput.right(input) ? 1 : 0;
@@ -69,19 +80,28 @@ public final class ServerBrowserScreen {
             if (focus == Focus.CREATE) createRouting = createRouting.equals("RELAY") ? "DIRECT" : "RELAY";
             else if (focus == Focus.PAGE || focus == Focus.ROOMS) changePage(delta, now);
         }
-        if (input.isKeyPressedWithoutModifiers(GLFW_KEY_R)) refresh(now);
-        if (input.isKeyPressedWithoutModifiers(GLFW_KEY_C)) { actions.create(createRouting); return; }
+        if (beforeFocus != focus || beforeSelected != selected || beforePage != page || !beforeRouting.equals(createRouting)) MenuFeedback.emit(NAVIGATE);
+        if (input.isKeyPressedWithoutModifiers(GLFW_KEY_R)) manualRefresh(now);
+        if (input.isKeyPressedWithoutModifiers(GLFW_KEY_C)) { actions.create(createRouting); MenuFeedback.emit(CONFIRM); return; }
         if (MenuInput.accept(input)) {
             switch (focus) {
                 case ROOMS -> {
                     List<ControlMessage.RoomSummary> snapshot = rooms;
-                    if (selected < snapshot.size()) actions.join(snapshot.get(selected));
+                    if (selected < snapshot.size()) { actions.join(snapshot.get(selected)); MenuFeedback.emit(CONFIRM); }
+                    else MenuFeedback.emit(ERROR);
                 }
-                case CREATE -> actions.create(createRouting);
-                case REFRESH -> refresh(now);
-                case PAGE -> changePage(1, now);
+                case CREATE -> { actions.create(createRouting); MenuFeedback.emit(CONFIRM); }
+                case REFRESH -> manualRefresh(now);
+                case PAGE -> { int previousPage = page; changePage(1, now); if (previousPage != page) MenuFeedback.emit(NAVIGATE); }
             }
         }
+    }
+
+    private void manualRefresh(long now) {
+        if (!client.isOpen()) { MenuFeedback.emit(ERROR); return; }
+        if (refreshInFlight) return;
+        refresh(now);
+        MenuFeedback.emit(CONFIRM);
     }
 
     private void move(int delta) {
@@ -107,7 +127,7 @@ public final class ServerBrowserScreen {
         for (int i = first; i < Math.min(snapshot.size(), first + VISIBLE_ROOMS); i++) {
             int y = 47 + (i - first) * 22;
             ControlMessage.RoomSummary room = snapshot.get(i);
-            if (focus == Focus.ROOMS && i == selected) MenuStyle.focus(font, 7, y - 2, 306, 22);
+            if (focus == Focus.ROOMS && i == selected) MenuStyle.focusContent(font, 7, y, 306, 22, 19);
             MenuStyle.label(font, room.name(), 12, y, 234, 1, 1, 1);
             MenuStyle.label(font, room.playerCount() + "/" + room.maxPlayers(), 258, y, 54, 1, 1, 1);
             text(room.routing() + " / " + (room.verified() ? "VERIFIED" : "UNVERIFIED TIMES"),
@@ -123,7 +143,7 @@ public final class ServerBrowserScreen {
     }
 
     private void action(Focus item, String label, int y) {
-        if (focus == item) MenuStyle.focus(font, 7, y - 2, 306, 16);
+        if (focus == item) MenuStyle.focusLabel(font, 7, y, 306, 16);
         MenuStyle.label(font, label, 12, y, 294, 1, 1, 1);
     }
 
@@ -143,6 +163,7 @@ public final class ServerBrowserScreen {
                 Throwable cause = error instanceof CompletionException && error.getCause() != null
                         ? error.getCause() : error;
                 status = "Refresh failed: " + cause.getMessage();
+                refreshFailurePending = true;
                 return;
             }
             rooms = List.copyOf(result.rooms());

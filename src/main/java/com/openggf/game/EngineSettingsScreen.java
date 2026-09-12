@@ -6,6 +6,8 @@ import com.openggf.configuration.EngineSettingsDraft;
 import com.openggf.configuration.GlfwKeyNameResolver;
 import com.openggf.configuration.SonicConfiguration;
 import com.openggf.configuration.SonicConfigurationService;
+import com.openggf.game.MenuFeedback;
+import static com.openggf.game.MenuFeedback.Cue.*;
 import com.openggf.control.InputHandler;
 import com.openggf.control.MenuInput;
 import com.openggf.graphics.PixelFont;
@@ -60,9 +62,10 @@ public final class EngineSettingsScreen {
         backHint = MenuInput.backLabel(input);
         directionsHint = MenuInput.directionLabel(input);
         if (discardPrompt) {
-            if (MenuInput.left(input) || MenuInput.right(input)) discardSelected = !discardSelected;
-            if (MenuInput.back(input)) discardPrompt = false;
+            if (MenuInput.left(input) || MenuInput.right(input)) { discardSelected = !discardSelected; MenuFeedback.emit(NAVIGATE); }
+            if (MenuInput.back(input)) { discardPrompt = false; MenuFeedback.emit(CANCEL); }
             else if (MenuInput.accept(input)) {
+                MenuFeedback.emit(discardSelected ? CANCEL : CONFIRM);
                 if (discardSelected) closeRequested = true;
                 discardPrompt = false;
             }
@@ -74,6 +77,7 @@ public final class EngineSettingsScreen {
                 case ACCEPTED -> {
                     try {
                         draft.set(selected(), textEditor.value());
+                        MenuFeedback.emit(CONFIRM);
                         textEditor = null;
                         message = "Draft changed. Choose Apply to save";
                     } catch (IllegalArgumentException e) { textEditor.reject(e.getMessage()); }
@@ -87,27 +91,31 @@ public final class EngineSettingsScreen {
         if (keyMenu) { updateKeyMenu(input); return; }
         if (choosing) { updateChoice(input); return; }
         if (MenuInput.back(input)) {
-            if (fields) fields = false;
+            if (fields) { fields = false; MenuFeedback.emit(CANCEL); }
             else requestClose();
             return;
         }
         if (!fields) {
-            if (MenuInput.up(input)) { category = Math.floorMod(category - 1, CATEGORIES.length + 2); row = 0; ticks = 0; }
-            if (MenuInput.down(input)) { category = (category + 1) % (CATEGORIES.length + 2); row = 0; ticks = 0; }
+            if (MenuInput.up(input)) { category = Math.floorMod(category - 1, CATEGORIES.length + 2); row = 0; ticks = 0; MenuFeedback.emit(NAVIGATE); }
+            if (MenuInput.down(input)) { category = (category + 1) % (CATEGORIES.length + 2); row = 0; ticks = 0; MenuFeedback.emit(NAVIGATE); }
             if (MenuInput.accept(input)) {
                 if (category == CATEGORIES.length) apply();
                 else if (category == CATEGORIES.length + 1) requestClose();
-                else { fields = true; row = 0; ticks = 0; }
+                else { fields = true; row = 0; ticks = 0; MenuFeedback.emit(CONFIRM); }
             }
             return;
         }
         List<SonicConfiguration> keys = keys();
-        if (MenuInput.up(input)) { row = Math.floorMod(row - 1, keys.size()); ticks = 0; }
-        if (MenuInput.down(input)) { row = (row + 1) % keys.size(); ticks = 0; }
+        if (MenuInput.up(input)) { row = Math.floorMod(row - 1, keys.size()); ticks = 0; MenuFeedback.emit(NAVIGATE); }
+        if (MenuInput.down(input)) { row = (row + 1) % keys.size(); ticks = 0; MenuFeedback.emit(NAVIGATE); }
         try {
-            if (MenuInput.left(input)) draft.step(selected(), -1);
-            else if (MenuInput.right(input)) draft.step(selected(), 1);
+            if (MenuInput.left(input) || MenuInput.right(input)) {
+                String before = draft.text(selected());
+                draft.step(selected(), MenuInput.left(input) ? -1 : 1);
+                if (!before.equals(draft.text(selected()))) MenuFeedback.emit(NAVIGATE);
+            }
             else if (MenuInput.accept(input)) {
+                MenuFeedback.emit(CONFIRM);
                 ConfigType type = ConfigCatalog.meta(selected()).type();
                 if (type == ConfigType.KEY) { keyMenu = true; choice = 0; }
                 else if (type == ConfigType.BOOL || type == ConfigType.ENUM) {
@@ -115,7 +123,7 @@ public final class EngineSettingsScreen {
                     choice = Math.max(0, options().indexOf(draft.text(selected())));
                 } else openTextEditor();
             }
-        } catch (IllegalArgumentException e) { message = e.getMessage(); }
+        } catch (IllegalArgumentException e) { message = e.getMessage(); MenuFeedback.emit(ERROR); }
     }
 
     private List<SonicConfiguration> keys() {
@@ -123,6 +131,7 @@ public final class EngineSettingsScreen {
     }
     private SonicConfiguration selected() { return keys().get(row); }
     private void requestClose() {
+        MenuFeedback.emit(CANCEL);
         if (draft.dirty()) { discardPrompt = true; discardSelected = false; }
         else closeRequested = true;
     }
@@ -130,15 +139,17 @@ public final class EngineSettingsScreen {
         try {
             boolean changed = draft.dirty();
             draft.apply();
+            MenuFeedback.emit(CONFIRM);
             applied |= changed;
             message = changed ? "Saved. Restart engine for all changes" : "No changes to save";
-        } catch (IOException e) { message = "Save failed. Draft kept; retry Apply"; }
-        catch (IllegalArgumentException e) { message = e.getMessage(); }
+        } catch (IOException e) { message = "Save failed. Draft kept; retry Apply"; MenuFeedback.emit(ERROR); }
+        catch (IllegalArgumentException e) { message = e.getMessage(); MenuFeedback.emit(ERROR); }
     }
     private void openTextEditor() {
         Object defaultValue = config.getDefaultValue(selected());
         textEditor = new MenuTextEditor(EngineSettingLabels.label(selected()), draft.text(selected()), 4096,
                 defaultValue == null ? "" : defaultValue.toString());
+        textEditor.deferAcceptanceFeedback();
     }
     private List<String> options() {
         if (ConfigCatalog.meta(selected()).type() == ConfigType.BOOL) return List.of("false", "true");
@@ -147,11 +158,12 @@ public final class EngineSettingsScreen {
         return values;
     }
     private void updateChoice(InputHandler input) {
-        if (MenuInput.back(input)) { choosing = false; return; }
+        if (MenuInput.back(input)) { choosing = false; MenuFeedback.emit(CANCEL); return; }
         int count = options().size() + 1;
-        if (MenuInput.up(input)) choice = Math.floorMod(choice - 1, count);
-        if (MenuInput.down(input)) choice = (choice + 1) % count;
+        if (MenuInput.up(input)) { choice = Math.floorMod(choice - 1, count); MenuFeedback.emit(NAVIGATE); }
+        if (MenuInput.down(input)) { choice = (choice + 1) % count; MenuFeedback.emit(NAVIGATE); }
         if (MenuInput.accept(input)) {
+            MenuFeedback.emit(CONFIRM);
             if (choice == count - 1) draft.reset(selected());
             else draft.set(selected(), options().get(choice));
             choosing = false;
@@ -159,10 +171,11 @@ public final class EngineSettingsScreen {
         }
     }
     private void updateKeyMenu(InputHandler input) {
-        if (MenuInput.back(input)) { keyMenu = false; return; }
-        if (MenuInput.up(input)) choice = Math.floorMod(choice - 1, 4);
-        if (MenuInput.down(input)) choice = (choice + 1) % 4;
+        if (MenuInput.back(input)) { keyMenu = false; MenuFeedback.emit(CANCEL); return; }
+        if (MenuInput.up(input)) { choice = Math.floorMod(choice - 1, 4); MenuFeedback.emit(NAVIGATE); }
+        if (MenuInput.down(input)) { choice = (choice + 1) % 4; MenuFeedback.emit(NAVIGATE); }
         if (MenuInput.accept(input)) {
+            MenuFeedback.emit(CONFIRM);
             switch (choice) {
                 case 0 -> capturing = true;
                 case 1 -> openTextEditor();
@@ -173,7 +186,7 @@ public final class EngineSettingsScreen {
         }
     }
     private void updateCapture(InputHandler input) {
-        if (MenuInput.textBack(input)) { capturing = false; return; }
+        if (MenuInput.textBack(input)) { capturing = false; MenuFeedback.emit(CANCEL); return; }
         for (int key = GLFW_KEY_SPACE; key <= GLFW_KEY_LAST; key++) {
             if (key >= GLFW_KEY_LEFT_SHIFT && key <= GLFW_KEY_RIGHT_SUPER) continue;
             if (!MenuInput.textKeyPressed(input, key)) continue;
@@ -183,6 +196,7 @@ public final class EngineSettingsScreen {
                     + (input.isPhysicalSuperDown() ? "META+" : "")
                     + GlfwKeyNameResolver.nameOf(key);
             draft.set(selected(), chord);
+            MenuFeedback.emit(CONFIRM);
             capturing = false;
             keyMenu = false;
             message = "Binding changed. Choose Apply to save";
@@ -213,8 +227,8 @@ public final class EngineSettingsScreen {
         for (int i = 0; i < CATEGORIES.length + 2; i++) {
             int y = railY(i);
             if (category == i) {
-                if (!fields) MenuStyle.focus(font, 7, y - 3, railWidth - 7, 13);
-                else MenuStyle.panel(font, 7, y - 3, railWidth - 7, 13);
+                if (!fields) MenuStyle.focusLabel(font, 7, y, railWidth - 7, 13);
+                else MenuStyle.panel(font, 7, y - 1, railWidth - 7, 13);
             }
             String name = i < CATEGORIES.length ? CATEGORIES[i].label() : i == CATEGORIES.length ? "Apply" : "Cancel";
             boolean nonDefault = i < CATEGORIES.length && draft.keys(CATEGORIES[i]).stream().anyMatch(draft::nonDefault);
@@ -228,7 +242,7 @@ public final class EngineSettingsScreen {
                 if (index >= keys.size()) break;
                 SonicConfiguration key = keys.get(index);
                 int y = 39 + i * 30;
-                if (fields && row == index) MenuStyle.focus(font, 104, y - 3, width - 111, 29);
+                if (fields && row == index) MenuStyle.focusContent(font, 104, y, width - 111, 29, 23);
                 int space = width - 120;
                 label(window(EngineSettingLabels.label(key), space / 9, fields && row == index), 111, y, space, WHITE);
                 String value = EngineSettingLabels.value(key, draft.text(key));
@@ -256,8 +270,8 @@ public final class EngineSettingsScreen {
         int buttonWidth = (width - 80) / 2;
         int selectedX = discardSelected ? width / 2 + 5 : 35;
         MenuStyle.focus(font, selectedX - 3, 115, buttonWidth, 19);
-        label("Keep editing", 35, 121, buttonWidth - 6, WHITE);
-        label("Discard", width / 2 + 5, 121, buttonWidth - 6, AMBER);
+        label("Keep editing", 35, MenuStyle.textY(115, 19, 1), buttonWidth - 6, WHITE);
+        label("Discard", width / 2 + 5, MenuStyle.textY(115, 19, 1), buttonWidth - 6, AMBER);
     }
     private void renderChoice(int width) {
         MenuStyle.page(font, width, EngineSettingLabels.label(selected()), "CHOOSE A VALUE");
@@ -265,7 +279,7 @@ public final class EngineSettingsScreen {
         String defaultText = String.valueOf(config.getDefaultValue(selected()));
         for (int i = 0; i <= values.size(); i++) {
             int y = 59 + i * 18;
-            if (choice == i) MenuStyle.focus(font, 9, y - 4, width - 18, 17);
+            if (choice == i) MenuStyle.focusLabel(font, 9, y, width - 18, 17);
             String label = i == values.size() ? "Restore engine default" : EngineSettingLabels.value(selected(), values.get(i));
             boolean nonDefault = i < values.size() && !values.get(i).equals(defaultText);
             label(label, 17, y, width - 34, nonDefault ? AMBER : WHITE);
@@ -287,7 +301,7 @@ public final class EngineSettingsScreen {
         String[] labels = { "Capture keyboard binding", "Edit key name / chord", "Unbind this shortcut", "Restore engine default" };
         for (int i = 0; i < labels.length; i++) {
             int y = 81 + i * 23;
-            if (choice == i) MenuStyle.focus(font, 9, y - 4, width - 18, 21);
+            if (choice == i) MenuStyle.focusLabel(font, 9, y, width - 18, 21);
             label(labels[i], 17, y, width - 34, WHITE);
         }
         footer(width, confirmHint + " Choose  " + backHint + " Back  " + directionsHint,

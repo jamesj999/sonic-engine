@@ -1727,6 +1727,7 @@ public class Engine {
 						configService, moduleResolutionService, preparedLaunch),
 				masterTitleEntries(),
 				cue -> audioManager.playSfx(cue.sfxName()));
+		com.openggf.game.MasterTitleCatalog.bind(screen, this::masterTitleEntries);
 		if (ModSubsystem.current().policy().mayScanAtBoot()) {
 			screen.setModManagerScreenFactory(font -> ModSubsystem.current().createManager(font));
 		}
@@ -1749,9 +1750,9 @@ public class Engine {
 		// This menu's reader is distinct from the in-game async writer.
 		com.openggf.game.save.SessionSaveRequests.flushPendingSaves();
 		List<com.openggf.game.MasterTitleEntry> entries = new ArrayList<>();
-		entries.add(new com.openggf.game.MasterTitleEntry.Stock(MasterTitleScreen.GameEntry.SONIC_1));
-		entries.add(new com.openggf.game.MasterTitleEntry.Stock(MasterTitleScreen.GameEntry.SONIC_2));
-		entries.add(new com.openggf.game.MasterTitleEntry.Stock(MasterTitleScreen.GameEntry.SONIC_3K));
+		for (MasterTitleScreen.GameEntry game : MasterTitleScreen.GameEntry.values()) {
+			entries.add(new com.openggf.game.MasterTitleEntry.Stock(game));
+		}
 		SaveManager saves = new SaveManager(com.openggf.game.save.SavePaths.root());
 		for (com.openggf.mods.ModDescriptor descriptor
 				: ModSubsystem.current().processCatalog().effective().orderedEnabled()) {

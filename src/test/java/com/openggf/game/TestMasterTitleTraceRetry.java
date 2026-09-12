@@ -18,6 +18,8 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.ArrayList;
+import com.openggf.game.launch.LaunchProfileStore;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.lwjgl.glfw.GLFW.*;
@@ -71,6 +73,27 @@ class TestMasterTitleTraceRetry {
             launcher.verify(() -> TraceSessionLauncher.launch(working), times(1));
             assertTrue(TraceLaunchStatus.current().isEmpty());
         }
+    }
+
+    @Test
+    void rootFailureIsNotAnnouncedAgainWhenThePickerIsRecreated() throws Exception {
+        SonicConfigurationService config = SonicConfigurationService.createStandalone(directory);
+        config.setConfigValue(SonicConfiguration.TEST_MODE_ENABLED, true);
+        config.setConfigValue(SonicConfiguration.TRACE_CATALOG_DIR, directory.toString());
+        List<MasterTitleScreen.AudioCue> cues = new ArrayList<>();
+        MasterTitleScreen screen = new MasterTitleScreen(config, new LaunchProfileStore(config), cues::add);
+        screen.setStateForTest(MasterTitleScreen.State.ACTIVE);
+        var fontField = MasterTitleScreen.class.getDeclaredField("font");
+        fontField.setAccessible(true);
+        fontField.set(screen, mock(PixelFont.class));
+        TraceLaunchStatus.record(entry("broken"), "Unable to read trace payload");
+
+        screen.showRomLoadError("s1");
+        press(screen, GLFW_KEY_ENTER);
+        screen.update(new InputHandler());
+
+        assertEquals(List.of(MasterTitleScreen.AudioCue.ERROR, MasterTitleScreen.AudioCue.CANCEL), cues);
+        assertTrue(TraceLaunchStatus.current().isPresent());
     }
 
     private static void launchSelected(MasterTitleScreen screen, TestModeTracePicker picker) {

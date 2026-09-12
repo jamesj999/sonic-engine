@@ -107,7 +107,7 @@ The capture gallery records illustrative fixture and network-isolation limits.
 
 ## Review refinements
 
-The hub shows three game tabs at once, dimming unavailable ROMs; longer mod lists
+The hub shows neighboring game names at once, dimming unavailable ROMs; longer mod lists
 scroll the tab window and show a selected-entry count. The left pane exposes the
 animated sky while the right keeps checkerboard styling. Error dialogs clear stale
 details, distinguish missing ROMs from unsupported standalone actions, and require
@@ -115,3 +115,18 @@ explicit dismissal. Settings descriptions show two lines with longer paired page
 launch options use fixed left anchors and cyan focus. Removed the unreachable old
 menu/matte/hover render paths and their helper-only tests. Public Mod API signatures
 remain unchanged; title quit requests route through the host input seam.
+
+## Menu consistency follow-up
+
+Use a wrapping catalog carousel with one prominent selected name, neighboring
+names and a position count. Preserve original ROM logo textures at final viewport
+resolution. Selection reconciliation uses game IDs; removed selections fall back
+to a remaining neighbor. Empty catalogs retain Mods, Settings, Advanced and Quit.
+The host refreshes the effective catalog after Mods returns; pending changes keep
+the existing restart requirement.
+
+All child menus emit semantic feedback through a scoped host sink. Navigation or
+value changes use navigate; successful selection uses confirm; backing out uses
+cancel; rejected/failed operations use error. No-op boundaries remain silent.
+Shared text/content centering helpers align focus frames to authored font metrics,
+including two-line settings and server rows.

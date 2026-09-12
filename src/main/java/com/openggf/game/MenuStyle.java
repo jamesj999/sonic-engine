@@ -8,6 +8,25 @@ public final class MenuStyle {
     public static final float COMPACT = 2f / 3f;
     private MenuStyle() { }
 
+    /** Center a text cell on the native pixel grid; odd spare pixels go below. */
+    public static int textY(int rowTop, int rowHeight, float scale) {
+        return contentY(rowTop, rowHeight, MenuPixelFont.glyphLineHeight(scale));
+    }
+
+    public static int contentY(int rowTop, int rowHeight, int contentHeight) {
+        return rowTop + (rowHeight - contentHeight) / 2;
+    }
+
+    /** A primary label and its focus share the same ten-pixel cell geometry. */
+    public static void focusLabel(PixelFont font, int x, int textY, int width, int height) {
+        focusContent(font, x, textY, width, height, MenuPixelFont.glyphLineHeight(1));
+    }
+
+    public static void focusContent(PixelFont font, int x, int textY, int width, int height,
+                                    int contentHeight) {
+        focus(font, x, textY - (height - contentHeight) / 2, width, height);
+    }
+
     public static void page(PixelFont font, int width, String title, String subtitle) {
         fill(font, 0, 0, width, 224, .025f, .065f, .19f, 1);
         checkerboard(font, width);

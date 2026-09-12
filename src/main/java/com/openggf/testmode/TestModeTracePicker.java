@@ -1,5 +1,7 @@
 package com.openggf.testmode;
 
+import com.openggf.game.MenuFeedback;
+import static com.openggf.game.MenuFeedback.Cue.*;
 import com.openggf.control.InputHandler;
 import com.openggf.control.MenuInput;
 import com.openggf.graphics.PixelFont;
@@ -38,19 +40,28 @@ public final class TestModeTracePicker {
     private TraceEntry loadingEntry;
     private boolean loadingPresented;
     private boolean launchIssued;
+    private boolean failureAnnounced;
 
     public TestModeTracePicker(List<TraceEntry> entries, PixelFont font) {
         this.entries = entries;
         this.font = font;
     }
 
+    /** A host ROM error page has already announced this pending launch failure. */
+    public void markFailureFeedbackAnnounced() {
+        failureAnnounced = true;
+    }
+
     public void update(InputHandler input) {
         menuInput = input;
         if (hasHeldFailure()) {
+            if (!failureAnnounced) { MenuFeedback.emit(ERROR); failureAnnounced = true; }
             updateHeldFailure(input);
             return;
         }
+        failureAnnounced = false;
         if ((!input.isAnyModifierDown() && MenuInput.back(input))) {
+            MenuFeedback.emit(CANCEL);
             loadingEntry = null;
             pendingResult = Result.BACK;
             return;
@@ -63,11 +74,13 @@ public final class TestModeTracePicker {
             return;
         }
         if (entries.isEmpty()) {
+            if (MenuInput.accept(input)) MenuFeedback.emit(ERROR);
             if ((!input.isAnyModifierDown() && MenuInput.back(input))) {
                 pendingResult = Result.BACK;
             }
             return;
         }
+        int previousCursor = cursor;
         if ((!input.isAnyModifierDown() && MenuInput.down(input))) {
             cursor = Math.min(entries.size() - 1, cursor + 1);
         }
@@ -86,10 +99,12 @@ public final class TestModeTracePicker {
         if (input.isKeyPressedWithoutModifiers(GLFW_KEY_PAGE_UP) || MenuInput.left(input)) {
             cursor = prevGroupStart(cursor);
         }
+        if (cursor != previousCursor) MenuFeedback.emit(NAVIGATE);
         // Keep the scroll window in sync with the cursor after any movement
         // so the selected entry is always within the visible viewport.
         firstVisible = computeFirstVisible(firstVisible, cursor);
         if ((!input.isAnyModifierDown() && MenuInput.accept(input))) {
+            MenuFeedback.emit(CONFIRM);
             loadingEntry = entries.get(cursor);
             loadingPresented = false;
             launchIssued = false;
@@ -100,10 +115,13 @@ public final class TestModeTracePicker {
     }
 
     private void updateHeldFailure(InputHandler input) {
+        int previousPage = failurePage;
         if (MenuInput.left(input)) failurePage = Math.max(0, failurePage - 1);
-        if (MenuInput.right(input)) failurePage++;
+        if (MenuInput.right(input)) failurePage = Math.min(failurePages() - 1, failurePage + 1);
+        if (previousPage != failurePage) MenuFeedback.emit(NAVIGATE);
         if ((!input.isAnyModifierDown() && MenuInput.accept(input))
                 || (!input.isAnyModifierDown() && MenuInput.back(input))) {
+            MenuFeedback.emit(MenuInput.back(input) ? CANCEL : CONFIRM);
             clearHeldFailure();
             return;
         }
@@ -131,8 +149,24 @@ public final class TestModeTracePicker {
         }
         firstVisible = computeFirstVisible(firstVisible, cursor);
         if (cursor != previousCursor) {
+            MenuFeedback.emit(NAVIGATE);
             clearHeldFailure();
         }
+    }
+
+    private int failurePages() {
+        List<String> messages = new ArrayList<>();
+        TraceRunFailureStatus.current().ifPresent(f -> {
+            messages.add("Segment: " + f.segmentIndex());
+            if (f.isComparison()) { messages.add("Expected: " + f.expectedIdentity()); messages.add("Actual: " + f.actualIdentity()); }
+            else messages.add("Reason: " + f.reason());
+            messages.add("Cursor: " + f.cursor() + "  Steps: " + f.stepCount());
+        });
+        if (messages.isEmpty()) TraceLaunchStatus.current().ifPresent(f -> {
+            messages.add("Trace: " + f.traceLabel()); messages.add("Reason: " + f.reason());
+        });
+        int lines = messages.stream().mapToInt(message -> (message.length() + FAILURE_MAX_CHARS - 1) / FAILURE_MAX_CHARS).sum();
+        return Math.max(1, (lines + 10) / 11);
     }
 
     private String confirmHint() { return menuInput == null ? "Enter" : MenuInput.confirmLabel(menuInput); }
@@ -200,7 +234,7 @@ public final class TestModeTracePicker {
                     line(gameHeading(e.gameId()), 9, y, 302, 1, .82f, .3f);
                     y += HEADING_HEIGHT;
                 }
-                if (i == cursor) MenuStyle.focus(font, 9, y - 2, 302, 12);
+                if (i == cursor) MenuStyle.focusLabel(font, 9, y, 302, 12);
                 MenuStyle.label(font, (i == cursor ? "> " : "  ") + e.displayLabel(), 13, y, 292,
                         i == cursor ? 1 : .72f, i == cursor ? 1 : .78f, 1);
                 y += LINE_HEIGHT;

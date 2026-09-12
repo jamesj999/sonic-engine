@@ -1,5 +1,7 @@
 package com.openggf.game;
 
+import com.openggf.game.MenuFeedback;
+import static com.openggf.game.MenuFeedback.Cue.*;
 import com.openggf.control.InputHandler;
 import com.openggf.control.MenuInput;
 import com.openggf.graphics.PixelFont;
@@ -29,6 +31,11 @@ public final class MenuTextEditor {
     private boolean finished;
     private boolean controller;
     private String error;
+    private boolean deferAcceptanceFeedback;
+    private boolean errorFeedback;
+
+    /** Owners that validate on acceptance emit confirm only after successful validation. */
+    public void deferAcceptanceFeedback() { deferAcceptanceFeedback = true; }
 
     public MenuTextEditor(String title, String initial, int maxLength) {
         this(title, initial, maxLength, null);
@@ -55,11 +62,22 @@ public final class MenuTextEditor {
     /** Keep the same value/caret visible when the owner rejects an accepted value. */
     public void reject(String reason) {
         error = Objects.requireNonNull(reason);
+        MenuFeedback.emit(ERROR);
         result = Result.NONE;
         finished = false;
     }
 
     public void update(InputHandler input) {
+        String beforeValue = value;
+        int beforeCaret = caret, beforeCell = cell, beforePage = page;
+        errorFeedback = false;
+        try { updateInput(input); } finally {
+            if (!finished && !errorFeedback && (!value.equals(beforeValue) || caret != beforeCaret
+                    || cell != beforeCell || page != beforePage)) MenuFeedback.emit(NAVIGATE);
+        }
+    }
+
+    private void updateInput(InputHandler input) {
         if (finished || input == null) return;
         ticks++;
         controller = MenuInput.controller(input);
@@ -110,12 +128,16 @@ public final class MenuTextEditor {
 
     private void accept() {
         if (value.codePointCount(0, value.length()) > maxLength) {
-            error = "Limit: " + maxLength + " characters";
+            error = "Limit: " + maxLength + " characters"; errorFeedback = true; MenuFeedback.emit(ERROR);
             return;
         }
         finish(Result.ACCEPTED);
     }
-    private void finish(Result next) { result = next; finished = true; }
+    private void finish(Result next) {
+        result = next; finished = true;
+        if (next == Result.CANCELLED) MenuFeedback.emit(CANCEL);
+        else if (!deferAcceptanceFeedback) MenuFeedback.emit(CONFIRM);
+    }
     private void insert(String text) {
         error = null;
         StringBuilder accepted = new StringBuilder();
@@ -124,7 +146,7 @@ public final class MenuTextEditor {
             int codePoint = text.codePointAt(offset);
             offset += Character.charCount(codePoint);
             if (Character.isISOControl(codePoint)) continue;
-            if (remaining-- <= 0) { error = "Limit: " + maxLength + " characters"; break; }
+            if (remaining-- <= 0) { error = "Limit: " + maxLength + " characters"; errorFeedback = true; MenuFeedback.emit(ERROR); break; }
             accepted.appendCodePoint(codePoint);
         }
         if (!accepted.isEmpty()) {
@@ -171,7 +193,7 @@ public final class MenuTextEditor {
         for (int i = 0; i < CELL_COUNT; i++) {
             int x = 10 + i % COLUMNS * cellWidth;
             int y = 91 + i / COLUMNS * 15;
-            if (controller && cell == i) MenuStyle.focus(font, x - 2, y - 3, cellWidth - 1, 14);
+            if (controller && cell == i) MenuStyle.focusLabel(font, x - 2, y, cellWidth - 1, 14);
             String label = cellLabel(i);
             MenuStyle.label(font, label, x, y, cellWidth - 3, i >= 50 ? 1 : .88f, i >= 50 ? .73f : .92f, i >= 50 ? .25f : 1);
         }

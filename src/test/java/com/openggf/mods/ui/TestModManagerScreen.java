@@ -913,6 +913,30 @@ class TestModManagerScreen {
         };
     }
 
+    @Test
+    void sixPrimaryRowsKeepBalancedFocusPaddingInsideTheListPanel() {
+        String[] ids = {"pack-a", "pack-b", "pack-c", "pack-d", "pack-e", "pack-f"};
+        List<ModDescriptor> mods = java.util.Arrays.stream(ids)
+                .map(id -> descriptor(id, id, List.of(), List.of())).toList();
+        RecordingFont font = new RecordingFont();
+        ModManagerScreen screen = screen(catalog(mods), state(new boolean[6], ids),
+                new ModRuntimeFindingStore(), font, temp.resolve("alignment"));
+        for (int selected = 0; selected < 6; selected++) {
+            font.lines.clear();
+            font.focus.clear();
+            screen.render();
+            List<RenderedLine> rows = font.lines.stream()
+                    .filter(line -> line.x() == 12 && line.scale() == 1 && line.value().startsWith("[OFF]")).toList();
+            assertEquals(6, rows.size());
+            FocusRect focus = font.focus.getFirst();
+            RenderedLine selectedLine = rows.get(selected);
+            assertEquals(2, selectedLine.y() - focus.y());
+            assertEquals(2, focus.y() + focus.height() - selectedLine.y() - 10);
+            assertTrue(focus.y() >= 48 && focus.y() + focus.height() <= 136);
+            if (selected < 5) press(screen, Action.DOWN);
+        }
+    }
+
     private static ModManagerScreen.TextSink textSink(PixelFont font) {
         return new ModManagerScreen.TextSink() {
             @Override public void begin() { font.beginMegaBatch(); }
@@ -921,16 +945,21 @@ class TestModManagerScreen {
                 font.drawText(text, x, y, scale, r, g, b, a);
             }
             @Override public void end() { font.endMegaBatch(); }
+            @Override public void focus(int x, int y, int width, int height) {
+                if (font instanceof RecordingFont recording) recording.focus.add(new FocusRect(y, height));
+            }
         };
     }
 
     private enum Action { UP, DOWN, LEFT, RIGHT, ACCEPT, BACK }
 
     private record RenderedLine(String value, int x, int y, float scale) { }
+    private record FocusRect(int y, int height) { }
 
     private static final class RecordingFont extends PixelFont {
         private final List<String> drawn = new ArrayList<>();
         private final List<RenderedLine> lines = new ArrayList<>();
+        private final List<FocusRect> focus = new ArrayList<>();
 
         @Override
         public void beginMegaBatch() { }
