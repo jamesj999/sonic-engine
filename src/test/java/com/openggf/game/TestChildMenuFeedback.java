@@ -10,6 +10,10 @@ import com.openggf.mods.*;
 import com.openggf.mods.ui.ModManagerScreen;
 import com.openggf.testmode.TestModeTracePicker;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
+import com.openggf.testmode.TraceLaunchStatus;
+import com.openggf.testmode.TraceRunFailureStatus;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
@@ -26,6 +30,13 @@ import static org.lwjgl.glfw.GLFW.*;
 
 class TestChildMenuFeedback {
     @TempDir Path directory;
+
+    @BeforeEach
+    @AfterEach
+    void clearHeldTraceDiagnostics() {
+        TraceLaunchStatus.clear();
+        TraceRunFailureStatus.clear();
+    }
 
     @Test
     void feedbackScopeRestoresOuterSinkAfterFailureAndDoesNotLeak() {
