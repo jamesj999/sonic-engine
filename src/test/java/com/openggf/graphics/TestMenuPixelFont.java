@@ -63,21 +63,46 @@ class TestMenuPixelFont {
     }
 
     @Test
-    void allPrintableAsciiHasArtworkAndAtlasCellsHaveTransparentSpacing() {
+    void allPrintableAsciiHasArtworkAndAtlasCellsKeepTransparentColumnSpacing() {
         byte[] atlas = MenuGlyphs.atlasRgba();
         for (char character = 33; character <= 126; character++) {
             int ink = 0;
-            for (int y = 0; y < 7; y++) ink |= MenuGlyphs.row(character, y);
+            for (int y = 0; y < MenuGlyphs.HEIGHT; y++) ink |= MenuGlyphs.row(character, y);
             assertNotEquals(0, ink, "Missing glyph " + character);
         }
-        for (int y = 0; y < 7; y++) assertEquals(0, MenuGlyphs.row(' ', y));
+        for (int y = 0; y < MenuGlyphs.HEIGHT; y++) assertEquals(0, MenuGlyphs.row(' ', y));
         for (int index = 0; index < 95; index++) {
             int originX = index % MenuGlyphs.COLUMNS * 6;
             int originY = index / MenuGlyphs.COLUMNS * 8;
             for (int y = 0; y < 8; y++) assertEquals(0, alpha(atlas, originX + 5, originY + y));
-            for (int x = 0; x < 6; x++) assertEquals(0, alpha(atlas, originX + x, originY + 7));
+            char character = (char) (index + 32);
+            for (int y = 0; y < MenuGlyphs.HEIGHT; y++) {
+                for (int x = 0; x < 5; x++) {
+                    int expected = (MenuGlyphs.row(character, y) & (1 << (4 - x))) == 0 ? 0 : 255;
+                    assertEquals(expected, alpha(atlas, originX + x, originY + y),
+                            "Atlas must include every authored row for " + character);
+                }
+            }
         }
         assertEquals(255, alpha(atlas, ('A' - 32) % 16 * 6 + 1, ('A' - 32) / 16 * 8));
+    }
+
+    @Test
+    void lowercaseDescendersReachBelowTheSharedBaselineWithinTheSameCell() {
+        for (char character : "gjpqy".toCharArray()) {
+            assertNotEquals(0, MenuGlyphs.row(character, 7), "Missing descender for " + character);
+        }
+        for (char character : "gpqy".toCharArray()) {
+            assertEquals(0, MenuGlyphs.row(character, 0));
+            assertEquals(0, MenuGlyphs.row(character, 1));
+            assertNotEquals(0, MenuGlyphs.row(character, 2), "Lowercase bodies share the x-height");
+        }
+        assertNotEquals(0, MenuGlyphs.row('j', 0), "Keep the dot above the j stem");
+        for (char character : "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefhiklmnorstuvwxz0123456789".toCharArray()) {
+            assertEquals(0, MenuGlyphs.row(character, 7), "Non-descenders keep their baseline: " + character);
+        }
+        assertEquals(6, MenuGlyphs.ADVANCE);
+        assertEquals(8, MenuGlyphs.HEIGHT);
     }
 
     @Test

@@ -14,7 +14,6 @@ import java.util.List;
 import java.util.Objects;
 
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_BACKSPACE;
-import static org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_TAB;
 
 /**
@@ -24,7 +23,8 @@ public final class LaunchConfigPanel {
 
     private static final int SCREEN_H = 224;
     private static final float TEXT_SCALE = 1f;
-    private static final int TEXT_SIDE_PADDING = 4;
+    private static final int ROW_TEXT_X = 17;
+    private static final int PAGE_TEXT_X = 9;
 
     public enum Result { NONE, CLOSED, CANCELLED }
 
@@ -39,8 +39,6 @@ public final class LaunchConfigPanel {
     private final LaunchProfileStore store;
     private final SonicConfigurationService configService;
     private final PixelFont font;
-    @SuppressWarnings("unused")
-    private final TexturedQuadRenderer renderer;
     private final LaunchProfile.Row[] rows = LaunchProfile.Row.values();
 
     private LaunchProfile profile;
@@ -65,7 +63,6 @@ public final class LaunchConfigPanel {
         this.originalProfile = this.profile;
         this.configService = Objects.requireNonNull(configService, "configService");
         this.font = font;
-        this.renderer = renderer;
     }
 
     public void update(InputHandler inputHandler) {
@@ -146,7 +143,6 @@ public final class LaunchConfigPanel {
             int fieldCount = visibleRows().size();
             if (selectedRow < fieldCount) {
                 MenuStyle.focus(font, 9, 48 + selectedRow * 16, viewportWidth - 18, 15);
-                font.drawText(">", 13, 52 + selectedRow * 16, TEXT_SCALE, .5f, .91f, 1f, 1f);
             }
             String[] actions = {"Stock", "Save", "Cancel"};
             int buttonWidth = (viewportWidth - 24) / 3;
@@ -199,23 +195,22 @@ public final class LaunchConfigPanel {
         for (int i = 0; i < views.size(); i++) {
             RowView view = views.get(i);
             boolean selected = i == selectedRow;
-            String marker = " ";
             String suffix = rowSuffix(view);
             float r = rowRed(view, selected);
             float g = rowGreen(view, selected);
             float b = rowBlue(view, selected);
-            addCenteredLine(lines, marker + " " + view.label() + ": " + view.value() + suffix,
-                    viewportWidth, y, TEXT_SCALE, r, g, b, 1f);
+            addLeftAlignedLine(lines, view.label() + ": " + view.value() + suffix,
+                    ROW_TEXT_X, viewportWidth, y, TEXT_SCALE, r, g, b, 1f);
             y += 16;
         }
-        addCenteredLine(lines, saveError == null ? "! experimental" : saveError, viewportWidth, SCREEN_H - 48,
+        addLeftAlignedLine(lines, saveError == null ? "! experimental" : saveError, PAGE_TEXT_X, viewportWidth, SCREEN_H - 48,
                 MenuStyle.COMPACT, 1f, 0.25f, 0.25f, 1f);
-        addCenteredLine(lines, "* non-default / non-stock", viewportWidth, SCREEN_H - 34,
+        addLeftAlignedLine(lines, "* non-default / non-stock", PAGE_TEXT_X, viewportWidth, SCREEN_H - 34,
                 MenuStyle.COMPACT, 1f, 0.72f, 0.25f, 1f);
-        addCenteredLine(lines, (lastInput == null ? "Arrows" : MenuInput.directionLabel(lastInput)) + (selectedRow < visibleRows().size() ? " Edit " : " Move ")
+        addLeftAlignedLine(lines, (lastInput == null ? "Arrows" : MenuInput.directionLabel(lastInput)) + (selectedRow < visibleRows().size() ? " Edit " : " Move ")
                         + (lastInput == null ? "Enter" : MenuInput.confirmLabel(lastInput)) + (selectedRow < visibleRows().size() ? " Save " : " OK ")
                         + (lastInput == null ? "Esc" : MenuInput.backLabel(lastInput)) + " Cancel",
-                viewportWidth, SCREEN_H - 16, 1f, 0.7f, 0.7f, 0.7f, 1f);
+                PAGE_TEXT_X, viewportWidth, SCREEN_H - 16, 1f, 0.7f, 0.7f, 0.7f, 1f);
         return List.copyOf(lines);
     }
 
@@ -255,24 +250,13 @@ public final class LaunchConfigPanel {
         pendingResult = Result.CLOSED;
     }
 
-    private void addCenteredLine(List<TextLineView> lines, String text, int viewportWidth,
-                                 int y, float scale, float r, float g, float b, float a) {
-        if (measureWidth(text, scale) > viewportWidth - 18) {
-            text = scale < 1f ? MenuStyle.fit(text, viewportWidth - 18)
-                    : MenuStyle.fitLabel(text, viewportWidth - 18);
+    private void addLeftAlignedLine(List<TextLineView> lines, String text, int x, int viewportWidth,
+                                    int y, float scale, float r, float g, float b, float a) {
+        int maxWidth = Math.max(0, viewportWidth - x - PAGE_TEXT_X);
+        if (measureWidth(text, scale) > maxWidth) {
+            text = scale < 1f ? MenuStyle.fit(text, maxWidth) : MenuStyle.fitLabel(text, maxWidth);
         }
-        int width = measureWidth(text, scale);
-        int x = Math.round((viewportWidth - width) / 2f);
-        lines.add(new TextLineView(text, x, y, scale, width, r, g, b, a));
-    }
-
-    private float fittedScale(String text, float preferredScale, int viewportWidth) {
-        int width = measureWidth(text, preferredScale);
-        int maxWidth = Math.max(1, viewportWidth - TEXT_SIDE_PADDING * 2);
-        if (width <= maxWidth) {
-            return preferredScale;
-        }
-        return preferredScale * maxWidth / width;
+        lines.add(new TextLineView(text, x, y, scale, measureWidth(text, scale), r, g, b, a));
     }
 
     private int measureWidth(String text, float scale) {

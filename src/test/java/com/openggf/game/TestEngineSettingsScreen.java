@@ -2,12 +2,12 @@ package com.openggf.game;
 
 import com.openggf.InputBindingFactory;
 import com.openggf.configuration.EngineSettingsDraft;
+import com.openggf.configuration.ConfigCatalog;
 import com.openggf.configuration.SonicConfigurationService;
 import com.openggf.control.GamepadStateSource;
 import com.openggf.control.InputHandler;
 import com.openggf.control.MenuInput;
 import com.openggf.graphics.PixelFont;
-import com.openggf.graphics.TexturedQuadRenderer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -170,10 +170,57 @@ class TestEngineSettingsScreen {
                 "Descriptions and status may use the secondary font");
     }
 
+    @Test
+    void shortDescriptionDisplaysBothLinesImmediatelyWithinTheAvailableBand() {
+        Fixture f = new Fixture();
+        f.press(GLFW_KEY_ENTER); // Display / screen shape
+        for (int width : new int[] {320, 426}) {
+            f.assertTextBounds(width);
+            List<Line> help = f.font.lines.stream().filter(line -> line.y == 178 || line.y == 188).toList();
+            if (width == 320) assertEquals(2, help.size(), "Both native-width help lines appear without waiting");
+            else assertTrue(help.size() >= 1 && help.size() <= 2, "Wider screens may fit the whole description on one line");
+            assertEquals(ConfigCatalog.meta(DISPLAY_ASPECT).description(),
+                    String.join(" ", help.stream().map(Line::text).toList()));
+            for (Line line : help) {
+                assertEquals(MenuStyle.COMPACT, line.scale, "Only explanatory text uses the secondary font");
+                assertTrue(line.y >= 178 && line.y + 8 <= 198, "Help stays clear of the rail and footer");
+            }
+        }
+    }
+
+    @Test
+    void longDescriptionsAdvanceInReadablePairsWithoutDroppingText() {
+        Fixture f = new Fixture();
+        f.press(GLFW_KEY_DOWN, 5); // Recording
+        f.press(GLFW_KEY_ENTER);
+        int codecRow = new EngineSettingsDraft(f.config).keys(EngineSettingsDraft.Category.RECORDING).indexOf(CAPTURE_CODEC);
+        assertTrue(codecRow >= 0);
+        f.press(GLFW_KEY_DOWN, codecRow);
+        List<String> first = f.descriptionLines();
+        assertEquals(2, first.size());
+        for (int i = 0; i < 240; i++) f.frame();
+        assertEquals(first, f.descriptionLines(), "Reading the first pair no longer advances after only four seconds");
+        for (int i = 0; i < 240; i++) f.frame();
+
+        List<String> allLines = new ArrayList<>(first);
+        boolean returnedToFirst = false;
+        for (int page = 0; page < 10; page++) {
+            List<String> current = f.descriptionLines();
+            if (current.equals(first)) { returnedToFirst = true; break; }
+            allLines.addAll(current);
+            for (int i = 0; i < 480; i++) f.frame();
+        }
+        assertTrue(returnedToFirst, "The complete help repeats after its final page");
+        assertEquals(ConfigCatalog.meta(CAPTURE_CODEC).description(), String.join(" ", allLines));
+        f.press(GLFW_KEY_DOWN);
+        f.press(GLFW_KEY_UP);
+        assertEquals(first, f.descriptionLines(), "Selecting a field restarts at the first help pair");
+    }
+
     private final class Fixture {
         final SonicConfigurationService config = SonicConfigurationService.createStandalone(directory);
         final RecordingFont font = new RecordingFont();
-        final EngineSettingsScreen screen = new EngineSettingsScreen(config, font, new NoGlRenderer(), 1);
+        final EngineSettingsScreen screen = new EngineSettingsScreen(config, font);
         List<GamepadStateSource.DeviceState> pads = List.of();
         final InputHandler input = new InputHandler(InputBindingFactory.supplier(config), () -> pads);
 
@@ -201,6 +248,10 @@ class TestEngineSettingsScreen {
             pads = List.of(GamepadStateSource.DeviceState.connected(0, "Test pad", state, 0, 0));
         }
         void frame() { input.refreshLogicalSnapshot(); screen.update(input); input.update(); }
+        List<String> descriptionLines() {
+            texts();
+            return font.lines.stream().filter(line -> line.y == 178 || line.y == 188).map(Line::text).toList();
+        }
         List<String> texts() {
             font.lines.clear();
             screen.render(320);
@@ -226,8 +277,5 @@ class TestEngineSettingsScreen {
             lines.add(new Line(text, x, y, scale));
         }
     }
-    private static final class NoGlRenderer extends TexturedQuadRenderer {
-        @Override public void drawTexture(int texture, float x, float y, float w, float h,
-                                          float r, float g, float b, float a) { }
-    }
+
 }
