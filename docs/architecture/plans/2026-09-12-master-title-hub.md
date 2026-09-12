@@ -8,7 +8,7 @@ scaled into the left pane without stretching or rectangular placeholder art.
 Left/right selects a game from either hub pane. Up/down enters the action list
 from game selection, then chooses Start, Launch options, Time attack, Recordings,
 Mods, Settings, Advanced, or Quit. Confirm remains an entry shortcut; Back returns
-to game selection with the error/cancel cue. Opening menu screens uses confirmation.
+to game selection with a distinct cancel cue. Opening menu screens uses confirmation.
 Existing shortcuts remain optional accelerators. Advanced contains trace replays
 and help, without duplicating Settings. Quit uses a cancellable confirmation and
 the existing host fade/exit flow; game-pane Back also opens the confirmation.

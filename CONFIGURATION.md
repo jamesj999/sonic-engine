@@ -212,7 +212,7 @@ and `launch.s3k`. Left/right changes games from either hub pane. Up/down enters
 the action list from the game pane, then chooses an action within it.
 `Enter` (controller A) opens the selected action and also provides a shortcut
 into the action pane. `Esc` (controller B) backs out. Opening a menu screen plays
-the confirmation cue; backing out plays the same error/cancel cue as a missing ROM. Choose **Launch Options** to edit the selected game's profile.
+the confirmation cue; backing out plays a distinct cancel cue. Choose **Launch Options** to edit the selected game's profile.
 The original ROM-backed animated game logos remain, proportionally scaled into
 the left pane. Their original textures are drawn directly into the window
 viewport, so a larger window recovers source detail instead of enlarging a
