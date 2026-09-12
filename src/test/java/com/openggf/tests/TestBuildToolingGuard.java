@@ -881,9 +881,10 @@ class TestBuildToolingGuard {
             violations.add("AGENTS.md/CLAUDE.md do not document explicit hook bootstrap");
         }
         for (String requiredText : List.of(
-                "mvn package",
-                "mvn test",
-                "mvn \"-Dtest=TestCollisionLogic\" test",
+                "python3 tools/testing/run_categories.py --list",
+                "python3 tools/testing/run_categories.py --base develop --run",
+                "mvn -Dmse=off package",
+                "mvn -Dmse=off \"-Dtest=TestCollisionLogic\" test",
                 "mvn -Dmse=off -Pguards test -B",
                 "Maven output belongs in the current worktree's `target/` directory.",
                 "Do not share or\n  copy build trees.",
