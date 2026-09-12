@@ -10,7 +10,6 @@ import com.openggf.tools.audio.completerun.CompleteRunAudioTrace.Lifecycle;
 import com.openggf.tools.audio.completerun.CompleteRunAudioTrace.Metadata;
 import com.openggf.tools.audio.completerun.CompleteRunAudioTrace.Record;
 import com.openggf.tools.audio.completerun.CompleteRunAudioTrace.Terminal;
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
@@ -208,9 +207,9 @@ public final class CompleteRunAudioCaptureStore {
             } else {
                 throw new IllegalArgumentException("unsupported complete-run record type: " + record.getClass().getName());
             }
-            write(record);
+            byte[] canonicalLine = write(record);
             if (!(record instanceof Terminal)) {
-                update(rootDigest, CompleteRunAudioJson.writeRecord(record));
+                rootDigest.update(canonicalLine);
                 update(semanticDigest, CompleteRunAudioJson.writeSemanticRecord(record));
             }
         }
@@ -279,12 +278,13 @@ public final class CompleteRunAudioCaptureStore {
             return current;
         }
 
-        private void write(Record record) throws IOException {
+        private byte[] write(Record record) throws IOException {
             ChunkWriter writer = current();
             String json = CompleteRunAudioJson.writeRecord(record);
             byte[] bytes = (json + "\n").getBytes(StandardCharsets.UTF_8);
             writer.gzip.write(bytes);
             writer.raw.update(bytes);
+            return bytes;
         }
 
         private void finishChunk() throws IOException {
@@ -370,7 +370,7 @@ public final class CompleteRunAudioCaptureStore {
         private final Validator validator;
         private int chunkIndex;
         private Chunk expectedChunk;
-        private BufferedReader input;
+        private BoundedLines input;
         private DigestInputStream compressedInput;
         private MessageDigest rawDigest;
         private Record next;
@@ -396,7 +396,7 @@ public final class CompleteRunAudioCaptureStore {
             try {
                 while (true) {
                     if (input == null) openChunk();
-                    String line = boundedLine(input);
+                    String line = input.readLine();
                     if (line != null) {
                         byte[] bytes = (line + "\n").getBytes(StandardCharsets.UTF_8);
                         rawDigest.update(bytes);
@@ -436,7 +436,7 @@ public final class CompleteRunAudioCaptureStore {
                 throw new IllegalArgumentException("chunk path escapes capture chunks directory");
             }
             compressedInput = new DigestInputStream(Files.newInputStream(file, LinkOption.NOFOLLOW_LINKS), sha256());
-            input = new BufferedReader(new InputStreamReader(new GZIPInputStream(compressedInput), StandardCharsets.UTF_8));
+            input = new BoundedLines(new InputStreamReader(new GZIPInputStream(compressedInput), StandardCharsets.UTF_8));
             rawDigest = sha256();
         }
 
@@ -709,18 +709,48 @@ public final class CompleteRunAudioCaptureStore {
         catch (IOException failure) { throw new IllegalArgumentException("cannot canonicalize complete-run record", failure); }
     }
 
-    private static String boundedLine(BufferedReader input) throws IOException {
-        StringBuilder line = new StringBuilder(Math.min(8192, MAX_RECORD_CHARACTERS));
-        int value;
-        while ((value = input.read()) >= 0) {
-            if (value == '\n') return line.toString();
-            if (value == '\r') throw new IllegalArgumentException("capture records require LF line endings");
-            if (line.length() == MAX_RECORD_CHARACTERS) {
-                throw new IllegalArgumentException("capture record exceeds its byte bound");
-            }
-            line.append((char) value);
+    /** Bounded LF records with bulk decoding, retaining unread characters between records. */
+    static final class BoundedLines implements AutoCloseable {
+        private final java.io.Reader reader;
+        private final char[] buffer = new char[8192];
+        private int position;
+        private int limit;
+
+        BoundedLines(java.io.Reader reader) {
+            this.reader = reader;
         }
-        return line.isEmpty() ? null : line.toString();
+
+        String readLine() throws IOException {
+            if (limit < 0) return null;
+            StringBuilder line = new StringBuilder(Math.min(8192, MAX_RECORD_CHARACTERS));
+            while (true) {
+                if (position == limit) {
+                    limit = reader.read(buffer);
+                    position = 0;
+                    if (limit < 0) return line.isEmpty() ? null : line.toString();
+                }
+                int start = position;
+                while (position < limit) {
+                    char value = buffer[position++];
+                    if (value == '\n') {
+                        line.append(buffer, start, position - start - 1);
+                        return line.toString();
+                    }
+                    if (value == '\r') {
+                        throw new IllegalArgumentException("capture records require LF line endings");
+                    }
+                    if (line.length() + position - start - 1 == MAX_RECORD_CHARACTERS) {
+                        throw new IllegalArgumentException("capture record exceeds its byte bound");
+                    }
+                }
+                line.append(buffer, start, position - start);
+            }
+        }
+
+        @Override
+        public void close() throws IOException {
+            reader.close();
+        }
     }
 
     private static String semanticRecordJson(Record record) {

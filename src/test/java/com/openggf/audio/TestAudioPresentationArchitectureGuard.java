@@ -27,6 +27,7 @@ import com.tngtech.archunit.core.domain.JavaMethodCall;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.TestInstance;
 
 import java.io.IOException;
@@ -416,6 +417,16 @@ class TestAudioPresentationArchitectureGuard {
 
         assertTrue(smpsOwnershipViolations(sources).contains(
                 "unguarded driver snapshot @ audio/driver/SmpsDriver.java"));
+    }
+
+    @Test
+    void lookupMemoKeepsIdenticalBodiesInDifferentSourceGraphsIndependent() {
+        String root = "private void root() { helper(); source.loader().loadSfx(1); } ";
+        String safe = root + "private void helper() { catalog.findRegisteredSmpsSfxAsset(); }";
+        String unsafe = root + "private void helper() { }";
+        assertTrue(lookupPrecedesEveryLoad(safe, "root"));
+        assertFalse(lookupPrecedesEveryLoad(unsafe, "root"));
+        assertTrue(lookupPrecedesEveryLoad(safe, "root"));
     }
 
     @Test
@@ -980,8 +991,8 @@ class TestAudioPresentationArchitectureGuard {
             Set<MethodSignature> activeMethods) {
     }
 
-    private static final Map<LookupState, LookupInspection> LOOKUP_MEMO =
-            new HashMap<>();
+    private static final Map<Map<MethodSignature, String>, Map<LookupState, LookupInspection>>
+            LOOKUP_MEMO = new java.util.IdentityHashMap<>();
 
     private static LookupInspection inspectLookupOrder(
             String body,
@@ -991,13 +1002,15 @@ class TestAudioPresentationArchitectureGuard {
             Set<MethodSignature> activeMethods) {
         LookupState state = new LookupState(body, lookupSeen,
                 Set.copyOf(activeMethods));
-        LookupInspection memoised = LOOKUP_MEMO.get(state);
+        Map<LookupState, LookupInspection> memo = LOOKUP_MEMO.computeIfAbsent(
+                methods, ignored -> new HashMap<>());
+        LookupInspection memoised = memo.get(state);
         if (memoised != null) {
             return memoised;
         }
         LookupInspection computed = computeLookupOrder(
                 body, methods, relevantMethods, lookupSeen, activeMethods);
-        LOOKUP_MEMO.put(state, computed);
+        memo.put(state, computed);
         return computed;
     }
 
@@ -1148,7 +1161,7 @@ class TestAudioPresentationArchitectureGuard {
             return true;
         }
         return relevantMethods.stream().anyMatch(method ->
-                localCallPattern(method).matcher(body).find());
+                body.contains(method) && localCallPattern(method).matcher(body).find());
     }
 
     private static Set<String> lookupRelevantMethods(
@@ -1218,8 +1231,8 @@ class TestAudioPresentationArchitectureGuard {
             return true;
         }
         for (Map.Entry<MethodSignature, String> method : methods.entrySet()) {
-            if (!localCallPattern(method.getKey().name())
-                    .matcher(body).find()) {
+            if (!body.contains(method.getKey().name())
+                    || !localCallPattern(method.getKey().name()).matcher(body).find()) {
                 continue;
             }
             if (activeMethods.add(method.getKey())) {
@@ -1246,6 +1259,11 @@ class TestAudioPresentationArchitectureGuard {
 
     private static void addLocalCallEvents(
             List<GuardEvent> events, String body, String method) {
+        // The regex quotes the name literally. An absent substring cannot
+        // match, so avoid scanning the entire body through the regex engine.
+        if (!body.contains(method)) {
+            return;
+        }
         Matcher calls = localCallPattern(method).matcher(body);
         while (calls.find()) {
             events.add(new GuardEvent(calls.start(), "call:" + method));
@@ -1266,7 +1284,23 @@ class TestAudioPresentationArchitectureGuard {
                         + Pattern.quote(name) + "\\s*\\("));
     }
 
+    private static final Map<String, Map<MethodSignature, String>> METHOD_BODY_CACHE =
+            new HashMap<>();
+
+    @AfterEach
+    void clearAnalysisCaches() {
+        METHOD_BODY_CACHE.clear();
+        METHOD_NAME_CACHE.clear();
+        METHODS_NAMED_CACHE.clear();
+        LOOKUP_MEMO.clear();
+    }
+
     private static Map<MethodSignature, String> methodBodies(String source) {
+        return METHOD_BODY_CACHE.computeIfAbsent(source,
+                TestAudioPresentationArchitectureGuard::parseMethodBodies);
+    }
+
+    private static Map<MethodSignature, String> parseMethodBodies(String source) {
         String declarationsSource = annotationsElided(source);
         Pattern declarations = Pattern.compile(
                 "(?:^|[;}])\\s*"
@@ -1439,6 +1473,9 @@ class TestAudioPresentationArchitectureGuard {
             String called = method.getKey().name();
             if (called.equals("captureLiveCommandMutation")
                     || called.equals("hasChipWriteObserver")) {
+                continue;
+            }
+            if (!body.contains(called)) {
                 continue;
             }
             Matcher calls = localCallPattern(called).matcher(body);

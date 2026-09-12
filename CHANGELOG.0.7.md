@@ -76,8 +76,12 @@ campaigns; feature/API publication remains subject to the 0.8 roadmap.
 
 ## Build and release
 
-- **Faster audio oracle validation:** buffer request-aware S2 capture reads while
-  preserving strict byte validation, digest checks, and full fixture coverage.
+- **Faster test validation:** buffer request-aware S2 capture reads, reuse read-only
+  launcher references and large-capture hash preparation, read bounded capture
+  lines in bulk, reuse emitted canonical bytes for hashing, cache repeated guard
+  analysis, and advance integration-test room deadlines through a controlled clock.
+  Strict byte validation, digest pins, ROM configurations, stress sizes, and real
+  socket exchanges remain covered.
 
 - **Local test categories:** select related subsystem checks from changed paths, with
   common tests and structural guards retained, broad fallback for shared changes,

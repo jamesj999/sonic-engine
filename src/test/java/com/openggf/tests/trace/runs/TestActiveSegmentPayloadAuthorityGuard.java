@@ -45,6 +45,7 @@ import com.tngtech.archunit.core.domain.JavaMethodReference;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 
 import java.io.IOException;
 import java.lang.reflect.Constructor;
@@ -81,7 +82,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Architectural ratchet for the one-active-segment payload lease. */
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class TestActiveSegmentPayloadAuthorityGuard {
+    private JavaClasses importedClasses;
     private static final Path MAIN_SOURCES = Path.of("src/main/java");
     private static final Path TEST_SOURCES = Path.of("src/test/java");
     private static final String SELF_SOURCE =
@@ -1808,10 +1811,15 @@ class TestActiveSegmentPayloadAuthorityGuard {
                 () -> assertNoRelayViolation(UnrelatedFieldRelayControl.class));
     }
 
-    private static JavaClasses importProjectClasses() {
-        return new ClassFileImporter()
-                .withImportOption(new ImportOption.DoNotIncludeArchives())
-                .importPackages("com.openggf");
+    private JavaClasses importProjectClasses() {
+        // Same compiled inputs and import scope for each rule in this class.
+        // Adversarial fixture imports remain independent.
+        if (importedClasses == null) {
+            importedClasses = new ClassFileImporter()
+                    .withImportOption(new ImportOption.DoNotIncludeArchives())
+                    .importPackages("com.openggf");
+        }
+        return importedClasses;
     }
 
     private static List<String> unauthorizedPayloadCalls(

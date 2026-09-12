@@ -3632,8 +3632,9 @@ class TestCompleteRunAudioComparator {
     void streamsMaximumCompleteRunHighEntropyFramesInSeparateThirtyTwoMiBJvm() throws Exception {
         int frames = 434_417;
         TestProfile profile = registerProfile(frames);
-        Path reference = writeStreamingCapture("large-reference", profile, ProducerKind.REFERENCE, frames);
-        Path engine = writeStreamingCapture("large-engine", profile, ProducerKind.OPENGGF, frames);
+        StreamingRoots roots = streamingRoots(frames);
+        Path reference = writeStreamingCapture("large-reference", profile, ProducerKind.REFERENCE, frames, roots);
+        Path engine = writeStreamingCapture("large-engine", profile, ProducerKind.OPENGGF, frames, roots);
         long referenceCompressedBytes = compressedBytes(reference);
         long engineCompressedBytes = compressedBytes(engine);
         long compressedBytes = referenceCompressedBytes + engineCompressedBytes;
@@ -3906,10 +3907,8 @@ class TestCompleteRunAudioComparator {
         return output;
     }
 
-    private Path writeStreamingCapture(String name, TestProfile profile, ProducerKind kind, int frames)
-            throws Exception {
-        String digest = streamingRoot(frames, false);
-        String semanticDigest = streamingRoot(frames, true);
+    private Path writeStreamingCapture(String name, TestProfile profile, ProducerKind kind, int frames,
+                                       StreamingRoots roots) throws Exception {
         Metadata metadata = metadata(profile, kind, profile.producerRuntimeIdentities().get(kind));
         Iterator<CompleteRunAudioTrace.Record> records = new Iterator<>() {
             private long cursor;
@@ -3922,7 +3921,7 @@ class TestCompleteRunAudioComparator {
                         entropyFrame(frames - 1).postRowState());
                 if (current == 2L * frames + 2) {
                     return new Terminal(FIRST_FRAME + frames, frames, frames, frames, frames,
-                            frames, frames, frames, 0, 0, digest, semanticDigest);
+                            frames, frames, frames, 0, 0, roots.physical(), roots.semantic());
                 }
                 int row = (int) ((current - 1) / 2);
                 return (current & 1) == 1 ? entropyLifecycle(row, frames) : entropyFrame(row);
@@ -3933,19 +3932,32 @@ class TestCompleteRunAudioComparator {
         return output;
     }
 
-    private static String streamingRoot(int frames, boolean semantic) {
+    private record StreamingRoots(String physical, String semantic) { }
+
+    private static StreamingRoots streamingRoots(int frames) {
         try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            update(digest, baseline(state(1)), semantic);
+            MessageDigest physical = MessageDigest.getInstance("SHA-256");
+            MessageDigest semantic = MessageDigest.getInstance("SHA-256");
+            // Both producers use the same immutable record stream. Derive both
+            // roots together, without retaining the large generated records.
+            updateRoots(physical, semantic, baseline(state(1)));
             for (int row = 0; row < frames; row++) {
-                update(digest, entropyLifecycle(row, frames), semantic);
-                update(digest, entropyFrame(row), semantic);
+                updateRoots(physical, semantic, entropyLifecycle(row, frames));
+                updateRoots(physical, semantic, entropyFrame(row));
             }
-            update(digest, CutoffFrontier.empty(entropyFrame(frames - 1).postRowState()), semantic);
-            return HexFormat.of().formatHex(digest.digest());
+            updateRoots(physical, semantic,
+                    CutoffFrontier.empty(entropyFrame(frames - 1).postRowState()));
+            return new StreamingRoots(HexFormat.of().formatHex(physical.digest()),
+                    HexFormat.of().formatHex(semantic.digest()));
         } catch (Exception failure) {
             throw new AssertionError(failure);
         }
+    }
+
+    private static void updateRoots(MessageDigest physical, MessageDigest semantic,
+                                    CompleteRunAudioTrace.Record record) throws IOException {
+        update(physical, record, false);
+        update(semantic, record, true);
     }
 
     private static Frame entropyFrame(int row) {

@@ -122,9 +122,8 @@ class TestFbzCompatibilityMatrix {
     void configuredTeamSurvivesSharedPlaneAndBossState(TeamCase team) throws Exception {
         try (ConfigurationScope ignored = ConfigurationScope.open()) {
             configureNative(team.sidekicks(), WidescreenAspect.NATIVE_4_3);
-            assertSynchronousMagneticTransitionCompatibility(
-                    team.label(), 320, "off",
-                    transition -> assertTeamGraph(transition.sprite(), team));
+            // The matching standalone preflight covers this configuration's
+            // synchronous transition. This route starts from a fresh session.
             restartFreshGameplaySession();
             List<AbstractPlayableSprite> routedSidekicks = new ArrayList<>();
             AbstractPlayableSprite[] routedMain = new AbstractPlayableSprite[1];
@@ -176,9 +175,8 @@ class TestFbzCompatibilityMatrix {
             WidescreenAspect aspect, int width) throws Exception {
         try (ConfigurationScope ignored = ConfigurationScope.open()) {
             configureNative("tails", aspect, width);
-            assertSynchronousMagneticTransitionCompatibility(width + "px", width, "off",
-                    transition -> assertEquals(width,
-                            transition.camera().getWidth() & 0xFFFF));
+            // The matching standalone preflight covers this configuration's
+            // synchronous transition. This route starts from a fresh session.
             restartFreshGameplaySession();
             RouteCompletionEvidence completion = TestFbzAct2TraversalPreboss
                     .runNativeStartFixedInputsReachSafeLateFrontierWithAllRouteMilestones(start -> {
@@ -266,16 +264,8 @@ class TestFbzCompatibilityMatrix {
                 assertEquals(donor, CrossGameFeatureProvider.getInstance().getDonorGameId());
             }
 
-            assertSynchronousMagneticTransitionCompatibility(
-                    "donor=" + donor, 320, donor, transition -> {
-                        if (donor.equals("off")) {
-                            assertSame(GameServices.module().getRules(),
-                                    transition.sprite().getGameRules());
-                        } else {
-                            assertNotSame(GameServices.module().getRules(),
-                                    transition.sprite().getGameRules());
-                        }
-                    });
+            // The matching standalone preflight covers this configuration's
+            // synchronous transition. This route starts from a fresh session.
             restartFreshGameplaySession();
 
             RouteCompletionEvidence completion = TestFbzAct2TraversalPreboss

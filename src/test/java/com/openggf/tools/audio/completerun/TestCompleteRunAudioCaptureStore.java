@@ -5,10 +5,12 @@ import static com.openggf.tools.audio.completerun.CompleteRunAudioTrace.*;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
+import java.io.StringReader;
 import java.io.ByteArrayOutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -35,6 +37,46 @@ class TestCompleteRunAudioCaptureStore {
     Path temp;
 
     private final CompleteRunAudioCaptureStore store = new CompleteRunAudioCaptureStore();
+
+    @Test
+    void boundedLinesRetainReadAheadAndHandleBufferEdges() throws Exception {
+        for (int length : new int[] {0, 1, 8191, 8192, 8193, 16384}) {
+            String first = "x".repeat(length);
+            try (var lines = new CompleteRunAudioCaptureStore.BoundedLines(
+                    new StringReader(first + "\n\nlast"))) {
+                assertEquals(first, lines.readLine());
+                assertEquals("", lines.readLine());
+                assertEquals("last", lines.readLine());
+                assertNull(lines.readLine());
+                assertNull(lines.readLine());
+            }
+            try (var lines = new CompleteRunAudioCaptureStore.BoundedLines(
+                    new StringReader(first + "\r\n"))) {
+                assertEquals("capture records require LF line endings",
+                        assertThrows(IllegalArgumentException.class, lines::readLine).getMessage());
+            }
+        }
+    }
+
+    @Test
+    void boundedLinesPreserveExactLimitAndErrorPrecedence() throws Exception {
+        String maximum = "x".repeat(16 * 1024 * 1024);
+        try (var lines = new CompleteRunAudioCaptureStore.BoundedLines(
+                new StringReader(maximum + "\nnext\n"))) {
+            assertEquals(maximum, lines.readLine());
+            assertEquals("next", lines.readLine());
+            assertNull(lines.readLine());
+        }
+        for (String suffix : new String[] {"x", "\r", "x\r"}) {
+            try (var lines = new CompleteRunAudioCaptureStore.BoundedLines(
+                    new StringReader(maximum + suffix))) {
+                assertEquals(suffix.equals("\r")
+                                ? "capture records require LF line endings"
+                                : "capture record exceeds its byte bound",
+                        assertThrows(IllegalArgumentException.class, lines::readLine).getMessage());
+            }
+        }
+    }
 
     @Test
     void duplicateCapturesHaveIdenticalBytesAndFixedFrameChunking() throws Exception {
