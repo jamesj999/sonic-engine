@@ -32,6 +32,8 @@ public class InputHandler {
 	private boolean mouseInputSeen;
 	private boolean controllerPresentation;
 	private boolean keyboardPresentationPending;
+	final MenuRepeat menuRepeat = new MenuRepeat();
+	long menuFrame;
 	private final StringBuilder menuTypedText = new StringBuilder();
 
 	/**
@@ -341,6 +343,10 @@ public class InputHandler {
 		return logicalOverride != null ? logicalOverride : physicalGamepadSnapshot;
 	}
 
+	boolean menuDetailsPressed() { return gamepadInputManager.isDebugModeTogglePressed(); }
+
+	ControllerPromptStyle menuControllerStyle() { return gamepadInputManager.presentationStyle(); }
+
 	boolean usesControllerPresentation() {
 		return controllerPresentation;
 	}
@@ -376,6 +382,7 @@ public class InputHandler {
 	 * Updates the input handler state. Should be called at the end of the game loop.
 	 */
 	public void update() {
+		menuFrame++;
 		menuTypedText.setLength(0);
 		System.arraycopy(keys, 0, previousKeys, 0, MAX_KEYS);
 		System.arraycopy(mouseButtons, 0, previousMouseButtons, 0, MAX_MOUSE_BUTTONS);

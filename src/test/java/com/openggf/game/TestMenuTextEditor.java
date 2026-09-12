@@ -205,19 +205,64 @@ class TestMenuTextEditor {
         assertEquals(List.of(keypadRow), focusRows, "Changing device must preserve keypad focus");
     }
 
+    @Test
+    void numericModeRejectsLettersAndControllerPathPickerPreservesUnicode() throws Exception {
+        Fixture numeric = new Fixture("", 64, MenuTextEditor.Mode.INTEGER);
+        numeric.type(GLFW_KEY_A, "12x3");
+        assertEquals("123", numeric.editor.value());
+        Path folder = java.nio.file.Files.createDirectory(directory.resolve("files"));
+        Path file = java.nio.file.Files.writeString(folder.resolve("caf\u00e9.gen"), "fixture");
+        Fixture path = new Fixture(folder.toString(), 4096, MenuTextEditor.Mode.PATH);
+        path.padPress(GLFW_GAMEPAD_BUTTON_DPAD_UP);
+        org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(java.time.Duration.ofSeconds(5), () -> {
+            RecordingFont loadingFont = new RecordingFont();
+            do {
+                path.frame(); loadingFont.lines.clear(); path.editor.render(loadingFont, 320);
+                if (loadingFont.lines.stream().noneMatch(line -> line.text.equals("Loading folder..."))) break;
+                Thread.onSpinWait();
+            } while (true);
+        });
+        path.padPress(GLFW_GAMEPAD_BUTTON_DPAD_DOWN, 2);
+        path.padPress(GLFW_GAMEPAD_BUTTON_A);
+        assertEquals(file.toString(), path.editor.value());
+        path.padPress(GLFW_GAMEPAD_BUTTON_A);
+        assertEquals(MenuTextEditor.Result.ACCEPTED, path.editor.consumeResult());
+    }
+
+    @Test
+    void detailsExposeUnicodeAndFullValidationErrorWithoutChangingTheValue() {
+        Fixture f = new Fixture("caf\u00e9\uD83D\uDE00", 64);
+        f.editor.reject("first\n" + "middle\n".repeat(25) + "FINAL ERROR");
+        f.press(GLFW_KEY_F1);
+        RecordingFont font = new RecordingFont();
+        f.editor.render(font, 320);
+        assertTrue(font.lines.stream().anyMatch(l -> l.text.equals("first")));
+        f.press(GLFW_KEY_DOWN, 30);
+        font.lines.clear(); f.editor.render(font, 320);
+        assertTrue(font.lines.stream().anyMatch(l -> l.text.contains("FINAL ERROR")));
+        assertTrue(font.lines.stream().anyMatch(l -> l.text.contains("[U+E9][U+1F600]")));
+        f.press(GLFW_KEY_ESCAPE);
+        assertEquals("caf\u00e9\uD83D\uDE00", f.editor.value());
+        assertEquals(MenuTextEditor.Result.NONE, f.editor.consumeResult());
+        f.press(GLFW_KEY_BACKSPACE);
+        assertEquals("caf\u00e9", f.editor.value());
+    }
+
     private final class Fixture {
         final SonicConfigurationService config = SonicConfigurationService.createStandalone(directory);
         final MenuTextEditor editor;
         List<GamepadStateSource.DeviceState> pads = List.of();
         final InputHandler input = new InputHandler(InputBindingFactory.supplier(config), () -> pads);
-        Fixture(String initial, int limit) {
+        Fixture(String initial, int limit) { this(initial, limit, MenuTextEditor.Mode.TEXT); }
+        Fixture(String initial, int limit, MenuTextEditor.Mode mode) {
             config.setConfigValue(CONTROLLER_ENABLED, true);
             config.setConfigValue(CONTROLLER_PLAYER1, "auto");
             config.setConfigValue(CONTROLLER_PLAYER2, "none");
-            editor = new MenuTextEditor("Edit text", initial, limit);
+            editor = new MenuTextEditor("Edit text", initial, limit, null, mode);
             pad();
             frame();
         }
+        void press(int key, int count) { for (int i = 0; i < count; i++) press(key); }
         void press(int key) {
             input.handleKeyEvent(key, GLFW_PRESS); frame();
             input.handleKeyEvent(key, GLFW_RELEASE); frame();

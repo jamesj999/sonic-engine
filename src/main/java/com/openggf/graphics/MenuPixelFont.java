@@ -130,6 +130,39 @@ public final class MenuPixelFont extends PixelFont {
         menuRenderer.drawTexture(solidTexture, x, 224 - y - height, width, height, r, g, b, a);
     }
 
+    // Reused native-grid geometry: the static checkerboard needs one submission,
+    // regardless of the number of checks or the current text batching mode.
+    private record CheckerGeometry(int start, int width, float[] vertices, int quads) { }
+    private final CheckerGeometry[] checkerCache = new CheckerGeometry[4];
+    private int nextCheckerSlot;
+
+    public void drawCheckerboard(int startX, int width) {
+        if (menuRenderer == null || width <= startX) return;
+        flushActiveBatch();
+        CheckerGeometry geometry = null;
+        for (CheckerGeometry cached : checkerCache) {
+            if (cached != null && cached.start() == startX && cached.width() == width) { geometry = cached; break; }
+        }
+        if (geometry == null) {
+            int checkerQuads = 0;
+            int capacity = 11 * ((width - startX + 31) / 32 + 1);
+            float[] checkerVertices = new float[capacity * TexturedQuadRenderer.COLORED_QUAD_FLOATS];
+            for (int y = 29, row = 0; y < 198; y += 16, row++) {
+                for (int x = startX + (row & 1) * 16; x < width; x += 32) {
+                    int height = Math.min(15, 198 - y);
+                    TexturedQuadRenderer.writeColoredQuadVerticesAtOffset(checkerVertices,
+                            checkerQuads++ * TexturedQuadRenderer.COLORED_QUAD_FLOATS,
+                            x, 224 - y - height, Math.min(15, width - x), height,
+                            0, 0, 1, 1, .05f, .115f, .28f, 1);
+                }
+            }
+            geometry = new CheckerGeometry(startX, width, checkerVertices, checkerQuads);
+            checkerCache[nextCheckerSlot] = geometry;
+            nextCheckerSlot = (nextCheckerSlot + 1) % checkerCache.length;
+        }
+        menuRenderer.drawColoredTextureBatch(solidTexture, geometry.vertices(), geometry.quads());
+    }
+
     private void selectBatch(Batch next) {
         if (activeBatch == next) return;
         flushActiveBatch();

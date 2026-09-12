@@ -60,6 +60,27 @@ class TestEditorRenderingSmoke {
     }
 
     @Test
+    void commandPaletteBackdropUsesACoreProfilePrimitiveBeforeText() throws Exception {
+        GraphicsManager graphics = org.mockito.Mockito.mock(GraphicsManager.class);
+        EditorTextRenderer text = org.mockito.Mockito.mock(EditorTextRenderer.class);
+        EditorLibraryPaneRenderer pane = new EditorLibraryPaneRenderer(null, graphics, text);
+        List<String> lines = new EditorCommandPalette().lines();
+        pane.renderCommands(lines);
+        var captured = org.mockito.ArgumentCaptor.forClass(GLCommandable.class);
+        var order = org.mockito.Mockito.inOrder(graphics, text);
+        order.verify(graphics).registerCommand(captured.capture());
+        order.verify(text).renderLines(lines, 18, 42);
+        var group = (com.openggf.graphics.GLCommandGroup) captured.getValue();
+        Field primitive = group.getClass().getDeclaredField("drawMethod");
+        primitive.setAccessible(true);
+        int mode = primitive.getInt(group);
+        assertTrue(mode == org.lwjgl.opengl.GL11.GL_TRIANGLES
+                || mode == org.lwjgl.opengl.GL11.GL_TRIANGLE_STRIP
+                || mode == org.lwjgl.opengl.GL11.GL_TRIANGLE_FAN,
+                "A filled palette backdrop must use a primitive supported by the core profile");
+    }
+
+    @Test
     void focusedPaneRenderer_buildsWithoutPermanentSidebarAssumptions() {
         InspectableFocusedEditorPaneRenderer renderer = new InspectableFocusedEditorPaneRenderer();
 

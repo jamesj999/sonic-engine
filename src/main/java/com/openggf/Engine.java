@@ -437,14 +437,24 @@ public class Engine {
 				levelEditorController, () -> camera, () -> graphicsManager, this::saveCurrentEditorLevel,
 				this::exportCurrentEditorLevel);
 
+        com.openggf.editor.EditorCommandPalette.forController(levelEditorController)
+                .setHostActions(this::toggleEditorPlaytestMode, this::startGameplayFromBeginning);
+        com.openggf.editor.EditorCommandPalette.forController(levelEditorController)
+                .setFeedback(cue -> audioManager.playSfx(MasterTitleScreen.AudioCue.valueOf(cue.name()).sfxName()));
+
 		// Set up game mode change listener to update projection width
 		gameLoop.setGameModeChangeListener((oldMode, newMode) -> {
+            com.openggf.editor.EditorCommandPalette.forController(levelEditorController).close();
 			// Keep projection at 320 for both modes
 			projectionWidth = realWidth;
 		});
 		gameLoop.setEditorInputHandler(editorInputHandler);
-		gameLoop.setEditorPlaytestToggleHandler(this::toggleEditorPlaytestMode);
-		gameLoop.setEditorFreshStartHandler(this::startGameplayFromBeginning);
+		gameLoop.setEditorPlaytestToggleHandler(() -> {
+            if (!com.openggf.editor.EditorCommandPalette.forController(levelEditorController).isOpen()) toggleEditorPlaytestMode();
+        });
+		gameLoop.setEditorFreshStartHandler(() -> {
+            if (!com.openggf.editor.EditorCommandPalette.forController(levelEditorController).isOpen()) startGameplayFromBeginning();
+        });
 
 		instance = this;
 	}
@@ -1450,7 +1460,7 @@ public class Engine {
 		nativeModNoticeScreen = new com.openggf.game.NativeModNoticeScreen(
 				graphicsManager.getFadeManager(),
 				com.openggf.mods.NativeUnsupportedMods.noticeLines(
-						names, com.openggf.game.NativeModNoticeScreen.MAX_VISIBLE_MOD_LINES));
+						names, Integer.MAX_VALUE));
 		nativeModNoticeScreen.initialize();
 		gameLoop.setNativeModNoticeExitHandler(this::exitNativeModNotice);
 		gameLoop.setGameMode(GameMode.NATIVE_MOD_NOTICE);
@@ -3936,6 +3946,7 @@ public class Engine {
 		resetCameraForScreenSpaceIfPresent();
 		if (nativeModNoticeScreen != null) {
 			nativeModNoticeScreen.setProjectionMatrix(getProjectionMatrixBuffer());
+			nativeModNoticeScreen.setViewportWidth((int) realWidth);
 			nativeModNoticeScreen.draw();
 		}
 	}

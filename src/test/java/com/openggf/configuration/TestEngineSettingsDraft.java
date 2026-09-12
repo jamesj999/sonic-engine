@@ -16,6 +16,25 @@ class TestEngineSettingsDraft {
     @TempDir Path directory;
 
     @Test
+    void presentationRevisionChangesOnlyWithDraftOrSavedState() throws IOException {
+        EngineSettingsDraft draft = new EngineSettingsDraft(service());
+        long initial = draft.revision();
+        assertSame(draft.keys(EngineSettingsDraft.Category.INPUT), draft.keys(EngineSettingsDraft.Category.INPUT));
+        draft.set(AUDIO_ENABLED, draft.text(AUDIO_ENABLED));
+        assertEquals(initial, draft.revision());
+        draft.step(AUDIO_ENABLED, 1);
+        assertTrue(draft.revision() > initial);
+        long edited = draft.revision();
+        assertTrue(draft.changed(AUDIO_ENABLED));
+        assertTrue(draft.dirty());
+        draft.apply();
+        assertTrue(draft.revision() > edited);
+        assertFalse(draft.dirty());
+        assertFalse(draft.changed(AUDIO_ENABLED));
+        assertTrue(draft.nonDefault(AUDIO_ENABLED));
+    }
+
+    @Test
     void everyPersistedPreferenceHasExactlyOneVisibleCategory() {
         EngineSettingsDraft draft = new EngineSettingsDraft(service());
         Set<SonicConfiguration> reachable = new HashSet<>();

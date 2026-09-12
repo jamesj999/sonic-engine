@@ -181,6 +181,54 @@ class TestMenuInput {
         assertFalse(MenuInput.accept(fixture.input));
     }
 
+    @Test
+    void keyboardAndPadNavigationRepeatButConfirmationDoesNot() {
+        for (boolean controller : new boolean[] {false, true}) {
+            Fixture fixture = new Fixture();
+            if (controller) fixture.pad(0, GLFW_GAMEPAD_BUTTON_DPAD_DOWN, GLFW_GAMEPAD_BUTTON_A);
+            else {
+                fixture.input.handleKeyEvent(GLFW_KEY_DOWN, GLFW_PRESS);
+                fixture.input.handleKeyEvent(GLFW_KEY_ENTER, GLFW_PRESS);
+            }
+            for (int frame = 0; frame <= 32; frame++) {
+                fixture.input.refreshLogicalSnapshot();
+                assertEquals(frame == 0 || frame >= 24 && (frame - 24) % 4 == 0,
+                        MenuInput.down(fixture.input), "repeat frame " + frame);
+                assertEquals(frame == 0, MenuInput.accept(fixture.input), "confirm frame " + frame);
+                fixture.input.update();
+            }
+        }
+    }
+
+    @Test
+    void fixedHeldArrowCannotRepeatItsConflictingGameplayBinding() {
+        Fixture fixture = new Fixture();
+        fixture.config.setConfigValue(SonicConfiguration.RIGHT, GLFW_KEY_LEFT);
+        fixture.input.handleKeyEvent(GLFW_KEY_LEFT, GLFW_PRESS);
+        for (int frame = 0; frame < 32; frame++) {
+            fixture.input.refreshLogicalSnapshot();
+            assertFalse(MenuInput.right(fixture.input));
+            assertEquals(frame == 0 || frame >= 24 && (frame - 24) % 4 == 0, MenuInput.left(fixture.input));
+            fixture.input.update();
+        }
+    }
+
+    @Test
+    void parentMappedNavigationCannotLeakIntoTextNavigationInSameFrame() {
+        Fixture fixture = new Fixture();
+        fixture.config.setConfigValue(SonicConfiguration.UP, GLFW_KEY_W);
+        fixture.input.handleKeyEvent(GLFW_KEY_W, GLFW_PRESS);
+        fixture.input.refreshLogicalSnapshot();
+        assertTrue(MenuInput.up(fixture.input));
+        assertFalse(MenuInput.textUp(fixture.input));
+        fixture.input.update();
+        fixture.input.handleKeyEvent(GLFW_KEY_W, GLFW_RELEASE);
+        fixture.input.handleKeyEvent(GLFW_KEY_UP, GLFW_PRESS);
+        fixture.input.refreshLogicalSnapshot();
+        assertTrue(MenuInput.up(fixture.input));
+        assertTrue(MenuInput.textUp(fixture.input));
+    }
+
     private static final class Fixture {
         private final SonicConfigurationService config = SonicConfigurationService.createStandalone();
         private List<GamepadStateSource.DeviceState> devices = List.of();
@@ -201,7 +249,7 @@ class TestMenuInput {
             for (int button : pressed) {
                 buttons[button] = true;
             }
-            devices = List.of(GamepadStateSource.DeviceState.connected(0, "Test pad", buttons, x, 0));
+            devices = List.of(GamepadStateSource.DeviceState.connected(0, "Xbox test pad", buttons, x, 0));
         }
 
         void frame() {

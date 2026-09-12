@@ -11,6 +11,23 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class TestMenuPixelFont {
     @Test
+    void checkerboardIsOneNativeGeometrySubmissionAndPreservesTextOrder() throws Exception {
+        Fixture fixture = new Fixture();
+        fixture.font.beginMegaBatch();
+        fixture.font.drawText("A", 0, 0, 1f, 1, 1, 1, 1);
+        fixture.font.drawCheckerboard(0, 320);
+        fixture.font.drawText("b", 0, 20, .6f, 1, 1, 1, 1);
+        fixture.font.endMegaBatch();
+        assertEquals(List.of(7, 13, 11), fixture.renderer.draws.stream().map(Draw::texture).toList());
+        assertEquals(110, fixture.renderer.draws.get(1).quads());
+        float[] before = fixture.renderer.draws.get(1).vertices();
+        fixture.font.drawCheckerboard(0, 320);
+        assertArrayEquals(before, fixture.renderer.draws.getLast().vertices());
+        fixture.font.drawCheckerboard(160, 320);
+        assertEquals(55, fixture.renderer.draws.getLast().quads());
+    }
+
+    @Test
     void compactMetricsAreNativeAtEveryFractionalScaleAndFullMetricsAreIntegerScaled() {
         MenuPixelFont font = new MenuPixelFont();
         for (float scale : new float[] {.4f, .5f, .6f, .65f, .8f, .99f}) {

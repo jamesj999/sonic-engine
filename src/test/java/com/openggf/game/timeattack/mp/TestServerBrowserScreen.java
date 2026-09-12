@@ -45,6 +45,7 @@ class TestServerBrowserScreen {
         press(screen, input, GLFW_KEY_DOWN);
         press(screen, input, GLFW_KEY_ENTER);
         verify(actions).create("RELAY");
+
     }
 
     @Test
@@ -72,6 +73,70 @@ class TestServerBrowserScreen {
         screen.render();
         assertTrue(font.lines.stream().anyMatch(line -> line.startsWith("Room13-")));
         assertFalse(font.lines.stream().anyMatch(line -> line.startsWith("Room0-")));
+    }
+
+    @Test
+    void transportCompletionOnlyPublishesDuringUpdateAndKeepsRoomIdentity() throws Exception {
+        var a = room("a");
+        var b = room("b");
+        MasterClient client = client(List.of(a, b));
+        var future = new CompletableFuture<ControlMessage.RoomListResult>();
+        when(client.listRooms("s2", 0)).thenReturn(
+                CompletableFuture.completedFuture(new ControlMessage.RoomListResult(List.of(a, b), 0, 1)), future);
+        var actions = mock(ServerBrowserScreen.Actions.class);
+        var font = new RecordingFont();
+        var screen = new ServerBrowserScreen(client, "s2", font, actions);
+        var input = new InputHandler();
+        screen.update(input);
+        press(screen, input, GLFW_KEY_DOWN);
+        press(screen, input, GLFW_KEY_R);
+        Thread transport = new Thread(() -> future.complete(
+                new ControlMessage.RoomListResult(List.of(b, a), 0, 1)));
+        transport.start(); transport.join();
+        screen.render();
+        assertTrue(font.lines.indexOf("a") < font.lines.indexOf("b"), "Render must not consume transport results");
+        press(screen, input, GLFW_KEY_ENTER);
+        verify(actions).join(b);
+    }
+
+    @Test
+    void resultAfterLeavingCannotReviveBrowser() {
+        MasterClient client = client(List.of());
+        var future = new CompletableFuture<ControlMessage.RoomListResult>();
+        when(client.listRooms("s2", 0)).thenReturn(future);
+        var actions = mock(ServerBrowserScreen.Actions.class);
+        var screen = new ServerBrowserScreen(client, "s2", null, actions);
+        var input = new InputHandler();
+        press(screen, input, GLFW_KEY_ESCAPE);
+        future.complete(new ControlMessage.RoomListResult(List.of(room("late")), 0, 1));
+        press(screen, input, GLFW_KEY_ENTER);
+        verify(actions).back();
+        verify(actions, never()).join(any());
+        verify(actions, never()).create(any());
+    }
+
+    @Test
+    void disappearedSelectionMovesToRefreshRatherThanJoiningReplacement() {
+        var a = room("a");
+        var b = room("b");
+        var client = client(List.of(a, b));
+        var future = new CompletableFuture<ControlMessage.RoomListResult>();
+        when(client.listRooms("s2", 0)).thenReturn(
+                CompletableFuture.completedFuture(new ControlMessage.RoomListResult(List.of(a, b), 0, 1)), future);
+        var actions = mock(ServerBrowserScreen.Actions.class);
+        var screen = new ServerBrowserScreen(client, "s2", null, actions);
+        var input = new InputHandler();
+        screen.update(input);
+        press(screen, input, GLFW_KEY_R);
+        future.complete(new ControlMessage.RoomListResult(List.of(b), 0, 1));
+        press(screen, input, GLFW_KEY_ENTER);
+        verify(actions, never()).join(any());
+        verify(actions, never()).create(any());
+        verify(client, times(3)).listRooms("s2", 0);
+    }
+
+    private static ControlMessage.RoomSummary room(String id) {
+        return new ControlMessage.RoomSummary(id, id, "s2", 0, 0, "OPEN", 1, 8, "RELAY", true);
     }
 
     private static final class RecordingFont extends PixelFont {

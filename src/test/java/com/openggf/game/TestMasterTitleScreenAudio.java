@@ -44,7 +44,7 @@ class TestMasterTitleScreenAudio {
         pressFrame(screen, input, GLFW_KEY_ENTER);
 
         MasterTitleScreen missingRomScreen = activeScreen(false);
-        pressFrame(missingRomScreen, input, GLFW_KEY_ENTER);
+        pressFrame(missingRomScreen, input, GLFW_KEY_DOWN);
         pressFrame(missingRomScreen, input, GLFW_KEY_ENTER);
 
         assertEquals(List.of("UI_NAVIGATE", "UI_CONFIRM", "UI_NAVIGATE", "UI_ERROR"),

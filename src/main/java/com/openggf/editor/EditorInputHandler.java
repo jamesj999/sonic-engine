@@ -2,6 +2,7 @@ package com.openggf.editor;
 
 import com.openggf.camera.Camera;
 import com.openggf.control.InputHandler;
+import com.openggf.control.MenuInput;
 import com.openggf.control.InputActionMasks;
 import com.openggf.editor.commands.StrokeCommand;
 import com.openggf.graphics.GraphicsManager;
@@ -119,6 +120,10 @@ public final class EditorInputHandler {
 
     public void update(InputHandler inputHandler) {
         Objects.requireNonNull(inputHandler, "inputHandler");
+        if (EditorCommandPalette.forController(controller).update(inputHandler, this::handleAction)) {
+            finishActiveStroke();
+            return;
+        }
         boolean capturesText = controller.isLibraryFilterInputActive();
         if(!capturesText)handleMouseInput(inputHandler);
         var logical = inputHandler.logical();
@@ -127,30 +132,30 @@ public final class EditorInputHandler {
         int dy = 0;
         if (controller.isLibraryBrowserFocused()) {
             if (controller.focusRegion() == EditorFocusRegion.SPAWN_PALETTE) {
-                if (inputHandler.isKeyPressed(GLFW_KEY_LEFT) || logical.menuLeft())
+                if (capturesText ? MenuInput.textLeft(inputHandler) : MenuInput.left(inputHandler))
                     handleAction(Action.BROWSE_LIBRARY_PREVIOUS);
-                if (inputHandler.isKeyPressed(GLFW_KEY_RIGHT) || logical.menuRight())
+                if (capturesText ? MenuInput.textRight(inputHandler) : MenuInput.right(inputHandler))
                     handleAction(Action.BROWSE_LIBRARY_NEXT);
-                if (inputHandler.isKeyPressed(GLFW_KEY_UP) || logical.menuUp())
+                if (capturesText ? MenuInput.textUp(inputHandler) : MenuInput.up(inputHandler))
                     handleAction(capturesText?Action.BROWSE_LIBRARY_ROW_PREVIOUS:Action.INCREMENT_SUBTYPE);
-                if (inputHandler.isKeyPressed(GLFW_KEY_DOWN) || logical.menuDown())
+                if (capturesText ? MenuInput.textDown(inputHandler) : MenuInput.down(inputHandler))
                     handleAction(capturesText?Action.BROWSE_LIBRARY_ROW_NEXT:Action.DECREMENT_SUBTYPE);
             } else {
-                if (inputHandler.isKeyPressed(GLFW_KEY_LEFT) || logical.menuLeft())
+                if (capturesText ? MenuInput.textLeft(inputHandler) : MenuInput.left(inputHandler))
                     handleAction(Action.BROWSE_LIBRARY_PREVIOUS);
-                if (inputHandler.isKeyPressed(GLFW_KEY_RIGHT) || logical.menuRight())
+                if (capturesText ? MenuInput.textRight(inputHandler) : MenuInput.right(inputHandler))
                     handleAction(Action.BROWSE_LIBRARY_NEXT);
-                if (inputHandler.isKeyPressed(GLFW_KEY_UP) || logical.menuUp())
+                if (capturesText ? MenuInput.textUp(inputHandler) : MenuInput.up(inputHandler))
                     handleAction(Action.BROWSE_LIBRARY_ROW_PREVIOUS);
-                if (inputHandler.isKeyPressed(GLFW_KEY_DOWN) || logical.menuDown())
+                if (capturesText ? MenuInput.textDown(inputHandler) : MenuInput.down(inputHandler))
                     handleAction(Action.BROWSE_LIBRARY_ROW_NEXT);
             }
         } else if (controller.focusRegion() == EditorFocusRegion.SPAWN_PALETTE
                 && controller.spawnEditMode() == EditorSpawnEditMode.OBJECTS) {
-            if (inputHandler.isKeyPressed(GLFW_KEY_LEFT) || logical.menuLeft()) handleAction(Action.PREVIOUS_OBJECT);
-            if (inputHandler.isKeyPressed(GLFW_KEY_RIGHT) || logical.menuRight()) handleAction(Action.NEXT_OBJECT);
-            if (inputHandler.isKeyPressed(GLFW_KEY_UP) || logical.menuUp()) handleAction(Action.INCREMENT_SUBTYPE);
-            if (inputHandler.isKeyPressed(GLFW_KEY_DOWN) || logical.menuDown()) handleAction(Action.DECREMENT_SUBTYPE);
+            if (capturesText ? MenuInput.textLeft(inputHandler) : MenuInput.left(inputHandler)) handleAction(Action.PREVIOUS_OBJECT);
+            if (capturesText ? MenuInput.textRight(inputHandler) : MenuInput.right(inputHandler)) handleAction(Action.NEXT_OBJECT);
+            if (capturesText ? MenuInput.textUp(inputHandler) : MenuInput.up(inputHandler)) handleAction(Action.INCREMENT_SUBTYPE);
+            if (capturesText ? MenuInput.textDown(inputHandler) : MenuInput.down(inputHandler)) handleAction(Action.DECREMENT_SUBTYPE);
         } else {
             if (inputHandler.isDirectionHeld(GLFW_KEY_LEFT, AbstractPlayableSprite.INPUT_LEFT)) dx -= 1;
             if (inputHandler.isDirectionHeld(GLFW_KEY_RIGHT, AbstractPlayableSprite.INPUT_RIGHT)) dx += 1;
@@ -175,11 +180,11 @@ public final class EditorInputHandler {
         }
         boolean controlDown = inputHandler.isKeyDown(GLFW_KEY_LEFT_CONTROL)
                 || inputHandler.isKeyDown(GLFW_KEY_RIGHT_CONTROL);
-        if (controller.isLibraryBrowserFocused() && inputHandler.isKeyPressed(GLFW_KEY_BACKSPACE)) {
+        if (controller.isLibraryBrowserFocused() && MenuInput.textKeyRepeated(inputHandler, GLFW_KEY_BACKSPACE)) {
             if (controlDown) controller.setLibraryFilter(""); else controller.backspaceLibraryFilter();
         }
         capturesText=controller.isLibraryFilterInputActive();
-        if(capturesText&&inputHandler.isKeyPressed(GLFW_KEY_ESCAPE)) {
+        if(capturesText && MenuInput.textBack(inputHandler)) {
             controller.endLibraryFilterInput();
             return;
         }
@@ -307,7 +312,8 @@ public final class EditorInputHandler {
 
     /** GLFW character-input callback seam; filtering is active only while a library pane owns focus. */
     public void handleTextInputCodepoint(int codepoint) {
-        if (!controller.isLibraryBrowserFocused() || !controller.isLibraryFilterInputActive()
+        if (EditorCommandPalette.forController(controller).isOpen()
+                || !controller.isLibraryBrowserFocused() || !controller.isLibraryFilterInputActive()
                 || !Character.isValidCodePoint(codepoint)
                 || Character.isISOControl(codepoint)) return;
         controller.appendLibraryFilterText(new String(Character.toChars(codepoint)));

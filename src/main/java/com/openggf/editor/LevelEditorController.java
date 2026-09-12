@@ -31,6 +31,9 @@ import java.util.Objects;
 
 @com.openggf.game.ModApi
 public final class LevelEditorController {
+    private final EditorCommandPalette commandPalette = new EditorCommandPalette(this::toggleLibraryFilterInput);
+
+    EditorCommandPalette commandPalette() { return commandPalette; }
     private static final int CHUNK_INDEX_MASK = 0x03FF;
 
     private final EditorHistory history = new EditorHistory();

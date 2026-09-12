@@ -66,10 +66,10 @@ class TestLegalDisclaimerTextWrap {
     }
 
     /**
-     * Mirrors PixelFont.measureWidth(s, scale) — 9 px/char × scale, rounded.
+     * Matches the authored native-grid menu font metrics.
      */
     private static int measureLike(String s, float scale) {
-        return Math.round(s.length() * 9f * scale);
+        return s.length() * com.openggf.graphics.MenuPixelFont.glyphAdvance(scale);
     }
 
     @Test

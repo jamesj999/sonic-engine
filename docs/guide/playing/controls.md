@@ -168,3 +168,20 @@ are unavailable.
 | F3 | Cycle Special Stage plane visibility debug modes (S2 only) |
 | F4 | Toggle the Special Stage alignment test (S2 only) |
 | F1 | Toggle the Special Stage lag-compensation display (S2 only) |
+
+## Host menu and editor navigation
+
+Host menus repeat held directions after a short delay; confirm and Back remain single
+presses. Prompt names follow the last device: Xbox A/B/Y, PlayStation
+Cross/Circle/Triangle, or South/East/North for unknown controllers.
+
+In the master-title game pane, Confirm opens Browse Games; Up/Down enters the action
+list. Settings and text editors expose full manually scrollable Details with F1 or
+the north controller button. Numeric values use a numeric keypad; Up from a path
+field opens the file browser. Mods requires explicit Apply to save drafts.
+
+The experimental level editor opens its command palette with F1 or the north
+controller button. Directions choose a command, Confirm executes it, and Back
+closes the palette. The palette includes placement, hierarchy/focus, library/filter,
+undo/redo, save/export, playtest and fresh-start commands. While it is open,
+underlying editor input and global playtest/fresh-start shortcuts are suppressed.

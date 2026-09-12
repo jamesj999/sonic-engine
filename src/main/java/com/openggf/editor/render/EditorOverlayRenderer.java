@@ -1,6 +1,7 @@
 package com.openggf.editor.render;
 
 import com.openggf.editor.EditorFocusRegion;
+import com.openggf.editor.EditorCommandPalette;
 import com.openggf.editor.EditorHierarchyDepth;
 import com.openggf.editor.LevelEditorController;
 import com.openggf.game.GameServices;
@@ -71,6 +72,12 @@ public final class EditorOverlayRenderer {
     }
 
     public void renderScreenSpaceOverlay() {
+        if (controller != null && EditorCommandPalette.forController(controller).isOpen()) {
+            // Replace the editor chrome while modal; world content remains visible underneath.
+            toolbar.render();
+            libraryPane.renderCommands(EditorCommandPalette.forController(controller).lines());
+            return;
+        }
         switch (activeDepth()) {
             case WORLD -> renderWorldPlacementUi();
             case BLOCK -> renderFocusedBlockEdit();
