@@ -1,5 +1,7 @@
 from pathlib import Path
 import sys
+import os
+import time
 import tempfile
 import unittest
 
@@ -88,6 +90,41 @@ class ArtifactRetentionTests(unittest.TestCase):
             artifacts.compact_run(root, failed=True)
             self.assertLessEqual(artifacts.size_bytes(root), 2 * artifacts.LOG_PART_BYTES)
             self.assertTrue(path.read_bytes().endswith(b'failure-end'))
+
+    def test_total_deadline_stops_even_a_chatty_child(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            command = [sys.executable, '-u', '-c',
+                       'import time\nwhile True: print("busy"); time.sleep(.02)']
+            with self.assertRaisesRegex(TimeoutError, 'total validation time budget'):
+                artifacts.run_logged(command, root, root / 'ordinary.log', timeout=.3)
+            self.assertIn('busy', (root / 'ordinary.log').read_text())
+
+    def test_idle_deadline_stops_a_silent_child(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with self.assertRaisesRegex(TimeoutError, 'no-output timeout'):
+                artifacts.run_logged([sys.executable, '-c', 'import time; time.sleep(60)'],
+                                     root, root / 'ordinary.log', timeout=10, idle_timeout=.2)
+
+    @unittest.skipUnless(os.name == 'posix', 'Unix process-group contract')
+    def test_timeout_also_stops_a_test_grandchild(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            marker = root / 'survived'
+            child = f'import time; from pathlib import Path; time.sleep(1); Path({str(marker)!r}).touch()'
+            parent = f'import subprocess, sys, time; subprocess.Popen([sys.executable, "-c", {child!r}]); print("spawned", flush=True); time.sleep(60)'
+            with self.assertRaises(TimeoutError):
+                artifacts.run_logged([sys.executable, '-c', parent], root, root / 'ordinary.log', timeout=.3)
+            self.assertIn('spawned', (root / 'ordinary.log').read_text())
+            time.sleep(1)
+            self.assertFalse(marker.exists(), 'test grandchild survived the runner timeout')
+
+    def test_expired_budget_does_not_launch_process(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with self.assertRaisesRegex(TimeoutError, 'before launch'):
+                artifacts.run_logged(['nonexistent-command'], root, root / 'ordinary.log', timeout=0)
 
     def test_child_tools_inherit_owned_temporary_directory(self):
         with tempfile.TemporaryDirectory() as tmp:
