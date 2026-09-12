@@ -106,9 +106,10 @@ in a separate JVM; its source and override scope is retained.
 
 ## Required delivery validation
 
-The selector includes all 2,504 ordinary candidate classes and all guards because
+Candidate `8f0e4ed2c` was frozen before broad validation. The selector includes
+all 2,504 ordinary candidate classes and all guards because
 shared test infrastructure changed. Tool preflight passed in the actual launch
-environment with `LUA_BIN=lua5.4`. Run once after focused work and documentation:
+environment with `LUA_BIN=lua5.4`. The completed command was:
 
 ```bash
 LUA_BIN=lua5.4 python3 tools/testing/run_categories.py --base 09f442379 --run
@@ -117,3 +118,64 @@ LUA_BIN=lua5.4 python3 tools/testing/run_categories.py --base 09f442379 --run
 The default stopping rule is 40 minutes total Maven time or 10 minutes without
 output. Known failures are compared by identity and diagnostic; unrelated gameplay
 failures do not justify repeated broad runs or changes to the engine.
+
+Run `20260912T172826Z-7577b8a1` completed without timeout:
+
+| Lane | Reports | Tests | Passed | Failed | Errors | Skipped | Elapsed |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Full ordinary | 2,523 | 20,373 | 20,333 | 15 | 0 | 25 | 740.02 s |
+| Structural guards | 82 | 658 | 658 | 0 | 0 | 0 | 194.31 s |
+
+Total Maven lane time: **15m34s**. This is a complete ordinary/guard run, not
+an explicit trace/native-profile run. The prior whole-suite measurement used
+an older commit, so do not attribute its entire difference to this patch.
+Guard class time summed to 173.141 seconds versus 215.251 in the fresh baseline.
+
+All 13 `TestFbzCompatibilityMatrix` failures matched the untouched baseline by
+identity and complete message in both focused and broad candidate runs. The
+remaining failures were checked on unchanged develop `09f442379` after the broad
+run, without a second full selection:
+
+```bash
+mvn -Dmse=off \
+  '-Dtest=TestObjectPlacementEncoding#commonParserPreservesDescendingFullXOrderInsideOnePlacementColumn,TestFbzAct2RouteHeadless#nativeStartWaveCompletesFbz2AndRequestsSandopolisAct0' \
+  test -B
+```
+
+Both selected baseline tests failed with exactly the candidate identity, failure
+type, and full message (SHA-256 equality of untruncated messages). Placement
+expects `[448, 384]` and receives `[384, 448]`. The standalone FBZ route reports
+`obj74-crossing-lost-flat-control` at frame 31,034. No new failures were introduced.
+
+All 25 skips were inspected, with zero omitted results. They include seven absent
+reference-audio cases, opt-in measurements/captures/soak checks, explicit BK2 or
+observation inputs, an unavailable surfaceless-EGL check, and
+`TestCPZObjectBugs.testSpinTubeForcesRolling` aborting because its capture/release
+assumption was not met. Skips are not passing coverage. All three root ROM
+identities were verified and their absolute paths supplied by the runner.
+
+## Current breakdown from the completed full run
+
+| Ordinary class | Seconds |
+|---|---:|
+| FBZ compatibility matrix | 108.605 |
+| Complete-run audio comparator | 86.977 |
+| Rewind torture | 62.383 |
+| FM bit-exact scripts | 44.657 |
+| FBZ act 1 route | 25.297 |
+| S3K oracle request-sidecar wiring | 24.892 |
+| S1 run-window audio oracle | 13.527 |
+| S2 raw-stream oracle | 13.150 |
+| S2 published windows | 12.924 |
+| Complete-run capture store | 11.947 |
+| Launcher | 9.349 |
+
+The leading guards are clock terminology (35.000 s), build tooling (32.600 s),
+active payload authority (25.730 s), constructor service checks (17.350 s),
+and trace/movie alignment (10.180 s). The optimized presentation guard is 7.150 s.
+Ordinary class time sums to 721.066 s; guard class time sums to 173.141 s.
+Compilation/startup and Maven account for the difference from lane elapsed time.
+
+The next substantial savings would require profiling the remaining ROM/audio
+execution or source attribution. Removing routes, chip cycles, rewind checks,
+mutation cases, or source scope is not an equivalent optimization.

@@ -56,7 +56,7 @@ in this order, using the current repository's bounded validation workflow.
   waiting with controlled host time where possible while retaining real sockets,
   latency proxy, event order, round/vote flow, and teardown. Owner:
   `TestDirectConnectEndToEnd`, with host changes only if required by a reusable seam.
-- [ ] Review every target's measured disposition, finish release/validation prose,
+- [x] Review every target's measured disposition, finish release/validation prose,
   preflight, and run the single required selection against the actual pinned base.
 - [ ] Integrate into develop without switching its branch; reconcile upstream by
   intent, perform relevant focused integration checks, validate push policy, push
@@ -70,7 +70,7 @@ Completed focused measurements are recorded in the
 | Target | Baseline | Final focused | Disposition |
 |---|---:|---:|---|
 | Complete-run audio comparator | 132.859 s | 78.641 s | Bulk bounded reads, canonical byte reuse, shared root preparation; 105 cases retained |
-| Structural guards | 215.251 s total | Three changed guards: 75.979 → 31.415 s | Exact substring prefilter, source/graph-scoped memo, identical-scope imports; complete lane pending |
+| Structural guards | 215.251 s total | 173.141 s total | Exact substring prefilter, source/graph-scoped memo, identical-scope imports; 658 passing checks in completed lane |
 | FBZ compatibility matrix | 64.512 s | 64.033 s | Duplicate preflight removed; all 13 full failure messages identical, 26 cases retained |
 | Rewind torture | 46.179 s | 46.289 s | Unchanged; replay audio dominates; keep seeds/checkpoints/identity |
 | Trace-session launcher | 43.923 s | 10.580 s | Lazy read-only S1 reference reuse; fresh mutable consumers; all 42 cases retained |
