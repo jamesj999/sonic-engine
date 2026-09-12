@@ -5,8 +5,10 @@
 The competition-style title remains a native 320x224 UI with proportional
 widescreen expansion. Preserve the existing ROM-backed animated game logos,
 scaled into the left pane without stretching or rectangular placeholder art.
-Left/right selects a game. Confirm enters the action pane; Back returns to
-game selection. Up/down selects Start, Launch options, Time attack, Recordings,
+Up/down selects a game in the left pane. Right enters the action pane; Left
+returns to game selection. Confirm remains an entry shortcut and Back returns
+to game selection with the error/cancel cue. Opening menu screens uses the
+confirmation cue. In the action pane, up/down selects Start, Launch options, Time attack, Recordings,
 Mods, Settings, or Tools. Existing shortcuts remain optional accelerators.
 Tools exposes the trace library without requiring a YAML test-mode gate.
 Standalone New Game/Continue remains available through Start.

@@ -6,7 +6,9 @@ campaigns; feature/API publication remains subject to the 0.8 roadmap.
 
 ## Gameplay and presentation
 
-- **Master title hub:** controller-first game/action navigation keeps the existing
+- **Master title hub:** controller-first navigation uses up/down within each pane and
+  left/right to switch between games and actions, with confirmation on menu entry
+  and error/cancel feedback on back. It keeps the existing
   animated ROM logos, adds visible launch, time-attack, recordings, mods, settings,
   and tools entries, and follows intentional input with keyboard/controller prompts.
   Catalog-backed engine settings offer visible categories, onscreen value/path/key

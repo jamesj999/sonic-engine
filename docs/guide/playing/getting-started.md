@@ -76,13 +76,14 @@ Linux terminal example:
 
 When the engine starts, you will see:
 
-1. **Master title screen** -- Choose a game with left/right, then press Enter (controller
-   A) to open its action menu. Up/down selects Start Game, Launch Options, Time Attack,
+1. **Master title screen** -- Choose a game with up/down, then press Right to
+   focus its action menu. Left returns to game selection. Up/down selects Start Game, Launch Options, Time Attack,
    Recordings, Mods, Settings, or Tools. Enter/A opens the selected action; Esc/B returns
    one level. Prompts follow the last keyboard/controller input. The original animated
    game logos remain, scaled proportionally into the game pane.
    When audio is enabled, navigation, confirmation, and missing-ROM errors use short
-   host-owned cues that do not depend on the selected game's ROM.
+   host-owned cues that do not depend on the selected game's ROM. Opening menu screens
+   plays confirmation; backing out plays the same error/cancel sound as a missing ROM.
 2. **Game title screen** -- The selected game's original title screen (e.g., the Sonic 2
    "PRESS START BUTTON" screen).
 3. **Gameplay** -- The first zone of the selected game.

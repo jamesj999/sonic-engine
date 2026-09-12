@@ -208,9 +208,11 @@ Paths are relative to the working directory (where the JAR is launched).
 ## Launch Profiles
 
 The master title stores per-game launch defaults under `launch.s1`, `launch.s2`,
-and `launch.s3k`. Left/right selects the game; `Enter` (controller A) enters its
-visible action menu. Up/down chooses an action; `Esc` (controller B) returns to
-game selection. Choose **Launch Options** to edit the selected game's profile.
+and `launch.s3k`. Up/down selects the game in the left pane or an action in the
+right pane. Right enters the action menu; Left returns to game selection.
+`Enter` (controller A) opens the selected action and also provides a shortcut
+into the action pane. `Esc` (controller B) backs out. Opening a menu screen plays
+the confirmation cue; backing out plays the same error/cancel cue as a missing ROM. Choose **Launch Options** to edit the selected game's profile.
 The original ROM-backed animated game logos remain, proportionally scaled into
 the left pane. Their original textures are drawn directly into the window
 viewport, so a larger window recovers source detail instead of enlarging a

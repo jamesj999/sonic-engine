@@ -414,15 +414,15 @@ class TestMasterTitleScreenLayout {
     }
 
     @Test
-    void logicalLeftRightNavigateActiveGameSelection() {
+    void logicalUpDownNavigateActiveGameSelection() {
         MasterTitleScreen screen = activeScreen();
         InputHandler input = new InputHandler();
 
-        input.setLogicalOverride(logicalPress(AbstractPlayableSprite.INPUT_RIGHT, 0, false));
+        input.setLogicalOverride(logicalPress(AbstractPlayableSprite.INPUT_DOWN, 0, false));
         screen.update(input);
         assertEquals("s3k", screen.getSelectedGameId());
 
-        input.setLogicalOverride(logicalPress(AbstractPlayableSprite.INPUT_LEFT, 0, false));
+        input.setLogicalOverride(logicalPress(AbstractPlayableSprite.INPUT_UP, 0, false));
         screen.update(input);
         assertEquals("s2", screen.getSelectedGameId());
     }

@@ -427,11 +427,11 @@ public class MasterTitleScreen {
         if (settingsScreen != null) {
             settingsScreen.update(inputHandler);
             if (settingsScreen.consumeApplied()) refreshRomPreviews();
-            if (settingsScreen.consumeCloseRequested()) settingsScreen = null;
+            if (settingsScreen.consumeCloseRequested()) { settingsScreen = null; playErrorSound(); }
             return;
         }
         if (helpOpen) {
-            if (navigation.back()) helpOpen = false;
+            if (navigation.back()) { helpOpen = false; playErrorSound(); }
             return;
         }
         if (toolsOpen) {
@@ -442,6 +442,7 @@ public class MasterTitleScreen {
             modManagerScreen.update(inputHandler);
             if (modManagerScreen.consumeCloseRequested()) {
                 modManagerScreen = null;
+                playErrorSound();
             }
             return;
         }
@@ -476,6 +477,7 @@ public class MasterTitleScreen {
                     // Disable test mode for this session so normal game-select runs
                     configService.setConfigValue(SonicConfiguration.TEST_MODE_ENABLED, false);
                     tracePicker = null;
+                    playErrorSound();
                 }
                 case NONE -> { }
             }
@@ -496,6 +498,7 @@ public class MasterTitleScreen {
             userRecordingMenu.update(inputHandler);
             if (userRecordingMenu.consumeCloseRequested()) {
                 userRecordingMenu = null;
+                playErrorSound();
             }
             return;
         }
@@ -508,6 +511,7 @@ public class MasterTitleScreen {
             // mid-update; re-check the field before touching it again.
             if (timeAttackMenu != null && menu.consumeCloseRequested()) {
                 timeAttackMenu = null;
+                playErrorSound();
             }
             return;
         }
@@ -517,14 +521,17 @@ public class MasterTitleScreen {
             LaunchConfigPanel.Result result = launchConfigPanel.consumeResult();
             if (result == LaunchConfigPanel.Result.CANCELLED) {
                 launchConfigPanel = null;
+                playErrorSound();
             } else if (result == LaunchConfigPanel.Result.CLOSED) {
                 MasterTitleEntry.Stock stock = (MasterTitleEntry.Stock) selectedEntry();
                 try {
                     launchProfileStore.save(stock.game(), launchConfigPanel.currentProfile());
                     launchConfigPanel = null;
+                    playConfirmSound();
                 } catch (java.io.UncheckedIOException failure) {
                     LOGGER.warning("Could not save launch profile: " + failure.getMessage());
                     launchConfigPanel.saveFailed();
+                    playErrorSound();
                 }
             }
             return;
@@ -551,15 +558,16 @@ public class MasterTitleScreen {
         }
 
         if (!navigation.actions()) {
-            if (navigation.left() && setSelectedIndex(selectedIndex - 1)) playNavigateSound();
-            if (navigation.right() && setSelectedIndex(selectedIndex + 1)) playNavigateSound();
-            if (navigation.accept()) {
+            if (navigation.up() && setSelectedIndex(selectedIndex - 1)) playNavigateSound();
+            if (navigation.down() && setSelectedIndex(selectedIndex + 1)) playNavigateSound();
+            if (navigation.right() || navigation.accept()) {
                 navigation.enter();
                 playNavigateSound();
             }
             return;
         }
-        if (navigation.back()) { navigation.leave(); playNavigateSound(); return; }
+        if (navigation.back()) { navigation.leave(); playErrorSound(); return; }
+        if (navigation.left()) { navigation.leave(); playNavigateSound(); return; }
         if (navigation.up() && navigation.move(-1)) { playNavigateSound(); return; }
         if (navigation.down() && navigation.move(1)) { playNavigateSound(); return; }
         if (!navigation.accept()) return;
@@ -570,17 +578,18 @@ public class MasterTitleScreen {
             case RECORDINGS -> { if (!tryOpenUserRecordingMenuForSelectedGame()) showUnavailableAction("No recording menu for this selection"); }
             case MODS -> openModManager();
             case SETTINGS -> openSettings();
-            case TOOLS -> { toolsOpen = true; toolIndex = 0; }
+            case TOOLS -> { toolsOpen = true; toolIndex = 0; playConfirmSound(); }
         }
     }
 
     private void openSettings() {
         settingsScreen = new EngineSettingsScreen(configService, font, renderer, solidWhiteTextureId);
+        playConfirmSound();
         childInputPending = true;
     }
 
     private void updateTools() {
-        if (navigation.back()) { toolsOpen = false; return; }
+        if (navigation.back()) { toolsOpen = false; playErrorSound(); return; }
         if (navigation.up()) toolIndex = Math.max(0, toolIndex - 1);
         if (navigation.down()) toolIndex = Math.min(2, toolIndex + 1);
         if (!navigation.accept()) return;
@@ -590,14 +599,16 @@ public class MasterTitleScreen {
                     .resolve(configService.getString(SonicConfiguration.TRACE_CATALOG_DIR)).normalize();
             tracePicker = new TestModeTracePicker(TraceCatalog.scan(root), ensurePickerFont());
             childInputPending = true;
+            playConfirmSound();
         } else if (toolIndex == 1) openSettings();
-        else helpOpen = true;
+        else { helpOpen = true; playConfirmSound(); }
     }
 
     private boolean openLaunchOptions() {
         if (!(selectedEntry() instanceof MasterTitleEntry.Stock stock) || !isEntryAvailable(stock)) return false;
         launchConfigPanel = new LaunchConfigPanel(stock.game(), launchProfileStore.load(stock.game()),
                 launchProfileStore, configService, font, renderer);
+        playConfirmSound();
         return true;
     }
 
@@ -637,7 +648,7 @@ public class MasterTitleScreen {
 
     private void updateStandaloneActionChooser(InputHandler input) {
         List<MasterTitleEntry.Action> actions = standaloneActionsForTest();
-        if (navigation.back()) { standaloneActionOpen = false; return; }
+        if (navigation.back()) { standaloneActionOpen = false; playErrorSound(); return; }
         if (navigation.up()) standaloneActionIndex = Math.max(0, standaloneActionIndex - 1);
         if (navigation.down()) standaloneActionIndex = Math.min(actions.size() - 1, standaloneActionIndex + 1);
         if (navigation.accept()) {
@@ -827,8 +838,8 @@ public class MasterTitleScreen {
                 textFitted("Configure in Settings", 12, 116, leftWidth - 6, 0.62f, 0.65f, 0.8f, 1f);
             }
         }
-        textFitted("< " + selectedEntry().menuLabel() + " >", 12, 163, leftWidth - 6, 1f, 1f, 1f, 1f);
-        textFitted(navigation.actions() ? backHint() + ": Games" : confirmHint() + ": Options",
+        textFitted(selectedEntry().menuLabel(), 12, 163, leftWidth - 6, 1f, 1f, 1f, 1f);
+        textFitted(navigation.actions() ? "Left: Games" : "Right: Menu",
                 12, 182, leftWidth - 6, 1f, 0.5f, 0.91f, 1f);
         for (TitleHubNavigation.Action action : TitleHubNavigation.Action.values()) {
             boolean available = action == TitleHubNavigation.Action.MODS || action == TitleHubNavigation.Action.SETTINGS
@@ -850,9 +861,8 @@ public class MasterTitleScreen {
             }
         }
         String footer = navigation.actions()
-                ? directionHint() + " Menu  " + confirmHint() + " Open  " + backHint() + " Back"
-                : (menuInput != null && MenuInput.controller(menuInput) ? "D-Pad L/R" : "Left/Right")
-                    + " Game  " + confirmHint() + " Options";
+                ? "Up/Down Menu  " + confirmHint() + " Open  Left Games"
+                : "Up/Down Game  Right Menu";
         textFitted(footer, 9, 211, viewportWidth - 18, 1f, 0.5f, 0.91f, 1f);
         if (standaloneActionOpen) drawStandaloneActions();
         font.endMegaBatch();
@@ -863,7 +873,7 @@ public class MasterTitleScreen {
         font.beginMegaBatch();
         font.drawText(toolsOpen ? "ENGINE TOOLS" : "CONTROLS / HELP", 10, 10, 1f, 1f, 1f, 1f);
         String[] lines = toolsOpen ? new String[] { "Trace replays", "Engine settings", "Controls / help" }
-                : new String[] { "Left/Right: choose game", confirmHint() + ": enter actions", "Up/Down: select action",
+                : new String[] { "Up/Down: game or action", "Left/Right: switch pane", confirmHint() + ": open action",
                     backHint() + ": return one screen", "Settings: draft, then Apply" };
         for (int i = 0; i < lines.length; i++) textFitted(lines[i], 17, 55 + i * 27,
                 viewportWidth - 34, 1f, 1f, 1f, 1f);
@@ -1306,6 +1316,7 @@ public class MasterTitleScreen {
         } else {
             modManagerOpenHandler.run();
         }
+        playConfirmSound();
     }
 
     boolean isModsFocusedForTest() {
@@ -1425,6 +1436,7 @@ public class MasterTitleScreen {
         try {
             userRecordingMenu = userRecordingMenuFactory.create(entry.gameId, font);
             childInputPending = true;
+            playConfirmSound();
             return true;
         } catch (IOException ex) {
             LOGGER.warning("Failed to open recordings menu for " + entry.gameId + ": " + ex.getMessage());
@@ -1474,6 +1486,7 @@ public class MasterTitleScreen {
         try {
             timeAttackMenu = timeAttackMenuFactory.create(availableGameIds, initialGameId, font);
             childInputPending = true;
+            playConfirmSound();
             return true;
         } catch (RuntimeException ex) {
             LOGGER.warning("Failed to open time attack menu: " + ex.getMessage());

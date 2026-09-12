@@ -103,7 +103,7 @@ class TestOrdinaryTitleScreenCommandEvidence {
             assertEquals(new Quad(1, 0, 0, width, 224), renderer.quads().get(0));
             assertTrue(renderer.quads().contains(new Quad(3, 10, 212, 31, 6)),
                     "OpenGGF logo stays in the title header");
-            assertTrue(font.texts().stream().anyMatch(text -> text.text().equals("Left/Right Game  Enter Options")
+            assertTrue(font.texts().stream().anyMatch(text -> text.text().equals("Up/Down Game  Right Menu")
                             && text.x() == 9), "game-selection keyboard prompts at " + width);
             assertTrue(font.texts().stream().anyMatch(text -> text.text().equals("LAUNCH OPTIONS")
                             && text.x() == width / 2 + 5), "visible launch entry at " + width);

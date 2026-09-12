@@ -28,7 +28,7 @@ class TestMasterTitleStandaloneEntries {
 
         assertEquals(2, screen.entriesForTest().size());
         screen.setStateForTest(MasterTitleScreen.State.ACTIVE);
-        press(screen, GLFW_KEY_RIGHT);
+        press(screen, GLFW_KEY_DOWN);
         assertEquals("sample-game", screen.getSelectedGameId());
     }
 

@@ -14,7 +14,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER;
-import static org.lwjgl.glfw.GLFW.GLFW_KEY_RIGHT;
+import static org.lwjgl.glfw.GLFW.*;
 import static org.lwjgl.glfw.GLFW.GLFW_PRESS;
 import static org.lwjgl.glfw.GLFW.GLFW_RELEASE;
 
@@ -47,7 +47,7 @@ class TestMasterTitleScreenAudio {
         pressFrame(missingRomScreen, input, GLFW_KEY_ENTER);
         pressFrame(missingRomScreen, input, GLFW_KEY_ENTER);
 
-        assertEquals(List.of("UI_NAVIGATE", "UI_NAVIGATE", "UI_CONFIRM", "UI_NAVIGATE", "UI_ERROR"),
+        assertEquals(List.of("UI_NAVIGATE", "UI_CONFIRM", "UI_NAVIGATE", "UI_ERROR"),
                 emittedSfxNames());
     }
 
@@ -57,7 +57,7 @@ class TestMasterTitleScreenAudio {
         screen.setSelectedIndexForTest(MasterTitleScreen.GameEntry.SONIC_3K.ordinal());
         InputHandler input = new InputHandler();
 
-        pressFrame(screen, input, GLFW_KEY_RIGHT);
+        pressFrame(screen, input, GLFW_KEY_DOWN);
 
         assertEquals(List.of(), emittedSfxNames());
     }
@@ -70,6 +70,38 @@ class TestMasterTitleScreenAudio {
         screen.showRomLoadError("s2");
 
         assertEquals(List.of("UI_ERROR"), emittedSfxNames());
+    }
+
+    @Test
+    void openingAndCancellingLaunchOptionsUseConfirmAndErrorOnce() {
+        MasterTitleScreen screen = activeScreen(true);
+        InputHandler input = new InputHandler();
+        pressFrame(screen, input, GLFW_KEY_RIGHT);
+        pressFrame(screen, input, GLFW_KEY_DOWN);
+        pressFrame(screen, input, GLFW_KEY_ENTER);
+        pressFrame(screen, input, GLFW_KEY_ESCAPE);
+        pressFrame(screen, input, GLFW_KEY_ESCAPE);
+        assertEquals(List.of("UI_NAVIGATE", "UI_NAVIGATE", "UI_CONFIRM", "UI_ERROR", "UI_ERROR"),
+                emittedSfxNames());
+    }
+
+    @Test
+    void settingsAndToolsEnterWithConfirmationAndBackWithError() {
+        MasterTitleScreen screen = activeScreen(true);
+        InputHandler input = new InputHandler();
+        pressFrame(screen, input, GLFW_KEY_RIGHT);
+        for (int i = 0; i < 5; i++) pressFrame(screen, input, GLFW_KEY_DOWN);
+        audio.resetState();
+        pressFrame(screen, input, GLFW_KEY_ENTER);
+        pressFrame(screen, input, GLFW_KEY_ESCAPE);
+        pressFrame(screen, input, GLFW_KEY_DOWN);
+        pressFrame(screen, input, GLFW_KEY_ENTER);
+        pressFrame(screen, input, GLFW_KEY_DOWN);
+        pressFrame(screen, input, GLFW_KEY_DOWN);
+        pressFrame(screen, input, GLFW_KEY_ENTER);
+        pressFrame(screen, input, GLFW_KEY_ESCAPE);
+        assertEquals(List.of("UI_CONFIRM", "UI_ERROR", "UI_NAVIGATE", "UI_CONFIRM",
+                "UI_CONFIRM", "UI_ERROR"), emittedSfxNames());
     }
 
     private MasterTitleScreen activeScreen(boolean selectedRomAvailable) {
@@ -86,6 +118,7 @@ class TestMasterTitleScreenAudio {
     private static void pressFrame(MasterTitleScreen screen, InputHandler input, int key) {
         input.handleKeyEvent(key, GLFW_PRESS);
         screen.update(input);
+        screen.update(input); // A held key must not replay the transition cue.
         input.handleKeyEvent(key, GLFW_RELEASE);
         input.update();
         screen.update(input);

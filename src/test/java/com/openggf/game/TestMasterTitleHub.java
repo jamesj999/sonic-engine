@@ -21,14 +21,20 @@ class TestMasterTitleHub {
         return screen;
     }
 
-    @Test void confirmEntersActionsBeforeLaunchingAndBackUnlocksGameSelection() {
+    @Test void directionsSwitchPanesAndOnlyCycleGamesInTheGamePane() {
         var screen = screen();
-        press(screen, GLFW_KEY_ENTER);
-        assertFalse(screen.isGameSelected(), "first confirmation opens the actions pane");
+        press(screen, GLFW_KEY_UP);
+        assertEquals("s1", screen.getSelectedGameId());
+        press(screen, GLFW_KEY_DOWN);
+        assertEquals("s2", screen.getSelectedGameId());
+        press(screen, GLFW_KEY_RIGHT);
+        assertFalse(screen.isGameSelected(), "right only opens the actions pane");
         press(screen, GLFW_KEY_RIGHT);
         assertEquals("s2", screen.getSelectedGameId(), "actions never cycle the selected game");
-        press(screen, GLFW_KEY_ESCAPE);
-        press(screen, GLFW_KEY_RIGHT);
+        press(screen, GLFW_KEY_DOWN);
+        assertEquals("s2", screen.getSelectedGameId(), "down selects actions in the right pane");
+        press(screen, GLFW_KEY_LEFT);
+        press(screen, GLFW_KEY_DOWN);
         assertEquals("s3k", screen.getSelectedGameId());
     }
 
