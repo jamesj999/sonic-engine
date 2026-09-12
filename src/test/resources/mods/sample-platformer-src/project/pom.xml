@@ -5,8 +5,8 @@
   <properties><maven.compiler.release>21</maven.compiler.release><lwjgl.version>3.3.3</lwjgl.version></properties>
   <profiles>
     <profile><id>published-openggf</id><activation><activeByDefault>true</activeByDefault></activation><dependencies>
-      <dependency><groupId>com.openggf</groupId><artifactId>OpenGGF</artifactId><version>0.7.prerelease</version><scope>provided</scope></dependency>
-      <dependency><groupId>com.openggf</groupId><artifactId>OpenGGF</artifactId><version>0.7.prerelease</version><classifier>openggf-mod-sdk</classifier><scope>provided</scope></dependency>
+      <dependency><groupId>com.openggf</groupId><artifactId>OpenGGF</artifactId><version>0.8.prerelease</version><scope>provided</scope></dependency>
+      <dependency><groupId>com.openggf</groupId><artifactId>OpenGGF</artifactId><version>0.8.prerelease</version><classifier>openggf-mod-sdk</classifier><scope>provided</scope></dependency>
     </dependencies></profile>
     <!--
       LWJGL native-classifier profiles, mirroring the engine's own pom.xml. Needed only by the

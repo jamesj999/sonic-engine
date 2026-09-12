@@ -51,7 +51,7 @@ means the wrong commit, and status 4 means an unsafe or missing path.
 The executable OpenGGF JAR with all dependencies is written to the current
 worktree's Maven output tree:
 ```
-target/OpenGGF-0.7.prerelease-jar-with-dependencies.jar
+target/OpenGGF-0.8.prerelease-jar-with-dependencies.jar
 ```
 
 Maven Silent Extension (MSE) is configured via `.mvn/extensions.xml`. By default, Maven

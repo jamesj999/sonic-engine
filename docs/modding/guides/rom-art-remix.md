@@ -12,8 +12,8 @@ Build OpenGGF before the sample so both artifacts expected by the scripts exist:
 ```powershell
 mvn package
 src/test/resources/mods/sample-rom-art-remix-src/build.ps1 `
-  target/OpenGGF-0.7.prerelease.jar `
-  target/OpenGGF-0.7.prerelease-openggf-mod-sdk.jar `
+  target/OpenGGF-0.8.prerelease.jar `
+  target/OpenGGF-0.8.prerelease-openggf-mod-sdk.jar `
   target/sample-rom-art-remix-build
 ```
 

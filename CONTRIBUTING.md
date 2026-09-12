@@ -62,7 +62,7 @@ mvn test
 Run the built jar:
 
 ```bash
-java -jar target/OpenGGF-0.7.prerelease-jar-with-dependencies.jar
+java -jar target/OpenGGF-0.8.prerelease-jar-with-dependencies.jar
 ```
 
 Maven output is quiet by default through the Maven Silent Extension. Use `-Dmse=off` when you need

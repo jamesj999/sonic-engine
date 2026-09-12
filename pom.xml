@@ -6,7 +6,7 @@
 
     <groupId>com.openggf</groupId>
     <artifactId>OpenGGF</artifactId>
-    <version>0.7.prerelease</version>
+    <version>0.8.prerelease</version>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>

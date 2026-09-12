@@ -69,7 +69,7 @@ Linux terminal example:
 3. Place your ROM files in the project root directory (next to `pom.xml`).
 4. Run:
    ```
-   java -jar target/OpenGGF-0.7.prerelease-jar-with-dependencies.jar
+   java -jar target/OpenGGF-0.8.prerelease-jar-with-dependencies.jar
    ```
 
 ## First Launch

@@ -14,13 +14,13 @@ decode the checked-in base64 level binaries, PNG, and WAV, then run Maven.
 PowerShell:
 
 ```powershell
-./build.ps1 C:\path\OpenGGF-0.7.prerelease-jar-with-dependencies.jar C:\path\OpenGGF-0.7.prerelease-openggf-mod-sdk.jar C:\temp\phase3-standalone
+./build.ps1 C:\path\OpenGGF-0.8.prerelease-jar-with-dependencies.jar C:\path\OpenGGF-0.8.prerelease-openggf-mod-sdk.jar C:\temp\phase3-standalone
 ```
 
 POSIX shell:
 
 ```sh
-./build.sh /path/OpenGGF-0.7.prerelease-jar-with-dependencies.jar /path/OpenGGF-0.7.prerelease-openggf-mod-sdk.jar /tmp/phase3-standalone
+./build.sh /path/OpenGGF-0.8.prerelease-jar-with-dependencies.jar /path/OpenGGF-0.8.prerelease-openggf-mod-sdk.jar /tmp/phase3-standalone
 ```
 
 The packed output is:

@@ -20,13 +20,13 @@ decode the checked-in base64 level binaries, then run Maven.
 PowerShell:
 
 ```powershell
-./build.ps1 C:\path\OpenGGF-0.7.prerelease.jar C:\path\OpenGGF-0.7.prerelease-openggf-mod-sdk.jar C:\temp\sample-flappy
+./build.ps1 C:\path\OpenGGF-0.8.prerelease.jar C:\path\OpenGGF-0.8.prerelease-openggf-mod-sdk.jar C:\temp\sample-flappy
 ```
 
 POSIX shell:
 
 ```sh
-./build.sh /path/OpenGGF-0.7.prerelease.jar /path/OpenGGF-0.7.prerelease-openggf-mod-sdk.jar /tmp/sample-flappy
+./build.sh /path/OpenGGF-0.8.prerelease.jar /path/OpenGGF-0.8.prerelease-openggf-mod-sdk.jar /tmp/sample-flappy
 ```
 
 The packed output is:

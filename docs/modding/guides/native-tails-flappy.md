@@ -25,8 +25,8 @@ templates. Build the engine first, then run the sample wrapper:
 mvn package
 $out = Join-Path $env:TEMP ("sample-flappy-" + [guid]::NewGuid())
 & src/test/resources/mods/sample-flappy-src/build.ps1 `
-  -EngineJar (Resolve-Path target/OpenGGF-0.7.prerelease.jar) `
-  -SdkJar (Resolve-Path target/OpenGGF-0.7.prerelease-openggf-mod-sdk.jar) `
+  -EngineJar (Resolve-Path target/OpenGGF-0.8.prerelease.jar) `
+  -SdkJar (Resolve-Path target/OpenGGF-0.8.prerelease-openggf-mod-sdk.jar) `
   -OutputDirectory $out
 ```
 
