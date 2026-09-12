@@ -120,7 +120,7 @@ class TestMasterTitleSecondaryActions {
         keyboardScreen.setModManagerOpenHandler(keyboardOpened::incrementAndGet);
         InputHandler keyboard = new InputHandler(InputBindingFactory.supplier(keyboardConfig));
 
-        TestMasterTitleHub.press(keyboardScreen, org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER);
+        TestMasterTitleHub.press(keyboardScreen, org.lwjgl.glfw.GLFW.GLFW_KEY_DOWN);
         for (int i = 0; i < 4; i++) TestMasterTitleHub.press(keyboardScreen, org.lwjgl.glfw.GLFW.GLFW_KEY_DOWN);
         TestMasterTitleHub.press(keyboardScreen, org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER);
 
@@ -134,7 +134,7 @@ class TestMasterTitleSecondaryActions {
         FakeGamepadStateSource source = new FakeGamepadStateSource();
         InputHandler gamepad = new InputHandler(InputBindingFactory.supplier(gamepadConfig), source);
 
-        source.setButtons(GLFW_GAMEPAD_BUTTON_A);
+        source.setButtons(GLFW_GAMEPAD_BUTTON_DPAD_DOWN);
         gamepad.refreshLogicalSnapshot();
         gamepadScreen.update(gamepad);
         for (int i = 0; i < 4; i++) {
@@ -216,7 +216,15 @@ class TestMasterTitleSecondaryActions {
         title.update(input);
         input.setLogicalOverride(LogicalInputSnapshot.neutral());
         title.update(input);
-        input.setLogicalOverride(logical(0, InputActionMasks.ACTION_C));
+        input.setLogicalOverride(logical(AbstractPlayableSprite.INPUT_RIGHT, 0)); // Actions.
+        title.update(input);
+        input.setLogicalOverride(LogicalInputSnapshot.neutral());
+        title.update(input);
+        input.setLogicalOverride(logical(AbstractPlayableSprite.INPUT_LEFT, 0)); // Apply.
+        title.update(input);
+        input.setLogicalOverride(LogicalInputSnapshot.neutral());
+        title.update(input);
+        input.setLogicalOverride(logical(0, InputActionMasks.ACTION_A));
         title.update(input);
 
         assertTrue(title.isModManagerOpenForTest());
@@ -225,7 +233,7 @@ class TestMasterTitleSecondaryActions {
     }
 
     private static void focusMods(MasterTitleScreen screen, InputHandler input) {
-        input.setLogicalOverride(logical(0, InputActionMasks.ACTION_A));
+        input.setLogicalOverride(logical(AbstractPlayableSprite.INPUT_DOWN, 0));
         screen.update(input);
         for (int i = 0; i < 4; i++) {
             input.setLogicalOverride(LogicalInputSnapshot.neutral()); screen.update(input);

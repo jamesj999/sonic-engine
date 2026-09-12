@@ -7,6 +7,7 @@ import com.fasterxml.jackson.core.StreamReadFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.io.BufferedInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -149,7 +150,9 @@ final class S2RequestAwareOracleRawStream {
             throws IOException {
         Objects.requireNonNull(candidate, "candidate");
         Objects.requireNonNull(window, "window");
-        try (InputStream input = Files.newInputStream(candidate)) {
+        // StrictLines validates and hashes each byte; buffer reads from the same
+        // descriptor so that validation does not issue a file read per byte.
+        try (InputStream input = new BufferedInputStream(Files.newInputStream(candidate))) {
             return scan(input, window, fullCapture);
         }
     }

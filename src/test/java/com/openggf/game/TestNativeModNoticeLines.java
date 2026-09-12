@@ -38,11 +38,11 @@ class TestNativeModNoticeLines {
     }
 
     @Test
-    void wrappedNoticeUsesEllipsisWhenTheVerticalBudgetIsExhausted() {
+    void wrappedNoticePreservesLinesBeyondThePageBudget() {
         var lines = NativeModNoticeScreen.wrapLines(
                 List.of("one", "two", "three", "four"), SIX_PER_CHAR, 120, 3);
 
-        assertEquals(List.of("one", "two", "..."), lines);
+        assertEquals(List.of("one", "two", "three", "four"), lines);
     }
 
     @Test

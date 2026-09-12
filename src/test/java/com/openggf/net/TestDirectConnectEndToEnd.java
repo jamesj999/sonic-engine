@@ -5,6 +5,8 @@ import com.openggf.net.client.GhostStreamPublisher;
 import com.openggf.net.client.RaceClient;
 import com.openggf.net.client.RemoteGhostPlayback;
 import com.openggf.net.host.RaceHostServer;
+import com.openggf.net.host.ControlledRaceHost;
+import com.openggf.net.hub.HostRoundEngine;
 import com.openggf.net.hub.RoomHostConfig;
 import com.openggf.net.hub.TrackValidationProfileSource;
 import com.openggf.net.identity.PlayerIdentity;
@@ -78,7 +80,8 @@ class TestDirectConnectEndToEnd {
     @Test
     void fullRoundWithLatencyProxiedGuest(@TempDir Path dir) throws Exception {
         PlayerIdentity hostIdentity = PlayerIdentity.loadOrCreate(dir.resolve("host"));
-        server = RaceHostServer.start(0,
+        ControlledRaceHost clock = new ControlledRaceHost();
+        server = clock.start(0,
                 new RoomHostConfig("E2E", "s3k", 0, 0,
                         "OPEN", null, 8, FP,
                         List.of("s3k:0:0", "s3k:0:1", "s3k:1:0")),
@@ -101,7 +104,7 @@ class TestDirectConnectEndToEnd {
                 new ControlMessage.RoundConfig("s3k", 0, 0, 4, "OPEN", null)));
         await(host, event -> isMessage(event, ControlMessage.RoundStart.class), 10_000);
         await(guest, event -> isMessage(event, ControlMessage.RoundStart.class), 10_000);
-        Thread.sleep(3100);
+        clock.advance(HostRoundEngine.COUNTDOWN_MILLIS);
 
         runAttempt(host, 1, 30, 24);
         runAttempt(guest, 1, 30, 20);
@@ -130,9 +133,11 @@ class TestDirectConnectEndToEnd {
         }
         assertTrue(rendered, "latency-proxied guest never rendered host ghost");
 
+        clock.advance(4_001);
         await(host, event -> isMessage(event, ControlMessage.RoundEnd.class), 15_000);
         await(guest, event -> isMessage(event, ControlMessage.RoundEnd.class), 15_000);
 
+        clock.advance(HostRoundEngine.ROUND_END_LINGER_MILLIS);
         ControlMessage.TrackVoteOffer offer = (ControlMessage.TrackVoteOffer)
                 ((RaceClient.Control) await(host,
                         event -> isMessage(event, ControlMessage.TrackVoteOffer.class),
@@ -145,6 +150,7 @@ class TestDirectConnectEndToEnd {
                         && tally.counts().stream().anyMatch(count ->
                         count.trackKey().equals(winner) && count.votes() == 1),
                 10_000);
+        clock.advance(HostRoundEngine.VOTE_WINDOW_MILLIS);
         await(host, event -> event instanceof RaceClient.Control control
                         && control.message() instanceof ControlMessage.TrackVoteResult result
                         && result.trackKey().equals(winner),

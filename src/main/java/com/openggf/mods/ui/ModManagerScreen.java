@@ -70,6 +70,8 @@ public final class ModManagerScreen {
     private String saveFailure;
     private boolean closeRequested;
     private boolean actionFocus;
+    private boolean discardPrompt;
+    private boolean discardSelected;
     private int selectedAction;
     private boolean detailsPage;
     private boolean noticesPage;
@@ -143,7 +145,7 @@ public final class ModManagerScreen {
 
     private List<Object> feedbackState() {
         return List.of(selectedIndex, detailScrollOffset, actionFocus, selectedAction, detailsPage,
-                noticesPage, orderPage, pageOffset, closeRequested, editor.pendingState(),
+                noticesPage, orderPage, pageOffset, closeRequested, discardPrompt, discardSelected, statusMessage, editor.pendingState(),
                 java.util.Optional.ofNullable(armedTrust), java.util.Optional.ofNullable(armedCascade));
     }
 
@@ -167,6 +169,15 @@ public final class ModManagerScreen {
         boolean back = input.menuBack() && !previousInput.menuBack();
         previousInput = input;
 
+        if (discardPrompt) {
+            if (left || right) discardSelected = !discardSelected;
+            if (escapeEdge || back) discardPrompt = false;
+            else if (accept) {
+                discardPrompt = false;
+                if (discardSelected) { editor.discardDraft(); closeRequested = true; }
+            }
+            return;
+        }
         if (escapeEdge || back) {
             if (detailsPage || noticesPage || orderPage) { detailsPage = false; noticesPage = false; orderPage = false; return; }
             if (actionFocus && !rows.isEmpty()) { actionFocus = false; return; }
@@ -186,7 +197,7 @@ public final class ModManagerScreen {
                 if (up || down || left || right) pageOffset = Math.clamp(pageOffset
                         + (down ? 1 : up ? -1 : right ? MAX_VISIBLE_DETAILS : -MAX_VISIBLE_DETAILS),
                         0, Math.max(0, noticeLines().size() - MAX_VISIBLE_DETAILS));
-                if (accept && saveFailure != null) saveAndRequestClose();
+                if (accept && saveFailure != null) applyDraft();
             }
             return;
         }
@@ -204,7 +215,7 @@ public final class ModManagerScreen {
                 if (selectedAction == 0) { detailsPage = true; detailScrollOffset = 0; }
                 else if (selectedAction == 1) orderPage = true;
                 else if (selectedAction == 2) noticesPage = true;
-                else saveAndRequestClose();
+                else applyDraft();
             }
             return;
         }
@@ -232,6 +243,15 @@ public final class ModManagerScreen {
         if (text == null) return;
         text.begin();
         try {
+            if (discardPrompt) {
+                text.page("MOD MANAGER", "UNSAVED CHANGES");
+                drawPrimary("Discard unsaved changes?", 24, 80, 1, 1, 1);
+                text.focus(discardSelected ? 178 : 20, 112, 122, 22);
+                drawPrimary("Keep editing", 25, 118, 1, 1, 1);
+                drawPrimary("Discard", 183, 118, 1, .73f, .25f);
+                text.footer("Left/Right Choose", confirmLabel + " Select  " + backLabel + " Back");
+                return;
+            }
             if (armedTrust != null || armedCascade != null) {
                 renderReadingPage(armedTrust != null ? "TRUST & ENABLE" : "CONFIRM MOD CHANGES",
                         confirmationLines(), pageOffset,
@@ -246,7 +266,7 @@ public final class ModManagerScreen {
                 orderLines.add("Dependencies must stay before their dependents.");
                 if (!statusMessage.isBlank()) orderLines.add(statusMessage);
                 renderReadingPage("MOD ORDER", wrapped(orderLines), 0,
-                        directionLabel + " Move  " + backLabel + " Actions", "Order is saved with Save+Back");
+                        directionLabel + " Move  " + backLabel + " Actions", "Choose Apply to save the new order");
                 return;
             }
             if (detailsPage) {
@@ -278,10 +298,11 @@ public final class ModManagerScreen {
                     + " mods; choose Details for full information", 9, 141, .7f, .8f, .95f);
             List<String> banners = bannerLines();
             String banner = saveFailure != null ? "Save failed: " + saveFailure
-                    : banners.isEmpty() ? "Changes apply after restart" : banners.getFirst();
+                    : editor.dirty() ? "DRAFT: choose Apply to save"
+                    : banners.isEmpty() ? "SAVED: changes apply after restart" : banners.getFirst();
             draw(banner, 9, 153, 1f, .65f, .3f);
             if (!statusMessage.isBlank()) draw(statusMessage, 9, 165, 1f, .75f, .25f);
-            String[] actions = {"Details", "Order", "Notices", "Save+Back"};
+            String[] actions = {"Details", "Order", "Notices", "Apply"};
             int[] actionX = {8, 86, 146, 226};
             int[] actionWidth = {74, 56, 76, 86};
             for (int i = 0; i < actions.length; i++) {
@@ -290,9 +311,9 @@ public final class ModManagerScreen {
                 if (actionFocus && selectedAction == i) text.focus(x, 178, actionWidth[i], 16);
                 drawPrimary(actions[i], x + 4, text.primaryTextY(178, 16), 1f, 1f, 1f);
             }
-            text.footer(actionFocus ? confirmLabel + " Open  " + backLabel + (rows.isEmpty() ? " Save+Back" : " List")
+            text.footer(actionFocus ? confirmLabel + " Open  " + backLabel + (rows.isEmpty() ? " Back" : " List")
                             : confirmLabel + " Toggle  Right Actions",
-                    actionFocus ? "Left/Right Choose  Up/Down List" : backLabel + " Save+Back  Up/Down Select");
+                    actionFocus ? "Left/Right Choose  Up/Down List" : backLabel + " Back  Up/Down Select");
         } finally {
             text.end();
         }
@@ -680,21 +701,24 @@ public final class ModManagerScreen {
 
     private void scrollDetails(int delta) {
         int maximum = Math.max(0, wrapped(detailLines()).size() - MAX_VISIBLE_DETAILS);
-        detailScrollOffset = Math.max(0, Math.min(maximum, detailScrollOffset + delta));
-        statusMessage = maximum == 0 ? "All details are visible" : "Detail scroll";
+        int next = Math.max(0, Math.min(maximum, detailScrollOffset + delta));
+        if (next == detailScrollOffset) return;
+        detailScrollOffset = next;
+        statusMessage = "Detail scroll";
     }
 
     private void handleBack() {
         if (armedTrust != null || armedCascade != null) cancelArmedConfirmation();
-        else saveAndRequestClose();
+        else if (editor.dirty()) { discardPrompt = true; discardSelected = false; }
+        else closeRequested = true;
     }
 
-    private void saveAndRequestClose() {
+    private void applyDraft() {
         ModStateSaveResult result = editor.save();
         if (result instanceof ModStateSaveResult.Saved) {
             saveFailure = null;
-            statusMessage = "Saved";
-            closeRequested = true;
+            statusMessage = "Saved. Restart to apply mod changes";
+            closeRequested = false;
         } else if (result instanceof ModStateSaveResult.Failed failed) {
             saveFailure = failed.message();
             feedbackError = true;

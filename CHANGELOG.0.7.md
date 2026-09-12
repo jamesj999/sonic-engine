@@ -18,12 +18,15 @@ campaigns; feature/API publication remains subject to the 0.8 roadmap.
   animated ROM logos, adds visible launch, time-attack, recordings, mods, settings,
   advanced, and quit entries, and follows intentional input with keyboard/controller prompts.
   Catalog-backed engine settings offer visible categories, onscreen value/path/key
-  editing, atomic Apply/Cancel, and amber non-default values. Launch options retain
+  editing, atomic Apply/Cancel, and amber non-default values. Shared text editors let
+  keyboard and controller users move focus between the field and onscreen keypad.
+  Launch options retain
   white stock, amber changed, and red experimental status at native resolution.
   Checkerboard pages retain full-size primary lettering and use an authored native
   small font with lowercase descenders for metadata instead of fractional downscaling.
   A wrapping game carousel shows the selected game, neighbors and catalog position,
-  supports arbitrary catalog sizes, and dims missing ROMs. The sky remains visible beside the action list,
+  supports arbitrary catalog sizes, and dims missing ROMs. Confirm from game selection
+  opens a full-width Browse Games list with availability and paging. The sky remains visible beside the action list,
   unavailable games hide profile status, and missing-ROM hints have a dark backing.
   Error pages retain accurate diagnostics until dismissed. Settings help shows
   two lines at once; launch rows use the shared left-aligned focus style. Recordings, traces,
@@ -31,6 +34,17 @@ campaigns; feature/API publication remains subject to the 0.8 roadmap.
   actions; text entry works with keyboards or controllers without triggering global
   shortcuts, and failed trace launches can be acknowledged and retried. Game logos render from
   their original textures at window resolution, preserving detail as the window grows.
+  Held directions repeat consistently; controller prompts identify Xbox, PlayStation,
+  or physical button positions. Settings, chat and input errors have manual full-text
+  details. Numeric/address keypads and an asynchronous controller file browser share
+  the text editor; unsupported glyphs retain their Unicode identity without changing
+  stored values. Mods uses explicit Apply and draft discard, matching Settings.
+  Startup notices use crisp native fonts and controller navigation; native-mod notices
+  paginate all names. Room refreshes retain room identity and publish on the UI thread.
+  Checkerboard geometry is batched and cached, catalog scans run in cancellable
+  background tasks, unchanged ROM previews survive Apply, and settings presentation
+  caches follow draft revisions. The experimental editor exposes a controller command
+  palette for editing, saving, exporting and playtesting.
 
 - **Widescreen presentation:** ordinary UI/HUD surfaces, titles, results, endings,
   diagnostics, all three special stages, scene effects, and trace-video capture.
@@ -74,14 +88,22 @@ campaigns; feature/API publication remains subject to the 0.8 roadmap.
   slots when the owning level is reset or rebuilt. Public profile adapters retain
   their compatibility identities while using canonical profile mechanics.
 
-## Build and release
-
   CNZ rival cutscene deletion reuses the shared coarse range predicate while keeping
   activation and respawn cleanup local.
   Solid objects no longer implement contact listeners solely to provide empty
   callbacks; manager-owned collision, riding and live callbacks are preserved.
   S2 player and dust art share the S2 mapping/DPLC decoder, with the public
   player DPLC entry point retained as a compatibility delegate.
+
+## Build and release
+
+- **Faster test validation:** buffer request-aware S2 capture reads, reuse read-only
+  launcher references and large-capture hash preparation, read bounded capture
+  lines in bulk, reuse emitted canonical bytes for hashing, cache repeated guard
+  analysis, and advance integration-test room deadlines through a controlled clock.
+  Strict byte validation, digest pins, ROM configurations, stress sizes, and real
+  socket exchanges remain covered.
+
 - **Local test categories:** select related subsystem checks from changed paths, with
   common tests and structural guards retained, broad fallback for shared changes,
   and bounded diagnostics and automatic temporary-file cleanup. Tool prerequisites

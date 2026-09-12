@@ -78,7 +78,9 @@ When the engine starts, you will see:
 
 1. **Master title screen** -- Choose a game with left/right from either pane.
    Up/down enters its action list, then selects Start Game, Launch Options, Time Attack,
-   Recordings, Mods, Settings, Advanced, or Quit. Enter/A opens the selected action; Esc/B returns
+   Recordings, Mods, Settings, Advanced, or Quit. Confirm from the game pane opens
+   **Browse Games**, a full-width list with availability and page navigation.
+   Confirm from the action pane opens the selected action; Back returns
    one level. Quit (or Esc/B from game selection) opens an exit confirmation.
    Missing ROM entries remain visible but dimmed. Prompts follow the last
    keyboard/controller input. The original animated
@@ -99,7 +101,14 @@ If a ROM file is missing for the game you selected, the engine will show an erro
 
 Choose **Settings** on the master title for a controller-accessible editor with
 visible categories, onscreen text/key editing, and draft Apply/Cancel. Non-default
-settings are amber. Restart the engine after saving to apply all subsystem changes.
+settings are amber. In text editors, Down enters the keypad and Up from its top
+row returns to the text field. Enter/A chooses a key or accepts the focused field;
+you can also type normally. Number fields use a numeric keypad, and Up in path
+fields opens a controller file browser. **Details** (`F1` or controller north button)
+shows complete help, values and errors with manual scrolling, including when a
+setting takes effect. Hold directions for repeated navigation. Mods uses the same
+explicit Apply and Back/discard behavior; applied mod changes require restart.
+Controller prompts follow Xbox/PlayStation labels or physical button positions.
 See [configuration](../../../CONFIGURATION.md#engine-settings-from-the-title) for
 navigation and current prototype limits.
 

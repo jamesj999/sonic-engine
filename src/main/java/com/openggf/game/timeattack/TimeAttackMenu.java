@@ -68,7 +68,7 @@ public final class TimeAttackMenu {
                 if (state.currentTrack() == null || state.currentCharacter() == null) MenuFeedback.emit(ERROR);
             }
             else if (focus == count && state.mode() == TimeAttackMenuState.Mode.JOIN_LAN) {
-                editor = new MenuTextEditor("JOIN ADDRESS", joinAddress.text(), 64);
+                editor = new MenuTextEditor("JOIN ADDRESS", joinAddress.text(), 64, null, MenuTextEditor.Mode.ADDRESS);
                 MenuFeedback.emit(CONFIRM);
             } else { focus = Math.min(focus + 1, go); MenuFeedback.emit(CONFIRM); }
         }

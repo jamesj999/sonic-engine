@@ -22,7 +22,6 @@ import static org.lwjgl.glfw.GLFW.*;
 public final class EngineSettingsScreen {
     private static final int VISIBLE_ROWS = 4;
     private static final int DESCRIPTION_LINES = 2;
-    private static final int DESCRIPTION_PAGE_TICKS = 480;
     private static final EngineSettingsDraft.Category[] CATEGORIES = EngineSettingsDraft.Category.values();
     private static final float[] WHITE = {1, 1, 1};
     private static final float[] AMBER = {1, .73f, .25f};
@@ -44,7 +43,17 @@ public final class EngineSettingsScreen {
     private boolean discardPrompt;
     private boolean discardSelected;
     private MenuTextEditor textEditor;
-    private String message = "Restart engine to apply all settings";
+    private MenuDetailsScreen details;
+    private String detailsHint = "F1";
+    private long presentationRevision = -1;
+    private final java.util.Map<SonicConfiguration, String> labels = new java.util.EnumMap<>(SonicConfiguration.class);
+    private final java.util.Map<SonicConfiguration, String> valueLabels = new java.util.EnumMap<>(SonicConfiguration.class);
+    private final java.util.Map<EngineSettingsDraft.Category, Boolean> categoryChanged = new java.util.EnumMap<>(EngineSettingsDraft.Category.class);
+    private final java.util.Map<SonicConfiguration, List<String>> optionCache = new java.util.EnumMap<>(SonicConfiguration.class);
+    private String descriptionText;
+    private int descriptionWidth;
+    private List<String> descriptionLines = List.of();
+    private String message = "Apply saves; Details explains when changes take effect";
     private String confirmHint = "Enter";
     private String backHint = "Esc";
     private String directionsHint = "Arrows";
@@ -61,6 +70,8 @@ public final class EngineSettingsScreen {
         confirmHint = MenuInput.confirmLabel(input);
         backHint = MenuInput.backLabel(input);
         directionsHint = MenuInput.directionLabel(input);
+        detailsHint = MenuInput.detailsLabel(input);
+        if (details != null) { if (details.update(input)) details = null; return; }
         if (discardPrompt) {
             if (MenuInput.left(input) || MenuInput.right(input)) { discardSelected = !discardSelected; MenuFeedback.emit(NAVIGATE); }
             if (MenuInput.back(input)) { discardPrompt = false; MenuFeedback.emit(CANCEL); }
@@ -86,6 +97,15 @@ public final class EngineSettingsScreen {
                 case NONE -> { }
             }
             return;
+        }
+        if (!MenuInput.back(input) && MenuInput.details(input) && !capturing) {
+            details = new MenuDetailsScreen(fields ? EngineSettingLabels.label(selected()) : "SETTINGS HELP",
+                    fields ? ConfigCatalog.meta(selected()).description() + "\n\n" + effect(selected())
+                            + "\n\nCurrent draft value:\n" + draft.text(selected())
+                            : "Apply saves the draft. Cancel preserves saved settings.\n\n"
+                            + "White values are engine defaults; amber values differ from defaults. An asterisk marks unsaved changes.\n\n"
+                            + "Open a setting's Details for its full description, value and when it takes effect.\n\n" + message);
+            MenuFeedback.emit(CONFIRM); return;
         }
         if (capturing) { updateCapture(input); return; }
         if (keyMenu) { updateKeyMenu(input); return; }
@@ -141,22 +161,69 @@ public final class EngineSettingsScreen {
             draft.apply();
             MenuFeedback.emit(CONFIRM);
             applied |= changed;
-            message = changed ? "Saved. Restart engine for all changes" : "No changes to save";
+            message = changed ? "Saved. See setting Details for when changes apply" : "No changes to save";
         } catch (IOException e) { message = "Save failed. Draft kept; retry Apply"; MenuFeedback.emit(ERROR); }
         catch (IllegalArgumentException e) { message = e.getMessage(); MenuFeedback.emit(ERROR); }
     }
     private void openTextEditor() {
         Object defaultValue = config.getDefaultValue(selected());
         textEditor = new MenuTextEditor(EngineSettingLabels.label(selected()), draft.text(selected()), 4096,
-                defaultValue == null ? "" : defaultValue.toString());
+                defaultValue == null ? "" : defaultValue.toString(), fieldMode(selected()));
         textEditor.deferAcceptanceFeedback();
     }
     private List<String> options() {
-        if (ConfigCatalog.meta(selected()).type() == ConfigType.BOOL) return List.of("false", "true");
-        List<String> values = new ArrayList<>(ConfigCatalog.meta(selected()).allowedValues());
-        values.sort(String::compareTo);
-        return values;
+        return optionCache.computeIfAbsent(selected(), key -> {
+            if (ConfigCatalog.meta(key).type() == ConfigType.BOOL) return List.of("false", "true");
+            return ConfigCatalog.meta(key).allowedValues().stream().sorted().toList();
+        });
     }
+
+    static MenuTextEditor.Mode fieldMode(SonicConfiguration key) {
+        return switch (key) {
+            case SONIC_1_ROM, SONIC_2_ROM, SONIC_3K_ROM, PLAYBACK_MOVIE_PATH, TRACE_CATALOG_DIR,
+                    CAPTURE_OUTPUT_DIR -> MenuTextEditor.Mode.PATH;
+            case TIME_ATTACK_NET_LAST_JOIN_ADDRESS -> MenuTextEditor.Mode.ADDRESS;
+            default -> switch (ConfigCatalog.meta(key).type()) {
+                case INT -> MenuTextEditor.Mode.INTEGER;
+                case DOUBLE -> MenuTextEditor.Mode.DECIMAL;
+                default -> MenuTextEditor.Mode.TEXT;
+            };
+        };
+    }
+
+    static String effect(SonicConfiguration key) {
+        // InputBindingFactory's supplier is sampled by InputHandler each frame.
+        return switch (key) {
+            case UP, DOWN, LEFT, RIGHT, P1_A, P1_B, P1_C, START,
+                    P2_UP, P2_DOWN, P2_LEFT, P2_RIGHT, P2_A, P2_B, P2_C, P2_START,
+                    CONTROLLER_ENABLED, CONTROLLER_DEADZONE, CONTROLLER_PLAYER1, CONTROLLER_PLAYER2,
+                    DEBUG_MODE_KEY, LIVE_REWIND_KEY, FRAME_STEP_KEY -> "Takes effect immediately after Apply.";
+            // MasterTitleScreen refreshes ROM previews on consumeApplied; load resolves saved ROM paths.
+            case SONIC_1_ROM, SONIC_2_ROM, SONIC_3K_ROM -> "After Apply: ROM previews refresh; used for the next game load.";
+            case TRACE_CATALOG_DIR -> "After Apply: used when the trace picker next opens.";
+            case TIME_ATTACK_NET_LAST_JOIN_ADDRESS -> "After Apply: used when the LAN menu next opens.";
+            // LiveCaptureRecorderFactory reads these when creating a recording.
+            case CAPTURE_CODEC, CAPTURE_AUDIO_CODEC, CAPTURE_ENCODER_THREADS, CAPTURE_ENCODER_PRESET,
+                    CAPTURE_FFMPEG_PASS1_ARGS, CAPTURE_FFMPEG_PASS2_ARGS, CAPTURE_QUEUE_BUDGET_MB,
+                    CAPTURE_OUTPUT_DIR, CAPTURE_CONTAINER -> "After Apply: used for the next recording.";
+            default -> "Saved by Apply. Restart the engine to ensure this setting takes effect.";
+        };
+    }
+
+    private void refreshPresentation() {
+        if (presentationRevision == draft.revision()) return;
+        for (EngineSettingsDraft.Category group : CATEGORIES) {
+            boolean any = false;
+            for (SonicConfiguration key : draft.keys(group)) {
+                labels.computeIfAbsent(key, EngineSettingLabels::label);
+                valueLabels.put(key, MenuDetailsScreen.readable(EngineSettingLabels.value(key, draft.text(key))));
+                any |= draft.nonDefault(key);
+            }
+            categoryChanged.put(group, any);
+        }
+        presentationRevision = draft.revision();
+    }
+
     private void updateChoice(InputHandler input) {
         if (MenuInput.back(input)) { choosing = false; MenuFeedback.emit(CANCEL); return; }
         int count = options().size() + 1;
@@ -217,6 +284,8 @@ public final class EngineSettingsScreen {
     public void render(int viewportWidth) {
         if (font == null) return;
         int width = Math.max(320, viewportWidth);
+        if (details != null) { details.render(font, width); return; }
+        refreshPresentation();
         if (textEditor != null) { textEditor.render(font, width); return; }
         if (choosing) { renderChoice(width); return; }
         if (keyMenu || capturing) { renderKeyMenu(width); return; }
@@ -231,7 +300,7 @@ public final class EngineSettingsScreen {
                 else MenuStyle.panel(font, 7, y - 1, railWidth - 7, 13);
             }
             String name = i < CATEGORIES.length ? CATEGORIES[i].label() : i == CATEGORIES.length ? "Apply" : "Cancel";
-            boolean nonDefault = i < CATEGORIES.length && draft.keys(CATEGORIES[i]).stream().anyMatch(draft::nonDefault);
+            boolean nonDefault = i < CATEGORIES.length && categoryChanged.get(CATEGORIES[i]);
             label(name, 12, y, 81, nonDefault ? AMBER : WHITE);
         }
         if (category < CATEGORIES.length) {
@@ -244,8 +313,8 @@ public final class EngineSettingsScreen {
                 int y = 39 + i * 30;
                 if (fields && row == index) MenuStyle.focusContent(font, 104, y, width - 111, 29, 23);
                 int space = width - 120;
-                label(window(EngineSettingLabels.label(key), space / 9, fields && row == index), 111, y, space, WHITE);
-                String value = EngineSettingLabels.value(key, draft.text(key));
+                label(window(labels.get(key), space / 9, fields && row == index), 111, y, space, WHITE);
+                String value = valueLabels.get(key);
                 label(window(value, space / 9 - 2, fields && row == index) + (draft.changed(key) ? " *" : ""),
                         111, y + 13, space, draft.nonDefault(key) ? AMBER : WHITE);
             }
@@ -255,12 +324,12 @@ public final class EngineSettingsScreen {
             description(description, width, 178);
         } else {
             label(category == CATEGORIES.length ? "Save all changes" : "Discard changes", 111, 48, width - 120, WHITE);
-            text("Restart applies all settings", 111, 70, width - 120, MUTED);
+            text("Details explains change timing", 111, 70, width - 120, MUTED);
             text("White: engine default", 111, 94, width - 120, WHITE);
             text("Amber: non-default value", 111, 108, width - 120, AMBER);
         }
         footer(width, confirmHint + (fields ? " Edit" : " Select") + "  " + backHint + " Back  " + directionsHint,
-                window(message, (width - 18) / 6, true));
+                detailsHint + " Details  " + window(message, Math.max(1, (width - 18) / 6 - detailsHint.length() - 10), true));
         if (discardPrompt) renderDiscard(width);
     }
     private static int railY(int i) { return i < CATEGORIES.length ? 40 + i * 13 : 151 + (i - CATEGORIES.length) * 14; }
@@ -305,29 +374,19 @@ public final class EngineSettingsScreen {
             label(labels[i], 17, y, width - 34, WHITE);
         }
         footer(width, confirmHint + " Choose  " + backHint + " Back  " + directionsHint,
-                "Changes stay in draft until Apply");
+                detailsHint + " Details  Draft until Apply");
     }
     private void description(String value, int width, int y) {
-        int columns = (width - 18) / 6;
-        List<String> lines = new ArrayList<>();
-        String remaining = value;
-        while (!remaining.isEmpty()) {
-            int end = Math.min(columns, remaining.length());
-            if (end < remaining.length()) {
-                int space = remaining.lastIndexOf(' ', end);
-                if (space > 0) end = space;
-            }
-            lines.add(remaining.substring(0, end));
-            remaining = remaining.substring(end).stripLeading();
+        if (!value.equals(descriptionText) || width != descriptionWidth) {
+            descriptionText = value;
+            descriptionWidth = width;
+            descriptionLines = MenuDetailsScreen.wrapText(MenuDetailsScreen.readable(value), (width - 18) / 6);
         }
-        // Most descriptions fit immediately. Longer help advances in whole pairs,
-        // giving both lines eight seconds at the usual 60 Hz menu rate.
-        int pages = Math.max(1, (lines.size() + DESCRIPTION_LINES - 1) / DESCRIPTION_LINES);
-        int first = ((ticks / DESCRIPTION_PAGE_TICKS) % pages) * DESCRIPTION_LINES;
-        for (int i = 0; i < DESCRIPTION_LINES && first + i < lines.size(); i++) {
-            text(lines.get(first + i), 9, y + i * 10, width - 18, MUTED);
+        for (int i = 0; i < DESCRIPTION_LINES && i < descriptionLines.size(); i++) {
+            text(descriptionLines.get(i), 9, y + i * 10, width - 18, MUTED);
         }
     }
+
     private String window(String value, int chars, boolean scroll) {
         if (value.length() <= chars) return value;
         if (!scroll) return value.substring(0, Math.max(0, chars - 3)) + "...";

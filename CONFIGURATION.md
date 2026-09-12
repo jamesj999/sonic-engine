@@ -210,8 +210,9 @@ Paths are relative to the working directory (where the JAR is launched).
 The master title stores per-game launch defaults under `launch.s1`, `launch.s2`,
 and `launch.s3k`. Left/right changes games from either hub pane. Up/down enters
 the action list from the game pane, then chooses an action within it.
-`Enter` (controller A) opens the selected action and also provides a shortcut
-into the action pane. `Esc` (controller B) backs out. Opening a menu screen plays
+`Enter` opens **Browse Games** from game selection and opens the selected action
+from the action pane. Browse Games is a full-width, paginated catalog with availability
+labels; confirming selects a game without launching it. `Esc` (controller B) backs out. Opening a menu screen plays
 the confirmation cue; backing out plays a distinct cancel cue. These cues also apply inside nested menus,
 with errors reserved for rejected actions and failed operations. The game carousel wraps at either end, shows its position in the effective catalog,
 and preserves game identity when catalog entries change. Pending mod changes still
@@ -243,16 +244,38 @@ Choose **Settings** for persisted engine preferences. The category rail stays
 visible; confirm enters the selected category, Back returns to the rail, and
 up/down moves through paginated fields. Left/right changes booleans, enums and
 numbers; confirm opens a value picker or text editor. Text editing supports
-ordinary keyboard typing and a controller keyboard with all printable ASCII,
-case/symbol pages, cursor movement, deletion, and default restoration. Key
+ordinary keyboard typing and an onscreen keyboard with all printable ASCII,
+case/symbol pages, cursor movement, deletion, and default restoration. Down moves
+from the text field onto the keypad; Up from its top row returns to the field.
+Arrows and D-pad move the same focus. Enter/A chooses the highlighted key on the
+keypad or accepts the value in the text field; the keypad also has an **OK** key.
+Typing directly returns focus to the field. Switching input devices changes
+prompts without moving focus. This editor is shared with recording target frames,
+join addresses, and lobby chat. Key
 bindings also offer physical key/chord capture. Values and categories with non-default settings remain
 amber, including after saving. **Apply** writes the draft atomically; save errors
 retain the draft for retry. **Cancel** asks before discarding unsaved edits.
 
-Settings requests an engine restart so cached subsystems can adopt all changes.
-Input bindings are read dynamically; ROM availability/logos are rescanned after
-Apply. Current launch/session overrides remain authoritative until the next
-launch. YAML remains an optional editing route.
+**Details** (`F1` or the controller's north button) opens manually scrollable help,
+the complete value/error, and when the setting takes effect. Input bindings take
+effect after Apply; other settings describe their next-use or restart boundary.
+Unchanged ROM previews are retained after Apply. Current launch/session overrides
+remain authoritative until the next launch. YAML remains an optional editing route.
+
+Number fields use a numeric keypad; join addresses prioritize address punctuation.
+For path fields, Up from the text field opens a controller browser. The browser
+loads folders asynchronously and can be cancelled; **Use this folder** selects a
+directory, while selecting a file returns its path. Type directly to enter a new
+path. Unsupported font characters appear as `[U+...]` identities while stored text
+remains unchanged. Details shows the full representation without truncation.
+
+Hold a direction to repeat after a short delay; confirmation and Back never repeat.
+Prompts use Xbox A/B/Y, PlayStation Cross/Circle/Triangle, or physical button
+positions South/East/North for unrecognized controllers.
+
+Mods also keeps a draft: **Apply** saves without leaving, while Back asks before
+discarding unsaved changes. Applied mod changes still require a restart. Trace and
+recording catalogs load in the background with a visible Cancel action.
 
 **Advanced > Trace replays** opens the trace catalog without enabling test mode.
 Time Attack, Recordings, and Mods also have visible action-menu entries;

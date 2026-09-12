@@ -1,5 +1,8 @@
 # Master title hub implementation
 
+This document records the initial delivery. Later navigation, input, loading and
+rendering changes are tracked in the [UI review improvement task list](2026-09-12-ui-review-improvements.md).
+
 ## Accepted design
 
 The competition-style title remains a native 320x224 UI with proportional
@@ -61,8 +64,11 @@ room browsing, lobby, standalone startup, and help.
 
 Keyboard text comes from GLFW character callbacks through a bounded frame-local
 queue; editor controls ignore gameplay-letter mappings. Controller text entry uses
-a visible keyboard with caret and case/symbol controls. Settings, network addresses,
-and chat share the editor. The engine keeps its original ROM logo textures and draws
+a visible keyboard with caret and case/symbol controls. Text-field/keypad focus is
+explicit and independent of prompt-device detection: Down enters the keypad, Up
+from the top row returns to the field, and direct typing focuses the field.
+Enter/A chooses a focused key or accepts the field. Settings, recording target
+frames, network addresses, and chat share the editor. The engine keeps its original ROM logo textures and draws
 them directly to the physical viewport, allowing larger windows to recover original
 art detail. Fixed native child pages center within wider viewports.
 

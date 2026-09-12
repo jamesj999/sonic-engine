@@ -219,7 +219,7 @@ public final class TestModeTracePicker {
                 line("No traces found", 17, 67, 286, 1, .75f, .3f);
                 line("Set the trace folder in Engine Settings", 17, 92, 286, 1, 1, 1);
                 line("Files > Trace catalog folder", 17, 108, 286, .7f, .8f, 1);
-                MenuStyle.footer(font, 320, "Return to Tools to open Settings", backHint() + " Back");
+                MenuStyle.footer(font, 320, "Return to the hub to open Settings", backHint() + " Back");
                 return;
             }
             firstVisible = computeFirstVisible(firstVisible, cursor);

@@ -16,6 +16,7 @@ public final class PendingModStateEditor {
     private final Map<String, ModDescriptor> descriptorsById;
     private final ModStateStore store;
     private ModState pending;
+    private ModState saved;
 
     public PendingModStateEditor(ModState startup, List<? extends ModCatalogEntry> scanned,
                                  ModStateStore store) {
@@ -24,6 +25,7 @@ public final class PendingModStateEditor {
         this.store = Objects.requireNonNull(store, "store");
         this.startup = startup.normalize(scanned);
         this.pending = this.startup;
+        this.saved = this.startup;
         Set<String> ids = new HashSet<>();
         Map<String, ModDescriptor> descriptors = new LinkedHashMap<>();
         for (ModCatalogEntry entry : scanned) {
@@ -95,8 +97,14 @@ public final class PendingModStateEditor {
         pending = startup;
     }
 
+    public boolean dirty() { return !pending.equals(saved); }
+
+    public void discardDraft() { pending = saved; }
+
     public ModStateSaveResult save() {
-        return store.save(pending);
+        ModStateSaveResult result = store.save(pending);
+        if (result instanceof ModStateSaveResult.Saved) saved = pending;
+        return result;
     }
 
     private void replaceEnabled(Set<String> ids, boolean enabled) {

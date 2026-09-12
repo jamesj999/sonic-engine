@@ -301,8 +301,8 @@ class TestModManagerScreen {
         assertTrue(screen.restartRequired());
         assertTrue(catalog.effective().orderedEnabled().isEmpty());
 
-        press(screen, Action.BACK);
-        assertTrue(screen.closeRequested());
+        applyFromList(screen);
+        assertFalse(screen.closeRequested());
         ModState persisted = new ModStateStore(temp.resolve("trust").toAbsolutePath().normalize())
                 .load().state();
         assertTrue(persisted.entries().getFirst().trustsSha256(code.sha256()));
@@ -480,13 +480,16 @@ class TestModManagerScreen {
     }
 
     @Test
-    void backSavesAndClosesOnSuccessButFailureBannerKeepsScreenOpen() throws Exception {
+    void explicitApplySavesWithoutClosingAndFailureKeepsDraftOpen() throws Exception {
         ModDescriptor mod = descriptor("pack-one", "One", List.of(), List.of());
         ModCatalog catalog = catalog(List.of(mod));
         ModManagerScreen success = screen(catalog, state(false, "pack-one"),
                 new ModRuntimeFindingStore(), null, temp.resolve("success"));
         press(success, Action.ACCEPT);
-        press(success, Action.BACK);
+        applyFromList(success);
+        assertFalse(success.closeRequested());
+        press(success, Action.BACK); // Actions to list.
+        press(success, Action.BACK); // Clean close.
         assertTrue(success.closeRequested());
         assertTrue(Files.exists(temp.resolve("success/modstate.json")));
 
@@ -495,7 +498,8 @@ class TestModManagerScreen {
         ModManagerScreen failure = screen(catalog, state(false, "pack-one"),
                 new ModRuntimeFindingStore(), null, invalidRoot);
         press(failure, Action.ACCEPT);
-        press(failure, Action.BACK);
+        applyFromList(failure);
+        assertTrue(enabled(failure, "pack-one"));
         assertFalse(failure.closeRequested());
         assertTrue(failure.bannerLines().stream().anyMatch(line -> line.startsWith("Save failed:")));
     }
@@ -544,7 +548,7 @@ class TestModManagerScreen {
     }
 
     @Test
-    void conventionalEscapeBackSavesOnceThroughLiveInputHandler() {
+    void cleanEscapeBackClosesWithoutWritingThroughLiveInputHandler() {
         ModDescriptor mod = descriptor("pack-one", "One", List.of(), List.of());
         ModManagerScreen screen = screen(catalog(List.of(mod)), state(false, "pack-one"),
                 new ModRuntimeFindingStore(), null, temp.resolve("escape"));
@@ -557,7 +561,7 @@ class TestModManagerScreen {
         host.update(input);
 
         assertTrue(screen.closeRequested());
-        assertTrue(Files.exists(temp.resolve("escape/modstate.json")));
+        assertFalse(Files.exists(temp.resolve("escape/modstate.json")));
     }
 
     @Test
@@ -843,7 +847,7 @@ class TestModManagerScreen {
         press(screen, Action.RIGHT);
         press(screen, Action.RIGHT);
         press(screen, Action.ACCEPT);
-        assertTrue(screen.closeRequested());
+        assertFalse(screen.closeRequested());
         assertTrue(Files.exists(temp.resolve("visible-actions/modstate.json")));
     }
 
@@ -887,13 +891,42 @@ class TestModManagerScreen {
         });
         screen.render();
         assertTrue(font.drawn.stream().anyMatch(line -> line.startsWith("A Toggle")));
-        assertTrue(font.drawn.stream().anyMatch(line -> line.startsWith("B Save+Back")));
+        assertTrue(font.drawn.stream().anyMatch(line -> line.startsWith("B Back")));
         press(screen, Action.RIGHT);
         press(screen, Action.ACCEPT);
         press(screen, Action.BACK);
         assertFalse(screen.closeRequested());
         assertFalse(enabled(screen, "pack-one"));
         assertFalse(Files.exists(temp.resolve("labels/modstate.json")));
+    }
+
+    @Test
+    void dirtyBackDefaultsToKeepAndExplicitDiscardRestoresLastSavedDraft() {
+        var root = temp.resolve("discard");
+        var screen = screen(catalog(List.of(descriptor("pack-one", "One", List.of(), List.of()))),
+                state(false, "pack-one"), new ModRuntimeFindingStore(), null, root);
+        press(screen, Action.ACCEPT); // Enable draft.
+        press(screen, Action.BACK);
+        press(screen, Action.ACCEPT); // Default Keep editing.
+        assertFalse(screen.closeRequested());
+        assertTrue(enabled(screen, "pack-one"));
+        assertFalse(Files.exists(root.resolve("modstate.json")));
+        applyFromList(screen);
+        press(screen, Action.BACK); // Actions to list.
+        press(screen, Action.ACCEPT); // Disable a new unsaved draft.
+        assertFalse(enabled(screen, "pack-one"));
+        press(screen, Action.BACK);
+        press(screen, Action.RIGHT);
+        press(screen, Action.ACCEPT); // Explicit Discard.
+        assertTrue(screen.closeRequested());
+        assertTrue(enabled(screen, "pack-one"), "Discard restores saved enabled state, not startup");
+        assertTrue(new ModStateStore(root.toAbsolutePath().normalize()).load().state().entries().getFirst().enabled());
+    }
+
+    private static void applyFromList(ModManagerScreen screen) {
+        press(screen, Action.RIGHT); // Actions, Details.
+        press(screen, Action.LEFT); // Wrap to Apply.
+        press(screen, Action.ACCEPT);
     }
 
     private static ModManagerScreen.MenuInput menu(LogicalInputSnapshot input) {

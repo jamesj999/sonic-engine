@@ -117,7 +117,7 @@ class TestMasterTitleQuitFlow {
 
     @Test
     void visibleQuitActionIsReachableWithControllerAndUsesConfirmation() {
-        tap(GLFW_GAMEPAD_BUTTON_A); // Enter the action pane.
+        tap(GLFW_GAMEPAD_BUTTON_DPAD_DOWN); // Enter the action pane.
         for (int row = 0; row < 7; row++) tap(GLFW_GAMEPAD_BUTTON_DPAD_DOWN);
         tap(GLFW_GAMEPAD_BUTTON_A); // Open Quit, leaving Return selected.
         assertFalse(fade.isActive());

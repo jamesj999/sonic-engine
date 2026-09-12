@@ -6,6 +6,7 @@ import com.openggf.control.InputHandler;
 import com.openggf.control.MenuInput;
 import com.openggf.game.MenuStyle;
 import com.openggf.game.MenuTextEditor;
+import com.openggf.game.MenuDetailsScreen;
 import com.openggf.game.timeattack.TimeAttackLaunchRequest;
 import com.openggf.graphics.PixelFont;
 import com.openggf.net.client.ClientRaceSession;
@@ -23,6 +24,7 @@ public final class RaceLobbyScreen {
     private int chatPage;
     private InputHandler menuInput;
     private MenuTextEditor editor;
+    private MenuDetailsScreen details;
 
     private final MultiplayerRaceCoordinator coordinator;
     private final PixelFont font;
@@ -56,7 +58,9 @@ public final class RaceLobbyScreen {
             leaveHandler.run();
             return;
         }
-        if (editor != null) {
+        if (details != null) {
+            if (details.update(input)) details = null;
+        } else if (editor != null) {
             editor.update(input);
             switch (editor.consumeResult()) {
                 case ACCEPTED -> {
@@ -88,7 +92,12 @@ public final class RaceLobbyScreen {
                         if (canStart()) { coordinator.sendRoundConfigure(configuredRound); MenuFeedback.emit(CONFIRM); }
                         else MenuFeedback.emit(ERROR);
                     }
-                    case PLAYERS, HISTORY -> { }
+                    case HISTORY -> {
+                        details = new MenuDetailsScreen("CHAT HISTORY",
+                                String.join("\n\n", coordinator.session().chatLines()));
+                        MenuFeedback.emit(CONFIRM);
+                    }
+                    case PLAYERS -> { }
                 }
             }
         }
@@ -113,6 +122,7 @@ public final class RaceLobbyScreen {
 
     public void render() {
         if (font == null) return;
+        if (details != null) { details.render(font, 320); return; }
         if (editor != null) { editor.render(font, 320); return; }
         ControlMessage.RoomDescriptor room = coordinator.session().room();
         MenuStyle.page(font, 320, "RACE LOBBY", room == null ? "Connecting..." : room.name());
@@ -146,7 +156,8 @@ public final class RaceLobbyScreen {
         action(Focus.LEAVE, "LEAVE ROOM", 185, true);
         String confirm = menuInput == null ? "Enter" : MenuInput.confirmLabel(menuInput);
         String back = menuInput == null ? "Esc" : MenuInput.backLabel(menuInput);
-        MenuStyle.footer(font, 320, "Up/Down Select  L/R Players/History", confirm + " Open  " + back + " Leave");
+        String directions = menuInput == null ? "Arrows" : MenuInput.directionLabel(menuInput);
+        MenuStyle.footer(font, 320, directions + " Select/Page", confirm + " Open  " + back + " Leave");
     }
 
     private void action(Focus action, String label, int y, boolean enabled) {

@@ -1,6 +1,8 @@
 package com.openggf.game;
 
 import com.openggf.control.InputHandler;
+import com.openggf.control.MenuInput;
+import com.openggf.graphics.MenuPixelFont;
 import com.openggf.graphics.FadeManager;
 import com.openggf.graphics.PixelFont;
 import com.openggf.graphics.PngTextureLoader;
@@ -43,7 +45,10 @@ public final class NativeModNoticeScreen {
     private static final int SCREEN_H = 224;
     private static final int BODY_MAX_WIDTH = SCREEN_W - 32;
     private static final int MAX_RENDERED_LINES = 12;
-    private static final float BODY_SCALE = 1f;
+    static final float BODY_SCALE = 0.75f;
+    private int page;
+    private int logicalWidth = SCREEN_W;
+    private InputHandler menuInput;
 
     private final FadeManager fadeManager;
     private final List<String> noticeLines;
@@ -58,13 +63,16 @@ public final class NativeModNoticeScreen {
     public NativeModNoticeScreen(FadeManager fadeManager, List<String> noticeLines) {
         this.fadeManager = Objects.requireNonNull(fadeManager, "fadeManager");
         this.noticeLines = List.copyOf(noticeLines);
+        wrappedNoticeLines = wrapLines(this.noticeLines,
+                line -> line.length() * MenuPixelFont.glyphAdvance(BODY_SCALE),
+                BODY_MAX_WIDTH, MAX_RENDERED_LINES);
     }
 
     public void initialize() {
         try {
             renderer = new TexturedQuadRenderer();
             renderer.init();
-            font = new PixelFont();
+            font = new MenuPixelFont();
             font.init("pixel-font.png", renderer);
             wrappedNoticeLines = wrapLines(noticeLines,
                     line -> font.measureWidth(line, BODY_SCALE),
@@ -81,11 +89,23 @@ public final class NativeModNoticeScreen {
         if (dismissed) {
             return;
         }
-        if (!fadingOut && inputHandler.isAnyKeyJustPressed()) {
-            fadingOut = true;
-            fadeManager.startFadeToBlack(() -> dismissed = true);
+        menuInput = inputHandler;
+        if (fadingOut) return;
+        int delta = MenuInput.up(inputHandler) || MenuInput.left(inputHandler) ? -1
+                : MenuInput.down(inputHandler) || MenuInput.right(inputHandler) ? 1 : 0;
+        page = Math.clamp(page + delta, 0, pageCount() - 1);
+        if (MenuInput.accept(inputHandler)) {
+            if (page + 1 < pageCount()) page++;
+            else {
+                fadingOut = true;
+                fadeManager.startFadeToBlack(() -> dismissed = true);
+            }
         }
     }
+
+    int pageCount() { return Math.max(1, (wrappedNoticeLines.size() + MAX_RENDERED_LINES - 1) / MAX_RENDERED_LINES); }
+    int currentPage() { return page; }
+
 
     public boolean isDismissed() {
         return dismissed;
@@ -97,17 +117,26 @@ public final class NativeModNoticeScreen {
         }
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        renderer.drawTexture(solidWhiteTextureId, 0, 0, SCREEN_W, SCREEN_H,
+        renderer.drawTexture(solidWhiteTextureId, 0, 0, logicalWidth, SCREEN_H,
                 0f, 0f, 0f, 1f);
         font.beginMegaBatch();
         int y = 40;
-        for (String line : wrappedNoticeLines) {
-            int x = (SCREEN_W - font.measureWidth(line, BODY_SCALE)) / 2;
+        for (String line : wrappedNoticeLines.subList(page * MAX_RENDERED_LINES,
+                Math.min(wrappedNoticeLines.size(), (page + 1) * MAX_RENDERED_LINES))) {
+            int x = (logicalWidth - font.measureWidth(line, BODY_SCALE)) / 2;
             font.drawText(line, x, y, BODY_SCALE, 0.95f, 0.95f, 0.95f, 1f);
             y += 12;
         }
-        font.drawTextCentered("Press any key to continue", SCREEN_W, SCREEN_H - 20,
-                0.8f, 0.8f, 0.8f, 1f);
+        String confirm = menuInput == null ? "Enter" : MenuInput.confirmLabel(menuInput);
+        String prompt = confirm + (page + 1 < pageCount() ? " Next page" : " Continue");
+        font.drawText(prompt, (logicalWidth - font.measureWidth(prompt, BODY_SCALE)) / 2,
+                SCREEN_H - 20, BODY_SCALE, 0.8f, 0.8f, 0.8f, 1f);
+        if (pageCount() > 1) {
+            String directions = menuInput == null ? "Arrows" : MenuInput.directionLabel(menuInput);
+            String pages = "Page " + (page + 1) + "/" + pageCount() + "  " + directions + " Browse";
+            font.drawText(pages, (logicalWidth - font.measureWidth(pages, BODY_SCALE)) / 2,
+                    188, BODY_SCALE, .8f, .8f, .8f, 1f);
+        }
         font.endMegaBatch();
     }
 
@@ -125,12 +154,8 @@ public final class NativeModNoticeScreen {
         for (String line : lines) {
             wrapped.addAll(wrapLine(Objects.requireNonNull(line, "line"), measure, maxWidth));
         }
-        if (wrapped.size() <= maxLines) {
-            return List.copyOf(wrapped);
-        }
-        List<String> visible = new ArrayList<>(wrapped.subList(0, maxLines - 1));
-        visible.add("...");
-        return List.copyOf(visible);
+        // The viewport is paged: keep every wrapped line for later pages.
+        return List.copyOf(wrapped);
     }
 
     private static List<String> wrapLine(String line,
@@ -182,6 +207,8 @@ public final class NativeModNoticeScreen {
             line.setLength(0);
         }
     }
+
+    public void setViewportWidth(int logicalWidth) { this.logicalWidth = Math.max(SCREEN_W, logicalWidth); }
 
     public void setProjectionMatrix(float[] projectionMatrix) {
         if (renderer != null && projectionMatrix != null) {

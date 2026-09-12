@@ -64,7 +64,7 @@ public class EditorCommandStripRenderer {
 
     protected List<String> buildCommandLines() {
         EditorHierarchyDepth depth = controller == null ? EditorHierarchyDepth.WORLD : controller.depth();
-        String focusHint = controller == null ? "Tab focus" : "Tab focus " + controller.focusRegion();
+        String focusHint = "F1 / North button: Commands | Tab focus";
         return switch (depth) {
             case WORLD -> List.of(focusHint, "Space Place block | E Eyedrop | Enter Block");
             case BLOCK -> List.of(focusHint, "Space Apply chunk | E Eyedrop | Esc World | Enter Chunk");

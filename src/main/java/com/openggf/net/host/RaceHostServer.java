@@ -21,6 +21,7 @@ import io.netty.handler.timeout.IdleStateHandler;
 
 import java.net.InetSocketAddress;
 import java.util.concurrent.TimeUnit;
+import java.util.function.LongSupplier;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Direct-connect WebSocket transport for one player-hosted race room. */
@@ -43,8 +44,16 @@ public final class RaceHostServer implements AutoCloseable {
     public static RaceHostServer start(int port, RoomHostConfig config,
                                        PlayerIdentity hostIdentity,
                                        TrackValidationProfileSource profiles) {
+        return start(port, config, hostIdentity, profiles, System::currentTimeMillis);
+    }
+
+    // Package-private clock seam: public transport behavior keeps wall time.
+    static RaceHostServer start(int port, RoomHostConfig config,
+                                PlayerIdentity hostIdentity,
+                                TrackValidationProfileSource profiles,
+                                LongSupplier clockMillis) {
         NioEventLoopGroup group = new NioEventLoopGroup(1);
-        RoomHost room = new RoomHost(config, hostIdentity, System::currentTimeMillis, profiles);
+        RoomHost room = new RoomHost(config, hostIdentity, clockMillis, profiles);
         ConnectionHygiene.ConnectionCounter counter =
                 new ConnectionHygiene.ConnectionCounter(MAX_CONNECTIONS_PER_IP);
         try {

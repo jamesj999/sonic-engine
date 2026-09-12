@@ -38,6 +38,11 @@ public class GamepadInputManager {
     // and replay overrides. Connecting a pad establishes a baseline, not an action.
     private final Map<Integer, Long> presentationHeld = new HashMap<>();
     private boolean presentationPress;
+    private String presentationName = "";
+
+    private ControllerPromptStyle presentationStyle = ControllerPromptStyle.forName("");
+
+    ControllerPromptStyle presentationStyle() { return presentationStyle; }
 
     public GamepadInputManager(GamepadStateSource stateSource) {
         this.stateSource = Objects.requireNonNull(stateSource, "stateSource");
@@ -148,6 +153,10 @@ public class GamepadInputManager {
             }
             if (previous != null && (held & ~previous) != 0) {
                 presentationPress = true;
+                if (!presentationName.equals(device.name())) {
+                    presentationName = device.name();
+                    presentationStyle = ControllerPromptStyle.forName(presentationName);
+                }
             }
             presentationHeld.put(id, held);
         }
