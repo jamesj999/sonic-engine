@@ -96,6 +96,8 @@ campaigns; feature/API publication remains subject to the 0.8 roadmap.
   player DPLC entry point retained as a compatibility delegate.
   SBZ and Final Zone share uniform scroll mechanics with independent camera state.
   Removed an unused radius-transition duplicate; live hurt and death paths retain their owners.
+  S1 and S3K rings decode ROM mappings, correcting sparkle flips to the ROM sequence
+  while preserving animation timing and the S3K pattern cap.
 
 ## Build and release
 

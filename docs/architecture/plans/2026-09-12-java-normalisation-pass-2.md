@@ -460,3 +460,12 @@ test callers. `PlayableHurtRadiusTransition` remains the live hurt owner and dea
 still calls `setRolling(false)` directly. No gameplay path was rewired. Compilation
 and the final combined movement/rewind coverage validate this deletion; no new
 implementation-mirroring test or separate hurt suite was added.
+
+### Candidate 7 — ROM-owned ring mappings
+
+S1 REV01 `$00A610` and the S&K half `$01A99A` feed the existing format decoders;
+`RingMappingFrames` adapts their pieces. Tests verify the owning placed/lost-ring
+instruction pointers, all nine frames, tile bounds, dimensions, effective palette,
+caching and timing. The ninth frame is blank; spin and sparkle counts remain four.
+The ROM sparkle flip sequence is none, H+V, H, V, correcting the former copied
+none, H, V, H+V table. This is an explicit parity correction. S3K retains 14 patterns.
