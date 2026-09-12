@@ -97,18 +97,66 @@ public final class ObjectPlayerQuery {
                                  C context, PlayerVisitor<? super C> visitor) {
         Objects.requireNonNull(policy, "policy");
         Objects.requireNonNull(visitor, "visitor");
-        PlayableEntity main=mainPlayerOrNull();
-        List<? extends PlayableEntity> sidekicks=rawSidekicks();
-        if(policy==ObjectPlayerParticipationPolicy.NEAREST_ENGINE_PLAYER){PlayableEntity nearest=nearestUnique(main,sidekicks,referenceX,referenceY);if(nearest!=null)visitor.visit(context,nearest);return;}
-        if(main!=null)visitor.visit(context,main);
-        if(policy==ObjectPlayerParticipationPolicy.MAIN_ONLY_NATIVE)return;
-        int limit=policy==ObjectPlayerParticipationPolicy.NATIVE_P1_P2?1:Integer.MAX_VALUE,added=0;
-        for(int i=0;i<sidekicks.size()&&added<limit;i++){PlayableEntity candidate=sidekicks.get(i);if(candidate==null||candidate==main||duplicateBefore(sidekicks,i,candidate))continue;visitor.visit(context,candidate);added++;}
+        PlayableEntity main = mainPlayerOrNull();
+        List<? extends PlayableEntity> sidekicks = rawSidekicks();
+        if (policy == ObjectPlayerParticipationPolicy.NEAREST_ENGINE_PLAYER) {
+            PlayableEntity nearest = nearestUnique(main, sidekicks, referenceX, referenceY);
+            if (nearest != null) {
+                visitor.visit(context, nearest);
+            }
+            return;
+        }
+        if (main != null) {
+            visitor.visit(context, main);
+        }
+        if (policy == ObjectPlayerParticipationPolicy.MAIN_ONLY_NATIVE) {
+            return;
+        }
+        int limit = policy == ObjectPlayerParticipationPolicy.NATIVE_P1_P2 ? 1 : Integer.MAX_VALUE;
+        int added = 0;
+        for (int i = 0; i < sidekicks.size() && added < limit; i++) {
+            PlayableEntity candidate = sidekicks.get(i);
+            if (candidate == null || candidate == main || duplicateBefore(sidekicks, i, candidate)) {
+                continue;
+            }
+            visitor.visit(context, candidate);
+            added++;
+        }
     }
 
-    private static boolean duplicateBefore(List<? extends PlayableEntity> players,int end,PlayableEntity candidate){for(int i=0;i<end;i++)if(players.get(i)==candidate)return true;return false;}
-    private static PlayableEntity nearestUnique(PlayableEntity main,List<? extends PlayableEntity> sidekicks,int x,int y){PlayableEntity nearest=main;long best=main==null?Long.MAX_VALUE:distanceSquared(main,x,y);for(int i=0;i<sidekicks.size();i++){PlayableEntity candidate=sidekicks.get(i);if(candidate==null||candidate==main||duplicateBefore(sidekicks,i,candidate))continue;long distance=distanceSquared(candidate,x,y);if(distance<best){nearest=candidate;best=distance;}}return nearest;}
-    private static long distanceSquared(PlayableEntity player,int x,int y){long dx=(long)player.getCentreX()-x,dy=(long)player.getCentreY()-y;return dx*dx+dy*dy;}
+    private static boolean duplicateBefore(
+            List<? extends PlayableEntity> players, int end, PlayableEntity candidate) {
+        for (int i = 0; i < end; i++) {
+            if (players.get(i) == candidate) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static PlayableEntity nearestUnique(
+            PlayableEntity main, List<? extends PlayableEntity> sidekicks, int x, int y) {
+        PlayableEntity nearest = main;
+        long best = main == null ? Long.MAX_VALUE : distanceSquared(main, x, y);
+        for (int i = 0; i < sidekicks.size(); i++) {
+            PlayableEntity candidate = sidekicks.get(i);
+            if (candidate == null || candidate == main || duplicateBefore(sidekicks, i, candidate)) {
+                continue;
+            }
+            long distance = distanceSquared(candidate, x, y);
+            if (distance < best) {
+                nearest = candidate;
+                best = distance;
+            }
+        }
+        return nearest;
+    }
+
+    private static long distanceSquared(PlayableEntity player, int x, int y) {
+        long dx = (long) player.getCentreX() - x;
+        long dy = (long) player.getCentreY() - y;
+        return dx * dx + dy * dy;
+    }
 
     public NearestPlayerX nearestByRomX(ObjectPlayerParticipationPolicy policy, int referenceX) {
         return nearestByRomX(policy, referenceX, player -> true);
