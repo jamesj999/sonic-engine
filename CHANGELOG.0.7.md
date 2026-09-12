@@ -6,6 +6,11 @@ campaigns; feature/API publication remains subject to the 0.8 roadmap.
 
 ## Gameplay and presentation
 
+- **Ring visibility:** restore full-X sorting of expanded ring placements so a
+  nearer ring cannot be hidden behind a farther off-screen record, fixing late
+  ring appearance in EHZ1 after the 0.7 branch rollover. Ring placement also
+  sorts editor reloads correctly.
+
 - **Master title hub:** controller-first navigation uses left/right to change games
   from either pane and up/down to enter and move through actions, with confirmation
   on menu entry, distinct cancel feedback on back, and consistent sounds within
@@ -31,7 +36,9 @@ campaigns; feature/API publication remains subject to the 0.8 roadmap.
   diagnostics, all three special stages, scene effects, and trace-video capture.
   Native 320x224 remains the gameplay/trace authority. 352x224 and 400x224 are
   supported presentation targets, 528x224 is a best-effort smoke tier, and
-  800x224 remains exploratory.
+  800x224 remains exploratory. Sonic 2 and Sonic 3 & Knuckles stage rings now
+  cover the configured viewport, preventing rings from appearing late inside
+  a wider screen while preserving native-width collection boundaries.
 - **S3K campaign work:** the promoted development baseline includes further MHZ
   and FBZ work, LBZ Big Arm, Super Emerald sanctuary/progression, and powered
   effects. Giant-ring sanctuary entry uses the same emerald ceremony, palette,

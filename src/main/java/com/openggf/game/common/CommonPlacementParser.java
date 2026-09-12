@@ -70,7 +70,10 @@ public final class CommonPlacementParser {
             cursor += RING_RECORD_SIZE;
         }
 
-        spawns.sort(Comparator.comparingInt(spawn -> spawn.x() & 0xFF80));
+        // S2 RingsMgr_SortRings compares full X after expanding rows/columns.
+        // Chunk ordering can put a nearer ring behind an off-screen record,
+        // causing RingsManager_Main's forward scan to stop before reaching it.
+        spawns.sort(Comparator.comparingInt(RingSpawn::x));
         return List.copyOf(spawns);
     }
 

@@ -1222,8 +1222,7 @@ public class RingManager implements RewindSnapshottable<RingSnapshot> {
     private static final class RingPlacement extends AbstractPlacementManager<RingSpawn> {
         private static final int EXTRA_AHEAD = 0x140; // 320; native -> 0x280 window
         private static final int UNLOAD_BEHIND = 0x300;
-        private static final int S3K_RAW_WINDOW_BEHIND = 0x08;
-        private static final int S3K_RAW_WINDOW_AHEAD = 0x148;
+        private static final int RAW_WINDOW_MARGIN = 0x08;
         private static final int NO_SPARKLE = -1;
 
         private final boolean useRawCameraWindow;
@@ -1239,7 +1238,7 @@ public class RingManager implements RewindSnapshottable<RingSnapshot> {
         private boolean[] coordinateOccupied;
 
         private RingPlacement(List<RingSpawn> spawns, boolean useRawCameraWindow) {
-            super(spawns, EXTRA_AHEAD, UNLOAD_BEHIND,
+            super(sortedByX(spawns), EXTRA_AHEAD, UNLOAD_BEHIND,
                     com.openggf.level.spawn.PlacementViewportWidth::current);
             this.useRawCameraWindow = useRawCameraWindow;
             this.sparkleStartFrames = new int[this.spawns.size()];
@@ -1249,7 +1248,7 @@ public class RingManager implements RewindSnapshottable<RingSnapshot> {
 
         /** Replaces spawns and resets all collection/sparkle state. */
         private void replaceSpawnsAndReset(List<RingSpawn> newSpawns) {
-            replaceSpawns(newSpawns);
+            replaceSpawns(sortedByX(newSpawns));
             collected.clear();
             sparkleStartFrames = new int[this.spawns.size()];
             Arrays.fill(sparkleStartFrames, NO_SPARKLE);
@@ -1279,6 +1278,15 @@ public class RingManager implements RewindSnapshottable<RingSnapshot> {
                     coordinateIndices[slot] = index;
                 }
             }
+        }
+
+        private static List<RingSpawn> sortedByX(List<RingSpawn> spawns) {
+            // Ring pointer scans and binary searches require full-X ordering,
+            // including editor input. The parent's stable chunk sort preserves
+            // this order; object placement keeps its separate ROM table order.
+            List<RingSpawn> sorted = new ArrayList<>(spawns);
+            sorted.sort(Comparator.comparingInt(RingSpawn::x));
+            return sorted;
         }
 
         private int findSpawnIndex(int x, int y) {
@@ -1461,16 +1469,19 @@ public class RingManager implements RewindSnapshottable<RingSnapshot> {
             if (!useRawCameraWindow) {
                 return getWindowStart(cameraX);
             }
-            return Math.max(0, cameraX - S3K_RAW_WINDOW_BEHIND);
+            return Math.max(0, cameraX - RAW_WINDOW_MARGIN);
         }
 
         private int ringWindowEnd(int cameraX) {
             if (!useRawCameraWindow) {
                 return getWindowEnd(cameraX);
             }
-            // The ROM end pointer is exclusive: a ring exactly at the computed
-            // endpoint belongs to the next placement window.
-            return cameraX + S3K_RAW_WINDOW_AHEAD - 1;
+            // S2 RingsManager_Main adds screen_width + 16 to cameraX - 8;
+            // S3K loc_E942 uses the equivalent native $150. Preserve that
+            // eight-pixel margin at wider viewports so visible rings load.
+            // The ROM end pointer is exclusive, hence the final -1.
+            return cameraX + com.openggf.level.spawn.PlacementViewportWidth.current()
+                    + RAW_WINDOW_MARGIN - 1;
         }
 
         private boolean areAllCollected() {
