@@ -128,26 +128,43 @@ of thousands of engine tests to verify timeout, subprocess and retention behavio
 
 ### Automatic storage cleanup
 
-No permanent log archive is created. The single broad-attempt receipt is small (under
-16 KiB for normal repository paths), overwritten, and contains no logs:
+Diagnostics are temporary, not a run history. After inspecting `results.json` (including
+skip reasons and failures) and any relevant log tail, acknowledge consumption:
 
-- Keep at most **two completed runs**, within a **100 MiB retained-data budget**. Pruning runs
-  under the worktree lock at startup and completion; old recognized runner directories are deleted.
-- Successful runs retain small JSON summaries/plans/commands only. Their logs and raw XML are deleted.
-- Failed or interrupted runs retain structured failure details and rolling log tails. Each Maven
-  invocation has two log chunks of at most **2 MiB each**, bounded while it runs. Read `.log.1`
-  before `.log` for chronological order. Raw XML is deleted after extracting the summary.
-- Each invocation receives its own `openggf.test.tmpdir` and `TMPDIR`/`TMP`/`TEMP`. Once Maven
-  exits, that directory is deleted, including on handled interruption. The runner stops Maven's
-  process tree before cleanup. A force-killed runner can leave a stale lock and temporary output;
-  confirm its processes have exited before removing the lock, then the next startup prunes old runs.
+```bash
+python3 tools/testing/run_categories.py --acknowledge <run-id>
+```
 
-The retention budget limits stored diagnostics, not the peak temporary space needed by an active
-fixture expansion. An oversized completed run may be removed entirely to honor the budget.
-Build caches, ROMs, unrelated `target/` directories and other worktrees are not pruned. Raw Maven
-and dedicated trace tools keep their existing artifact behavior. For durable release/partition
-XML evidence, use the dedicated direct-Maven evidence workflow below; the local category runner
-is intentionally ephemeral.
+This deletes the **entire run directory**, including summaries, plans and commands, without
+running Maven. It takes the same lock as validation and refuses cleanup while a runner
+owns that lock. Only exact runner IDs are accepted, never paths or symlinked directories.
+A repeated acknowledgment is harmless. Agents must acknowledge consumed results before
+delivery; there is no background process that can detect when a human has read a file.
+
+- Success logs and raw XML are deleted immediately after extracting results. The compact
+  results remain temporarily so skips can be inspected before acknowledgment.
+- Failed/interrupted results include rolling log tails until acknowledged. Each Maven
+  invocation keeps two chunks of at most **2 MiB each** while running. Read `.log.1` before
+  `.log`. Raw XML is deleted after summary extraction.
+- Before launching another run, the runner deletes all unacknowledged, recognized prior
+  run directories, including legacy retained runs. This also cleans abandoned diagnostics;
+  it never follows symlinks or prunes unrelated target contents.
+- Only an explicit `--keep-diagnostics` on `--run` retains a run across later launches.
+  Use it only at the user's request. Opt-in retention remains bounded to **two runs /
+  100 MiB**, and acknowledgment deletes these folders too. Raw XML and temporary fixture
+  data are still removed; this flag retains bounded logs and JSON, not complete build output.
+- Each invocation uses its own `openggf.test.tmpdir` and `TMPDIR`/`TMP`/`TEMP`, deleted after
+  Maven's process tree exits, including on handled interruption. After a force-killed runner,
+  confirm its processes exited before removing a stale lock. The next launch removes leftovers.
+
+The only persistent default artifact is the single overwritten
+`target/category-tests-last-broad.json` receipt (normally under 16 KiB). It keeps the tested
+revision/fingerprint, retry reason, status and lane counts, not logs, skip reasons or failure
+payloads. Acknowledgment preserves it, so deleting diagnostics cannot bypass retry controls.
+The temporary storage needed by an active test is not limited by the retention budget.
+Build caches, ROMs, unrelated target folders and other worktrees are not pruned. Do not copy
+local logs into another archive to evade cleanup. Dedicated release/partition evidence uses
+its existing explicit evidence workflow below.
 
 `target/category-tests.lock` prevents two category runners in one worktree. Raw Maven bypasses
 this lock: never start it concurrently in that worktree. Do not retry a run while its predecessor

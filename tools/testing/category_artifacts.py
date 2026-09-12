@@ -9,7 +9,8 @@ import threading
 import time
 
 LOG_PART_BYTES = 2 * 1024 * 1024
-MAX_COMPLETED_RUNS = 2
+MAX_COMPLETED_RUNS = 0
+MAX_KEPT_RUNS = 2
 MAX_RETAINED_BYTES = 100 * 1024 * 1024
 RUN_NAME = re.compile(r'\d{8}T\d{6}Z-[0-9a-f]{8}')
 
@@ -169,8 +170,40 @@ def prune_runs(base, active=None, max_runs=MAX_COMPLETED_RUNS, max_bytes=MAX_RET
     kept = used = 0
     for directory in runs:
         size = size_bytes(directory)
-        if kept < max_runs and used + size <= max_bytes:
+        marker = directory / 'keep-diagnostics'
+        limit = MAX_KEPT_RUNS if marker.is_file() and not marker.is_symlink() else max_runs
+        if kept < limit and used + size <= max_bytes:
             kept += 1
             used += size
         else:
             shutil.rmtree(directory)
+
+
+def acknowledge_run(root, run_id):
+    """Delete only the named runner-owned result, serialized with Maven execution."""
+    if not RUN_NAME.fullmatch(run_id):
+        raise ValueError('Use the exact run ID, not a path, with --acknowledge')
+    target = root / 'target'
+    target.mkdir(exist_ok=True)
+    lock = target / 'category-tests.lock'
+    try:
+        fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    except FileExistsError:
+        raise ValueError('Category runner is active or has a stale lock; do not clean up until its processes have exited')
+    try:
+        with os.fdopen(fd, 'w') as stream:
+            stream.write(str(os.getpid()) + '\n')
+        base = target / 'category-tests'
+        directory = base / run_id
+        if base.is_symlink() or directory.is_symlink():
+            raise ValueError('Refusing to acknowledge symlinked diagnostics')
+        if not directory.exists():
+            return  # A repeated acknowledgment is harmless.
+        plan = directory / 'plan.json'
+        if not plan.is_file() or plan.is_symlink():
+            raise ValueError('Refusing to delete an unrecognized diagnostics directory')
+        shutil.rmtree(directory)
+        if not any(base.iterdir()):
+            base.rmdir()
+    finally:
+        lock.unlink()
