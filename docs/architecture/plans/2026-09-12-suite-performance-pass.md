@@ -58,9 +58,9 @@ in this order, using the current repository's bounded validation workflow.
   `TestDirectConnectEndToEnd`, with host changes only if required by a reusable seam.
 - [x] Review every target's measured disposition, finish release/validation prose,
   preflight, and run the single required selection against the actual pinned base.
-- [ ] Integrate into develop without switching its branch; reconcile upstream by
-  intent, perform relevant focused integration checks, validate push policy, push
-  develop, acknowledge diagnostics, and remove accounted-for worktrees/branches.
+- [x] Integrate into develop without switching its branch; reconcile upstream by
+  intent and perform relevant focused integration checks (83 passing at `f0fcdf818`).
+  Final push and worktree cleanup are reported with the delivered Git state.
 
 ## Disposition ledger
 

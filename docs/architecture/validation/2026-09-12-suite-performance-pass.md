@@ -179,3 +179,20 @@ Compilation/startup and Maven account for the difference from lane elapsed time.
 The next substantial savings would require profiling the remaining ROM/audio
 execution or source attribution. Removing routes, chip cycles, rewind checks,
 mutation cases, or source scope is not an equivalent optimization.
+
+## Integration
+
+Merged conflict-free into develop at `f0fcdf818`; the committed merged tree was
+identical to the validated candidate tree. The focused integrated check passed
+83 tests with zero failures, errors, or skips:
+
+```bash
+mvn -Dmse=off -Pguards \
+  '-Dtest=TestCompleteRunAudioCaptureStore#boundedLinesRetainReadAheadAndHandleBufferEdges+boundedLinesPreserveExactLimitAndErrorPrecedence,TestDirectConnectEndToEnd,TestTraceSessionLauncherRunBranch,TestAudioPresentationArchitectureGuard' \
+  test -B
+```
+
+The helper supplied verified absolute ROM paths and isolated report/temporary
+paths. Broad diagnostics were acknowledged with the runner; consumed focused
+logs, reports, temporary data, and profiling artifacts were removed. Unrelated
+main-workspace changes were preserved.
