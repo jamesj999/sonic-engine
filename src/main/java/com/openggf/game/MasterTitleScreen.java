@@ -183,7 +183,7 @@ public class MasterTitleScreen {
     private PixelFont pickerFont;
     private TestModeTracePicker tracePicker;
     private UserRecordingMenu userRecordingMenu;
-    private UserRecordingMenuFactory userRecordingMenuFactory = this::createUserRecordingMenu;
+    private UserRecordingMenuFactory userRecordingMenuFactory;
     private UserRecordingMenu.PlaybackStarter userRecordingPlaybackStarter =
             (entry, options) -> LOGGER.info("User recording playback callback not configured.");
     private TimeAttackMenu timeAttackMenu;
@@ -215,6 +215,12 @@ public class MasterTitleScreen {
     private EngineSettingsScreen settingsScreen;
     private float[] currentProjection;
     private boolean toolsOpen;
+    private boolean gameBrowserOpen;
+    private int gameBrowserIndex;
+    private MenuLoadTask<?> catalogLoad;
+    private java.util.function.Consumer<Object> catalogLoaded;
+    private String catalogLoadingTitle;
+    private final Map<GameEntry, String> previewSources = new EnumMap<>(GameEntry.class);
     private int toolIndex;
     private boolean helpOpen;
     private boolean modsShortcutHeld;
@@ -415,6 +421,8 @@ public class MasterTitleScreen {
                     || MenuInput.down(inputHandler) || MenuInput.left(inputHandler) || MenuInput.right(inputHandler)) return;
             childInputPending = false;
         }
+        if (catalogLoad != null) { updateCatalogLoad(); return; }
+        if (gameBrowserOpen) { updateGameBrowser(); return; }
         if (quitPrompt) { updateQuitPrompt(); return; }
         if (settingsScreen != null) {
             settingsScreen.update(inputHandler);
@@ -449,12 +457,8 @@ public class MasterTitleScreen {
                 Path root = Path.of(System.getProperty("user.dir"))
                         .resolve(configService.getString(SonicConfiguration.TRACE_CATALOG_DIR))
                         .normalize();
-                tracePicker = new TestModeTracePicker(
-                        TraceCatalog.scan(root), ensurePickerFont());
-                if (traceFailureAnnounced) {
-                    tracePicker.markFailureFeedbackAnnounced();
-                    traceFailureAnnounced = false;
-                }
+                openTraceCatalog(root);
+                return;
             }
             tracePicker.update(inputHandler);
             switch (tracePicker.consumeResult()) {
@@ -561,7 +565,13 @@ public class MasterTitleScreen {
         if (navigation.right() && cycleSelectedEntry(1)) { playNavigateSound(); return; }
         if (!navigation.actions()) {
             if (navigation.back()) { openQuitPrompt(); return; }
-            if (navigation.up() || navigation.down() || navigation.accept()) {
+            if (navigation.accept()) {
+                gameBrowserOpen = true;
+                gameBrowserIndex = selectedIndex;
+                playConfirmSound();
+                return;
+            }
+            if (navigation.up() || navigation.down()) {
                 navigation.enter();
                 playNavigateSound();
             }
@@ -580,6 +590,92 @@ public class MasterTitleScreen {
             case SETTINGS -> openSettings();
             case TOOLS -> { toolsOpen = true; toolIndex = 0; playConfirmSound(); }
             case QUIT -> openQuitPrompt();
+        }
+    }
+
+    private void updateGameBrowser() {
+        if (navigation.back()) { gameBrowserOpen = false; playCancelSound(); return; }
+        if (entries.isEmpty()) return;
+        int previous = gameBrowserIndex;
+        if (navigation.up()) gameBrowserIndex = Math.floorMod(gameBrowserIndex - 1, entries.size());
+        if (navigation.down()) gameBrowserIndex = (gameBrowserIndex + 1) % entries.size();
+        if (navigation.left()) gameBrowserIndex = Math.max(0, gameBrowserIndex - 6);
+        if (navigation.right()) gameBrowserIndex = Math.min(entries.size() - 1, gameBrowserIndex + 6);
+        if (gameBrowserIndex != previous) { frameCounter = 0; playNavigateSound(); }
+        if (navigation.accept()) {
+            setSelectedIndex(gameBrowserIndex);
+            gameBrowserOpen = false;
+            playConfirmSound();
+        }
+    }
+
+    private void drawGameBrowser() {
+        MenuStyle.page(font, viewportWidth, "BROWSE GAMES", "Choose a game to return to the hub");
+        int first = gameBrowserIndex / 6 * 6;
+        for (int i = first; i < Math.min(entries.size(), first + 6); i++) {
+            var entry = entries.get(i);
+            int y = 51 + (i - first) * 24;
+            if (i == gameBrowserIndex) MenuStyle.focusContent(font, 7, y, viewportWidth - 14, 23, 20);
+            String name = entry.menuLabel();
+            int columns = (viewportWidth - 26) / 9;
+            if (i == gameBrowserIndex && name.length() > columns) {
+                int overflow = name.length() - columns;
+                int offset = Math.min(overflow, Math.max(0, (frameCounter / 8) % (overflow + 30) - 15));
+                name = name.substring(offset, offset + columns);
+            }
+            MenuStyle.label(font, name, 13, y, viewportWidth - 26, 1, 1, 1);
+            boolean available = isEntryAvailable(entry);
+            MenuStyle.text(font, available ? "Available" : "ROM missing - configure in Settings",
+                    13, y + 11, viewportWidth - 26, available ? .6f : 1, .8f, available ? 1 : .3f);
+        }
+        if (entries.isEmpty()) MenuStyle.label(font, "No games available", 13, 63, viewportWidth - 26, 1, 1, 1);
+        MenuStyle.footer(font, viewportWidth, "Up/Down Game  L/R Page  " + (entries.isEmpty() ? 0 : gameBrowserIndex + 1) + "/" + entries.size(),
+                confirmHint() + " Select  " + backHint() + " Back");
+    }
+
+    private void openTraceCatalog(Path root) {
+        PixelFont loadedFont = ensurePickerFont();
+        loadCatalog("TRACE REPLAYS", () -> TraceCatalog.scan(root), entries -> {
+            tracePicker = new TestModeTracePicker(entries, loadedFont);
+            if (traceFailureAnnounced) {
+                tracePicker.markFailureFeedbackAnnounced();
+                traceFailureAnnounced = false;
+            }
+        });
+    }
+
+    @SuppressWarnings("unchecked")
+    private <T> void loadCatalog(String title, java.util.concurrent.Callable<T> read,
+                                 java.util.function.Consumer<T> loaded) {
+        cancelCatalogLoad();
+        catalogLoadingTitle = title;
+        catalogLoaded = value -> loaded.accept((T) value);
+        catalogLoad = new MenuLoadTask<>(read);
+    }
+
+    private void cancelCatalogLoad() {
+        if (catalogLoad != null) catalogLoad.cancel();
+        catalogLoad = null;
+        catalogLoaded = null;
+    }
+
+    private void updateCatalogLoad() {
+        if (navigation.back()) {
+            cancelCatalogLoad();
+            configService.setConfigValue(SonicConfiguration.TEST_MODE_ENABLED, false);
+            playCancelSound();
+            return;
+        }
+        if (!catalogLoad.done()) return;
+        var completed = catalogLoad;
+        var loaded = catalogLoaded;
+        catalogLoad = null;
+        catalogLoaded = null;
+        try { loaded.accept(completed.result()); childInputPending = true; }
+        catch (Exception failure) {
+            configService.setConfigValue(SonicConfiguration.TEST_MODE_ENABLED, false);
+            Throwable cause = failure.getCause() == null ? failure : failure.getCause();
+            showUnavailableAction("Could not load catalog: " + cause.getMessage());
         }
     }
 
@@ -643,8 +739,7 @@ public class MasterTitleScreen {
         if (toolIndex == 0) {
             Path root = Path.of(System.getProperty("user.dir"))
                     .resolve(configService.getString(SonicConfiguration.TRACE_CATALOG_DIR)).normalize();
-            tracePicker = new TestModeTracePicker(TraceCatalog.scan(root), ensurePickerFont());
-            childInputPending = true;
+            openTraceCatalog(root);
             playConfirmSound();
         } else { helpOpen = true; playConfirmSound(); }
     }
@@ -682,13 +777,21 @@ public class MasterTitleScreen {
     private void refreshRomPreviews() {
         for (GameEntry game : GameEntry.values()) {
             String path = configService.getString(game.romConfigKey);
-            stockAvailability.put(game, path != null && !path.isBlank() && new File(path).isFile());
+            boolean available = path != null && !path.isBlank() && new File(path).isFile();
+            stockAvailability.put(game, available);
+            boolean listed = entries.stream().anyMatch(entry -> entry instanceof MasterTitleEntry.Stock stock && stock.game() == game);
+            String source = available && listed ? previewSource(path) : null;
+            if (Objects.equals(source, previewSources.get(game))) continue;
+            RomPreviewState removed = romPreviews.remove(game);
+            if (removed != null) PngTextureLoader.deleteTexture(removed.textureId);
+            previewSources.remove(game);
+            if (renderer != null && source != null) loadRomPreview(game, Path.of(path), source);
         }
-        if (renderer == null) return;
-        romPreviews.values().forEach(preview -> PngTextureLoader.deleteTexture(preview.textureId));
-        romPreviews.clear();
-        loadRomPreviews();
-        previewAnimationFrame = 0;
+    }
+
+    private static String previewSource(String path) {
+        File file = new File(path);
+        return file.getAbsolutePath() + ":" + file.length() + ":" + file.lastModified();
     }
 
     private void updateStandaloneActionChooser(InputHandler input) {
@@ -741,9 +844,13 @@ public class MasterTitleScreen {
 
     private void drawNativePage(Runnable page) {
         if (renderer == null || font == null) { page.run(); return; }
-        MenuStyle.fill(font, 0, 0, viewportWidth, SCREEN_H, .025f, .065f, .19f, 1);
-        MenuStyle.checkerboard(font, viewportWidth);
         int margin = Math.max(0, (viewportWidth - SCREEN_W) / 2);
+        if (margin > 0) {
+            MenuStyle.fill(font, 0, 0, margin, SCREEN_H, .025f, .065f, .19f, 1);
+            MenuStyle.fill(font, viewportWidth - margin, 0, margin, SCREEN_H, .025f, .065f, .19f, 1);
+            MenuStyle.checkerboard(font, 0, margin);
+            MenuStyle.checkerboard(font, viewportWidth - margin, viewportWidth);
+        }
         if (margin == 0 || currentProjection == null) { page.run(); return; }
         float[] centered = new org.joml.Matrix4f()
                 .ortho2D(-margin, viewportWidth - margin, 0, SCREEN_H).get(new float[16]);
@@ -753,6 +860,13 @@ public class MasterTitleScreen {
     }
 
     private void drawContent() {
+        if (catalogLoad != null) {
+            MenuStyle.page(font, viewportWidth, catalogLoadingTitle, "Reading catalog...");
+            MenuStyle.label(font, "Loading" + ".".repeat((frameCounter / 20) % 4), 14, 84, viewportWidth - 28, 1, 1, 1);
+            MenuStyle.footer(font, viewportWidth, "You can cancel while files are read", backHint() + " Cancel");
+            return;
+        }
+        if (gameBrowserOpen) { drawGameBrowser(); return; }
 
         if (tracePicker != null) {
             drawNativePage(tracePicker::render);
@@ -922,7 +1036,7 @@ public class MasterTitleScreen {
         }
         String footer = navigation.actions()
                 ? "L/R Game  U/D Actions  " + confirmHint() + " Open  " + backHint() + " Back"
-                : "Left/Right Game  Up/Down Actions";
+                : "L/R Game  U/D Actions  " + confirmHint() + " Browse";
         textFitted(footer, 9, 211, viewportWidth - 18, 1f, 0.5f, 0.91f, 1f);
         font.endMegaBatch();
     }
@@ -1012,17 +1126,23 @@ public class MasterTitleScreen {
         for (MasterTitleEntry entry : entries) {
             if (!(entry instanceof MasterTitleEntry.Stock stock) || !isEntryAvailable(entry)) continue;
             GameEntry game = stock.game();
-            Path path = Path.of(configService.getString(game.romConfigKey));
-            MasterTitleRomPreview.loadSequenceFor(game, path).ifPresent(sequence -> {
-                RomPreviewState preview = new RomPreviewState();
-                preview.sequence = sequence;
-                MasterTitleRomPreview.Image firstFrame = sequence.imageAt(0);
-                preview.textureId = MasterTitleRomPreview.uploadTexture(firstFrame);
-                preview.width = firstFrame.width();
-                preview.height = firstFrame.height();
-                romPreviews.put(game, preview);
-            });
+            String path = configService.getString(game.romConfigKey);
+            loadRomPreview(game, Path.of(path), previewSource(path));
         }
+    }
+
+    private void loadRomPreview(GameEntry game, Path path, String source) {
+        // Remember even a failed decode: unrelated Apply must not retry disk work.
+        previewSources.put(game, source);
+        MasterTitleRomPreview.loadSequenceFor(game, path).ifPresent(sequence -> {
+            RomPreviewState preview = new RomPreviewState();
+            preview.sequence = sequence;
+            MasterTitleRomPreview.Image firstFrame = sequence.imageAt(0);
+            preview.textureId = MasterTitleRomPreview.uploadTexture(firstFrame);
+            preview.width = firstFrame.width();
+            preview.height = firstFrame.height();
+            romPreviews.put(game, preview);
+        });
     }
 
     private void updateSelectedRomPreviewTexture() {
@@ -1383,8 +1503,16 @@ public class MasterTitleScreen {
                 || !isEntryAvailable(stock)) return false;
         GameEntry entry = stock.game();
         try {
-            userRecordingMenu = userRecordingMenuFactory.create(entry.gameId, font);
-            childInputPending = true;
+            if (userRecordingMenuFactory != null) {
+                userRecordingMenu = userRecordingMenuFactory.create(entry.gameId, font);
+                childInputPending = true;
+            } else {
+                Path root = Path.of(System.getProperty("user.dir", "."));
+                var identity = AppVersion.identity();
+                loadCatalog("RECORDINGS", () -> UserRecordingCatalog.scan(root, entry.gameId, identity),
+                        catalog -> userRecordingMenu = new UserRecordingMenu(entry.gameId, catalog, font,
+                                userRecordingPlaybackStarter));
+            }
             playConfirmSound();
             return true;
         } catch (IOException ex) {
@@ -1400,14 +1528,6 @@ public class MasterTitleScreen {
         return tryOpenUserRecordingMenuForSelectedGame();
     }
 
-    private UserRecordingMenu createUserRecordingMenu(String gameId, PixelFont font) throws IOException {
-        Path root = Path.of(System.getProperty("user.dir", "."));
-        return new UserRecordingMenu(
-                gameId,
-                UserRecordingCatalog.scan(root, gameId, AppVersion.identity()),
-                font,
-                userRecordingPlaybackStarter);
-    }
 
     /**
      * Opens the Time Attack menu, seeded with the currently highlighted game
@@ -1481,6 +1601,7 @@ public class MasterTitleScreen {
     }
 
     public void cleanup() {
+        cancelCatalogLoad();
         if (font != null) font.cleanup();
         // pickerFont is only non-null AND distinct from font when the
         // no-shadow atlas loaded successfully. Clean it up separately.
@@ -1529,7 +1650,7 @@ public class MasterTitleScreen {
                 || settingsScreen != null || launchConfigPanel != null || modManagerScreen != null
                 || timeAttackMenu != null || userRecordingMenu != null || raceLobbyScreen != null
                 || serverBrowserScreen != null || tracePicker != null || standaloneActionOpen
-                || toolsOpen || helpOpen || configService.getBoolean(SonicConfiguration.TEST_MODE_ENABLED);
+                || toolsOpen || helpOpen || gameBrowserOpen || catalogLoad != null || configService.getBoolean(SonicConfiguration.TEST_MODE_ENABLED);
     }
 
     @com.openggf.game.ModApi

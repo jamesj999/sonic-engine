@@ -63,18 +63,25 @@ class TestMasterTitleHub {
 
     @Test void launchOptionsAreReachableWithoutShortcut() {
         var screen = screen();
-        press(screen, GLFW_KEY_ENTER);
+        press(screen, GLFW_KEY_DOWN);
         press(screen, GLFW_KEY_DOWN);
         press(screen, GLFW_KEY_ENTER);
         assertTrue(screen.isLaunchConfigPanelOpenForTest());
         assertFalse(screen.isGameSelected());
     }
 
-    @Test void startRemainsReachableWithTwoDistinctConfirmations() {
+    @Test void browseSelectsGameWithoutLaunchingAndBackPreservesSelection() {
         var screen = screen();
         press(screen, GLFW_KEY_ENTER);
+        assertTrue(screen.blocksGlobalShortcuts());
+        press(screen, GLFW_KEY_DOWN);
+        press(screen, GLFW_KEY_ESCAPE);
+        assertEquals("s2", screen.getSelectedGameId());
         press(screen, GLFW_KEY_ENTER);
-        assertTrue(screen.isGameSelected());
+        press(screen, GLFW_KEY_DOWN);
+        press(screen, GLFW_KEY_ENTER);
+        assertEquals("s3k", screen.getSelectedGameId());
+        assertFalse(screen.isGameSelected());
     }
 
     @Test void cancelledLaunchDraftDoesNotWriteAndFailedSaveCanBeRetried() {

@@ -17,6 +17,17 @@ public final class EngineSettingsDraft {
         public String label() { return label; }
     }
 
+    private static final Map<Category, List<SonicConfiguration>> CATEGORY_KEYS = new EnumMap<>(Category.class);
+    static {
+        for (Category category : Category.values()) {
+            CATEGORY_KEYS.put(category, ConfigCatalog.emitOrder().stream().filter(k -> category(k) == category).toList());
+        }
+    }
+    private final Map<SonicConfiguration, String> textCache = new EnumMap<>(SonicConfiguration.class);
+    private final Map<SonicConfiguration, Boolean> changedCache = new EnumMap<>(SonicConfiguration.class);
+    private final Map<SonicConfiguration, Boolean> nonDefaultCache = new EnumMap<>(SonicConfiguration.class);
+    private long revision;
+    private int changedCount;
     private final SonicConfigurationService config;
     private final Map<SonicConfiguration, Object> initial;
     private final Map<SonicConfiguration, Object> values;
@@ -25,10 +36,11 @@ public final class EngineSettingsDraft {
         this.config = Objects.requireNonNull(config);
         initial = config.settingsSnapshot();
         values = new EnumMap<>(initial);
+        values.keySet().forEach(this::refresh);
     }
 
     public List<SonicConfiguration> keys(Category category) {
-        return ConfigCatalog.emitOrder().stream().filter(k -> category(k) == category).toList();
+        return CATEGORY_KEYS.get(category);
     }
 
     public static Category category(SonicConfiguration key) {
@@ -48,7 +60,9 @@ public final class EngineSettingsDraft {
     }
 
     public Object value(SonicConfiguration key) { return values.get(key); }
-    public String text(SonicConfiguration key) {
+    public long revision() { return revision; }
+    public String text(SonicConfiguration key) { return textCache.getOrDefault(key, ""); }
+    private String format(SonicConfiguration key) {
         Object value = value(key);
         if (ConfigCatalog.meta(key).type() == ConfigType.KEY && value instanceof Number) {
             int code = ((Number) value).intValue();
@@ -57,13 +71,27 @@ public final class EngineSettingsDraft {
         return value == null ? "" : value.toString();
     }
     public boolean nonDefault(SonicConfiguration key) {
-        return !equivalent(key, value(key), config.getDefaultValue(key));
+        return nonDefaultCache.getOrDefault(key, false);
     }
     public boolean changed(SonicConfiguration key) {
-        return !equivalent(key, value(key), initial.get(key));
+        return changedCache.getOrDefault(key, false);
     }
-    public boolean dirty() { return values.keySet().stream().anyMatch(this::changed); }
-    public void reset(SonicConfiguration key) { values.put(key, config.getDefaultValue(key)); }
+    public boolean dirty() { return changedCount > 0; }
+    public void reset(SonicConfiguration key) { put(key, config.getDefaultValue(key)); }
+    private void put(SonicConfiguration key, Object next) {
+        if (Objects.equals(values.get(key), next)) return;
+        values.put(key, next);
+        refresh(key);
+        revision++;
+    }
+    private void refresh(SonicConfiguration key) {
+        boolean changed = !equivalent(key, value(key), initial.get(key));
+        if (changedCache.getOrDefault(key, false)) changedCount--;
+        if (changed) changedCount++;
+        changedCache.put(key, changed);
+        nonDefaultCache.put(key, !equivalent(key, value(key), config.getDefaultValue(key)));
+        textCache.put(key, format(key));
+    }
 
     /** Reject invalid typed edits before they enter the draft. */
     public void set(SonicConfiguration key, String text) {
@@ -99,7 +127,7 @@ public final class EngineSettingsDraft {
             throw new IllegalArgumentException(meta.type() == ConfigType.INT ? "Use a whole number" : "Use a number");
         }
         validateRange(key, parsed);
-        values.put(key, parsed);
+        put(key, parsed);
     }
 
     public void step(SonicConfiguration key, int direction) {
@@ -135,6 +163,8 @@ public final class EngineSettingsDraft {
             throw new IllegalArgumentException("Rewind minimum exceeds maximum");
         config.applySettings(changes);
         initial.putAll(changes);
+        changes.keySet().forEach(this::refresh);
+        revision++;
     }
 
     private static void validateRange(SonicConfiguration key, Object value) {

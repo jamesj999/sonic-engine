@@ -221,7 +221,7 @@ public final class LaunchConfigPanel {
                 MenuStyle.COMPACT, 1f, 0.72f, 0.25f, 1f);
         addLeftAlignedLine(lines, (lastInput == null ? "Arrows" : MenuInput.directionLabel(lastInput)) + (selectedRow < visibleRows().size() ? " Edit " : " Move ")
                         + (lastInput == null ? "Enter" : MenuInput.confirmLabel(lastInput)) + (selectedRow < visibleRows().size() ? " Save " : " OK ")
-                        + (lastInput == null ? "Esc" : MenuInput.backLabel(lastInput)) + " Cancel",
+                        + (lastInput == null ? "Esc" : MenuInput.backLabel(lastInput)) + " Back",
                 PAGE_TEXT_X, viewportWidth, SCREEN_H - 16, 1f, 0.7f, 0.7f, 0.7f, 1f);
         return List.copyOf(lines);
     }

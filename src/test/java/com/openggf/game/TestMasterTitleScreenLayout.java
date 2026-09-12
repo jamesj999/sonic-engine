@@ -187,7 +187,7 @@ class TestMasterTitleScreenLayout {
         assertFalse(screen.isLaunchConfigPanelOpenForTest());
         assertEquals(0, store.saved.size());
 
-        pressFrame(screen, input, GLFW_KEY_ENTER);
+        pressFrame(screen, input, org.lwjgl.glfw.GLFW.GLFW_KEY_DOWN);
         assertFalse(screen.isGameSelected());
         pressFrame(screen, input, GLFW_KEY_ENTER);
         assertTrue(screen.isGameSelected());
@@ -220,9 +220,9 @@ class TestMasterTitleScreenLayout {
         assertFalse(screen.isGameSelected());
         input.setLogicalOverride(LogicalInputSnapshot.neutral());
         screen.update(input);
-        input.setLogicalOverride(logicalPress(0, InputActionMasks.ACTION_A, false));
+        input.setLogicalOverride(logicalPress(AbstractPlayableSprite.INPUT_DOWN, 0, false));
         screen.update(input);
-        assertFalse(screen.isGameSelected(), "accept enters actions after returning from Quit");
+        assertFalse(screen.isGameSelected(), "down enters actions after returning from Quit");
         input.setLogicalOverride(LogicalInputSnapshot.neutral());
         screen.update(input);
         input.setLogicalOverride(logicalPress(0, InputActionMasks.ACTION_A, false));

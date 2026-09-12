@@ -26,7 +26,8 @@ audio/emerald-hill.wav
 
 Open the Mod Manager through the master title's `MODS` action. Newly discovered
 mods start disabled. Enable, disable, or reorder entries; dependency cascades
-require confirmation, and Back saves the pending state to `mods/modstate.json`.
+require confirmation. Apply saves the pending state to `mods/modstate.json` without
+leaving the manager; Back asks before discarding unsaved changes.
 Restart OpenGGF to apply it: the running catalog and prepared audio session are
 immutable. A failed owner is disabled for the next start while independent
 owners and stock fallbacks continue.

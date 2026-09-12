@@ -59,6 +59,24 @@ class TestRaceLobbyScreen {
         assertEquals(1, launches.get());
     }
 
+    @Test
+    void chatHistoryDetailsReturnWithoutLeavingAndStillPumpRoundLaunch() {
+        ClientRaceSession session = new ClientRaceSession(() -> 0);
+        AtomicInteger leaves = new AtomicInteger();
+        AtomicInteger launches = new AtomicInteger();
+        RaceLobbyScreen screen = screen(new ArrayList<>(), session, true, leaves, launches);
+        InputHandler input = new InputHandler();
+        press(screen, input, GLFW_KEY_UP); // History.
+        press(screen, input, GLFW_KEY_ENTER);
+        session.onControl(new ControlMessage.RoundStart(ROUND, 1000, 10000));
+        screen.update(input);
+        assertEquals(1, launches.get());
+        press(screen, input, GLFW_KEY_ESCAPE);
+        assertEquals(0, leaves.get());
+        press(screen, input, GLFW_KEY_ESCAPE);
+        assertEquals(1, leaves.get());
+    }
+
     private static RaceLobbyScreen screen(List<ControlMessage> sent, ClientRaceSession session,
                                           boolean host, AtomicInteger leaves, AtomicInteger launches) {
         RaceTransport transport = new RaceTransport() {

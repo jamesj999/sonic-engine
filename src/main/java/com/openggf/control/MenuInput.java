@@ -1,5 +1,7 @@
 package com.openggf.control;
 
+import com.openggf.sprites.playable.AbstractPlayableSprite;
+
 import static org.lwjgl.glfw.GLFW.*;
 
 /** Shared menu controls and hints, selected by the last intentional physical input. */
@@ -13,6 +15,14 @@ public final class MenuInput {
     }
 
     public static String consumeText(InputHandler input) { return input.consumeMenuText(); }
+    public static boolean textKeyRepeated(InputHandler input, int key) {
+        return key >= 0 && key < input.keys.length
+                && input.menuRepeat.pulse(key + 1024, input.menuFrame, input.keys[key], input.isRawKeyPressed(key));
+    }
+    public static boolean details(InputHandler input) {
+        return input.isRawKeyPressed(GLFW_KEY_F1) || input.menuDetailsPressed();
+    }
+    public static boolean textDetails(InputHandler input) { return details(input); }
     public static boolean textKeyPressed(InputHandler input, int key) { return input.isRawKeyPressed(key); }
     public static boolean textBack(InputHandler input) {
         return input.isRawKeyPressed(GLFW_KEY_ESCAPE) || input.physicalMenuGamepad().menuBack();
@@ -24,16 +34,16 @@ public final class MenuInput {
                 || (pad.actionPressedMask() & (InputActionMasks.ACTION_A | InputActionMasks.ACTION_B)) != 0);
     }
     public static boolean textLeft(InputHandler input) {
-        return input.isRawKeyPressed(GLFW_KEY_LEFT) || input.physicalMenuGamepad().menuLeft();
+        return direction(input, GLFW_KEY_LEFT, AbstractPlayableSprite.INPUT_LEFT, input.physicalMenuGamepad(), true);
     }
     public static boolean textRight(InputHandler input) {
-        return input.isRawKeyPressed(GLFW_KEY_RIGHT) || input.physicalMenuGamepad().menuRight();
+        return direction(input, GLFW_KEY_RIGHT, AbstractPlayableSprite.INPUT_RIGHT, input.physicalMenuGamepad(), true);
     }
     public static boolean textUp(InputHandler input) {
-        return input.isRawKeyPressed(GLFW_KEY_UP) || input.physicalMenuGamepad().menuUp();
+        return direction(input, GLFW_KEY_UP, AbstractPlayableSprite.INPUT_UP, input.physicalMenuGamepad(), true);
     }
     public static boolean textDown(InputHandler input) {
-        return input.isRawKeyPressed(GLFW_KEY_DOWN) || input.physicalMenuGamepad().menuDown();
+        return direction(input, GLFW_KEY_DOWN, AbstractPlayableSprite.INPUT_DOWN, input.physicalMenuGamepad(), true);
     }
 
     public static boolean controller(InputHandler input) {
@@ -41,11 +51,11 @@ public final class MenuInput {
     }
 
     public static String confirmLabel(InputHandler input) {
-        return controller(input) ? "A" : "Enter";
+        return controller(input) ? input.menuControllerStyle().confirm() : "Enter";
     }
 
     public static String backLabel(InputHandler input) {
-        return controller(input) ? "B" : "Esc";
+        return controller(input) ? input.menuControllerStyle().back() : "Esc";
     }
 
     public static String directionLabel(InputHandler input) {
@@ -68,19 +78,29 @@ public final class MenuInput {
     }
 
     public static boolean up(InputHandler input) {
-        return input.isRawKeyPressed(GLFW_KEY_UP) || mapped(input).menuUp();
+        return direction(input, GLFW_KEY_UP, AbstractPlayableSprite.INPUT_UP, mapped(input), false);
     }
 
     public static boolean down(InputHandler input) {
-        return input.isRawKeyPressed(GLFW_KEY_DOWN) || mapped(input).menuDown();
+        return direction(input, GLFW_KEY_DOWN, AbstractPlayableSprite.INPUT_DOWN, mapped(input), false);
     }
 
     public static boolean left(InputHandler input) {
-        return input.isRawKeyPressed(GLFW_KEY_LEFT) || mapped(input).menuLeft();
+        return direction(input, GLFW_KEY_LEFT, AbstractPlayableSprite.INPUT_LEFT, mapped(input), false);
     }
 
     public static boolean right(InputHandler input) {
-        return input.isRawKeyPressed(GLFW_KEY_RIGHT) || mapped(input).menuRight();
+        return direction(input, GLFW_KEY_RIGHT, AbstractPlayableSprite.INPUT_RIGHT, mapped(input), false);
+    }
+
+    public static String detailsLabel(InputHandler input) {
+        return controller(input) ? input.menuControllerStyle().details() : "F1";
+    }
+
+    private static boolean direction(InputHandler input, int key, int mask, LogicalInputSnapshot snapshot, boolean text) {
+        return input.menuRepeat.pulse(text ? key + 1024 : key, input.menuFrame,
+                input.keys[key] || (snapshot.player1().heldMask() & mask) != 0,
+                input.isRawKeyPressed(key) || (snapshot.player1().pressedMask() & mask) != 0);
     }
 
     private static boolean mappedAccept(InputHandler input) {
@@ -89,15 +109,17 @@ public final class MenuInput {
                 || player.startPressed();
     }
 
+    private static boolean rawHeld(InputHandler input, int key) { return input.keys[key]; }
+
     private static LogicalInputSnapshot mapped(InputHandler input) {
         // Fixed menu keys own this frame's keyboard intent. Their gameplay bindings
         // may point elsewhere (Enter -> C, Left -> Right), so retain only the pad
         // contribution alongside them. In particular a simultaneous physical B still
         // takes precedence over keyboard Enter. Replay overrides remain authoritative.
-        boolean fixed = input.isRawKeyPressed(GLFW_KEY_ENTER) || input.isRawKeyPressed(GLFW_KEY_KP_ENTER)
-                || input.isRawKeyPressed(GLFW_KEY_ESCAPE) || input.isRawKeyPressed(GLFW_KEY_UP)
-                || input.isRawKeyPressed(GLFW_KEY_DOWN) || input.isRawKeyPressed(GLFW_KEY_LEFT)
-                || input.isRawKeyPressed(GLFW_KEY_RIGHT);
+        boolean fixed = rawHeld(input, GLFW_KEY_ENTER) || rawHeld(input, GLFW_KEY_KP_ENTER)
+                || rawHeld(input, GLFW_KEY_ESCAPE) || rawHeld(input, GLFW_KEY_UP)
+                || rawHeld(input, GLFW_KEY_DOWN) || rawHeld(input, GLFW_KEY_LEFT)
+                || rawHeld(input, GLFW_KEY_RIGHT);
         return fixed ? input.menuWithoutMappedKeyboard() : input.logical();
     }
 

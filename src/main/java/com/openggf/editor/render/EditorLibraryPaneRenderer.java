@@ -45,6 +45,17 @@ public class EditorLibraryPaneRenderer {
         this.textRenderer = Objects.requireNonNull(textRenderer, "textRenderer");
     }
 
+    public void renderCommands(List<String> lines) {
+        List<GLCommand> backdrop = new ArrayList<>();
+        for (int[] point : new int[][] {{8, 34}, {312, 34}, {312, 192}, {8, 192}}) {
+            backdrop.add(new GLCommand(GLCommand.CommandType.VERTEX2I, -1,
+                    GLCommand.BlendType.ONE_MINUS_SRC_ALPHA, 0.025f, 0.04f, 0.07f,
+                    point[0], point[1], 0, 0));
+        }
+        graphicsManager.registerCommand(new GLCommandGroup(org.lwjgl.opengl.GL11.GL_TRIANGLE_FAN, backdrop));
+        textRenderer.renderLines(lines, 18, 42);
+    }
+
     public void render(EditorHierarchyDepth depth) {
         List<GLCommand> commands = new ArrayList<>();
         appendCommands(commands);

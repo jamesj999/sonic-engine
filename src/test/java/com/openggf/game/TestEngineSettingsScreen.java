@@ -68,7 +68,7 @@ class TestEngineSettingsScreen {
         assertFalse(f.screen.consumeApplied());
         assertFalse(f.screen.consumeCloseRequested());
         assertEquals(!original, SonicConfigurationService.createStandalone(directory).getBoolean(AUDIO_ENABLED));
-        assertTrue(f.texts().stream().anyMatch(s -> s.startsWith("Saved. Restart")));
+        assertTrue(f.texts().stream().anyMatch(s -> s.contains("Saved. See setting")));
     }
 
     @Test
@@ -189,32 +189,40 @@ class TestEngineSettingsScreen {
     }
 
     @Test
-    void longDescriptionsAdvanceInReadablePairsWithoutDroppingText() {
+    void longDescriptionsStayStillAndDetailsExplainWhenChangesApply() {
         Fixture f = new Fixture();
-        f.press(GLFW_KEY_DOWN, 5); // Recording
+        f.press(GLFW_KEY_DOWN, 5);
         f.press(GLFW_KEY_ENTER);
         int codecRow = new EngineSettingsDraft(f.config).keys(EngineSettingsDraft.Category.RECORDING).indexOf(CAPTURE_CODEC);
-        assertTrue(codecRow >= 0);
         f.press(GLFW_KEY_DOWN, codecRow);
         List<String> first = f.descriptionLines();
-        assertEquals(2, first.size());
-        for (int i = 0; i < 240; i++) f.frame();
-        assertEquals(first, f.descriptionLines(), "Reading the first pair no longer advances after only four seconds");
-        for (int i = 0; i < 240; i++) f.frame();
+        for (int i = 0; i < 1200; i++) f.frame();
+        assertEquals(first, f.descriptionLines(), "Help never moves while being read");
+        f.press(GLFW_KEY_F1);
+        List<String> all = new ArrayList<>(f.texts());
+        for (int i = 0; i < 30; i++) { f.press(GLFW_KEY_DOWN); all.addAll(f.texts()); }
+        assertTrue(all.stream().anyMatch(line -> line.contains("next recording")));
+        f.press(GLFW_KEY_ESCAPE);
+        assertEquals(first, f.descriptionLines());
+        assertTrue(EngineSettingsScreen.effect(CONTROLLER_DEADZONE).contains("immediately"));
+        assertTrue(EngineSettingsScreen.effect(SCREEN_WIDTH).contains("Restart"));
+        assertEquals(MenuTextEditor.Mode.INTEGER, EngineSettingsScreen.fieldMode(TIME_ATTACK_NET_HOST_PORT));
+        assertEquals(MenuTextEditor.Mode.ADDRESS, EngineSettingsScreen.fieldMode(TIME_ATTACK_NET_LAST_JOIN_ADDRESS));
+    }
 
-        List<String> allLines = new ArrayList<>(first);
-        boolean returnedToFirst = false;
-        for (int page = 0; page < 10; page++) {
-            List<String> current = f.descriptionLines();
-            if (current.equals(first)) { returnedToFirst = true; break; }
-            allLines.addAll(current);
-            for (int i = 0; i < 480; i++) f.frame();
-        }
-        assertTrue(returnedToFirst, "The complete help repeats after its final page");
-        assertEquals(ConfigCatalog.meta(CAPTURE_CODEC).description(), String.join(" ", allLines));
-        f.press(GLFW_KEY_DOWN);
-        f.press(GLFW_KEY_UP);
-        assertEquals(first, f.descriptionLines(), "Selecting a field restarts at the first help pair");
+    @Test
+    void playStationPromptsKeepEveryCriticalActionVisibleAtNativeWidth() {
+        Fixture f = new Fixture();
+        f.padName = "DualSense Wireless Controller";
+        f.padPress(GLFW_GAMEPAD_BUTTON_DPAD_DOWN);
+        f.texts();
+        assertEquals("Cross Select  Circle Back  D-Pad", f.font.lines.stream()
+                .filter(line -> line.y == 212).findFirst().orElseThrow().text());
+        assertTrue(f.font.lines.stream().anyMatch(line -> line.y == 200 && line.text.startsWith("Triangle Details")));
+        f.padPress(GLFW_GAMEPAD_BUTTON_A);
+        f.assertTextBounds(320);
+        assertEquals("Cross Edit  Circle Back  D-Pad", f.font.lines.stream()
+                .filter(line -> line.y == 212).findFirst().orElseThrow().text());
     }
 
     private final class Fixture {
@@ -222,6 +230,7 @@ class TestEngineSettingsScreen {
         final RecordingFont font = new RecordingFont();
         final EngineSettingsScreen screen = new EngineSettingsScreen(config, font);
         List<GamepadStateSource.DeviceState> pads = List.of();
+        String padName = "Test pad";
         final InputHandler input = new InputHandler(InputBindingFactory.supplier(config), () -> pads);
 
         Fixture() {
@@ -245,7 +254,7 @@ class TestEngineSettingsScreen {
         void pad(int... buttons) {
             boolean[] state = new boolean[GLFW_GAMEPAD_BUTTON_LAST + 1];
             for (int button : buttons) state[button] = true;
-            pads = List.of(GamepadStateSource.DeviceState.connected(0, "Test pad", state, 0, 0));
+            pads = List.of(GamepadStateSource.DeviceState.connected(0, padName, state, 0, 0));
         }
         void frame() { input.refreshLogicalSnapshot(); screen.update(input); input.update(); }
         List<String> descriptionLines() {

@@ -12,6 +12,7 @@ import com.openggf.net.protocol.ControlMessage;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_C;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_R;
@@ -36,11 +37,14 @@ public final class ServerBrowserScreen {
     private final String gameId;
     private final PixelFont font;
     private final Actions actions;
-    private volatile List<ControlMessage.RoomSummary> rooms = List.of();
-    private volatile String status = "Loading rooms...";
-    private volatile boolean refreshInFlight;
-    private volatile boolean refreshFailurePending;
+    private List<ControlMessage.RoomSummary> rooms = List.of();
+    private String status = "Loading rooms...";
+    private boolean refreshInFlight;
+    private volatile boolean active = true;
+    private record RefreshResult(ControlMessage.RoomListResult result, Throwable error) {}
+    private final AtomicReference<RefreshResult> pendingRefresh = new AtomicReference<>();
     private int selected;
+    private boolean selectedRoomClosed;
     private int page;
     private int totalPages;
     private String createRouting = "RELAY";
@@ -56,6 +60,8 @@ public final class ServerBrowserScreen {
     }
 
     public void update(InputHandler input) {
+        if (!active) return;
+        applyPendingRefresh();
         long now = System.currentTimeMillis();
         if (!client.isOpen()) {
             status = "Master connection lost";
@@ -63,13 +69,8 @@ public final class ServerBrowserScreen {
                 || now - lastRefreshAt >= REFRESH_INTERVAL_MILLIS) {
             refresh(now);
         }
-        // Futures may complete on the transport thread; dispatch sound on the host update thread.
-        if (refreshFailurePending) {
-            refreshFailurePending = false;
-            MenuFeedback.emit(ERROR);
-        }
         menuInput = input;
-        if (MenuInput.back(input)) { MenuFeedback.emit(CANCEL); actions.back(); return; }
+        if (MenuInput.back(input)) { deactivate(); MenuFeedback.emit(CANCEL); actions.back(); return; }
         Focus beforeFocus = focus;
         int beforeSelected = selected, beforePage = page;
         String beforeRouting = createRouting;
@@ -80,7 +81,10 @@ public final class ServerBrowserScreen {
             if (focus == Focus.CREATE) createRouting = createRouting.equals("RELAY") ? "DIRECT" : "RELAY";
             else if (focus == Focus.PAGE || focus == Focus.ROOMS) changePage(delta, now);
         }
-        if (beforeFocus != focus || beforeSelected != selected || beforePage != page || !beforeRouting.equals(createRouting)) MenuFeedback.emit(NAVIGATE);
+        if (beforeFocus != focus || beforeSelected != selected || beforePage != page || !beforeRouting.equals(createRouting)) {
+            if (selectedRoomClosed) { selectedRoomClosed = false; status = roomStatus(); }
+            MenuFeedback.emit(NAVIGATE);
+        }
         if (input.isKeyPressedWithoutModifiers(GLFW_KEY_R)) manualRefresh(now);
         if (input.isKeyPressedWithoutModifiers(GLFW_KEY_C)) { actions.create(createRouting); MenuFeedback.emit(CONFIRM); return; }
         if (MenuInput.accept(input)) {
@@ -115,7 +119,7 @@ public final class ServerBrowserScreen {
 
     private void changePage(int delta, long now) {
         int next = Math.clamp(page + delta, 0, Math.max(0, totalPages - 1));
-        if (next != page && !refreshInFlight) { page = next; selected = 0; refresh(now); }
+        if (next != page && !refreshInFlight) { page = next; selected = 0; rooms = List.of(); status = "Loading rooms..."; refresh(now); }
     }
 
     public void render() {
@@ -138,7 +142,8 @@ public final class ServerBrowserScreen {
         action(Focus.PAGE, "PAGE  < " + (page + 1) + " / " + Math.max(1, totalPages) + " >", 183);
         String confirm = menuInput == null ? "Enter" : MenuInput.confirmLabel(menuInput);
         String back = menuInput == null ? "Esc" : MenuInput.backLabel(menuInput);
-        MenuStyle.footer(font, 320, MenuStyle.fit(status, 138) + "  L/R Page/Route",
+        MenuStyle.footer(font, 320, MenuStyle.fit(status, 138) + "  "
+                        + (menuInput == null ? "Left/Right" : MenuInput.horizontalLabel(menuInput)) + " Page/Route",
                 confirm + " Select  " + back + " Back");
     }
 
@@ -158,20 +163,45 @@ public final class ServerBrowserScreen {
         refreshInFlight = true;
         lastRefreshAt = now;
         client.listRooms(gameId, page).whenComplete((result, error) -> {
-            refreshInFlight = false;
-            if (error != null) {
-                Throwable cause = error instanceof CompletionException && error.getCause() != null
-                        ? error.getCause() : error;
-                status = "Refresh failed: " + cause.getMessage();
-                refreshFailurePending = true;
-                return;
-            }
-            rooms = List.copyOf(result.rooms());
-            if (rooms.isEmpty() && focus == Focus.ROOMS) focus = Focus.CREATE;
-            totalPages = result.totalPages();
-            selected = Math.min(selected, Math.max(0, rooms.size() - 1));
-            status = rooms.isEmpty() ? "No rooms found"
-                    : "Page " + (result.page() + 1) + "/" + Math.max(1, totalPages);
+            // Publish one immutable result; only update() may change visible UI state.
+            if (active) pendingRefresh.set(new RefreshResult(result, error));
         });
+    }
+
+    private void deactivate() {
+        active = false;
+        pendingRefresh.set(null);
+    }
+
+    private void applyPendingRefresh() {
+        RefreshResult completion = pendingRefresh.getAndSet(null);
+        if (completion == null) return;
+        refreshInFlight = false;
+        if (completion.error() != null) {
+            Throwable error = completion.error();
+            Throwable cause = error instanceof CompletionException && error.getCause() != null
+                    ? error.getCause() : error;
+            status = "Refresh failed: " + cause.getMessage();
+            MenuFeedback.emit(ERROR);
+            return;
+        }
+        String selectedId = selected < rooms.size() ? rooms.get(selected).roomId() : null;
+        ControlMessage.RoomListResult result = completion.result();
+        rooms = List.copyOf(result.rooms());
+        int matched = -1;
+        for (int i = 0; i < rooms.size(); i++) {
+            if (rooms.get(i).roomId().equals(selectedId)) { matched = i; break; }
+        }
+        selected = matched >= 0 ? matched : Math.min(selected, Math.max(0, rooms.size() - 1));
+        if (selectedId != null && matched < 0 && focus == Focus.ROOMS) {
+            focus = Focus.REFRESH;
+            selectedRoomClosed = true;
+        } else if (rooms.isEmpty() && focus == Focus.ROOMS) focus = Focus.CREATE;
+        totalPages = result.totalPages();
+        status = selectedRoomClosed ? "Selected room closed" : roomStatus();
+    }
+
+    private String roomStatus() {
+        return rooms.isEmpty() ? "No rooms found" : "Page " + (page + 1) + "/" + Math.max(1, totalPages);
     }
 }

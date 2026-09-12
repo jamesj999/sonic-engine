@@ -126,6 +126,40 @@ class TestPendingModStateEditor {
         assertTrue(disabled.trustsSha256(descriptor.sha256()));
     }
 
+    @Test
+    void discardRestoresLatestSuccessfulSaveAndRetainsRestartRequirement() {
+        var editor = new PendingModStateEditor(ModState.EMPTY, List.of(descriptor("known")),
+                new ModStateStore(temp.toAbsolutePath().normalize()));
+        assertFalse(editor.dirty());
+        editor.enable("known");
+        assertTrue(editor.dirty());
+        assertInstanceOf(ModStateSaveResult.Saved.class, editor.save());
+        assertFalse(editor.dirty());
+        assertTrue(editor.restartRequired());
+        ModState saved = editor.pendingState();
+        editor.disable("known");
+        assertTrue(editor.dirty());
+        editor.discardDraft();
+        assertEquals(saved, editor.pendingState());
+        assertFalse(editor.dirty());
+        assertTrue(editor.restartRequired());
+    }
+
+    @Test
+    void failedSaveDoesNotAdvanceDiscardBaseline() throws Exception {
+        Path blocked = temp.resolve("file");
+        Files.writeString(blocked, "occupied");
+        var editor = new PendingModStateEditor(ModState.EMPTY, List.of(descriptor("known")),
+                new ModStateStore(blocked.toAbsolutePath().normalize()));
+        ModState original = editor.pendingState();
+        editor.enable("known");
+        assertInstanceOf(ModStateSaveResult.Failed.class, editor.save());
+        assertTrue(editor.dirty());
+        editor.discardDraft();
+        assertEquals(original, editor.pendingState());
+        assertFalse(editor.dirty());
+    }
+
     private ModDescriptor descriptor(String id) {
         ModManifest manifest = new ModManifest(1, id, id, new SemanticVersion(1, 0, 0),
                 List.of("Author"), "Description", VersionRange.parse("*"), ModType.PATCH,

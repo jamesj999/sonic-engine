@@ -25,7 +25,8 @@ campaigns; feature/API publication remains subject to the 0.8 roadmap.
   Checkerboard pages retain full-size primary lettering and use an authored native
   small font with lowercase descenders for metadata instead of fractional downscaling.
   A wrapping game carousel shows the selected game, neighbors and catalog position,
-  supports arbitrary catalog sizes, and dims missing ROMs. The sky remains visible beside the action list,
+  supports arbitrary catalog sizes, and dims missing ROMs. Confirm from game selection
+  opens a full-width Browse Games list with availability and paging. The sky remains visible beside the action list,
   unavailable games hide profile status, and missing-ROM hints have a dark backing.
   Error pages retain accurate diagnostics until dismissed. Settings help shows
   two lines at once; launch rows use the shared left-aligned focus style. Recordings, traces,
@@ -33,6 +34,17 @@ campaigns; feature/API publication remains subject to the 0.8 roadmap.
   actions; text entry works with keyboards or controllers without triggering global
   shortcuts, and failed trace launches can be acknowledged and retried. Game logos render from
   their original textures at window resolution, preserving detail as the window grows.
+  Held directions repeat consistently; controller prompts identify Xbox, PlayStation,
+  or physical button positions. Settings, chat and input errors have manual full-text
+  details. Numeric/address keypads and an asynchronous controller file browser share
+  the text editor; unsupported glyphs retain their Unicode identity without changing
+  stored values. Mods uses explicit Apply and draft discard, matching Settings.
+  Startup notices use crisp native fonts and controller navigation; native-mod notices
+  paginate all names. Room refreshes retain room identity and publish on the UI thread.
+  Checkerboard geometry is batched and cached, catalog scans run in cancellable
+  background tasks, unchanged ROM previews survive Apply, and settings presentation
+  caches follow draft revisions. The experimental editor exposes a controller command
+  palette for editing, saving, exporting and playtesting.
 
 - **Widescreen presentation:** ordinary UI/HUD surfaces, titles, results, endings,
   diagnostics, all three special stages, scene effects, and trace-video capture.

@@ -185,7 +185,13 @@ class TestUserRecordingMenu {
             loop.setGameMode(GameMode.MASTER_TITLE_SCREEN);
 
             pressShiftRecord(loop, input, config);
-            // Let the hosted menu observe the opener released before confirming.
+            // Catalog I/O is asynchronous; wait for readiness, then release the opener.
+            long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+            while (!screen.isUserRecordingMenuOpenForTest() && System.nanoTime() < deadline) {
+                loop.step();
+                Thread.yield();
+            }
+            assertTrue(screen.isUserRecordingMenuOpenForTest(), "catalog must complete");
             loop.step();
             pressLoopKey(loop, input, GLFW_KEY_ENTER);
             pressLoopKey(loop, input, GLFW_KEY_ENTER);

@@ -83,7 +83,7 @@ public final class UserRecordingMenu {
                 }
                 if (MenuInput.accept(input)) {
                     switch (optionCursor) {
-                        case 0 -> { targetEditor = new MenuTextEditor("TARGET FRAME", Integer.toString(state.options().targetFrame()), 9); targetEditor.deferAcceptanceFeedback(); }
+                        case 0 -> { targetEditor = new MenuTextEditor("TARGET FRAME", Integer.toString(state.options().targetFrame()), 9, null, MenuTextEditor.Mode.INTEGER); targetEditor.deferAcceptanceFeedback(); }
                         case 1 -> state.pressP();
                         case 2 -> state.pressF();
                         case 3 -> {
