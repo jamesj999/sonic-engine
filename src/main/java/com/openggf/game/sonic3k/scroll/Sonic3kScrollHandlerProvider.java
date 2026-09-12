@@ -94,7 +94,7 @@ public class Sonic3kScrollHandlerProvider implements ScrollHandlerProvider {
             case Sonic3kZoneConstants.ZONE_MHZ -> mhzHandler;
             case Sonic3kZoneConstants.ZONE_MGZ -> mgzHandler;
             case Sonic3kZoneConstants.ZONE_FBZ -> fbzHandler;
-            case Sonic3kZoneIds.ZONE_HPZ -> hpzHandler;
+            case Sonic3kZoneIds.ZONE_HPZ, Sonic3kZoneIds.ZONE_DEZ_BOSS_SS_ARENA -> hpzHandler;
             case Sonic3kZoneIds.ZONE_GUMBALL -> gumballHandler;
             case Sonic3kZoneIds.ZONE_GLOWING_SPHERE -> pachinkoHandler;
             case Sonic3kZoneIds.ZONE_SLOT_MACHINE -> slotsHandler;

@@ -277,6 +277,25 @@ class TestMushmeanieBadnikInstance {
     }
 
     @Test
+    void leftWallBouncePreservesRomAddDistanceQuirk() {
+        MushmeanieBadnikInstance mushmeanie = mushmeanie();
+        TestablePlayableSprite player = player(0x110, 0x100);
+        advanceToJumping(mushmeanie, player);
+        assertEquals(-0x100, mushmeanie.getXVelocity());
+
+        try (MockedStatic<ObjectTerrainUtils> terrain = mockStatic(ObjectTerrainUtils.class)) {
+            terrain.when(() -> ObjectTerrainUtils.checkLeftWallDist(0x117, 0x0F7))
+                    .thenReturn(new TerrainCheckResult(-4, (byte) 0, 0));
+            mushmeanie.update(12, player);
+        }
+
+        assertEquals(0x11B, mushmeanie.getX(),
+                "loc_8DBB4 adds negative d1 even after ObjCheckLeftWallDist");
+        assertEquals(0x100, mushmeanie.getXVelocity(),
+                "loc_8DBB4 reverses x_vel after applying the left-wall distance");
+    }
+
+    @Test
     void jumpingUsesRomMoveSpriteLightGravityStep() {
         MushmeanieBadnikInstance mushmeanie = mushmeanie();
         TestablePlayableSprite player = player(0x19F, 0x100);

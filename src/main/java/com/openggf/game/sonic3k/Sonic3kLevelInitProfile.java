@@ -74,13 +74,12 @@ public class Sonic3kLevelInitProfile extends AbstractLevelInitProfile {
                     GameServices.level().initCameraForLevel();
                     int zone = GameServices.level().getCurrentZone();
                     int act = GameServices.level().getCurrentAct();
-                    if (ctx.hasCheckpoint()
-                            || zone != com.openggf.game.sonic3k.constants.Sonic3kZoneIds.ZONE_HPZ
-                            || act != 1) {
-                        return;
-                    }
                     Sonic3kLevelResourceProfile profile =
                             Sonic3kLevelResourceProfile.resolve(zone, act);
+                    if (ctx.hasCheckpoint() || profile.eventKind()
+                            != Sonic3kLevelResourceProfile.EventKind.HPZ_SPECIAL_STAGE_HUB) {
+                        return;
+                    }
                     Sonic3kLevelResourceProfile.CustomLevelResources resources =
                             profile.requireCustomResources();
                     var camera = GameServices.camera();

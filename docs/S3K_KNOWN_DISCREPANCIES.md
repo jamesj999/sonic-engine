@@ -923,6 +923,17 @@ handling (`Screen_shake_offset`) was already correct and untouched.
 
 ---
 
+## MHZ Madmole deferred body deletion (corrected)
+
+`loc_8D6D6` clears the cap's busy bit but `Go_Delete_Sprite` only installs
+`Delete_Current_Sprite` for the next pass. The body still returns through
+`Child_DrawTouch_Sprite` at its final submerged position. The consolidated
+engine object previously snapped that still-collidable body onto the cap.
+Cleanup now waits for the deferred-delete pass, preserving final movement,
+collision, mapping and slot occupancy. The focused boundary test passes;
+the MHZ zone replay advances from row 2,830 to row 6,958. Further route and
+checkpoint parity remains unresolved (see the trace frontier log).
+
 ## MHZ Deferred Items: Out-of-Scope Divergences Confirmed During the Parity-Fix Wave
 
 **Location:** various (see per-item notes below)
@@ -934,38 +945,42 @@ because the item is a scope-limited follow-up, or because fixing it needs a dedi
 investigation this wave's task briefs explicitly excluded. Recorded here per the wave's Task 15
 note and Task V1 (Step 5) reconciliation so they are tracked rather than silently dropped.
 
-- **SK-alone / star-post Act 1 start bootstrap, and the Act 1 -> Act 2 title-card handoff.**
-  Not modeled to ROM-exact behavior in this wave. Deferred as a Wave-4-or-later candidate only if
-  the Sonic & Knuckles-alone start slice becomes an active target; MHZ playable-route parity
-  through the swing/vine/mushroom/boss/miniboss/cutscene objects covered by this wave does not
-  depend on it.
-- **Mushmeanie shell-direction stale-pointer read.** ROM re-reads a stale pointer for the shell's
-  facing direction in a way the wave's audit judged to be a ROM quirk rather than intended
-  behavior; the engine's current facing-direction source is more internally consistent than
-  reproducing the stale read would be. Intentionally not ROM-matched.
+- **Standalone S&K entry remains outside the supported locked-on ROM scope.**
+  `sub_54B80` tests `SK_alone_flag`, not the player character. The Act 1
+  camera now follows the locked-on height rule for every character: min X
+  `$C0` above Y `$580`, otherwise zero. The existing Knuckles boundary test
+  covers this correction; further Knuckles-route work is excluded from the
+  current Sonic/Tails completion scope.
+- **Act 1 → Act 2 title-card handoff (implemented).**
+  The old deferred note is obsolete. `updateAct1BackgroundEvent` requests
+  the target-level reload with `TITLE_OWNER` art admission, preserved results
+  globals, the in-level title card and its event-state reset. Existing
+  `TestSonic3kMHZEvents` transition tests cover this contract.
+- **Mushmeanie shell-direction pointer (verified, 2026-09-12).**
+  The earlier stale-pointer diagnosis was incorrect: `Check_PlayerCollision`
+  explicitly stores the selected player pointer into the parent's `$44`.
+  `loc_8DC42` reads that pointer after `loc_8DC9C` reverses the player's
+  velocity. The engine's saved attacking-player velocity follows this path;
+  existing tests cover P1 and P2. No stale ROM-header read needs implementing.
 - **PulleyLift level-select cheat.** The ROM's MHZ Pulley Lift object has an undocumented
   level-select easter-egg trigger; the engine does not reproduce it. Intentionally out of scope
   (`MhzPulleyLiftObjectInstance`).
-- **Mushmeanie left-wall bounce sign (`MushmeanieBadnikInstance.checkSideWallBounce`, currently
-  `currentX += wall.distance();`) and ICZ path-follow platform left-wall stop
-  (`IczPathFollowPlatformObjectInstance.stopFallingAgainstWall`, currently `x += wallDistance;`).**
-  A Task 1 code review raised a distance-sign proof suggesting both left-wall correction sites may
-  need `-=` to match ROM's `sub.w d1,x_pos` convention (the same class of bug Task 1 fixed for
-  `MhzMushroomParachuteObjectInstance`'s left-wall sensor). This was explicitly flagged as
-  out-of-scope for the MHZ wave (neither object is part of the 16 MHZ parity-fix tasks) and is
-  **not fixed here** per the Task V1 brief's explicit instruction to record, not fix. Follow-up:
-  verify the ROM `sub_FD32`-style sign convention against each object's actual wall-check helper
-  before changing either `+=` to `-=`.
-- **MHZ1 cutscene door-lowered latch scope (`Mhz1CutsceneButtonInstance.doorLowered`) across a
-  real death/respawn cycle.** Task 15 ports ROM's global `_unkFAA9` RAM byte as a per-button-instance
-  boolean field. If the engine destroys and recreates `Mhz1CutsceneButtonInstance` across a player
-  death/checkpoint-respawn cycle (rather than keeping the same live instance), the per-instance
-  latch would reset to `false` on respawn while ROM's global `_unkFAA9` byte would not (checkpoint
-  respawn in S3K repositions the player without a full level/RAM reload). This was **not verified
-  at runtime** in this validation pass -- confirming it requires tracing the engine's object
-  lifecycle across an actual checkpoint-respawn cycle, which was judged not cheap enough to fold
-  into this pass. Recorded honestly as unverified per the Task V1 brief's explicit fallback
-  instruction, rather than asserted correct without evidence.
+- **Mushmeanie left-wall bounce sign (verified correct, 2026-09-12).**
+  `loc_8DB94` selects `ObjCheckRightWallDist` or `ObjCheckLeftWallDist`, then both
+  branches enter `loc_8DBB4`, which explicitly executes `add.w d1,x_pos(a0)`.
+  The current `currentX += wall.distance()` therefore matches the shipped ROM,
+  including its counterintuitive left-wall penetration correction. The earlier
+  proposed subtraction was based on a different object's routine and is rejected.
+  `TestMushmeanieBadnikInstance#leftWallBouncePreservesRomAddDistanceQuirk`
+  covers the left branch. The separately recorded ICZ path-follow wall question
+  still requires its own owning-routine investigation.
+- **MHZ1 door latch ownership (corrected, 2026-09-12).**
+  `_unkFAA9` now belongs to `MhzZoneRuntimeState` and is included in its rewind
+  payload, so button/door streaming does not reset the lowered position.
+  Contrary to the old note, full level reload does clear this byte:
+  `loc_60DE` clears `_unkFA80` through `DMA_queue`. A newly installed MHZ
+  runtime therefore resets it, including checkpoint reload. The focused
+  recreation/rewind test covers both lifetimes.
 - **`MhzEndBossDefeatFragmentChild` velocity table and end-boss body collision category
   (Task V1 Step 4 spot-checks).** The velocity table was verified against raw ROM bytes and found
   to be genuinely wrong (using `Obj_VelocityIndex` rows 4-9 instead of the ROM-correct rows 2-7,
@@ -981,21 +996,24 @@ note and Task V1 (Step 5) reconciliation so they are tracked rather than silentl
   body contact vs. the attackable weak point), predating this wave and already covered by
   `TestMhzBossObjects#mhzBossesExposeRomCollisionHitCounts` and the `MHZEndBossHitProxy*` tests.
   No fix needed for the collision-category half of this spot-check.
-- **`MhzEndBossDefeatFragmentChild.parentDerivedXVelocity` mirrors x-velocity on the parent's
-  render flip.** The final whole-branch review noted ROM `Set_IndexedVelocity` tests the *child's*
-  `render_flags` bit 0, which is always 0 for these fragments (`CreateChild6_Simple` copies only
-  mappings/art_tile and `SetUp_ObjAttributes` only sets bit 2), so ROM never mirrors the defeat
-  fragments even when the boss body is x-flipped at defeat. The engine's parent-flip mirroring
-  (`MhzEndBossDefeatFragmentChild.java:101-108`) predates this wave and is observable only if the
-  end boss is x-flipped on its defeat frame. Recorded for follow-up rather than fixed in the
-  merge-prep pass.
+- **MHZ end-boss fragment parent-flip inheritance (corrected, 2026-09-12).**
+  `CreateChild6_Simple` copies mappings/art_tile but not render flags;
+  `loc_766CA` calls `SetUp_ObjAttributes`, which sets only bit 2. Consequently
+  `Set_IndexedVelocity` sees the child's bit 0 clear regardless of the parent.
+  Fragment construction now uses the unmirrored ROM velocity table for both
+  parent orientations. `loc_766CA`'s first pass only initializes/draws; subsequent
+  `Obj_FlickerMove` passes alternate hidden/visible starting hidden. Boundary
+  deletion retains its slot until the next pass, matching `Go_Delete_Sprite_3`.
+  The defeat-spawn test exercises both parent orientations and the first three passes.
 
 ### Verification
 
 The defeat-fragment velocity fix is covered by
-`TestMhzBossObjects#mhzEndBossFadeWaitUnderflowSpawnsRomDefeatFragments`. The remaining items in
-this section are documentation-only; no test coverage is expected or claimed for the unfixed
-divergences themselves.
+`TestMhzBossObjects#mhzEndBossFadeWaitUnderflowSpawnsRomDefeatFragments`. The parent-flip and Mushmeanie wall checks described above extend that coverage.
+The native pulley menu/debug unlock and standalone S&K entry remain excluded.
+Direct Sonic/Tails implementation coverage and validation are recorded in
+[the completion audit](architecture/research/s3k-zones/mhz-completion-audit.md);
+this section does not establish frame-perfect zone parity.
 
 ## S3K Bonus Stage Rewind: Gumball/Pachinko Live, Slot Machine Deferred
 
@@ -1227,6 +1245,13 @@ divergence.
 ---
 
 ## HPZ Sanctuary Background: Screen Shake and Two-Band Plane Fill Not Modelled
+
+The giant-ring destination `$1701` now selects the same sanctuary resource,
+object, palette, camera, and scroll paths as the legacy engine alias `$1601`.
+A routing regression had left the real destination on ordinary level defaults,
+without its controller or seven emerald pedestals. ROM-backed lifecycle tests
+exercise both destinations through the ceremony and pedestal traversal.
+The rendering limitations below remain separate from that restored routing.
 
 `SwScrlHpz` ports `HPZ_BackgroundInit` / `HPZ_BackgroundEvent` and their shared
 scroll math at `loc_5A33C` (sonic3k.asm:120069-120280). Two parts of the ROM

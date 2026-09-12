@@ -270,6 +270,8 @@ public final class MushmeanieBadnikInstance extends AbstractS3kBadnikInstance
         if (!wall.hasCollision() || wall.distance() >= 0) {
             return;
         }
+        // loc_8DBB4 adds d1 after either wall helper, including the left wall.
+        // Preserve the shipped ROM correction even though it moves left into that wall.
         currentX += wall.distance();
         xVelocity = -xVelocity;
         facingLeft = xVelocity < 0;

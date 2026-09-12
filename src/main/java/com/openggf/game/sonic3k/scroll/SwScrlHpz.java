@@ -1,7 +1,6 @@
 package com.openggf.game.sonic3k.scroll;
 
 import com.openggf.game.GameServices;
-import com.openggf.level.scroll.AbstractZoneScrollHandler;
 import com.openggf.level.scroll.compose.DeformationPlan;
 import com.openggf.level.scroll.compose.ScrollEffectComposer;
 import com.openggf.level.scroll.compose.ScrollValueTable;
@@ -37,7 +36,7 @@ import static com.openggf.level.scroll.M68KMath.negWord;
  * (word 4), so the topmost band scrolls at the full 3/16 rate and the bands below
  * it walk the 1/4-to-3/4 gradient.
  */
-public class SwScrlHpz extends AbstractZoneScrollHandler {
+public class SwScrlHpz extends SwScrlS3kDefault {
 
     /** {@code HPZ_BGDeformArray}: nine finite bands followed by the remainder band. */
     private static final int[] HPZ_BG_DEFORM =
@@ -77,6 +76,12 @@ public class SwScrlHpz extends AbstractZoneScrollHandler {
                        int cameraY,
                        int frameCounter,
                        int actId) {
+        // ScreenEvents assigns HPZS_BackgroundEvent to $1701; $1700 is
+        // DEZ3. Keep the existing fallback for the paired boss act.
+        if (actId == 0) {
+            super.update(horizScrollBuf, cameraX, cameraY, frameCounter, actId);
+            return;
+        }
         resetScrollTracking();
         composer.reset();
 

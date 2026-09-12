@@ -701,7 +701,8 @@ public class Sonic3k extends Game implements PlayerSpriteArtProvider, SpindashDu
     }
 
     private void applyHpzSanctuaryPaletteLifecycle(int zone, int act) {
-        if (zone != Sonic3kZoneIds.ZONE_HPZ || act != 1) {
+        if (Sonic3kLevelResourceProfile.resolve(zone, act).eventKind()
+                != Sonic3kLevelResourceProfile.EventKind.HPZ_SPECIAL_STAGE_HUB) {
             return;
         }
         var resources = Sonic3kLevelResourceProfile.resolve(zone, act)

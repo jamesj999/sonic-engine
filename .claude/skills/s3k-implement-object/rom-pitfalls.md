@@ -4578,3 +4578,30 @@ Plane A and restore the hidden rows before disabling the window. See
 `docs/architecture/audits/2026-09-09-lbz2-ending-sequence.md` and the pixel test
 `TestForegroundWindowRendering`. The rendering principle also applies to S1/S2
 scenes that use the hardware window.
+
+## Sanctuary routes must exercise the ROM destination, not only an engine alias
+
+`SSEntryFlash_GoSS` / `loc_618AC` writes `$1701` before restarting the level.
+The engine also exposes the sanctuary through its legacy `$1601` alias. A
+headless test loading only the alias can pass while giant-ring entry has no
+controller, emeralds, custom palette, camera setup, or background handler.
+`ScreenEvents` dispatches `$1701` to `HPZS_*`; connect the resource profile
+and stock object factories to that destination and test both entry identities.
+Keep the paired `$1700` Death Egg boss act outside the sanctuary profile.
+
+## Deferred deletion still has a final draw/touch pass
+
+**Evidence:** MHZ Madmole `loc_8D602`, `loc_8D6D6` and `Go_Delete_Sprite`;
+MHZ end-boss fragments `loc_766CA`, `Obj_FlickerMove`, `Go_Delete_Sprite_3`.
+
+Installing a deletion routine does not free the object immediately. Read the
+caller after the helper returns: Madmole still publishes body touch at its
+final submerged position. A folded parent/body must retain that position and
+its reserved slot until the next pass, rather than restoring parent fields
+early. Fragment boundary deletion similarly retains its slot for one pass.
+
+Read child initialization separately from its installed update routine.
+`loc_766CA` initializes and draws; movement begins next pass. Do not inherit
+parent flip flags unless the allocation helper copies them: `CreateChild6_Simple`
+copies mappings/art tile but leaves these fragments unflipped. These lifetime
+and copy-contract checks also apply to S1/S2 helpers; verify each owning routine.

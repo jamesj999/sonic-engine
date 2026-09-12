@@ -40,6 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.verify;
@@ -315,6 +316,49 @@ class TestMadmoleBadnikInstance {
         assertEquals("BURIED", madmole.getStateName(),
                 "Obj_Wait jumps through $34 only once the word timer has underflowed negative");
         assertEquals(0x100, madmole.getY());
+    }
+
+    @Test
+    void deferredBodyDeletionKeepsFinalTouchPositionAndSlotUntilNextPass() {
+        ObjectManager objectManager = mock(ObjectManager.class);
+        LevelManager levelManager = mock(LevelManager.class);
+        when(levelManager.getObjectManager()).thenReturn(objectManager);
+        ObjectSpawn spawn = new ObjectSpawn(
+                0x120, 0x100, Sonic3kObjectIds.MADMOLE, 0, 0, false, 0);
+        MadmoleBadnikInstance madmole = new MadmoleBadnikInstance(spawn);
+        madmole.setServices(new TestObjectServices()
+                .withLevelManager(levelManager)
+                .withGameState(mock(GameStateManager.class)));
+        madmole.setSlotIndex(17);
+        TestablePlayableSprite player = player(0x100, 0x100);
+        advanceToRising(madmole, player);
+        int frame = advanceWhileState(madmole, player, 3, "RISING");
+        frame = advanceWhileState(madmole, player, frame, "PAUSING");
+        frame = advanceWhileState(madmole, player, frame, "DRILLING");
+        while (madmole.getTimer() > 0) {
+            madmole.update(frame++, player);
+        }
+        assertEquals(0x10F, madmole.getY());
+
+        madmole.update(frame++, player);
+
+        assertEquals("SINKING", madmole.getStateName());
+        assertEquals(0x110, madmole.getY(),
+                "loc_8D6CA moves before Go_Delete_Sprite defers deletion; body never snaps to cap");
+        assertEquals(0x100, madmole.getYVelocity());
+        assertEquals(0x0B, madmole.getCollisionFlags(),
+                "loc_8D602 still calls Child_DrawTouch_Sprite after the delete callback returns");
+        assertEquals(0x100, madmole.getY() + madmole.getSolidParams().offsetY(),
+                "the independent solid cap stays anchored while the body awaits deletion");
+        verify(objectManager, never()).freeReservedChildSlot(spawn, 0);
+
+        madmole.update(frame, player);
+
+        assertEquals("COOLDOWN", madmole.getStateName());
+        assertEquals(60, madmole.getTimer());
+        assertEquals(0x100, madmole.getY());
+        assertEquals(0, madmole.getCollisionFlags());
+        verify(objectManager).freeReservedChildSlot(spawn, 0);
     }
 
     @Test

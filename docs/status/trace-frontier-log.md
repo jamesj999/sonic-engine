@@ -109497,3 +109497,49 @@ see the audit for ROM/donor limitations and exact commands.
   `$FBZ_EVIDENCE_ROOT/fbz-base-trace.log` and `base-trace.json`
   (external task directory `fbz-20260912`). `S3K_ROM` names the verified
   existing absolute ROM path; no alias or link was created.
+
+
+## 2026-09-12 — MHZ completion baseline
+
+- Worktree `.worktrees/feature-ai-mhz-completion`, branch
+  `feature/ai-mhz-completion`, baseline `10f844594b`. Fresh JDK 21 run:
+  `mvn -Dmse=off -Ptrace-replay-r7 -Dsurefire.forkCount=1 -Dtest=TestS3kMhzZoneSliceTraceReplay -Ds3k.rom.path="<absolute root locked-on ROM>" test`.
+- Completed with one failed replay, zero skipped tests, 28,004 reported total
+  frames, 3,073 error spans, zero warnings and zero bootstrap errors.
+  First error: row 2,830 `g_speed`, expected `-00E0`, actual `0000`.
+  Context shows the engine entering hurt routine 4 and losing 44 rings near
+  Madmole at `(1060,0740)` while the ROM stays in routine 2. The hurt source
+  and object execution ordering require investigation; proximity is not proof.
+- Reports: `target/trace-reports/trace/s3k_mhz1-single-ec1a83b31fa42bc3.json`
+  and its `_context.txt`; log `target/mhz-baseline.log` in that worktree.
+  Missing advertised auxiliary schemas are listed in the report. No route
+  closure or boss/exit parity is claimed from this failed replay.
+- Next replay target is the earliest causal hurt disagreement, not a later
+  cascade. Separately confirmed boss-fragment parent-flip correction does not
+  explain this frontier.
+
+
+## 2026-09-12 — MHZ Madmole deferred-delete frontier advance
+
+- Candidate on `10f844594b` plus local edits in
+  `.worktrees/feature-ai-mhz-completion`, replicated as a diff into detached
+  `.worktrees/mhz-replay-validation` with independent Maven output.
+- Owning routines: `loc_8D6CA`, `loc_8D6D6`, `Go_Delete_Sprite` and
+  `Child_DrawTouch_Sprite`. Preserve the final submerged body position,
+  velocity, mapping and reserved slot until the deferred delete executes;
+  moving the still-collidable body onto the cap one pass early caused hurt.
+- Command: `mvn -Dmse=off -Ptrace-replay-r7 -Dsurefire.forkCount=1 -Dtest=TestMadmoleBadnikInstance,TestS3kMhzZoneSliceTraceReplay,TestS3kSonicTailsMhzSegmentTraceReplay,TestS3kTailsFullChainMhzSegmentTraceReplay -Ds3k.rom.path="<absolute root locked-on ROM>" test`.
+  Completed: 33 Madmole checks pass; three replays fail; zero skipped.
+  MHZ zone slice improves from 3,073 errors / row 2,830 `g_speed` to 3,019
+  errors / row 6,958 `rings` (expected 2, actual 1). Log in validation tree:
+  `target/mhz-candidate.log`. Matching JSON/context use the same zone-slice
+  basename recorded above. No full-zone parity claim.
+- Entry-only alternate runs remain red: Sonic+Tails 12 errors, first row
+  1,276 `x`; Tails 164 errors, first row 0 `y_speed`.
+- Follow-up command with the same options and
+  `-Dtest=TestS3kSonicTailsMhz2SegmentTraceReplay,TestS3kTailsFullChainMhz2SegmentTraceReplay`
+  completed with two failures and no skips (`target/mhz-alternate.log`):
+  631 errors, first row 0 `tails_y_speed`; 577 errors, first row 0 `camera_y`.
+  Those bootstrap failures prevent attributing downstream agreement to this fix.
+- Next target: establish the cause of the scattered-ring count difference
+  at row 6,958; preserve alternate bootstrap gaps as independent requirements.
