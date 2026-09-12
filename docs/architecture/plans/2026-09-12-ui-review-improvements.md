@@ -23,15 +23,16 @@ white/default, amber/non-default, red/experimental status meanings.
 - [x] Asynchronous, cancellable trace/recording catalog loading.
 - [x] Selective ROM-preview invalidation.
 - [x] Cached settings presentation data keyed by actual changes.
+- [x] Identify slow audio-test costs; reconcile the concurrent suite-performance pass.
 
 ## Verification and delivery checklist
 
 - [x] Focused regression checks for changed behavior.
-- [ ] Native visual review at default resolution and larger window scales.
+- [x] Native visual review at default resolution and larger window scales.
 - [x] Before/after rendering cost and transition measurements; report limits honestly.
 - [x] Update user/configuration documentation and existing unreleased changelog entry.
-- [ ] Review combined change and fix regressions.
-- [ ] Required change-based category selection and separate structural guards; inspect skips/failures.
+- [x] Review combined change and fix regressions.
+- [x] Required change-based category selection and separate structural guards; inspect skips/failures.
 - [ ] Reconcile upstream, integrate into main workspace develop, package and push.
 - [ ] Acknowledge temporary diagnostics and safely remove fully integrated worktree/branch.
 
@@ -48,7 +49,7 @@ by Unicode identities in the ASCII pixel font; this is not full Unicode glyph ar
 
 Measured checkerboard comparison (native Mesa/RX 9070 XT, 320 logical pixels at
 4×, five alternating 1,000-draw rounds): 110 submissions become one; median GPU
-time 11.979 → 3.676 microseconds. This isolates the checkerboard, not whole frames.
+time 11.966 → 3.649 microseconds. This isolates the checkerboard, not whole frames.
 Settings presentation (recording font, no GL, warmed Java 21): allocation per
 unchanged render 51,424 → 480 bytes; CPU median 19,219 → 105 ns. These synthetic
 measurements establish the specific removed work, not an engine-wide speedup.
@@ -72,3 +73,57 @@ core-profile palette capture exposed GL_INVALID_ENUM from a new GL_QUADS backdro
 changed it to GL_TRIANGLE_FAN and added a primitive/order regression before delivery.
 Root inspected game-browser, numeric keypad, PlayStation settings footer and
 notice pagination captures; original ROM logos and checkerboard styling remain.
+
+Candidate `9b6f6d896` is under required validation against destination base
+`09f442379`. Run `20260912T172957Z-c787e149` uses the full ordinary selection plus
+structural guards in separate JVMs. Final native palette and loading supplements
+passed without GL errors; the gallery now contains 240 images across 40 states.
+Final editor focused check: 34 tests passed, no skips.
+
+Bounded baseline attribution: `mvn -Dmse=off -Dtest=TestObjectPlacementEncoding
+test -B` on unchanged main `09f442379` completed with 3 tests, 1 failure, no
+errors/skips. `commonParserPreservesDescendingFullXOrderInsideOnePlacementColumn`
+still expects descending ring positions 448,384; both base and UI candidate return
+384,448 following the inherited full-X ring-ordering change. Identity, assertion
+type and message matched exactly. No parser/gameplay change is included here.
+
+
+Completed ordinary run `20260912T172957Z-c787e149` at `9b6f6d896`:
+20,404 tests, 18 failures, zero errors, 25 skips, 871.15 seconds. Three failures
+were obsolete hub test drivers/wording; the two packaged-mod launch helpers now
+enter Actions with Down, and the widescreen evidence checks the Browse footer.
+`mvn -Dmse=off -Dtest=TestPhase3StandaloneSampleIntegration,TestSamplePlatformerIntegration,TestOrdinaryTitleScreenCommandEvidence test -B`
+then passed all 10 tests, no skips (30.887 seconds).
+
+The remaining 15 failures are inherited: the ring-ordering assertion above and
+14 FBZ route/matrix cases. Twelve FBZ diagnostics matched the earlier recorded
+baseline; all five viewport matrix cases were additionally checked on unchanged
+`09f442379`, matching identity, exception type and full assertion message against
+the candidate detail. This includes two diagnostics changed by upstream ring work.
+No test assertion domain or gameplay behavior was weakened.
+
+All 25 skips were inspected: seven absent audio-reference cases, opt-in
+measurements/captures/soak cases, explicit BK2/observation prerequisites,
+unavailable surfaceless EGL, and the existing CPZ spin-tube capture assumption.
+Skipped cases are not passing coverage. No failure or skip records were omitted.
+The category runner stopped before guards because task-list documentation changed
+during the ordinary run; the completed ordinary lane is retained as evidence and
+only the missing guards lane is run separately with a 20-minute timeout.
+
+Concurrent local develop advanced to `f0fcdf818` with the independent
+[suite performance pass](2026-09-12-suite-performance-pass.md). Its
+[validation ledger](../validation/2026-09-12-suite-performance-pass.md) explains
+and measures the audio costs: repeated canonical preparation, byte-at-a-time
+capture reads, and the deliberately large 434,417-frame/32 MiB comparison test.
+It preserves coverage while reducing focused comparator time 132.859 → 78.641 s.
+This UI run predates those optimizations; its comparator class took 147 seconds.
+The integration must retain the performance changes and exercise the shared
+network path plus UI flows. No new audio optimization is attributed to this UI patch.
+
+
+The missing guard lane completed with
+`LUA_BIN=/usr/bin/lua5.4 timeout --signal=TERM --kill-after=15s 20m mvn -Dmse=off -Pguards test -B`:
+82 classes, 657 tests, zero failures/errors/skips, 3m54s. This was completion of
+the unstarted lane, not a second ordinary selection. All production UI sources
+remained at `9b6f6d896`; only the three test expectations and validation prose
+changed after that run. Upstream performance delivery is now `2dd0de646`.

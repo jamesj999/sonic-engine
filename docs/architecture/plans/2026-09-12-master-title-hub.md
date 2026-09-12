@@ -1,5 +1,8 @@
 # Master title hub implementation
 
+This document records the initial delivery. Later navigation, input, loading and
+rendering changes are tracked in the [UI review improvement task list](2026-09-12-ui-review-improvements.md).
+
 ## Accepted design
 
 The competition-style title remains a native 320x224 UI with proportional

@@ -716,7 +716,7 @@ class TestSamplePlatformerIntegration {
         GameLoop loop = (GameLoop) getField(engine, "gameLoop");
         loop.setInputHandler(input);
 
-        pressTitleKey(loop, input, org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER); // Enter action pane.
+        pressTitleKey(loop, input, org.lwjgl.glfw.GLFW.GLFW_KEY_DOWN); // Enter action pane.
         assertFalse(screen.isGameSelected(), "Opening actions must not launch the standalone");
         pressTitleKey(loop, input, org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER); // Start opens New Game/Continue.
         assertFalse(screen.isGameSelected(), "Opening the standalone chooser must not launch yet");
