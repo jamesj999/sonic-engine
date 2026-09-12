@@ -1184,6 +1184,18 @@
                                 <mkdir dir="${openggf.surefire.reports}"/>
                                 <mkdir dir="${openggf.trace.reports}"/>
                                 <mkdir dir="${openggf.test.diagnostics}"/>
+                                <!-- Maven resources does not remove deleted source files.
+                                     Retire old copied captures on existing checkouts too;
+                                     preserve synthetic scripts and other generated outputs. -->
+                                <delete includeemptydirs="true">
+                                    <fileset dir="${project.build.directory}/test-classes" erroronmissingdir="false">
+                                        <include name="audio/parity/**"/>
+                                        <include name="audio/nuked-opn2/port/s1-*.txt.gz"/>
+                                        <include name="audio/nuked-opn2/port/s2-*.txt.gz"/>
+                                        <include name="audio/nuked-opn2/port/s3k-*.txt.gz"/>
+                                        <include name="audio/nuked-opn2/port/expected.txt"/>
+                                    </fileset>
+                                </delete>
                             </target>
                         </configuration>
                     </execution>

@@ -777,6 +777,14 @@ class TestBuildToolingGuard {
         }
         assertEquals(580, Files.readAllLines(port.resolve("expected.txt")).size(),
                 "retain the independently pinned synthetic chip cases");
+        String pom = Files.readString(Path.of("pom.xml"));
+        assertTrue(pom.contains("dir=\"${project.build.directory}/test-classes\" erroronmissingdir=\"false\""));
+        for (String retired : List.of("audio/parity/**", "audio/nuked-opn2/port/s1-*.txt.gz",
+                "audio/nuked-opn2/port/s2-*.txt.gz", "audio/nuked-opn2/port/s3k-*.txt.gz",
+                "audio/nuked-opn2/port/expected.txt")) {
+            assertTrue(pom.contains("<include name=\"" + retired + "\"/>"),
+                    "existing build trees must retire copied game references: " + retired);
+        }
     }
 
     @Test

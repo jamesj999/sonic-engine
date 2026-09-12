@@ -102,7 +102,9 @@ mvn -Dmse=off -Paudio-stress test -B
 
 Run game-reference comparisons with an external fixture root and verified local
 ROM paths. The root uses `audio/parity/...` and `audio/nuked-opn2/port/...`; raw
-captures are never Maven resources or public build inputs. The reference lane
+captures are never Maven resources or public build inputs. Maven validation
+removes retired capture copies from existing `target/test-classes` trees and
+refreshes FM expectations from the current synthetic resources. The reference lane
 must fail when its prerequisites are missing. Independent reference expectations
 must not be regenerated from the engine under test to make a comparison pass.
 

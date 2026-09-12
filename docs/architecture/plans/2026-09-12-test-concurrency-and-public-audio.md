@@ -1,6 +1,6 @@
 # Test concurrency and public audio follow-up
 
-The follow-up is being implemented from pinned base
+The follow-up was implemented from pinned base
 `040ce4809420c809fd8f16eae295160afec8e12d` in
 `feature/ai-test-concurrency-public-audio`. The original source audit used
 `4ffc035dd`; earlier performance work is recorded in the
@@ -25,6 +25,8 @@ failure, external reference assertions and the retained stress case. Reserve abo
 identities, failures and skips, and attribute failures narrowly against the pinned
 base. The one-broad-attempt rule supersedes repeated full runs per integration step.
 No public-suite speedup claim includes cases moved into explicit deeper lanes.
+Completed checks and baseline failure attribution are in the
+[validation ledger](../validation/2026-09-12-test-concurrency-public-audio.md).
 
 The representative unchanged-base experiment ran six classes and the same 950
 identities with zero failures/errors/skips. Warm serial Maven took 92.541 seconds;
