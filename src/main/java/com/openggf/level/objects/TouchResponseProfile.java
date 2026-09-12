@@ -69,17 +69,14 @@ public record TouchResponseProfile(
             throw new IllegalArgumentException(
                     "Enemy touch override cannot be combined with special-property decode modes");
         }
-        TouchCategoryDecodeMode decodeMode = forceEnemy
-                ? TouchCategoryDecodeMode.FORCE_ENEMY
-                : sonic1
-                ? TouchCategoryDecodeMode.S1_SPECIAL_PROPERTY
-                : sonic2
-                ? TouchCategoryDecodeMode.SONIC2_SPECIAL_PROPERTY
-                : s3k ? TouchCategoryDecodeMode.S3K_SPECIAL_PROPERTY : TouchCategoryDecodeMode.NORMAL;
+        if (!forceEnemy) {
+            return fromCanonical(com.openggf.game.profiles.touchresponse.TouchResponseProfileMapper
+                    .fromProvider(provider, multiRegionSource));
+        }
         int shieldFlags = provider.getShieldReactionFlags();
 
         return new TouchResponseProfile(
-                decodeMode,
+                TouchCategoryDecodeMode.FORCE_ENEMY,
                 provider.requiresContinuousTouchCallbacks(),
                 provider.requiresRenderFlagForTouch(),
                 multiRegionSource,

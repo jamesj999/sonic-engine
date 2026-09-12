@@ -158,6 +158,19 @@ class TestTouchResponseProfileMapping {
                 profile.stopAfterFirstOverlapPolicy());
     }
 
+    @Test
+    void compatibilityOverloadRetainsForceEnemyCategory() {
+        TouchResponseProfile profile = TouchResponseProfile.fromProvider(new ForceEnemyProvider(), false);
+
+        assertEquals(TouchCategoryDecodeMode.FORCE_ENEMY, profile.categoryDecodeMode());
+    }
+
+    @Test
+    void compatibilityOverloadRejectsForceEnemyWithSpecialPropertyDecoding() {
+        assertThrows(IllegalArgumentException.class,
+                () -> TouchResponseProfile.fromProvider(new ForceEnemySonic2Provider(), false));
+    }
+
     private static class DefaultProvider implements TouchResponseProvider {
         @Override
         public int getCollisionFlags() {
@@ -302,6 +315,20 @@ class TestTouchResponseProfileMapping {
         @Override
         public TouchRegion[] getMultiTouchRegions() {
             throw new AssertionError("region geometry must stay delegated");
+        }
+    }
+
+    private static class ForceEnemyProvider extends DefaultProvider {
+        @Override
+        public boolean usesEnemyTouchCategoryOverride() {
+            return true;
+        }
+    }
+
+    private static final class ForceEnemySonic2Provider extends ForceEnemyProvider {
+        @Override
+        public boolean usesSonic2TouchSpecialPropertyResponse() {
+            return true;
         }
     }
 }

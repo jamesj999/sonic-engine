@@ -1,7 +1,5 @@
 package com.openggf.game.profiles.touchresponse;
 
-import com.openggf.level.objects.TouchResponseProvider;
-
 import java.util.Objects;
 
 @com.openggf.game.ModApi
@@ -49,30 +47,10 @@ public record TouchResponseProfile(
                 stopAfterFirstOverlapPolicy);
     }
 
-    public static TouchResponseProfile fromProvider(TouchResponseProvider provider) {
+    public static TouchResponseProfile fromProvider(com.openggf.level.objects.TouchResponseProvider provider) {
         Objects.requireNonNull(provider, "provider");
-
-        TouchCategoryDecodeMode decodeMode = decodeMode(provider);
-        boolean multiRegionSource = provider.getMultiTouchRegions() != null;
-        int shieldFlags = provider.getShieldReactionFlags();
-        TouchShieldDeflectCapability shieldCapability =
-                (shieldFlags & SHIELD_REACTION_BOUNCE_BIT) != 0
-                        ? TouchShieldDeflectCapability.SHIELD_DEFLECT
-                        : TouchShieldDeflectCapability.NONE;
-
-        return new TouchResponseProfile(
-                decodeMode,
-                provider.requiresContinuousTouchCallbacks(),
-                provider.requiresRenderFlagForTouch(),
-                multiRegionSource,
-                shieldCapability,
-                shieldFlags,
-                provider.enablesPostSpecialTouchAirborneSideVelocityPreservation(),
-                TouchAttackBouncePolicy.STANDARD_ENEMY_KILL,
-                TouchActorContextPolicy.MAIN_FULL_SIDEKICK_HURT_ONLY,
-                multiRegionSource
-                        ? TouchOverlapStopPolicy.STOP_AFTER_FIRST_OVERLAP_FOR_MAIN_ONLY
-                        : TouchOverlapStopPolicy.STOP_AFTER_FIRST_OVERLAP_FOR_ALL_ACTORS);
+        return TouchResponseProfileMapper.fromProvider(
+                provider, provider.getMultiTouchRegions() != null);
     }
 
     public static TouchResponseProfile standardEnemy() {
@@ -121,25 +99,5 @@ public record TouchResponseProfile(
                 TouchAttackBouncePolicy.STANDARD_ENEMY_KILL,
                 TouchActorContextPolicy.MAIN_FULL_SIDEKICK_HURT_ONLY,
                 TouchOverlapStopPolicy.STOP_AFTER_FIRST_OVERLAP_FOR_ALL_ACTORS);
-    }
-
-    private static TouchCategoryDecodeMode decodeMode(TouchResponseProvider provider) {
-        boolean sonic1 = provider.usesSonic1TouchSpecialPropertyResponse();
-        boolean sonic2 = provider.usesSonic2TouchSpecialPropertyResponse();
-        boolean s3k = provider.usesS3kTouchSpecialPropertyResponse();
-        if ((sonic1 ? 1 : 0) + (sonic2 ? 1 : 0) + (s3k ? 1 : 0) > 1) {
-            throw new IllegalArgumentException(
-                    "Touch special-property decode mode must be Sonic 1, Sonic 2, or S3K");
-        }
-        if (sonic1) {
-            return TouchCategoryDecodeMode.S1_SPECIAL_PROPERTY;
-        }
-        if (sonic2) {
-            return TouchCategoryDecodeMode.SONIC2_SPECIAL_PROPERTY;
-        }
-        if (s3k) {
-            return TouchCategoryDecodeMode.S3K_SPECIAL_PROPERTY;
-        }
-        return TouchCategoryDecodeMode.NORMAL;
     }
 }
