@@ -4605,3 +4605,17 @@ Read child initialization separately from its installed update routine.
 parent flip flags unless the allocation helper copies them: `CreateChild6_Simple`
 copies mappings/art tile but leaves these fragments unflipped. These lifetime
 and copy-contract checks also apply to S1/S2 helpers; verify each owning routine.
+
+
+## Seamless carry must replace freshly initialized fixed SST occupants
+
+A replacement object manager may install fixed-slot defaults during reset even
+when the act transition will retain the original occupants of those slots.
+Keeping both duplicates gameplay owners and can collide their rewind identities
+at the immediate transition-boundary capture. MHZ pollen (slot 4) and HCZ water
+splash (slot 5) exposed this together. In exact-slot carry, discard the freshly
+initialized occupant of each carried slot before importing the original
+identity and registering the carried object. Preserve fixed defaults in slots
+that are not carried. Do not weaken identity-table uniqueness checks or merely
+renumber duplicate owners. Verify one owner, retained slot/identity, and
+capture/restore immediately after a real resource reload.

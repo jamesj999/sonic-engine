@@ -978,6 +978,14 @@ note and Task V1 (Step 5) reconciliation so they are tracked rather than silentl
   after body retirement. The initial checks missed upload readiness; the
   strengthened check now passes, following the user's successful manual
   verification. See [defeat validation](architecture/validation/2026-09-12-mhz1-boss-defeat.md).
+- **Fixed SST owner duplication at act handoff (corrected, 2026-09-12).**
+  A freshly reset manager installed a new fixed-slot controller before
+  carrying the original into the same slot. MHZ's pollen owner and HCZ's
+  water-splash owner were both duplicated, causing identical rewind IDs at
+  transition-boundary capture. Exact-slot carry now removes the fresh default
+  in each carried slot before importing the original identity and owner.
+  The real resource-reload regression reproduces the original exception in
+  both zones and checks single ownership, retained identity/slot, and rewind.
 - **Mushmeanie shell-direction pointer (verified, 2026-09-12).**
   The earlier stale-pointer diagnosis was incorrect: `Check_PlayerCollision`
   explicitly stores the selected player pointer into the parent's `$44`.

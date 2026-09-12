@@ -4059,6 +4059,19 @@ public class LevelManager extends InitialProcessSpritesLevelManagerBase {
             com.openggf.level.objects.ObjectCallbackDispatch.inheritOwners(
                     objectManager, previousObjectManager, carriedIdentities);
             if (exactSstCarry) {
+                // Reset installs the target act's fixed SST defaults. A retained
+                // native occupant replaces that default, not a second live object
+                // beside it (e.g. the persistent pollen / water-splash owners).
+                // Remove defaults before importing the original rewind identities.
+                for (ObjectInstance initialized : new ArrayList<>(objectManager.getActiveObjects())) {
+                    if (initialized instanceof com.openggf.level.objects.AbstractObjectInstance fresh
+                            && persistentDynamicObjects.stream().anyMatch(occupant ->
+                                    occupant.identity() != initialized
+                                            && occupant.originalSlot() >= 0
+                                            && occupant.originalSlot() == fresh.getSlotIndex())) {
+                        objectManager.removeDynamicObject(initialized);
+                    }
+                }
                 objectManager.inheritTransitionObjectIdentities(previousObjectManager, carriedIdentities);
             }
         }

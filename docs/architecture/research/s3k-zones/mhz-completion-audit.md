@@ -136,3 +136,8 @@ that retired with the body before its final bursts. The initialization PLC
 and independent native controller are now represented; real-manager tests
 cover the full train and rewind after the body retires. See
 [defeat validation](../../validation/2026-09-12-mhz1-boss-defeat.md).
+
+The user's subsequent post-signpost crash exposed duplicate fixed SST owners
+at the resource reload. Exact-slot carry now replaces the freshly initialized
+default with the original owner; real MHZ/HCZ reloads cover immediate rewind
+capture and restore. See [transition rewind validation](../../validation/2026-09-12-mhz1-transition-rewind.md).

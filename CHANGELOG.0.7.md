@@ -41,6 +41,8 @@ campaigns; feature/API publication remains subject to the 0.8 roadmap.
   the Act 1 boss and its thrusters stay alive during offscreen attack phases.
   Its defeat loads the explosion art and finishes the full burst sequence
   across the signpost handoff.
+  Seamless act handoffs retain fixed object owners without duplicates, avoiding
+  a rewind-capture crash after the MHZ signpost.
   Complete routes, finales, and continuous replay chains remain gates.
 
 ## Development features carried forward
