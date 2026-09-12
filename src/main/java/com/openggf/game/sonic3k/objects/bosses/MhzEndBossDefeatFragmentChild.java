@@ -52,11 +52,13 @@ public final class MhzEndBossDefeatFragmentChild extends AbstractObjectInstance
     private int xFixed;
     private int yFixed;
     private int flickerCounter;
+    private boolean initialized;
+    private boolean pendingDelete;
 
     /**
      * Parent-linked construction entry retained for tests and legacy callers.
      * Rewind restore now uses {@link #recreateForRewind(RewindRecreateContext)}
-     * and lets compact restore reapply the captured parent-derived {@code xVel}.
+     * and lets compact restore reapply the captured {@code xVel}.
      */
     public static MhzEndBossDefeatFragmentChild forRewindRecreate(
             MhzEndBossInstance parent, int subtype) {
@@ -64,8 +66,10 @@ public final class MhzEndBossDefeatFragmentChild extends AbstractObjectInstance
     }
 
     MhzEndBossDefeatFragmentChild(MhzEndBossInstance parent, int subtype) {
-        this(fragmentSpawn(parent.getX(), parent.getY(), subtype), subtype,
-                parentDerivedXVelocity(parent, subtype));
+        // CreateChild6_Simple copies mappings/art_tile, but not render_flags.
+        // loc_766CA sets only bit 2 through SetUp_ObjAttributes, so
+        // Set_IndexedVelocity never mirrors these children with the parent.
+        this(fragmentSpawn(parent.getX(), parent.getY(), subtype));
     }
 
     MhzEndBossDefeatFragmentChild(ObjectSpawn spawn) {
@@ -98,15 +102,6 @@ public final class MhzEndBossDefeatFragmentChild extends AbstractObjectInstance
         return new ObjectSpawn(x, y, Sonic3kObjectIds.MHZ_END_BOSS, subtype, 0, false, 0);
     }
 
-    private static int parentDerivedXVelocity(MhzEndBossInstance parent, int subtype) {
-        int validSubtype = validatedSubtype(subtype);
-        int velocityX = VELOCITIES[validSubtype][0];
-        if ((parent.getState().renderFlags & 1) != 0) {
-            velocityX = -velocityX;
-        }
-        return velocityX;
-    }
-
     private static int validatedSubtype(int subtype) {
         if (subtype < 0 || subtype >= MAPPING_FRAMES.length) {
             throw new IllegalArgumentException("Invalid MHZ end-boss defeat fragment subtype: " + subtype);
@@ -116,6 +111,16 @@ public final class MhzEndBossDefeatFragmentChild extends AbstractObjectInstance
 
     @Override
     public void update(int vIntRunCount, PlayableEntity player) {
+        if (pendingDelete) {
+            setDestroyed(true);
+            return;
+        }
+        if (!initialized) {
+            // loc_766CA installs Obj_FlickerMove but ends in Draw_Sprite;
+            // movement starts on the next object pass.
+            initialized = true;
+            return;
+        }
         xFixed += xVel;
         yFixed += yVel;
         yVel += GRAVITY;
@@ -136,7 +141,9 @@ public final class MhzEndBossDefeatFragmentChild extends AbstractObjectInstance
         int deltaY = y - cameraY + 0x80;
         if (Integer.compareUnsigned(coarseDeltaX & 0xFFFF, 0x280) > 0
                 || Integer.compareUnsigned(deltaY & 0xFFFF, 0x200) > 0) {
-            setDestroyed(true);
+            // Obj_FlickerMove uses Go_Delete_Sprite_3, which installs the
+            // next-pass deletion routine rather than freeing this slot now.
+            pendingDelete = true;
         }
     }
 
@@ -162,7 +169,9 @@ public final class MhzEndBossDefeatFragmentChild extends AbstractObjectInstance
 
     @Override
     public void appendRenderCommands(List<GLCommand> commands) {
-        if (isDestroyed() || (flickerCounter & 1) == 0) {
+        // The init pass draws. Obj_FlickerMove then bchg's bit 6 of $38:
+        // old bit clear skips drawing on its first movement pass.
+        if (!initialized || pendingDelete || isDestroyed() || (flickerCounter & 1) != 0) {
             return;
         }
         PatternSpriteRenderer renderer = getRenderer(Sonic3kObjectArtKeys.MHZ_END_BOSS);

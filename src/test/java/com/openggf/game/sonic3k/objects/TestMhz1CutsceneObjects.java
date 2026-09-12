@@ -2590,6 +2590,34 @@ class TestMhz1CutsceneObjects {
     }
 
     @Test
+    void mhz1DoorLatchSurvivesButtonRecreationAndRewindsWithLevelState() {
+        MhzZoneRuntimeState state = new MhzZoneRuntimeState(0, PlayerCharacter.KNUCKLES);
+        ZoneRuntimeRegistry registry = new ZoneRuntimeRegistry();
+        registry.install(state);
+        TestObjectServices services = new TestObjectServices().withZoneRuntimeRegistry(registry);
+        ObjectSpawn spawn = new ObjectSpawn(0x330, 0x620,
+                Sonic3kObjectIds.MHZ1_CUTSCENE_BUTTON, 0, 0, false, 0);
+        Mhz1CutsceneButtonInstance original = new Mhz1CutsceneButtonInstance(spawn);
+        original.setServices(services);
+        original.setDoorLowered(true);
+        byte[] loweredSnapshot = state.captureBytes();
+        original.onUnload();
+
+        Mhz1CutsceneButtonInstance reloaded = new Mhz1CutsceneButtonInstance(spawn);
+        reloaded.setServices(services);
+        assertTrue(reloaded.isDoorLowered(), "_unkFAA9 survives object streaming");
+        assertEquals(0x660, new Mhz1CutsceneDoorInstance(reloaded).getY());
+
+        reloaded.setDoorLowered(false);
+        assertFalse(original.isDoorLowered(), "all instances read the same ROM byte");
+        state.restoreBytes(loweredSnapshot);
+        assertTrue(reloaded.isDoorLowered(), "rewind restores the shared door latch");
+
+        registry.install(new MhzZoneRuntimeState(0, PlayerCharacter.KNUCKLES));
+        assertFalse(reloaded.isDoorLowered(), "loc_60DE clears _unkFAA9 on a full level reload");
+    }
+
+    @Test
     void mhz1DoorUsesRomSolidObjectFullDimensions() {
         ObjectManager objectManager = mock(ObjectManager.class);
         List<ObjectInstance> spawned = new ArrayList<>();

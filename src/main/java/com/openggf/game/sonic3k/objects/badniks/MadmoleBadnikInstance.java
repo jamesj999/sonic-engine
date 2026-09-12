@@ -341,6 +341,13 @@ public final class MadmoleBadnikInstance extends AbstractS3kBadnikInstance
             // only begins its 60-frame Obj_Wait cooldown (loc_8D5DE) the following
             // frame. Model that one-frame parent-observe gap here.
             awaitingParentObserve = false;
+            // Go_Delete_Sprite only installs Delete_Current_Sprite. The body
+            // keeps its final submerged position/collision until this next pass.
+            currentY = homeY;
+            ySubpixel = 0;
+            yVelocity = 0;
+            mappingFrame = CAP_MAPPING_FRAME;
+            releaseBodyChildSlot();
             state = State.COOLDOWN;
             timer = COOLDOWN_FRAMES;
             return;
@@ -351,12 +358,10 @@ public final class MadmoleBadnikInstance extends AbstractS3kBadnikInstance
             return;
         }
 
-        currentY = homeY;
-        ySubpixel = 0;
-        yVelocity = 0;
-        mappingFrame = CAP_MAPPING_FRAME;
+        // loc_8D6D6 -> Go_Delete_Sprite returns through loc_8D602 to
+        // Child_DrawTouch_Sprite: publish and draw the final body state here.
+        // Its slot is cleared by Delete_Current_Sprite on the following pass.
         awaitingParentObserve = true;
-        releaseBodyChildSlot();
     }
 
     private void updateCooldown() {
