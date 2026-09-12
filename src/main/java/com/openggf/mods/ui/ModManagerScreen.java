@@ -36,6 +36,9 @@ import java.util.Set;
  * owns no activation seam: all changes are persisted for the next process start.
  */
 public final class ModManagerScreen {
+    public enum Feedback { NAVIGATE, CONFIRM, CANCEL, ERROR }
+    private boolean feedbackError;
+
     public static final int MAX_VISIBLE_ROWS = 6;
     public static final int MAX_VISIBLE_DETAILS = 12;
     private static final float SCALE = 2f / 3f;
@@ -123,7 +126,28 @@ public final class ModManagerScreen {
     }
 
     /** Engine-neutral state transition used by live composition and focused tests. */
-    public void update(MenuInput input) {
+    public void update(MenuInput input) { update(input, event -> { }); }
+
+    /** Neutral feedback events are adapted by the host; no engine audio dependency. */
+    public void update(MenuInput input, java.util.function.Consumer<Feedback> feedback) {
+        Objects.requireNonNull(input, "input");
+        Objects.requireNonNull(feedback, "feedback");
+        var before = feedbackState();
+        boolean back = (input.escape() && !previousEscape) || (input.menuBack() && !previousInput.menuBack());
+        boolean accept = input.menuAccept() && !previousInput.menuAccept();
+        feedbackError = false;
+        updateInput(input);
+        if (feedbackError) feedback.accept(Feedback.ERROR);
+        else if (!before.equals(feedbackState())) feedback.accept(back ? Feedback.CANCEL : accept ? Feedback.CONFIRM : Feedback.NAVIGATE);
+    }
+
+    private List<Object> feedbackState() {
+        return List.of(selectedIndex, detailScrollOffset, actionFocus, selectedAction, detailsPage,
+                noticesPage, orderPage, pageOffset, closeRequested, editor.pendingState(),
+                java.util.Optional.ofNullable(armedTrust), java.util.Optional.ofNullable(armedCascade));
+    }
+
+    private void updateInput(MenuInput input) {
         Objects.requireNonNull(input, "input");
         confirmLabel = input.confirmLabel();
         backLabel = input.backLabel();
@@ -242,12 +266,12 @@ public final class ModManagerScreen {
             if (rows.isEmpty()) drawPrimary("No mods discovered.", 12, y, 1f, 1f, 1f);
             for (RowView row : visibleRows()) {
                 boolean selected = rows.get(selectedIndex).identity().equals(row.identity());
-                if (selected && !actionFocus) text.focus(8, y - 2, 304, 12);
+                if (selected && !actionFocus) text.focus(8, y - 2, 304, 14);
                 String enabled = (!row.valid() || row.notLoaded()) ? "[--] " : row.enabled() ? "[ON] " : "[OFF] ";
                 String badges = row.badges().isEmpty() ? "" : " [" + String.join(",", row.badges()) + "]";
                 float green = !row.valid() ? .4f : row.enabled() ? .75f : 1f;
                 float blue = !row.valid() ? .4f : row.enabled() ? .25f : 1f;
-                drawPrimary(enabled + row.label() + badges, 12, y, 1f, green, blue);
+                drawPrimary(enabled + row.label() + badges, 12, text.primaryTextY(y - 2, 14), 1f, green, blue);
                 y += 14;
             }
             draw((rows.isEmpty() ? "0" : Integer.toString(selectedIndex + 1)) + " / " + rows.size()
@@ -264,7 +288,7 @@ public final class ModManagerScreen {
                 int x = actionX[i];
                 text.panel(x, 178, actionWidth[i], 16);
                 if (actionFocus && selectedAction == i) text.focus(x, 178, actionWidth[i], 16);
-                drawPrimary(actions[i], x + 4, 181, 1f, 1f, 1f);
+                drawPrimary(actions[i], x + 4, text.primaryTextY(178, 16), 1f, 1f, 1f);
             }
             text.footer(actionFocus ? confirmLabel + " Open  " + backLabel + (rows.isEmpty() ? " Save+Back" : " List")
                             : confirmLabel + " Toggle  Right Actions",
@@ -419,6 +443,7 @@ public final class ModManagerScreen {
         Row row = rows.get(selectedIndex);
         if (row.descriptor() == null) {
             statusMessage = "Invalid jars cannot be enabled";
+            feedbackError = true;
             return;
         }
         String id = row.descriptor().manifest().id();
@@ -432,6 +457,7 @@ public final class ModManagerScreen {
                     ModDescriptor cascadeDescriptor = descriptorsById.get(cascadeId);
                     if (cascadeDescriptor != null && cascadeDescriptor.containsCode()) {
                         statusMessage = id + " is not supported on native builds";
+            feedbackError = true;
                         armedCascade = null;
                         armedTrust = null;
                         return;
@@ -441,6 +467,7 @@ public final class ModManagerScreen {
             String refusal = enableRefusal(cascade, id);
             if (refusal != null) {
                 statusMessage = id + " cannot be enabled: " + refusal;
+            feedbackError = true;
                 armedCascade = null;
                 armedTrust = null;
                 return;
@@ -601,11 +628,13 @@ public final class ModManagerScreen {
         Row row = rows.get(selectedIndex);
         if (row.descriptor() == null) {
             statusMessage = "Invalid jars cannot be reordered";
+            feedbackError = true;
             return;
         }
         String id = row.descriptor().manifest().id();
         if (descriptorCounts.getOrDefault(id, 0) != 1) {
             statusMessage = "Duplicate-id jars cannot be reordered";
+            feedbackError = true;
             return;
         }
         List<ModState.Entry> current = editor.pendingState().entries();
@@ -617,6 +646,7 @@ public final class ModManagerScreen {
         candidate.add(target, moved);
         if (!dependencyOrderValid(candidate)) {
             statusMessage = "Move refused: dependency order must be preserved";
+            feedbackError = true;
             return;
         }
         editor.move(id, target);
@@ -667,6 +697,7 @@ public final class ModManagerScreen {
             closeRequested = true;
         } else if (result instanceof ModStateSaveResult.Failed failed) {
             saveFailure = failed.message();
+            feedbackError = true;
             statusMessage = "Pending changes were not saved";
             closeRequested = false;
         }
@@ -878,6 +909,8 @@ public final class ModManagerScreen {
         }
         default void panel(int x, int y, int width, int height) { }
         default void focus(int x, int y, int width, int height) { }
+        /** Host-independent ten-pixel primary text cell, centered inside a row. */
+        default int primaryTextY(int rowTop, int rowHeight) { return rowTop + (rowHeight - 10) / 2; }
         default void footer(String first, String second) {
             draw(primaryHint(first), 9, 200, 1, .5f, .9f, 1, 1);
             draw(primaryHint(second), 9, 212, 1, .8f, .86f, 1, 1);

@@ -1,5 +1,7 @@
 package com.openggf.game.recording.menu;
 
+import com.openggf.game.MenuFeedback;
+import static com.openggf.game.MenuFeedback.Cue.*;
 import com.openggf.control.InputHandler;
 import com.openggf.control.MenuInput;
 import com.openggf.graphics.PixelFont;
@@ -39,64 +41,86 @@ public final class UserRecordingMenu {
     }
 
     public void update(InputHandler input) {
-        menuInput = input;
-        if (targetEditor != null) {
-            targetEditor.update(input);
-            switch (targetEditor.consumeResult()) {
-                case ACCEPTED -> {
-                    try {
-                        state.setTargetFrame(Integer.parseInt(targetEditor.value()));
-                        targetEditor = null;
-                    } catch (NumberFormatException invalid) {
-                        targetEditor.reject("Enter a whole frame number");
+        int beforeCursor = state.cursor(), beforeOption = optionCursor, beforeScroll = detailScroll;
+        var beforeOptions = state.options();
+        boolean wasOptions = optionsOpen, wasDetails = detailsOpen;
+        boolean wasEditor = targetEditor != null;
+        boolean outcome = false;
+        try {
+            menuInput = input;
+            if (targetEditor != null) {
+                targetEditor.update(input);
+                switch (targetEditor.consumeResult()) {
+                    case ACCEPTED -> {
+                        try {
+                            state.setTargetFrame(Integer.parseInt(targetEditor.value()));
+                            MenuFeedback.emit(CONFIRM);
+                            targetEditor = null;
+                        } catch (NumberFormatException invalid) {
+                            targetEditor.reject("Enter a whole frame number");
+                        }
+                    }
+                    case CANCELLED -> targetEditor = null;
+                    case NONE -> { }
+                }
+                return;
+            }
+            if (detailsOpen) {
+                if (MenuInput.back(input)) detailsOpen = false;
+                else if (MenuInput.up(input)) detailScroll = Math.max(0, detailScroll - 1);
+                else if (MenuInput.down(input)) detailScroll = Math.min(Math.max(0, detailLines().size() - 12), detailScroll + 1);
+                return;
+            }
+            if (optionsOpen) {
+                if (MenuInput.back(input)) { optionsOpen = false; return; }
+                if (MenuInput.up(input)) optionCursor = Math.floorMod(optionCursor - 1, 5);
+                if (MenuInput.down(input)) optionCursor = (optionCursor + 1) % 5;
+                if (MenuInput.left(input) || MenuInput.right(input)) {
+                    if (optionCursor == 0) {
+                        if (MenuInput.left(input)) state.pressLeft(); else state.pressRight();
+                    } else if (optionCursor == 1) state.pressP();
+                    else if (optionCursor == 2) state.pressF();
+                }
+                if (MenuInput.accept(input)) {
+                    switch (optionCursor) {
+                        case 0 -> { targetEditor = new MenuTextEditor("TARGET FRAME", Integer.toString(state.options().targetFrame()), 9); targetEditor.deferAcceptanceFeedback(); }
+                        case 1 -> state.pressP();
+                        case 2 -> state.pressF();
+                        case 3 -> {
+                            state.pressPlay();
+                            if (state.selectedEntry() == null || !state.selectedEntry().isLoadable()) { MenuFeedback.emit(ERROR); outcome = true; }
+                        }
+                        case 4 -> { detailsOpen = true; detailScroll = 0; }
+                        default -> { }
                     }
                 }
-                case CANCELLED -> targetEditor = null;
-                case NONE -> { }
+            } else if (MenuInput.accept(input) && state.selectedEntry() != null) {
+                optionsOpen = true;
+                optionCursor = 3;
+                return;
+            } else {
+                state.update(input);
             }
-            return;
-        }
-        if (detailsOpen) {
-            if (MenuInput.back(input)) detailsOpen = false;
-            else if (MenuInput.up(input)) detailScroll = Math.max(0, detailScroll - 1);
-            else if (MenuInput.down(input)) detailScroll++;
-            return;
-        }
-        if (optionsOpen) {
-            if (MenuInput.back(input)) { optionsOpen = false; return; }
-            if (MenuInput.up(input)) optionCursor = Math.floorMod(optionCursor - 1, 5);
-            if (MenuInput.down(input)) optionCursor = (optionCursor + 1) % 5;
-            if (MenuInput.left(input) || MenuInput.right(input)) {
-                if (optionCursor == 0) {
-                    if (MenuInput.left(input)) state.pressLeft(); else state.pressRight();
-                } else if (optionCursor == 1) state.pressP();
-                else if (optionCursor == 2) state.pressF();
-            }
-            if (MenuInput.accept(input)) {
-                switch (optionCursor) {
-                    case 0 -> targetEditor = new MenuTextEditor("TARGET FRAME", Integer.toString(state.options().targetFrame()), 9);
-                    case 1 -> state.pressP();
-                    case 2 -> state.pressF();
-                    case 3 -> state.pressPlay();
-                    case 4 -> { detailsOpen = true; detailScroll = 0; }
-                    default -> { }
+            UserRecordingMenuState.PlaybackRequest request = state.consumePlaybackRequest();
+            if (request != null) {
+                try {
+                    playbackStarter.start(request.entry(), request.options());
+                    statusText = null;
+                    MenuFeedback.emit(CONFIRM); outcome = true;
+                } catch (Exception ex) {
+                    statusText = "Playback failed: " + ex.getMessage();
+                    MenuFeedback.emit(ERROR); outcome = true;
+                    LOGGER.log(Level.WARNING, "Failed to start user recording playback", ex);
                 }
             }
-        } else if (MenuInput.accept(input) && state.selectedEntry() != null) {
-            optionsOpen = true;
-            optionCursor = 3;
-            return;
-        } else {
-            state.update(input);
-        }
-        UserRecordingMenuState.PlaybackRequest request = state.consumePlaybackRequest();
-        if (request != null) {
-            try {
-                playbackStarter.start(request.entry(), request.options());
-                statusText = null;
-            } catch (Exception ex) {
-                statusText = "Playback failed: " + ex.getMessage();
-                LOGGER.log(Level.WARNING, "Failed to start user recording playback", ex);
+        } finally {
+            if (!wasEditor && !outcome) {
+                if (MenuInput.back(input)) MenuFeedback.emit(CANCEL);
+                else if ((!wasOptions && optionsOpen) || (!wasDetails && detailsOpen) || targetEditor != null)
+                    MenuFeedback.emit(CONFIRM);
+                else if (beforeCursor != state.cursor() || beforeOption != optionCursor || beforeScroll != detailScroll
+                        || !beforeOptions.equals(state.options())) MenuFeedback.emit(MenuInput.accept(input) ? CONFIRM : NAVIGATE);
+                else if (MenuInput.accept(input) && state.selectedEntry() == null) MenuFeedback.emit(ERROR);
             }
         }
     }
@@ -130,7 +154,7 @@ public final class UserRecordingMenu {
             int first = Math.max(0, Math.min(state.cursor() - 3, entries.size() - 8));
             for (int i = first, y = 53; i < Math.min(entries.size(), first + 8); i++, y += 12) {
                 boolean selected = i == state.cursor();
-                if (selected) MenuStyle.focus(font, 9, y - 2, 302, 12);
+                if (selected) MenuStyle.focusLabel(font, 9, y, 302, 12);
                 MenuStyle.label(font, (selected ? "> " : "  ") + entries.get(i).displayName(), 13, y, 292,
                         selected ? 1 : .7f, selected ? 1 : .78f, 1);
             }
@@ -151,10 +175,10 @@ public final class UserRecordingMenu {
             int y = 52 + i * 24;
             MenuStyle.panel(font, 9, y, 302, 21);
             if (optionCursor == i) MenuStyle.focus(font, 9, y, 302, 21);
-            MenuStyle.label(font, labels[i], 17, y + 6, 188, 1, 1, 1);
+            MenuStyle.label(font, labels[i], 17, MenuStyle.textY(y, 21, 1), 188, 1, 1, 1);
             boolean changed = i == 0 ? state.options().targetFrame() != Math.max(0, state.selectedEntry().frameCount() - 1)
                     : i == 1 ? state.options().pauseOnDesync() : i == 2 && state.options().fastForward();
-            MenuStyle.label(font, values[i], 211, y + 6, 92, 1, changed ? .72f : 1, changed ? .25f : 1);
+            MenuStyle.label(font, values[i], 211, MenuStyle.textY(y, 21, 1), 92, 1, changed ? .72f : 1, changed ? .25f : 1);
         }
         String warning = statusText != null ? statusText : state.warningText();
         if (warning != null) line(warning, 9, 182, 302, 1, .65f, .3f);
@@ -162,7 +186,7 @@ public final class UserRecordingMenu {
                 confirmHint() + (optionCursor == 3 ? " Play" : " Select") + "   " + backHint() + " Recordings");
     }
 
-    private void renderDetails() {
+    private List<String> detailLines() {
         List<String> lines = new ArrayList<>();
         List<String> messages = new ArrayList<>(state.selectedInfoLines());
         if (state.warningText() != null) messages.add(state.warningText());
@@ -171,6 +195,11 @@ public final class UserRecordingMenu {
             for (int start = 0; start < message.length(); start += 48)
                 lines.add(message.substring(start, Math.min(message.length(), start + 48)));
         }
+        return lines;
+    }
+
+    private void renderDetails() {
+        List<String> lines = detailLines();
         detailScroll = Math.min(detailScroll, Math.max(0, lines.size() - 12));
         MenuStyle.page(font, 320, "RECORDING DETAILS", state.selectedEntry().displayName());
         MenuStyle.panel(font, 9, 48, 302, 145);

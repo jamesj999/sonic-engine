@@ -212,14 +212,17 @@ and `launch.s3k`. Left/right changes games from either hub pane. Up/down enters
 the action list from the game pane, then chooses an action within it.
 `Enter` (controller A) opens the selected action and also provides a shortcut
 into the action pane. `Esc` (controller B) backs out. Opening a menu screen plays
-the confirmation cue; backing out plays a distinct cancel cue. Choose **Launch Options** to edit the selected game's profile.
+the confirmation cue; backing out plays a distinct cancel cue. These cues also apply inside nested menus,
+with errors reserved for rejected actions and failed operations. The game carousel wraps at either end, shows its position in the effective catalog,
+and preserves game identity when catalog entries change. Pending mod changes still
+follow the existing restart rules. Choose **Launch Options** to edit the selected game's profile.
 The original ROM-backed animated game logos remain, proportionally scaled into
 the left pane. Their original textures are drawn directly into the window
 viewport, so a larger window recovers source detail instead of enlarging a
 pre-reduced thumbnail. The default logical resolution remains 320x224.
 Primary text keeps the original 9x10 pixel font; supplementary details use a
 native small font in 6x8 cells, including lowercase descenders. Neither is
-fractionally resampled. The game pane shows the sky and the available game tabs;
+fractionally resampled. The game pane shows the sky and the game carousel;
 missing ROMs are dimmed. Checkerboards and cyan focus frames connect menu pages.
 **Quit** opens a confirmation with **Return to menu** selected by default;
 `Esc`/B from the game pane also opens it. Error pages wait for `Enter`/A or

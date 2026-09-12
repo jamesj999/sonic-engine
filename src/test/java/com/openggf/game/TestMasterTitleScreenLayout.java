@@ -106,6 +106,7 @@ class TestMasterTitleScreenLayout {
         screen.setRomAvailableForTest(MasterTitleScreen.GameEntry.SONIC_2, false);
         pressFrame(screen, input, GLFW_KEY_TAB);
         assertFalse(screen.isLaunchConfigPanelOpenForTest());
+        pressFrame(screen, input, GLFW_KEY_ESCAPE); // Acknowledge the unavailable-action page.
 
         screen.setRomAvailableForTest(MasterTitleScreen.GameEntry.SONIC_2, true);
         pressFrame(screen, input, GLFW_KEY_TAB);
@@ -132,6 +133,7 @@ class TestMasterTitleScreenLayout {
         source.setDevices(GamepadStateSource.DeviceState.connected(0, "pad", buttons(), 0f, 0f));
         input.refreshLogicalSnapshot();
         screen.update(input);
+        pressFrame(screen, input, GLFW_KEY_ESCAPE); // Acknowledge the unavailable-action page.
 
         screen.setRomAvailableForTest(MasterTitleScreen.GameEntry.SONIC_2, true);
         source.setDevices(GamepadStateSource.DeviceState.connected(0, "pad", buttons(GLFW_GAMEPAD_BUTTON_BACK), 0f, 0f));

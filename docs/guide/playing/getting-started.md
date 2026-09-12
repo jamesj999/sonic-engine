@@ -80,11 +80,15 @@ When the engine starts, you will see:
    Up/down enters its action list, then selects Start Game, Launch Options, Time Attack,
    Recordings, Mods, Settings, Advanced, or Quit. Enter/A opens the selected action; Esc/B returns
    one level. Quit (or Esc/B from game selection) opens an exit confirmation.
-   The three stock game tabs stay visible, with missing ROMs dimmed. Prompts follow the last keyboard/controller input. The original animated
+   Missing ROM entries remain visible but dimmed. Prompts follow the last
+   keyboard/controller input. The original animated
    game logos remain, scaled proportionally into the game pane.
    When audio is enabled, navigation, confirmation, and missing-ROM errors use short
    host-owned cues that do not depend on the selected game's ROM. Opening menu screens
-   plays confirmation; backing out plays a distinct cancel sound.
+   plays confirmation; backing out plays a distinct cancel sound. Navigation, edits,
+   confirmations and errors also have feedback inside the nested menus. Game selection
+   uses a wrapping carousel with neighboring names and a position count, so added
+   standalone games do not need extra slots or smaller primary labels.
 2. **Game title screen** -- The selected game's original title screen (e.g., the Sonic 2
    "PRESS START BUTTON" screen).
 3. **Gameplay** -- The first zone of the selected game.
