@@ -10,7 +10,6 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectPlayerParticipationPolicy;
-import com.openggf.level.objects.ObjectPlayerQuery;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.RewindRecreateObjectLinks;
@@ -128,7 +127,7 @@ public class MGZPulleyObjectInstance extends AbstractObjectInstance
             return;
         }
 
-        NativePlayerSlots slots = nativePlayerSlots(playerEntity);
+        NativePlayerSlots slots = NativePlayerSlots.resolve(services().playerQuery(), playerEntity);
         reconcileNativeP2(slots.player(1), vIntRunCount);
         tickReleaseCooldowns();
         updateExtensionAndFrame();
@@ -513,38 +512,6 @@ public class MGZPulleyObjectInstance extends AbstractObjectInstance
 
     private int computeHandleY() {
         return anchorY + HANDLE_Y_OFFSET + currentExtension;
-    }
-
-    private NativePlayerSlots nativePlayerSlots(PlayableEntity updatePlayer) {
-        ObjectPlayerQuery query = services().playerQuery();
-        PlayableEntity main = query.mainPlayerOrNull();
-        if (!(main instanceof AbstractPlayableSprite) && updatePlayer instanceof AbstractPlayableSprite) {
-            main = updatePlayer;
-        }
-
-        AbstractPlayableSprite p1 = (main instanceof AbstractPlayableSprite sprite) ? sprite : null;
-        AbstractPlayableSprite p2 = null;
-        for (PlayableEntity candidate : query.playersFor(ObjectPlayerParticipationPolicy.NATIVE_P1_P2)) {
-            if (candidate == main || !(candidate instanceof AbstractPlayableSprite sprite)) {
-                continue;
-            }
-            p2 = sprite;
-            break;
-        }
-        if (p2 == p1) {
-            p2 = null;
-        }
-        return new NativePlayerSlots(p1, p2);
-    }
-
-    private record NativePlayerSlots(AbstractPlayableSprite p1, AbstractPlayableSprite p2) {
-        private AbstractPlayableSprite player(int slot) {
-            return switch (slot) {
-                case 0 -> p1;
-                case 1 -> p2;
-                default -> null;
-            };
-        }
     }
 
     @Override

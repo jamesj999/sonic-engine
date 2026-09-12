@@ -1,101 +1,102 @@
 package com.openggf.level.objects;
 
 import com.openggf.game.PlayableEntity;
+import com.openggf.game.profiles.solidroutine.SolidRoutineProviderForwarding;
 
 public record SolidRoutineAdapter(SolidObjectProvider provider, SolidRoutineProfile profile) {
     public SolidObjectParams getSolidParams() {
-        return provider.getSolidParams();
+        return SolidRoutineProviderForwarding.getSolidParams(provider);
     }
 
     public SolidExecutionMode solidExecutionMode() {
-        return provider.solidExecutionMode();
+        return SolidRoutineProviderForwarding.solidExecutionMode(provider);
     }
 
     public boolean isSolidFor(PlayableEntity player) {
-        return provider.isSolidFor(player);
+        return SolidRoutineProviderForwarding.isSolidFor(provider, player);
     }
 
     public int getTopSolidPlayerPositionHistoryFrames(PlayableEntity player) {
-        return provider.getTopSolidPlayerPositionHistoryFrames(player);
+        return SolidRoutineProviderForwarding.getTopSolidPlayerPositionHistoryFrames(provider, player);
     }
 
     public int getFullSolidPlayerPositionHistoryFrames(PlayableEntity player) {
-        return provider.getFullSolidPlayerPositionHistoryFrames(player);
+        return SolidRoutineProviderForwarding.getFullSolidPlayerPositionHistoryFrames(provider, player);
     }
 
     public boolean rejectsZeroDistanceTopSolidLanding() {
-        return provider.rejectsZeroDistanceTopSolidLanding();
+        return SolidRoutineProviderForwarding.rejectsZeroDistanceTopSolidLanding(provider);
     }
 
     public boolean rejectsZeroDistanceTopSolidLanding(PlayableEntity player) {
-        return provider.rejectsZeroDistanceTopSolidLanding(player);
+        return SolidRoutineProviderForwarding.rejectsZeroDistanceTopSolidLanding(provider, player);
     }
 
     public boolean allowsZeroDistanceTopSolidLanding(PlayableEntity player) {
-        return provider.allowsZeroDistanceTopSolidLanding(player);
+        return SolidRoutineProviderForwarding.allowsZeroDistanceTopSolidLanding(provider, player);
     }
 
     public boolean gatesNewTopSolidLandingWithPreviousPosition() {
-        return provider.gatesNewTopSolidLandingWithPreviousPosition();
+        return SolidRoutineProviderForwarding.gatesNewTopSolidLandingWithPreviousPosition(provider);
     }
 
     public void onRejectedZeroDistanceTopSolidLanding(PlayableEntity player) {
-        provider.onRejectedZeroDistanceTopSolidLanding(player);
+        SolidRoutineProviderForwarding.onRejectedZeroDistanceTopSolidLanding(provider, player);
     }
 
     public boolean providesPreMovementGroundAttachmentSupport() {
-        return provider.providesPreMovementGroundAttachmentSupport();
+        return SolidRoutineProviderForwarding.providesPreMovementGroundAttachmentSupport(provider);
     }
 
     public boolean preservesObjectManagedRideWhileNotSolidFor(PlayableEntity player) {
-        return provider.preservesObjectManagedRideWhileNotSolidFor(player);
+        return SolidRoutineProviderForwarding.preservesObjectManagedRideWhileNotSolidFor(provider, player);
     }
 
     public Integer getObjectManagedRideCentreY(PlayableEntity player, int objectY, SolidObjectParams params) {
-        return provider.getObjectManagedRideCentreY(player, objectY, params);
+        return SolidRoutineProviderForwarding.getObjectManagedRideCentreY(provider, player, objectY, params);
     }
 
     public int getTopLandingSnapAdjustment(PlayableEntity player, int solidTopYRadius) {
-        return provider.getTopLandingSnapAdjustment(player, solidTopYRadius);
+        return SolidRoutineProviderForwarding.getTopLandingSnapAdjustment(provider, player, solidTopYRadius);
     }
 
     public int getContinuedRideSnapAdjustment(PlayableEntity player, int solidTopYRadius) {
-        return provider.getContinuedRideSnapAdjustment(player, solidTopYRadius);
+        return SolidRoutineProviderForwarding.getContinuedRideSnapAdjustment(provider, player, solidTopYRadius);
     }
 
     public boolean skipsCpuSidekickWhenRenderFlagOffScreen() {
-        return provider.skipsCpuSidekickWhenRenderFlagOffScreen();
+        return SolidRoutineProviderForwarding.skipsCpuSidekickWhenRenderFlagOffScreen(provider);
     }
 
     public int getTopLandingHalfWidth(PlayableEntity player, int collisionHalfWidth) {
-        return provider.getTopLandingHalfWidth(player, collisionHalfWidth);
+        return SolidRoutineProviderForwarding.getTopLandingHalfWidth(provider, player, collisionHalfWidth);
     }
 
     public boolean seedsNewRideCarryFromPreUpdateX() {
-        return provider.seedsNewRideCarryFromPreUpdateX();
+        return SolidRoutineProviderForwarding.seedsNewRideCarryFromPreUpdateX(provider);
     }
 
     public int staleHorizontalLogicalInputFramesWhileRiding(PlayableEntity player, int rideFrames) {
-        return provider.staleHorizontalLogicalInputFramesWhileRiding(player, rideFrames);
+        return SolidRoutineProviderForwarding.staleHorizontalLogicalInputFramesWhileRiding(provider, player, rideFrames);
     }
 
     public boolean fullSolidBottomOverlapUsesCurrentYRadiusOnly(PlayableEntity player) {
-        return provider.fullSolidBottomOverlapUsesCurrentYRadiusOnly(player);
+        return SolidRoutineProviderForwarding.fullSolidBottomOverlapUsesCurrentYRadiusOnly(provider, player);
     }
 
     public void setPlayerPushing(PlayableEntity player, boolean pushing) {
-        provider.setPlayerPushing(player, pushing);
+        SolidRoutineProviderForwarding.setPlayerPushing(provider, player, pushing);
     }
 
     public boolean carriesRiderOnHorizontalMove(PlayableEntity player) {
-        return provider.carriesRiderOnHorizontalMove(player);
+        return SolidRoutineProviderForwarding.carriesRiderOnHorizontalMove(provider, player);
     }
 
     public boolean suppressSlopeSampleThisFrame(PlayableEntity player) {
-        return provider.suppressSlopeSampleThisFrame(player);
+        return SolidRoutineProviderForwarding.suppressSlopeSampleThisFrame(provider, player);
     }
 
     public boolean sampleSlopeOnRideExit(PlayableEntity player) {
-        return provider.sampleSlopeOnRideExit(player);
+        return SolidRoutineProviderForwarding.sampleSlopeOnRideExit(provider, player);
     }
 }

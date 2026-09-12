@@ -16,7 +16,6 @@ import org.mockito.MockedStatic;
 import java.lang.reflect.Field;
 import java.util.concurrent.CompletableFuture;
 
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -47,9 +46,7 @@ class TestEngineRequiresSonic1Rom {
 
                 ((Sonic1GameModule.S1DataSelectImageWarmup) manager).ensureGenerationStarted();
 
-                Field inFlightField = S1DataSelectImageCacheManager.class.getDeclaredField("inFlight");
-                inFlightField.setAccessible(true);
-                assertNotNull(inFlightField.get(manager));
+                assertTrue(manager.isGenerationRunning());
                 blocked.complete(new com.openggf.graphics.RgbaImage(320, 224, new int[320 * 224]));
                 manager.awaitGenerationIfRunning();
             }

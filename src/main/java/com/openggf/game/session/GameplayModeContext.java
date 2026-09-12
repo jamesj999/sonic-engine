@@ -54,6 +54,7 @@ import com.openggf.game.zone.ZoneRuntimeRegistry;
 import com.openggf.graphics.FadeManager;
 import com.openggf.level.Level;
 import com.openggf.level.LevelManager;
+import com.openggf.level.LevelLostRingSpawnRewindAccess;
 import com.openggf.level.Palette;
 import com.openggf.level.ParallaxManager;
 import com.openggf.level.WaterSystem;
@@ -834,6 +835,7 @@ public final class GameplayModeContext implements ModeContext {
             return;
         }
         rewindRegistry.deregister("level");
+        LevelLostRingSpawnRewindAccess.unregister(rewindRegistry);
         rewindRegistry.deregister("level-transition");
         rewindRegistry.deregister("level-tilemap");
         rewindRegistry.deregister("object-manager");
@@ -845,6 +847,7 @@ public final class GameplayModeContext implements ModeContext {
         }
         levelEventExtraRewindKeys.clear();
         rewindRegistry.register(levelManager.levelRewindSnapshottable());
+        LevelLostRingSpawnRewindAccess.register(levelManager, rewindRegistry);
         RewindSnapshottable<?> transitionAdapter =
                 levelManager.levelTransitionRewindSnapshottable();
         if (transitionAdapter != null) {
