@@ -572,6 +572,7 @@ public class TestFbzAct2TraversalPreboss {
         private FbzWireCageObjectInstance horizontalCageTarget;
         private boolean horizontalCageWasHeld;
         private boolean horizontalCageEgressJumpActive;
+        private boolean earlySpikeGapRecovery;
 
         private FixedInputRunner(
                 HeadlessTestFixture fixture, ObjectManager objects, FrameObserver observer) {
@@ -608,6 +609,56 @@ public class TestFbzAct2TraversalPreboss {
                             .orElse(false);
                     int playerX = player.getCentreX() & 0xFFFF;
                     int playerY = player.getCentreY() & 0xFFFF;
+                    Sonic3kSpikeObjectInstance earlyLeftSpike = objects.activeObjectsOfType(
+                                    Sonic3kSpikeObjectInstance.class).stream()
+                            .filter(spike -> spike.getSpawn().x() == 0x0810
+                                    && spike.getSpawn().y() == 0x0290)
+                            .findFirst().orElse(null);
+                    Sonic3kSpikeObjectInstance earlyRightSpike = objects.activeObjectsOfType(
+                                    Sonic3kSpikeObjectInstance.class).stream()
+                            .filter(spike -> spike.getSpawn().x() == 0x0870
+                                    && spike.getSpawn().y() == 0x0290)
+                            .findFirst().orElse(null);
+                    if (earlyLeftSpike != null && earlyRightSpike != null) {
+                        int gapX = (earlyLeftSpike.getX() + earlyRightSpike.getX()) / 2;
+                        int spikeTop = earlyLeftSpike.getY()
+                                - earlyLeftSpike.getSolidParams().airHalfHeight();
+                        ObjectInstance riding = player.getLatchedSolidObjectInstance();
+                        boolean chainThreat = riding instanceof FbzChainLinkObjectInstance chain
+                                && !chain.horizontalMode() && player.isObjectControlled()
+                                && playerX >= earlyLeftSpike.getX() - earlyLeftSpike.getSolidParams().halfWidth()
+                                && playerX <= earlyRightSpike.getX() + earlyRightSpike.getSolidParams().halfWidth()
+                                && playerY < spikeTop
+                                && !player.getInvulnerable()
+                                && GameServices.level().getLevelGamestate().getRings() == 0
+                                && playerY + player.getStandYRadius() + 2 >= spikeTop - 1;
+                        if (chainThreat) {
+                            // Obj_FBZChainLink loc_3A860 moves a held chain by
+                            // its initialized two pixels; loc_3A910 releases on
+                            // a normal jump edge with directional +/-$200 X speed.
+                            // Preserve the authored route unless the next carried
+                            // step would put unprotected, zero-ring P1 on a spike.
+                            earlySpikeGapRecovery = true;
+                            mask = AbstractPlayableSprite.INPUT_JUMP
+                                    | (playerX < gapX ? AbstractPlayableSprite.INPUT_RIGHT
+                                    : AbstractPlayableSprite.INPUT_LEFT);
+                        } else if (earlySpikeGapRecovery) {
+                            if (playerY - player.getYRadius() > earlyLeftSpike.getY()
+                                    + earlyLeftSpike.getSolidParams().groundHalfHeight()) {
+                                earlySpikeGapRecovery = false;
+                            } else {
+                                // Sonic_ChgJumpDir applies twice run acceleration.
+                                // Aim using the distance needed to brake that live
+                                // lateral speed, rather than a viewport/frame timer.
+                                int velocity = player.getXSpeed();
+                                int airAcceleration = 2 * player.getRunAccel();
+                                int projectedX = playerX + velocity * Math.abs(velocity)
+                                        / (2 * airAcceleration * 256);
+                                mask = projectedX < gapX ? AbstractPlayableSprite.INPUT_RIGHT
+                                        : projectedX > gapX ? AbstractPlayableSprite.INPUT_LEFT : 0;
+                            }
+                        }
+                    }
                     if (!s1UpperCarEgressCompleted && s1UpperAssistObserved
                             && playerX >= 0x0880 && playerX <= 0x0940
                             && playerY >= 0x0830 && playerY <= 0x0890) {
