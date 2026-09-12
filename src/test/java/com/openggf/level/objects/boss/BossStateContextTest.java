@@ -127,21 +127,6 @@ public class BossStateContextTest {
     }
 
     @Test
-    public void testVelocityApplication_ShiftBy8() {
-        // Verify velocity shift matches ROM: asl.l #8,d0
-        context.xVel = 0x200; // 2 px/frame
-        context.xFixed = 0;
-
-        // ROM: move.w x_vel(a0),d0 ; asl.l #8,d0 ; add.l d0,x_pos(a0)
-        int velocityShifted = context.xVel << 8;
-        context.xFixed += velocityShifted;
-
-        // Verify shifted value
-        assertEquals(0x20000, velocityShifted, "Velocity shift should multiply by 256");
-        assertEquals(0x20000, context.xFixed, "Fixed position should match shifted velocity");
-    }
-
-    @Test
     public void testRoundingBehavior() {
         // Test that integer extraction truncates (doesn't round)
         context.xFixed = 0x0001FF00; // 1.996... pixels (0xFF00 / 0x10000 â‰ˆ 0.996)

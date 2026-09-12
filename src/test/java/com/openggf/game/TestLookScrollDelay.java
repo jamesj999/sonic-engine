@@ -59,34 +59,6 @@ public class TestLookScrollDelay {
         assertEquals((short) 120, fs.camera().lookScrollDelay(), "S3K should have 120-frame look scroll delay");
     }
 
-    @Test
-    public void testSonic1_ZeroDelayMeansImmediatePan() {
-        // Verify that delay=0 means lookDelay (starting at 0) immediately
-        // satisfies the >= threshold, so panning starts on the first frame.
-        short lookScrollDelay = (short) 0;
-        short lookDelay = 1; // After one increment
-        assertTrue(lookDelay >= lookScrollDelay, "With zero delay, first frame should pan");
-    }
-
-    @Test
-    public void testSonic2_DelayRequiresFrames() {
-        // Verify that delay=0x78 requires 120 frames before panning starts.
-        short lookScrollDelay = (short) 120;
-        assertEquals(0x78, lookScrollDelay, "S2 delay should be 120 frames");
-
-        // After 1 frame, should NOT pan yet
-        short lookDelay = 1;
-        assertFalse(lookDelay >= lookScrollDelay, "After 1 frame, should not pan yet");
-
-        // After 119 frames, should NOT pan yet
-        lookDelay = 0x77;
-        assertFalse(lookDelay >= lookScrollDelay, "After 119 frames, should not pan yet");
-
-        // After 120 frames, SHOULD pan
-        lookDelay = 0x78;
-        assertTrue(lookDelay >= lookScrollDelay, "After 120 frames, should pan");
-    }
-
     private static class TestableSprite extends AbstractPlayableSprite {
         public TestableSprite(String code, short x, short y) {
             super(code, x, y);

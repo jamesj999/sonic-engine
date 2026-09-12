@@ -373,33 +373,6 @@ public class SwScrlOozTest {
         assertTrue(nonZeroCount <= 33, "Should have at most 33 non-zero values (heat-haze region)");
     }
 
-    /**
-     * Test segment heights add up correctly.
-     * Total: factory + 8 + 8 + 8 + 7 + 33 + 8 + 8 + 8 + 8 + 8 + 72 = factory + 176
-     * When factory fills the rest, total = 224.
-     */
-    @Test
-    public void testSegmentHeightsTotal() {
-        // Fixed segment heights (excluding factory)
-        int mediumClouds = 8;
-        int slowClouds = 8;
-        int fastClouds = 8;
-        int slowClouds2 = 7;
-        int sunHaze = 33;
-        int emptySky = 72;
-
-        int fixedTotal = (mediumClouds * 4) + slowClouds + slowClouds2 + sunHaze + emptySky;
-        // = 32 + 8 + 7 + 33 + 72 = 152
-        // Wait, let me recount:
-        // 8 + 8 + 8 + 7 + 33 + 8 + 8 + 8 + 8 + 8 + 72 = 176
-
-        int sum = 8 + 8 + 8 + 7 + 33 + 8 + 8 + 8 + 8 + 8 + 72;
-        assertEquals(176, sum, "Non-factory segments total");
-
-        // Factory fills remaining: 224 - 176 = 48 at minimum
-        // But factory height is variable based on threshold logic
-    }
-
     // ==================== Integration Test ====================
 
     /**
