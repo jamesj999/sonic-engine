@@ -33,6 +33,33 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class TestSmpsPhysicalPolicy {
     @Test
+    void s1MusicLoadRunsShippedInitMusicPlaybackSilenceProgram() {
+        var source = SmpsSourceDescriptor.baseMusic(
+                new AudioTestFixtures.StubSmpsData("drowning"));
+        List<SmpsChipWrite> expected = new java.util.ArrayList<>(34);
+        for (int channel : new int[] {2, 6, 1, 5, 0, 4}) {
+            expected.add(new SmpsChipWrite.Ym2612(0, 0x28, channel));
+        }
+        for (int channel = 0; channel < 3; channel++) {
+            for (int operator = 0; operator < 4; operator++) {
+                int register = 0x40 + channel + operator * 4;
+                expected.add(new SmpsChipWrite.Ym2612(
+                        0, register, 0x7F));
+                expected.add(new SmpsChipWrite.Ym2612(
+                        1, register, 0x7F));
+            }
+        }
+        expected.add(new SmpsChipWrite.Psg(0x9F));
+        expected.add(new SmpsChipWrite.Psg(0xBF));
+        expected.add(new SmpsChipWrite.Psg(0xDF));
+        expected.add(new SmpsChipWrite.Psg(0xFF));
+
+        assertEquals(expected, Sonic1SmpsCompatibilityPolicy.INSTANCE
+                .activateMusic(new SmpsMusicActivation(source, 6, 0))
+                .writes());
+    }
+
+    @Test
     void s2LoadDispositionAndClosingNoteOffsFollowLiteralRomSlotOrder() {
         var policy = Sonic2SmpsCompatibilityPolicy.INSTANCE;
         var source = SmpsSourceDescriptor.baseMusic(new AudioTestFixtures.StubSmpsData("load"));
