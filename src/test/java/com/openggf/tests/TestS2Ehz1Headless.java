@@ -770,18 +770,7 @@ public class TestS2Ehz1Headless {
         assertTrue(tails.getAir());
     }
 
-    // -- findSonic Tests --
-
-    @Test
-    public void testFindsSonicAsNonCpuControlledSprite() {
-        createTailsForTest();
-        // controller.update should automatically find Sonic
-        controller.update(0);
-
-        // If Sonic wasn't found, all inputs would be cleared and state unchanged
-        // Since state transitions to NORMAL, Sonic was found
-        assertEquals(SidekickCpuController.State.NORMAL, controller.getState(), "Should find Sonic and transition to NORMAL");
-    }
+    // -- Leader Assignment Tests --
 
     @Test
     public void testClearsInputsWhenNoLeader() {
