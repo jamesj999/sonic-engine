@@ -18,6 +18,7 @@ import com.openggf.level.render.TileLoadRequest;
 import com.openggf.level.resources.CompressionType;
 import com.openggf.data.compression.KosinskiReader;
 import com.openggf.data.compression.NemesisReader;
+import com.openggf.util.DplcStaticFlattener;
 import com.openggf.util.PatternDecompressor;
 
 import java.io.IOException;
@@ -743,7 +744,7 @@ public class Sonic3kObjectArt {
             List<SpriteMappingFrame> rawMappings =
                     S3kSpriteDataLoader.loadMappingFrames(reader, Sonic3kConstants.MAP_RHINOBOT_ADDR);
             List<SpriteDplcFrame> dplcFrames = loadObjectDplcFrames(reader, Sonic3kConstants.DPLC_RHINOBOT_ADDR);
-            List<SpriteMappingFrame> remapped = applyDplcRemap(rawMappings, dplcFrames);
+            List<SpriteMappingFrame> remapped = DplcStaticFlattener.applyDplcRemap(rawMappings, dplcFrames);
             return new ObjectSpriteSheet(patterns, remapped, 1, 1);
         } catch (IOException e) {
             LOG.warning("Failed loading Rhinobot art: " + e.getMessage());
@@ -864,7 +865,7 @@ public class Sonic3kObjectArt {
 
         if (entry.dplcAddr() > 0) {
             List<SpriteDplcFrame> dplcFrames = loadObjectDplcFrames(reader, entry.dplcAddr());
-            mappings = applyDplcRemap(mappings, dplcFrames);
+            mappings = DplcStaticFlattener.applyDplcRemap(mappings, dplcFrames);
         } else {
             if (entry.mappingTileOffset() != 0) {
                 mappings = adjustTileIndices(mappings, entry.mappingTileOffset());
@@ -1466,89 +1467,6 @@ public class Sonic3kObjectArt {
             frames.add(new SpriteDplcFrame(requests));
         }
         return frames;
-    }
-
-    /**
-     * Remaps mapping tile indices through object DPLC requests.
-     */
-    private static List<SpriteMappingFrame> applyDplcRemap(
-            List<SpriteMappingFrame> mappings, List<SpriteDplcFrame> dplcFrames) {
-        if (dplcFrames == null || dplcFrames.isEmpty()) {
-            return mappings;
-        }
-
-        List<SpriteMappingFrame> remapped = new ArrayList<>(mappings.size());
-        for (int i = 0; i < mappings.size(); i++) {
-            SpriteMappingFrame frame = mappings.get(i);
-            if (i >= dplcFrames.size()) {
-                remapped.add(frame);
-                continue;
-            }
-
-            SpriteDplcFrame dplc = dplcFrames.get(i);
-            int totalSlots = 0;
-            for (TileLoadRequest req : dplc.requests()) {
-                totalSlots += req.count();
-            }
-
-            int[] vramToSource = new int[totalSlots];
-            int slot = 0;
-            for (TileLoadRequest req : dplc.requests()) {
-                for (int t = 0; t < req.count(); t++) {
-                    vramToSource[slot++] = req.startTile() + t;
-                }
-            }
-
-            List<SpriteMappingPiece> remappedPieces = new ArrayList<>(frame.pieces().size());
-            for (SpriteMappingPiece piece : frame.pieces()) {
-                int tileIdx = piece.tileIndex();
-                int wTiles = piece.widthTiles();
-                int hTiles = piece.heightTiles();
-                int tileCount = wTiles * hTiles;
-
-                if (tileIdx < 0 || tileIdx >= vramToSource.length) {
-                    remappedPieces.add(piece);
-                    continue;
-                }
-
-                int remappedBase = vramToSource[tileIdx];
-                boolean contiguous = true;
-                for (int t = 1; t < tileCount; t++) {
-                    int vramSlot = tileIdx + t;
-                    if (vramSlot >= vramToSource.length || vramToSource[vramSlot] != remappedBase + t) {
-                        contiguous = false;
-                        break;
-                    }
-                }
-
-                if (contiguous) {
-                    remappedPieces.add(new SpriteMappingPiece(
-                            piece.xOffset(), piece.yOffset(),
-                            wTiles, hTiles,
-                            remappedBase, piece.hFlip(), piece.vFlip(),
-                            piece.paletteIndex(), piece.priority()));
-                    continue;
-                }
-
-                for (int tx = 0; tx < wTiles; tx++) {
-                    for (int ty = 0; ty < hTiles; ty++) {
-                        int tileOffset = tx * hTiles + ty;
-                        int vramSlot = tileIdx + tileOffset;
-                        int remappedTile = vramSlot < vramToSource.length
-                                ? vramToSource[vramSlot]
-                                : tileIdx + tileOffset;
-                        remappedPieces.add(new SpriteMappingPiece(
-                                piece.xOffset() + tx * 8,
-                                piece.yOffset() + ty * 8,
-                                1, 1,
-                                remappedTile, piece.hFlip(), piece.vFlip(),
-                                piece.paletteIndex(), piece.priority()));
-                    }
-                }
-            }
-            remapped.add(new SpriteMappingFrame(remappedPieces));
-        }
-        return remapped;
     }
 
     private static List<SpriteMappingFrame> applyDplcRemapWithDestinationBase(

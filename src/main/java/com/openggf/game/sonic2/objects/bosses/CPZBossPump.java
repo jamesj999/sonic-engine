@@ -3,15 +3,12 @@ package com.openggf.game.sonic2.objects.bosses;
 import com.openggf.game.PlayableEntity;
 import com.openggf.game.sonic2.Sonic2Rng;
 import com.openggf.game.sonic2.constants.Sonic2ObjectIds;
-import com.openggf.game.sonic2.Sonic2ObjectArtKeys;
 import com.openggf.level.objects.ObjectAnimationState;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
-import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.RewindRecreateContext;
-import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
 import java.util.List;
@@ -94,32 +91,12 @@ public class CPZBossPump extends AbstractObjectInstance implements RewindRecreat
     }
 
     private void animate() {
-        if (animationState == null) {
-            return;
-        }
-        animationState.setAnimId(anim);
-        animationState.update();
-        mappingFrame = animationState.getMappingFrame();
+        mappingFrame = CpzBossPresentation.advanceAnimation(animationState, anim, mappingFrame);
     }
 
     @Override
     public void appendRenderCommands(List<GLCommand> commands) {
-        ObjectRenderManager renderManager = services().renderManager();
-        if (renderManager == null) {
-            return;
-        }
-
-        PatternSpriteRenderer renderer = renderManager.getRenderer(Sonic2ObjectArtKeys.CPZ_BOSS_PARTS);
-        if (renderer == null || !renderer.isReady()) {
-            return;
-        }
-
-        if (mappingFrame < 0) {
-            return;
-        }
-
-        boolean flipped = (renderFlags & 1) != 0;
-        renderer.drawFrameIndex(mappingFrame, x, y, flipped, false);
+        CpzBossPresentation.drawFrame(services().renderManager(), mappingFrame, x, y, renderFlags);
     }
 
     @Override

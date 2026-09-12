@@ -23,7 +23,7 @@ public interface SpawnDefaultArgsRewindRecreatable extends RewindRecreatable {
                 RewindRecreateConstructors.objectClass(this);
         try {
             Constructor<?> constructor = findConstructor(objectClass);
-            Object[] args = defaultArgs(constructor);
+            Object[] args = RewindRecreateConstructors.defaultArgs(constructor);
             args[0] = ctx.spawn();
             return RewindRecreateConstructors.instantiateSelected(
                     this,
@@ -50,35 +50,8 @@ public interface SpawnDefaultArgsRewindRecreatable extends RewindRecreatable {
                     Class<?>[] parameterTypes = constructor.getParameterTypes();
                     return parameterTypes.length >= 2
                             && parameterTypes[0] == ObjectSpawn.class
-                            && allDefaultable(parameterTypes, 1);
+                            && RewindRecreateConstructors.allDefaultable(parameterTypes, 1);
                 },
                 true);
-    }
-
-    private static boolean allDefaultable(Class<?>[] parameterTypes, int offset) {
-        for (int i = offset; i < parameterTypes.length; i++) {
-            Class<?> parameterType = parameterTypes[i];
-            if (parameterType.isPrimitive()
-                    && parameterType != int.class
-                    && parameterType != boolean.class) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private static Object[] defaultArgs(Constructor<?> constructor) {
-        Class<?>[] parameterTypes = constructor.getParameterTypes();
-        Object[] args = new Object[parameterTypes.length];
-        for (int i = 0; i < parameterTypes.length; i++) {
-            if (parameterTypes[i] == boolean.class) {
-                args[i] = Boolean.FALSE;
-            } else if (parameterTypes[i] == int.class) {
-                args[i] = 0;
-            } else {
-                args[i] = null;
-            }
-        }
-        return args;
     }
 }

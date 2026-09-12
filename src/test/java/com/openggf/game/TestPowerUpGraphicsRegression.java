@@ -58,7 +58,7 @@ class TestPowerUpGraphicsRegression {
         Object instaShield = player.getInstaShieldObject();
         assertNotNull(instaShield,
                 "Sonic should have a persistent insta-shield object after cross-game S2 level load");
-        assertNotNull(readField(instaShield, "dplcRenderer"),
+        assertNotNull(readLifecycleRenderer(instaShield),
                 "Persistent insta-shield object should have donor art renderer ready");
     }
 
@@ -69,7 +69,7 @@ class TestPowerUpGraphicsRegression {
         Object instaShield = player.getInstaShieldObject();
         assertNotNull(instaShield,
                 "Sonic should have a persistent insta-shield object after cross-game S2 level load");
-        Object renderer = readField(instaShield, "dplcRenderer");
+        Object renderer = readLifecycleRenderer(instaShield);
         assertNotNull(renderer,
                 "Persistent insta-shield object should have donor art renderer ready");
 
@@ -166,6 +166,13 @@ class TestPowerUpGraphicsRegression {
         } else {
             System.setProperty(key, previous);
         }
+    }
+
+    private static Object readLifecycleRenderer(Object instaShield) throws Exception {
+        Object lifecycle = readField(instaShield, "animationLifecycle");
+        var renderer = lifecycle.getClass().getDeclaredMethod("renderer");
+        renderer.setAccessible(true);
+        return renderer.invoke(lifecycle);
     }
 
     private static Object readField(Object target, String fieldName) throws Exception {

@@ -7,7 +7,6 @@ import com.openggf.game.rewind.RewindStateful;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectPlayerParticipationPolicy;
-import com.openggf.level.objects.ObjectPlayerQuery;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.sprites.NativePositionOps;
@@ -216,28 +215,28 @@ public class HCZConveyorBeltObjectInstance extends AbstractObjectInstance
             loadArray[rawSubtype] = true;
         }
 
-        NativePlayerSlots slots = nativePlayerSlots(playerEntity);
-        bindNativeState(p1State, p1Owner, slots.p1);
-        p1Owner = slots.p1;
-        bindNativeState(p2State, p2Owner, slots.p2);
-        p2Owner = slots.p2;
+        NativePlayerSlots slots = NativePlayerSlots.resolve(services().playerQuery(), playerEntity);
+        bindNativeState(p1State, p1Owner, slots.p1());
+        p1Owner = slots.p1();
+        bindNativeState(p2State, p2Owner, slots.p2());
+        p2Owner = slots.p2();
 
         // ROM: loc_311C4 (sonic3k.asm:66344-66365)
         // Process Player 1
-        if (slots.p1 != null) {
-            processPlayer(slots.p1, p1State, vIntRunCount);
+        if (slots.p1() != null) {
+            processPlayer(slots.p1(), p1State, vIntRunCount);
         }
 
         // Preserve the native Player 2 slot before processing identity-owned
         // novelty extensions below.
-        if (slots.p2 != null) {
-            processPlayer(slots.p2, p2State, vIntRunCount);
+        if (slots.p2() != null) {
+            processPlayer(slots.p2(), p2State, vIntRunCount);
         }
         List<PlayableEntity> participants = services().playerQuery().playersFor(
                 ObjectPlayerParticipationPolicy.MAIN_PLUS_ENGINE_SIDEKICKS_AS_NATIVE_P2_EXTENDED);
         for (PlayableEntity candidate : participants) {
             if (candidate instanceof AbstractPlayableSprite extension
-                    && extension != slots.p1 && extension != slots.p2) {
+                    && extension != slots.p1() && extension != slots.p2()) {
                 processPlayer(extension, extensionStates.computeIfAbsent(
                         extension, ignored -> new PlayerBeltState()), vIntRunCount);
             }
@@ -260,31 +259,6 @@ public class HCZConveyorBeltObjectInstance extends AbstractObjectInstance
         if (cameraX > rightCheck) {
             unloadBelt();
         }
-    }
-
-    private NativePlayerSlots nativePlayerSlots(PlayableEntity updatePlayer) {
-        ObjectPlayerQuery query = services().playerQuery();
-        PlayableEntity main = query.mainPlayerOrNull();
-        if (!(main instanceof AbstractPlayableSprite) && updatePlayer instanceof AbstractPlayableSprite) {
-            main = updatePlayer;
-        }
-
-        AbstractPlayableSprite p1 = (main instanceof AbstractPlayableSprite sprite) ? sprite : null;
-        AbstractPlayableSprite p2 = null;
-        for (PlayableEntity candidate : query.playersFor(ObjectPlayerParticipationPolicy.NATIVE_P1_P2)) {
-            if (candidate == main || !(candidate instanceof AbstractPlayableSprite sprite)) {
-                continue;
-            }
-            p2 = sprite;
-            break;
-        }
-        if (p2 == p1) {
-            p2 = null;
-        }
-        return new NativePlayerSlots(p1, p2);
-    }
-
-    private record NativePlayerSlots(AbstractPlayableSprite p1, AbstractPlayableSprite p2) {
     }
 
     /**

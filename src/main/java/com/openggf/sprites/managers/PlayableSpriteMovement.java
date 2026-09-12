@@ -5050,7 +5050,7 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 
 		// ROM formula: d1 = player_x + width - object_x
 		// This gives player position relative to left edge of object
-		int d1 = playerX + objectWidth - objectX;
+		int horizontalPositionWithinObject = playerX + objectWidth - objectX;
 
 		// S1 (non-extended) hard-codes #4 (s1disasm/_incObj/01 Sonic.asm:392).
 		// Extended (S2/S3K) reads a per-character shift from PhysicsProfile:
@@ -5064,9 +5064,14 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 			balanceShift = profile != null ? profile.onObjectBalanceShift() : 2;
 		}
 		int leftThreshold = balanceShift;
-		int d2 = (objectWidth * 2) - balanceShift;
+		int rightEdgeThreshold = (objectWidth * 2) - balanceShift;
 
-		applyObjectEdgeBalance(d1, d2, leftThreshold, extended, singleFacingBalanceSet);
+		applyObjectEdgeBalance(
+				horizontalPositionWithinObject,
+				rightEdgeThreshold,
+				leftThreshold,
+				extended,
+				singleFacingBalanceSet);
 	}
 
 	/**
@@ -5095,20 +5100,29 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 
 		// Cleared SST: width_pixels=0 and x_pos=0. Keep both calculations
 		// word-sized so high level coordinates retain the 68000 signed branches.
-		int d1 = (short) sprite.getCentreX();
-		int d2 = (short) -balanceShift;
-		applyObjectEdgeBalance(d1, d2, balanceShift, extended, singleFacingBalanceSet);
+		int horizontalPositionWithinObject = (short) sprite.getCentreX();
+		int rightEdgeThreshold = (short) -balanceShift;
+		applyObjectEdgeBalance(
+				horizontalPositionWithinObject,
+				rightEdgeThreshold,
+				balanceShift,
+				extended,
+				singleFacingBalanceSet);
 	}
 
-	private void applyObjectEdgeBalance(int d1, int d2, int leftThreshold, boolean extended,
+	private void applyObjectEdgeBalance(
+			int horizontalPositionWithinObject,
+			int rightEdgeThreshold,
+			int leftThreshold,
+			boolean extended,
 			boolean singleFacingBalanceSet) {
 		boolean facingRight = sprite.getDirection() == Direction.RIGHT;
 
-		if (d1 < leftThreshold) {
+		if (horizontalPositionWithinObject < leftThreshold) {
 			// On left edge of object
 			if (extended) {
 				// S2/S3K: 4-state balance with precarious check
-				boolean precarious = d1 < -4;
+				boolean precarious = horizontalPositionWithinObject < -4;
 				boolean facingTowardEdge = !facingRight;
 				int balanceState;
 				if (singleFacingBalanceSet) {
@@ -5127,11 +5141,11 @@ public class PlayableSpriteMovement extends AbstractSpriteMovementManager<Abstra
 				sprite.setBalanceState(1);
 				sprite.setDirection(Direction.LEFT);
 			}
-		} else if (d1 >= d2) {
+		} else if (horizontalPositionWithinObject >= rightEdgeThreshold) {
 			// On right edge of object
 			if (extended) {
 				// S2/S3K: 4-state balance with precarious check
-				boolean precarious = d1 >= d2 + 6;
+				boolean precarious = horizontalPositionWithinObject >= rightEdgeThreshold + 6;
 				boolean facingTowardEdge = facingRight;
 				int balanceState;
 				if (singleFacingBalanceSet) {

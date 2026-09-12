@@ -22,37 +22,37 @@ public final class SwingMotion {
      * @return updated velocity, direction, and whether direction changed this frame
      */
     public static Result update(int acceleration, int velocity, int maxVelocity, boolean directionDown) {
-        int d0 = acceleration;
-        int d1 = velocity;
-        int d2 = maxVelocity;
-        boolean changed = false;
+        int signedAcceleration = acceleration;
+        int nextVelocity = velocity;
+        int velocityLimit = maxVelocity;
+        boolean directionChanged = false;
 
         // ROM: if bit0 clear, apply upward acceleration first.
         if (!directionDown) {
-            d0 = -d0;
-            d1 += d0;
-            d2 = -d2;
-            if (d1 <= d2) {
+            signedAcceleration = -signedAcceleration;
+            nextVelocity += signedAcceleration;
+            velocityLimit = -velocityLimit;
+            if (nextVelocity <= velocityLimit) {
                 // Hit upper bound: flip direction and cancel the overshoot step.
                 directionDown = true;
-                d0 = -d0;
-                d2 = -d2;
-                changed = true;
+                signedAcceleration = -signedAcceleration;
+                velocityLimit = -velocityLimit;
+                directionChanged = true;
             } else {
-                return new Result(d1, false, false);
+                return new Result(nextVelocity, false, false);
             }
         }
 
         // Downward phase (also entered immediately after an upper-bound flip).
-        d1 += d0;
-        if (d1 >= d2) {
+        nextVelocity += signedAcceleration;
+        if (nextVelocity >= velocityLimit) {
             // Hit lower bound: flip direction and cancel the overshoot step.
             directionDown = false;
-            d0 = -d0;
-            d1 += d0;
-            changed = true;
+            signedAcceleration = -signedAcceleration;
+            nextVelocity += signedAcceleration;
+            directionChanged = true;
         }
 
-        return new Result(d1, directionDown, changed);
+        return new Result(nextVelocity, directionDown, directionChanged);
     }
 }

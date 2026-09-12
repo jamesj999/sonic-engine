@@ -5,6 +5,8 @@ import re
 import shutil
 import signal
 import subprocess
+import threading
+import time
 
 LOG_PART_BYTES = 2 * 1024 * 1024
 MAX_COMPLETED_RUNS = 2
@@ -69,7 +71,9 @@ def stop_process_tree(process):
             pass
 
 
-def run_logged(command, cwd, log_path, temporary=None):
+def run_logged(command, cwd, log_path, temporary=None, timeout=None, idle_timeout=None):
+    if timeout is not None and timeout <= 0:
+        raise TimeoutError('Validation time budget exhausted before launch')
     log = RollingLog(log_path)
     environment = None if temporary is None else {
         **os.environ, **{name: str(temporary) for name in ('TMPDIR', 'TMP', 'TEMP')}}
@@ -78,13 +82,40 @@ def run_logged(command, cwd, log_path, temporary=None):
                               stderr=subprocess.STDOUT,
                               env=environment,
                               start_new_session=(os.name == 'posix')) as process:
+            started = last_output = time.monotonic()
+            done = threading.Event()
+            expired = []
+
+            def watch():
+                while not done.wait(0.1):
+                    now = time.monotonic()
+                    if timeout is not None and now - started >= timeout:
+                        expired.append('total validation time budget')
+                    elif idle_timeout is not None and now - last_output >= idle_timeout:
+                        expired.append('no-output timeout')
+                    if expired:
+                        stop_process_tree(process)
+                        return
+
+            watcher = threading.Thread(target=watch, daemon=True)
+            watcher.start()
             try:
                 while chunk := process.stdout.read1(65536):
+                    last_output = time.monotonic()
                     log.write(chunk)
-                return process.wait()
+                code = process.wait()
             except BaseException:
+                done.set()
+                watcher.join()
                 stop_process_tree(process)
                 raise
+            finally:
+                done.set()
+                watcher.join()
+            if expired:
+                raise TimeoutError(f"Stopped Maven process tree: {expired[0]} exceeded; "
+                                   'validation is incomplete, not passed. Inspect the retained tail before retrying.')
+            return code
     finally:
         log.close()
 

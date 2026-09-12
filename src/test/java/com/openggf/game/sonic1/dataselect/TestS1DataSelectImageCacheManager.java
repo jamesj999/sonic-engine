@@ -220,7 +220,7 @@ public class TestS1DataSelectImageCacheManager {
                     () -> "constructor-sha",
                     mapper);
 
-            assertNull(readInFlight(manager));
+            assertFalse(manager.isGenerationRunning());
             blocked.complete(new RgbaImage(1, 1, new int[] {0xFFFFFFFF}));
             manager.awaitGenerationIfRunning();
         }
@@ -398,14 +398,6 @@ public class TestS1DataSelectImageCacheManager {
 
         assertThrows(IOException.class, generator::generateAll);
         assertFalse(Files.exists(cacheRoot.resolve("manifest.json")));
-    }
-
-    private CompletableFuture<Void> readInFlight(S1DataSelectImageCacheManager manager) throws Exception {
-        var field = S1DataSelectImageCacheManager.class.getDeclaredField("inFlight");
-        field.setAccessible(true);
-        @SuppressWarnings("unchecked")
-        CompletableFuture<Void> future = (CompletableFuture<Void>) field.get(manager);
-        return future;
     }
 
     private void writeManifest(String romSha256, Map<String, String> zones) throws IOException {

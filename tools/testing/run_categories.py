@@ -13,10 +13,13 @@ import re
 import shutil
 import subprocess
 import sys
+import time
+import math
 import uuid
 import xml.etree.ElementTree as ET
 
 from category_artifacts import compact_run, prune_runs, run_logged
+from category_control import DEFAULT_MINUTES, IDLE_SECONDS, preflight, check_repeat, record_attempt, is_broad
 
 ROOT = Path(__file__).resolve().parents[2]
 TEST_ROOT = Path('src/test/java')
@@ -205,7 +208,7 @@ def tree_state(root):
     return digest.hexdigest()
 
 
-def run_plan(root, plan):
+def run_plan(root, plan, max_minutes=DEFAULT_MINUTES, repeat_reason=None):
     target = root / 'target'
     target.mkdir(exist_ok=True)
     lock = target / 'category-tests.lock'
@@ -219,6 +222,7 @@ def run_plan(root, plan):
         with os.fdopen(fd, 'w') as stream:
             stream.write(str(os.getpid()) + '\n')
         base = target / 'category-tests'
+        check_repeat(target, plan, repeat_reason)
         prune_runs(base)
         run = base / (datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '-' + uuid.uuid4().hex[:8])
         run.mkdir(parents=True)
@@ -228,9 +232,13 @@ def run_plan(root, plan):
               f"guards={'on' if plan['guards'] else 'off'}", flush=True)
         initial_state = tree_state(root)
         plan['working_tree_fingerprint'] = initial_state
+        plan['max_minutes'] = max_minutes
+        plan['repeat_reason'] = repeat_reason
         (run / 'plan.json').write_text(json.dumps(plan, indent=2) + '\n')
         includes = run / 'includes.txt'
         includes.write_text('\n'.join(plan['tests']) + '\n')
+        record_attempt(target, run, plan, repeat_reason)
+        deadline = time.monotonic() + max_minutes * 60
         results = []
         failed = False
         for lane in (('ordinary', 'guards') if plan['guards'] else ('ordinary',)):
@@ -248,23 +256,32 @@ def run_plan(root, plan):
             (run / f'{lane}-command.json').write_text(json.dumps(command, indent=2) + '\n')
             print(f'Running {lane}; rolling output: {run / (lane + ".log")}', flush=True)
             try:
-                exit_code = run_logged(command, root, run / f'{lane}.log', temporary)
+                lane_started = time.monotonic()
+                exit_code = run_logged(command, root, run / f'{lane}.log', temporary,
+                                       timeout=deadline - lane_started, idle_timeout=IDLE_SECONDS)
+            except TimeoutError as error:
+                summary = summarize(reports)
+                summary.update(lane=lane, status='incomplete', reason=str(error),
+                               elapsed_seconds=round(time.monotonic() - lane_started, 2))
+                results.append(summary)
+                (run / 'results.json').write_text(json.dumps(results, indent=2) + '\n')
+                raise
             finally:
                 # run_logged reaps Maven before returning/raising. Only this run's
                 # temporary files are removed, never another run's target/test-tmp.
                 shutil.rmtree(temporary)
             summary = summarize(reports)
-            summary.update(lane=lane, exit_code=exit_code)
+            summary.update(lane=lane, exit_code=exit_code, elapsed_seconds=round(time.monotonic() - lane_started, 2))
             results.append(summary)
             (run / 'results.json').write_text(json.dumps(results, indent=2) + '\n')
             print(json.dumps({k: v for k, v in summary.items()
                               if k not in ('skipped_cases', 'failed_cases')}), flush=True)
+            if tree_state(root) != initial_state:
+                raise ValueError('Working tree changed during validation; stop before another lane')
             if not summary['reports'] or summary['tests'] == summary['skipped']:
                 status = 'failed'
                 return 1
             failed |= bool(exit_code or summary['failures'] or summary['errors'])
-        if tree_state(root) != initial_state:
-            raise ValueError('Working tree changed during validation; results do not validate the current candidate')
         status = 'failed' if failed else 'passed'
         print('Selected checks ' + status + '. Inspect results.json for skips/failures; '
               'a category pass is not full-suite certification.')
@@ -286,9 +303,16 @@ def main(argv=None):
     parser.add_argument('--category', action='append', default=[], help='add a category (repeatable), or all')
     parser.add_argument('--guards', action='store_true', help='also run guards during focused development (automatic with --base or all)')
     parser.add_argument('--run', action='store_true', help='execute the plan; otherwise print JSON only')
+    parser.add_argument('--preflight', action='store_true', help='check Java and guard tools without running tests')
+    parser.add_argument('--max-minutes', type=float, default=DEFAULT_MINUTES, help='total Maven budget across lanes (default: 40 minutes)')
+    parser.add_argument('--repeat-reason', help='record why another broad run is necessary; does not skip checks')
     parser.add_argument('--json', action='store_true', help='print the complete dry-run plan, including every class')
     args = parser.parse_args(argv)
     try:
+        if not math.isfinite(args.max_minutes) or args.max_minutes <= 0:
+            parser.error('--max-minutes must be a positive finite number')
+        if args.repeat_reason is not None and not 10 <= len(args.repeat_reason.strip()) <= 2000:
+            parser.error('--repeat-reason must explain the reason in 10–2000 characters')
         data = policy()
         if args.list:
             tests = inventory(ROOT, data)
@@ -300,8 +324,20 @@ def main(argv=None):
         if set(args.category) - (set(data['categories']) | {'all'}):
             parser.error('unknown category; use --list')
         plan = make_plan(ROOT, data, args.base, args.category, args.guards)
-        if args.run:
-            return run_plan(ROOT, plan)
+        if args.run or args.preflight:
+            if is_broad(plan):
+                print('BROAD selection: allow tens of minutes; the September normalization run '
+                      'took ~24 minutes ordinary + ~10 minutes guards. This is context, not an ETA.', flush=True)
+            print(f'Time limit: {args.max_minutes:g} minutes total Maven time; '
+                  '10 minutes without output. Timeout means incomplete; no automatic retry.', flush=True)
+            if sys.platform == 'darwin':
+                print('Native tests need macOS display/service access. Launch in the known working '
+                      'native environment; tool preflight does not prove GLFW access.', flush=True)
+            preflight(ROOT, plan)
+            if args.preflight and not args.run:
+                print('Tool prerequisites passed; no tests executed.')
+                return 0
+            return run_plan(ROOT, plan, args.max_minutes, args.repeat_reason)
         display = plan if args.json else {
             **{k: v for k, v in plan.items() if k not in ('tests', 'reasons')},
             'selected_classes': len(plan['tests']), 'reasons': plan['reasons'][:50],

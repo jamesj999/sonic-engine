@@ -88,9 +88,48 @@ omissions and domain coverage before delivery. The runner checks exit status and
 execution and rejects a changed working tree at completion. It does not cache or authenticate
 passes for Git hooks, or claim that every candidate source produced a report.
 
+### Cost, prerequisites and stopping
+
+Run `python3 tools/testing/run_categories.py --base <pinned-base> --preflight` in the
+same environment as the intended test command. Every `--run` also performs these checks:
+Maven must use Java 21; selections with guards require executable Lua 5.4 (`LUA_BIN`,
+default `lua`) and `pwsh` on PATH. Failures are collected before any test lane starts.
+This checks tool launches, not ROM completeness, native display access or every fixture
+prerequisite. On macOS use the known working native display/service permissions from the
+first graphics launch, especially after a documented sandbox failure.
+
+Full selections and selections of at least 500 candidate classes print a cost warning.
+The September normalization run measured about 24 minutes ordinary and 10 minutes guards;
+this is historical context, not a prediction. `--max-minutes` defaults to **40 minutes total
+across Maven lanes**, not 40 minutes each. There is also a **10-minute no-output timeout**.
+Both terminate the Maven process tree and report incomplete validation. Compilation consumes
+the same budget. Tool probes have separate 20-second limits. A timeout never authorizes
+silently increasing the budget or restarting the suite.
+
+A single, overwritten `target/category-tests-last-broad.json` receipt records the latest
+broad attempt, including incomplete attempts. It survives diagnostic rotation and focused
+runs. Further broad attempts in that worktree require `--repeat-reason "<concrete reason>"`,
+even after edits or a new task; the explanation is retained with the plan and receipt. A
+new task/scope or a repaired prerequisite can justify a new attempt. A red result alone
+cannot. This is a retry brake, not a pass cache or a claim that agent-written explanations
+are authenticated. Direct Maven bypasses it; agent instructions prohibit that workaround.
+
+The agent stopping rule is one completed required selection per candidate, followed by
+focused regression fixes and, where needed, matched baseline/current tests for disputed
+failures. Keep unrelated failures as explicit limitations. Do not chase unrelated test
+infrastructure or repeat full suites to establish a baseline. Report changed code, tested
+revision, counts/skips, incomplete lanes and unresolved attribution. CI/release coverage is
+unchanged and must still pass where required; this workflow does not waive those gates.
+
+Changes confined to the Python runner/tests and this prose guidance use the Python safety
+suite below plus actual tool preflight. Changes to selection policy, POM, Java, workflows
+or hooks still require their normal change-based validation. This avoids launching tens
+of thousands of engine tests to verify timeout, subprocess and retention behavior.
+
 ### Automatic storage cleanup
 
-No permanent log archive is created:
+No permanent log archive is created. The single broad-attempt receipt is small (under
+16 KiB for normal repository paths), overwritten, and contains no logs:
 
 - Keep at most **two completed runs**, within a **100 MiB retained-data budget**. Pruning runs
   under the worktree lock at startup and completion; old recognized runner directories are deleted.

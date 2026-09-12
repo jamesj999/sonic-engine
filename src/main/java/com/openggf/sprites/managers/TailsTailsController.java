@@ -308,10 +308,17 @@ public class TailsTailsController {
             // early-out (s2.asm:41338-41339), so the bank and the flips are latched
             // here and held frozen over the countdown frames - matching
             // sonic3k.asm:29592-29604 behind :29375-29376.
-            mappingFrame += computeDirectionalOffset();
-            boolean[] flips = computeDirectionalFlips();
-            dirHFlip = flips[0];
-            dirVFlip = flips[1];
+            int adjustedTailAngle = computeAdjustedTailAngle();
+            mappingFrame += (adjustedTailAngle >> 3) & 0x0C;
+
+            // ROM TAnim_GetTailFrame: the high angle bit sets both flip bits;
+            // the facing-direction bit then toggles x_flip (s2.asm:41505-41516).
+            int directionalFlipFlags = (adjustedTailAngle & 0x80) != 0 ? 3 : 0;
+            if (Direction.LEFT.equals(sprite.getDirection())) {
+                directionalFlipFlags ^= 1;
+            }
+            dirHFlip = (directionalFlipFlags & 1) != 0;
+            dirVFlip = (directionalFlipFlags & 2) != 0;
         }
         publishDynamicArtDecision();
     }
@@ -475,12 +482,11 @@ public class TailsTailsController {
     }
 
     /**
-     * Compute directional offset for tails based on velocity angle.
-     * ROM: TAnim_GetTailFrame calculates angle from (x_vel, y_vel),
-     * adjusts for facing direction, then divides into 4 quadrants
-     * giving offsets 0, 4, 8, or 12.
+     * Computes the velocity angle after TAnim_GetTailFrame has adjusted it for
+     * the parent's facing direction and added its quadrant bias. The caller uses
+     * the same ROM value for both mapping-bank selection and render flips.
      */
-    private int computeDirectionalOffset() {
+    private int computeAdjustedTailAngle() {
         // ROM TAnim_GetTailFrame calls CalcAngle UNCONDITIONALLY
         // (docs/s2disasm/s2.asm:41484-41487); there is no zero-velocity
         // short-circuit. CalcAngle_Zero itself returns $40
@@ -494,53 +500,16 @@ public class TailsTailsController {
         // (s2.asm:4037-4081, Angle_Data table); S3K's tail routine calls the
         // identical GetArcTan (sonic3k.asm:3043, ArcTanTable).
         // 0=right, 64=down, 128=left, 192=up (Genesis convention, Y-down).
-        int d0 = TrigLookupTable.calcAngle(xVel, yVel);
+        int adjustedTailAngle = TrigLookupTable.calcAngle(xVel, yVel);
 
         // ROM: Adjust for facing direction
         boolean facingLeft = Direction.LEFT.equals(sprite.getDirection());
         if (!facingLeft) {
-            d0 = (~d0) & 0xFF;
+            adjustedTailAngle = (~adjustedTailAngle) & 0xFF;
         } else {
-            d0 = (d0 + 0x80) & 0xFF;
+            adjustedTailAngle = (adjustedTailAngle + 0x80) & 0xFF;
         }
 
-        // ROM: Add $10, divide by 8, mask to get quadrant offset
-        d0 = (d0 + 0x10) & 0xFF;
-        d0 = (d0 >> 3) & 0x0C;
-        return d0;
-    }
-
-    /**
-     * Compute flip flags for directional tails animation.
-     * ROM: TAnim_GetTailFrame sets render flags based on velocity angle.
-     * Returns [hFlip, vFlip].
-     */
-    private boolean[] computeDirectionalFlips() {
-        // No zero-velocity short-circuit: see computeDirectionalOffset.
-        short xVel = sprite.getXSpeed();
-        short yVel = sprite.getYSpeed();
-
-        // ROM: CalcAngle (s2.asm:4037-4081) / GetArcTan (sonic3k.asm:3043)
-        int d0 = TrigLookupTable.calcAngle(xVel, yVel);
-
-        boolean facingLeft = Direction.LEFT.equals(sprite.getDirection());
-        if (!facingLeft) {
-            d0 = (~d0) & 0xFF;
-        } else {
-            d0 = (d0 + 0x80) & 0xFF;
-        }
-
-        d0 = (d0 + 0x10) & 0xFF;
-
-        // ROM: If (d0 + $10) >= $80, set both flip flags
-        int d1 = 0;
-        if ((d0 & 0x80) != 0) {
-            d1 = 3; // x_flip | y_flip
-        }
-        int d2 = facingLeft ? 1 : 0;
-        int flipResult = d1 ^ d2;
-        boolean hFlip = (flipResult & 1) != 0;
-        boolean vFlip = (flipResult & 2) != 0;
-        return new boolean[]{ hFlip, vFlip };
+        return (adjustedTailAngle + 0x10) & 0xFF;
     }
 }

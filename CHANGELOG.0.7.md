@@ -59,12 +59,22 @@ campaigns; feature/API publication remains subject to the 0.8 roadmap.
 - **Existing feature foundations:** retain editor, racing, prepared-loading,
   audio-core, and mod regression coverage while stock campaigns mature.
 
+- **Java runtime ownership:** debug shortcuts, rewind constructor defaults, static
+  object-art remapping, native player selection, shield playback, CPZ boss-child
+  presentation and donated preview capture use shared implementations. Sidekick
+  diagnostic construction is separated from CPU decisions.
+  Deferred lost-ring spawns retain their queue across rewind and release reserved
+  slots when the owning level is reset or rebuilt. Public profile adapters retain
+  their compatibility identities while using canonical profile mechanics.
+
 ## Build and release
 
 - **Local test categories:** select related subsystem checks from changed paths, with
   common tests and structural guards retained, broad fallback for shared changes,
-  and bounded diagnostics and automatic temporary-file cleanup. Full CI and release
-  validation remain unchanged.
+  and bounded diagnostics and automatic temporary-file cleanup. Tool prerequisites
+  are checked before testing; a shared time budget stops hung runs, and repeated broad
+  attempts require a recorded reason. Agent validation stops after the required selection
+  and focused regression checks. Full CI and release validation remain unchanged.
 
 - **Release-line integration:** preserve hosted release builds, snapshot policy
   checks, current launcher artifact selection, Linux packaging, and automatic

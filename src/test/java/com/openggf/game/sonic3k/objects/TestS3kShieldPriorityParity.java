@@ -4,8 +4,6 @@ import com.openggf.game.ShieldType;
 import com.openggf.tests.TestablePlayableSprite;
 import org.junit.jupiter.api.Test;
 
-import java.lang.reflect.Field;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class TestS3kShieldPriorityParity {
@@ -50,10 +48,12 @@ class TestS3kShieldPriorityParity {
     }
 
     private static void setCurrentMappingFrame(Object shield, int frame) throws Exception {
-        Field field = shield.getClass().getDeclaredField("currentMappingFrame");
+        var field = shield.getClass().getDeclaredField("animationLifecycle");
         field.setAccessible(true);
-        field.setInt(shield, frame);
+        ShieldAnimationArtLifecycle lifecycle = (ShieldAnimationArtLifecycle) field.get(shield);
+        ShieldAnimationArtLifecycle.RewindState state = lifecycle.captureRewindStateValue();
+        lifecycle.restoreRewindStateValue(new ShieldAnimationArtLifecycle.RewindState(
+                state.animationId(), state.frameIndex(), state.delayCounter(), frame));
     }
 }
-
 
