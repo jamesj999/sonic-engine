@@ -10,6 +10,8 @@ import org.junit.jupiter.api.Test;
 import static com.openggf.level.scroll.M68KMath.VISIBLE_LINES;
 import static com.openggf.level.scroll.M68KMath.unpackBG;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -38,6 +40,23 @@ class SwScrlHpzTest {
         assertNotNull(handler);
         assertTrue(handler instanceof SwScrlHpz,
                 "HPZ should not use the generic S3K fallback scroll handler");
+    }
+
+    @Test
+    void giantRingDestinationUsesSanctuaryScrollButBossActKeepsFallback() throws Exception {
+        Sonic3kScrollHandlerProvider provider = new Sonic3kScrollHandlerProvider();
+        provider.load(new Rom());
+        ZoneScrollHandler handler = provider.getHandler(Sonic3kZoneIds.ZONE_DEZ_BOSS_SS_ARENA);
+        assertSame(provider.getHandler(Sonic3kZoneIds.ZONE_HPZ), handler);
+        int[] actual = new int[VISIBLE_LINES];
+        int[] expected = new int[VISIBLE_LINES];
+        SwScrlS3kDefault fallback = new SwScrlS3kDefault();
+        handler.update(actual, SANCTUARY_CAMERA_X, SANCTUARY_CAMERA_Y, 0, 1);
+        assertEquals((short) 0x0096, handler.getVscrollFactorBG());
+        handler.update(actual, 0x160, 0x240, 0, 0);
+        fallback.update(expected, 0x160, 0x240, 0, 0);
+        assertArrayEquals(expected, actual);
+        assertEquals(fallback.getVscrollFactorBG(), handler.getVscrollFactorBG());
     }
 
     /**

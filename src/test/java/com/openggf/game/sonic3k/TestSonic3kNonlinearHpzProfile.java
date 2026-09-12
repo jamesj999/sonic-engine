@@ -112,6 +112,22 @@ class TestSonic3kNonlinearHpzProfile {
     }
 
     @Test
+    void giantRingDestinationSelectsTheCompleteSanctuaryProfile() {
+        var profile = Sonic3kLevelResourceProfile.resolve(
+                Sonic3kZoneIds.ZONE_DEZ_BOSS_SS_ARENA, 1);
+        assertEquals(Sonic3kLevelResourceProfile.resolve(Sonic3kZoneIds.ZONE_HPZ, 1),
+                profile);
+        Sonic3kLevelEventManager events = new Sonic3kLevelEventManager();
+        events.initLevel(Sonic3kZoneIds.ZONE_DEZ_BOSS_SS_ARENA, 1);
+        assertEquals(Sonic3kLevelEventManager.ScreenEventIdentity.HPZ_SPECIAL_STAGE_HUB,
+                events.getScreenEventIdentity());
+        assertEquals(Sonic3kLevelResourceProfile.EventKind.STANDARD,
+                Sonic3kLevelResourceProfile.resolve(
+                        Sonic3kZoneIds.ZONE_DEZ_BOSS_SS_ARENA, 0).eventKind(),
+                "the paired Death Egg boss act is not the sanctuary");
+    }
+
+    @Test
     void ordinaryLevelsRetainLinearRomProfile() {
         Sonic3kLevelResourceProfile profile =
                 Sonic3kLevelResourceProfile.resolve(Sonic3kZoneIds.ZONE_MHZ, 0);

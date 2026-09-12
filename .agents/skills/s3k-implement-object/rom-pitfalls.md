@@ -4578,3 +4578,13 @@ Plane A and restore the hidden rows before disabling the window. See
 `docs/architecture/audits/2026-09-09-lbz2-ending-sequence.md` and the pixel test
 `TestForegroundWindowRendering`. The rendering principle also applies to S1/S2
 scenes that use the hardware window.
+
+## Sanctuary routes must exercise the ROM destination, not only an engine alias
+
+`SSEntryFlash_GoSS` / `loc_618AC` writes `$1701` before restarting the level.
+The engine also exposes the sanctuary through its legacy `$1601` alias. A
+headless test loading only the alias can pass while giant-ring entry has no
+controller, emeralds, custom palette, camera setup, or background handler.
+`ScreenEvents` dispatches `$1701` to `HPZS_*`; connect the resource profile
+and stock object factories to that destination and test both entry identities.
+Keep the paired `$1700` Death Egg boss act outside the sanctuary profile.

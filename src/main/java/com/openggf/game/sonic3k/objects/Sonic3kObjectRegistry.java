@@ -1455,6 +1455,18 @@ public class Sonic3kObjectRegistry extends AbstractObjectRegistry {
                 S3kZoneSet.SKL, Sonic3kZoneIds.ZONE_HPZ,
                 (spawn, registry) -> new HPZSSEntryControlObjectInstance(spawn));
 
+        // Obj_HPZSSEntryControl and its children belong to the $1701
+        // sanctuary reached by SSEntryFlash_GoSS, as well as its engine alias.
+        registerStockRomZoneBound(Sonic3kObjectIds.HPZ_MASTER_EMERALD,
+                S3kZoneSet.SKL, Sonic3kZoneIds.ZONE_DEZ_BOSS_SS_ARENA,
+                (spawn, registry) -> new HPZMasterEmeraldObjectInstance(spawn));
+        registerStockRomZoneBound(Sonic3kObjectIds.HPZ_SUPER_EMERALD,
+                S3kZoneSet.SKL, Sonic3kZoneIds.ZONE_DEZ_BOSS_SS_ARENA,
+                (spawn, registry) -> new HPZSuperEmeraldObjectInstance(spawn));
+        registerStockRomZoneBound(Sonic3kObjectIds.HPZ_SS_ENTRY_CONTROL,
+                S3kZoneSet.SKL, Sonic3kZoneIds.ZONE_DEZ_BOSS_SS_ARENA,
+                (spawn, registry) -> new HPZSSEntryControlObjectInstance(spawn));
+
         factories.forEach(this::registerSetOnly);
     }
 

@@ -86,10 +86,12 @@ public record Sonic3kLevelResourceProfile(
                     Optional.of(HPZ_RESOURCES));
 
     public static Sonic3kLevelResourceProfile resolve(int canonicalZone, int canonicalAct) {
-        if (canonicalZone == Sonic3kZoneIds.ZONE_HPZ) {
-            if (canonicalAct == 1) {
-                return HPZ_SANCTUARY;
-            }
+        // SSEntryFlash_GoSS / loc_618AC restarts into $1701. Retain
+        // $1601 as the existing engine sanctuary alias. Both must select
+        // the same resources and HPZS screen-event dispatch.
+        if (canonicalAct == 1 && (canonicalZone == Sonic3kZoneIds.ZONE_HPZ
+                || canonicalZone == Sonic3kZoneIds.ZONE_DEZ_BOSS_SS_ARENA)) {
+            return HPZ_SANCTUARY;
         }
         return new Sonic3kLevelResourceProfile(
                 canonicalZone, canonicalAct, S3kZoneSet.forZone(canonicalZone),

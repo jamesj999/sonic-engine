@@ -26,7 +26,9 @@ campaigns; feature/API publication remains subject to the 0.8 roadmap.
   800x224 remains exploratory.
 - **S3K campaign work:** the promoted development baseline includes further MHZ
   and FBZ work, LBZ Big Arm, Super Emerald sanctuary/progression, and powered
-  effects. Complete routes, finales, and continuous replay chains remain gates.
+  effects. Giant-ring sanctuary entry uses the same emerald ceremony, palette,
+  camera, and background setup as direct sanctuary loading. Complete routes,
+  finales, and continuous replay chains remain gates.
 
 ## Development features carried forward
 

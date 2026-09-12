@@ -1228,6 +1228,13 @@ divergence.
 
 ## HPZ Sanctuary Background: Screen Shake and Two-Band Plane Fill Not Modelled
 
+The giant-ring destination `$1701` now selects the same sanctuary resource,
+object, palette, camera, and scroll paths as the legacy engine alias `$1601`.
+A routing regression had left the real destination on ordinary level defaults,
+without its controller or seven emerald pedestals. ROM-backed lifecycle tests
+exercise both destinations through the ceremony and pedestal traversal.
+The rendering limitations below remain separate from that restored routing.
+
 `SwScrlHpz` ports `HPZ_BackgroundInit` / `HPZ_BackgroundEvent` and their shared
 scroll math at `loc_5A33C` (sonic3k.asm:120069-120280). Two parts of the ROM
 routine are deliberately not carried over.
