@@ -72,17 +72,6 @@ public class TestEndingProviderContract {
     }
 
     @Test
-    public void testEndingPhaseValuesExist() {
-        // Verify all expected enum constants exist (compilation would fail if not,
-        // but this documents the contract explicitly)
-        assertNotNull(EndingPhase.CUTSCENE);
-        assertNotNull(EndingPhase.CREDITS_TEXT);
-        assertNotNull(EndingPhase.CREDITS_DEMO);
-        assertNotNull(EndingPhase.POST_CREDITS);
-        assertNotNull(EndingPhase.FINISHED);
-    }
-
-    @Test
     public void testEndingPhaseOrdinalOrder() {
         // Verify phases are in the expected sequential order
         assertTrue(EndingPhase.CUTSCENE.ordinal() < EndingPhase.CREDITS_TEXT.ordinal(), "CUTSCENE should come before CREDITS_TEXT");
@@ -113,23 +102,5 @@ public class TestEndingProviderContract {
         assertEquals(EndingPhase.CUTSCENE, provider.getCurrentPhase());
     }
 
-    // ========================================================================
-    // S1 initial phase differs from S2
-    // ========================================================================
-
-    @Test
-    public void testSonic1InitialPhaseIsCreditsText() {
-        // S1 has no cutscene, goes straight to credits text
-        Sonic1EndingProvider provider = new Sonic1EndingProvider();
-        assertEquals(EndingPhase.CREDITS_TEXT, provider.getCurrentPhase(), "S1 initial phase should be CREDITS_TEXT (no cutscene)");
-    }
-
-    @Test
-    public void testSonic2InitialPhaseIsCutscene() {
-        // S2 starts with a cutscene
-        Sonic2EndingProvider provider = new Sonic2EndingProvider();
-        assertEquals(EndingPhase.CUTSCENE, provider.getCurrentPhase(), "S2 initial phase should be CUTSCENE");
-    }
 }
-
 

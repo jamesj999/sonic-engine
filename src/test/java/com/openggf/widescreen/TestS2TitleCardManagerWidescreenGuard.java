@@ -11,8 +11,8 @@ import org.junit.jupiter.api.Test;
 /**
  * White-box guard for S2 title-card widescreen wiring.
  *
- * <p>The pure arithmetic tests cover the intended behavior, but a later merge
- * dropped the actual TitleCardManager calls while leaving those tests green.
+ * <p>A previous merge dropped the actual TitleCardManager calls while tests
+ * of copied arithmetic stayed green. Those arithmetic-only tests were retired.
  * This guard pins the manager to the viewport-aware helpers and edge-margin
  * plumbing that keep the 320-space composition centered and fully clearable.
  */

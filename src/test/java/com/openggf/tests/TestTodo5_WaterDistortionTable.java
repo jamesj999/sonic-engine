@@ -1,6 +1,5 @@
 package com.openggf.tests;
 
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import com.openggf.data.Rom;
 import com.openggf.game.GameServices;
@@ -12,12 +11,11 @@ import java.io.IOException;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * TODO #5 coverage: WaterSystem.getDistortionTable() uses a generated sine wave
- * instead of the ROM's SwScrl_RippleData lookup table.
+ * Verifies WaterSystem.getDistortionTable() matches the ROM's
+ * SwScrl_RippleData lookup table.
  * <p>
  * The original ROM uses a hand-tuned ripple table (not a mathematical sine wave)
  * with values 0-3 representing horizontal pixel offsets per scanline.
@@ -70,24 +68,7 @@ public class TestTodo5_WaterDistortionTable {
     }
 
     /**
-     * Verify the engine's generated distortion table is non-null and has expected size.
-     * The current implementation is a placeholder sine wave.
-     */
-    @Test
-    public void testGeneratedDistortionTableProperties() {
-        WaterSystem waterSystem = GameServices.water();
-        int[] table = waterSystem.getDistortionTable();
-        assertNotNull(table, "Distortion table should not be null");
-        assertEquals(66, table.length, "Distortion table should be 66 entries");
-    }
-
-    /**
-     * Verify the engine's generated distortion table does NOT match the ROM data.
-     * This documents that TODO #5 is not yet implemented - the engine uses a
-     * generated sine wave instead of the ROM's hand-tuned ripple table.
-     * <p>
-     * When TODO #5 is implemented, this test should be updated to verify the
-     * engine's table matches the ROM data.
+     * Verify the engine's complete distortion table matches the ROM ripple data.
      */
     @Test
     public void testDistortionTableMatchesRom() {
@@ -95,9 +76,6 @@ public class TestTodo5_WaterDistortionTable {
         int[] engineTable = waterSystem.getDistortionTable();
 
         // The ROM ripple data has 66 entries with values 0-3.
-        // The engine table has 64 entries with values generated from sin().
-        // When implemented, the engine should use the ROM's 66-byte table directly.
-        assertEquals(EXPECTED_RIPPLE_DATA.length, engineTable.length, "Table size should match ROM ripple data");
         assertArrayEquals(EXPECTED_RIPPLE_DATA, engineTable, "Engine distortion should match ROM ripple data");
     }
 
@@ -141,5 +119,4 @@ public class TestTodo5_WaterDistortionTable {
         return -1;
     }
 }
-
 

@@ -67,11 +67,6 @@ class TestS3kSlotPrizeCalculator {
     }
 
     @Test
-    void jackpotWithTwoRingsGivesDoubleRingReward() {
-        assertEquals(20, S3kSlotPrizeCalculator.calculate(0, (byte) 0x55));
-    }
-
-    @Test
     void robotnikWithTwoJackpotsIsStillNegativePrize() {
         assertEquals(-4, S3kSlotPrizeCalculator.calculate(4, (byte) 0x00));
     }

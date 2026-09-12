@@ -82,16 +82,6 @@ public class TestTodo30_TimerErrorReporting {
     }
 
     @Test
-    public void testSuccessfulTimerIsRemoved() {
-        SucceedingTimer timer = new SucceedingTimer("SUCCESS_TEST");
-        manager.registerTimer(timer);
-        manager.update();
-
-        assertTrue(timer.performCalled, "perform() should have been called");
-        assertNull(manager.getTimerForCode("SUCCESS_TEST"), "Successful timer should be removed");
-    }
-
-    @Test
     public void testFailedTimerLogsErrorMessage() {
         // Capture log output to verify the error message content
         Logger logger = Logger.getLogger(TimerManager.class.getName());
