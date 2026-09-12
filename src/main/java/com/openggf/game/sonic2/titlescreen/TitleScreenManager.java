@@ -283,6 +283,7 @@ public class TitleScreenManager implements TitleScreenProvider {
     private int flashingStarAnimDuration = 0;
     private int flashingStarPosIndex = 0;
     private int flashingStarWaitCounter = 0;
+    private boolean flashingStarVisible = false;
 
     // Falling star
     private int fallingStarAnimFrame = 0;
@@ -356,6 +357,7 @@ public class TitleScreenManager implements TitleScreenProvider {
         flashingStarAnimDuration = 0;
         flashingStarPosIndex = 0;
         flashingStarWaitCounter = 0;
+        flashingStarVisible = false;
         fallingStarAnimFrame = 0;
         fallingStarAnimDuration = 0;
         fallingStarLifetime = 0;
@@ -798,19 +800,21 @@ public class TitleScreenManager implements TitleScreenProvider {
     }
 
     private void updateFlashingStar() {
+        // Obj0E only submits DisplaySprite from Animate, never from Wait or Move.
+        // Capture the dispatched routine: $FA still displays on its transition update.
+        flashingStarVisible = false;
         switch (flashingStarSubState) {
             case 0 -> { // Animate (sparkle cycle)
-                flashingStarAnimDuration++;
-                if (flashingStarAnimDuration > 1) { // duration = 1 (2 frames per step)
-                    flashingStarAnimDuration = 0;
-                    flashingStarAnimFrame++;
+                flashingStarVisible = true;
+                // AnimateSprite decrements before testing, selecting frame zero immediately.
+                if (--flashingStarAnimDuration < 0) {
+                    flashingStarAnimDuration = 1;
                     if (flashingStarAnimFrame >= ANIM_FLASHING_STAR.length) {
                         // Animation complete ($FA terminator) - advance to Wait sub-state.
                         // Wait counter was already set by Init (4) or Move (6).
                         flashingStarSubState = 1;
-                        flashingStarAnimFrame = 0;
                     } else {
-                        flashingStarSprite.mappingFrame = ANIM_FLASHING_STAR[flashingStarAnimFrame];
+                        flashingStarSprite.mappingFrame = ANIM_FLASHING_STAR[flashingStarAnimFrame++];
                     }
                 }
             }
@@ -821,9 +825,8 @@ public class TitleScreenManager implements TitleScreenProvider {
                 }
             }
             case 2 -> { // Move to next position
-                // From disasm: Obj0E_FlashingStar_Move reads position THEN increments index.
-                // addq.w #4,d0 / cmpi.w #$24,d0 / lea Positions-4(pc,d0.w),a1
-                // First call: d0=0→4, reads Positions[0]. Ninth call: d0=32→36, 36>=$24 → delete.
+                // Obj0E_FlashingStar_Move advances the byte offset then reads Positions-4.
+                // All nine table entries are visited before the next Move deletes the object.
                 if (flashingStarPosIndex >= FLASHING_STAR_POSITIONS.length) {
                     // All positions visited, delete star
                     flashingStarSprite.active = false;
@@ -1091,7 +1094,7 @@ public class TitleScreenManager implements TitleScreenProvider {
                 drawSprite(tailsHandSprite);
             }
 
-            if (flashingStarSprite.active) {
+            if (isFlashingStarVisible()) {
                 drawSprite(flashingStarSprite);
             }
         }
@@ -1773,6 +1776,10 @@ public class TitleScreenManager implements TitleScreenProvider {
         }
     }
 
+    boolean isFlashingStarVisible() {
+        return flashingStarSprite.active && flashingStarVisible;
+    }
+
     /**
      * Plays the sparkle sound for a specific index (0=init, 1-9=star positions).
      * Each index can only play once per title screen session, preventing any
@@ -1796,6 +1803,7 @@ public class TitleScreenManager implements TitleScreenProvider {
     public void reset() {
         GameServices.audio().stopSegaPcm();
         state = State.INACTIVE;
+        flashingStarVisible = false;
         cameraX = -0x280;
         frameCounter = 0;
         fadeTimer = 0;
