@@ -1,6 +1,7 @@
 package com.openggf.game.timeattack;
 
 import org.junit.jupiter.api.Test;
+import com.openggf.control.*;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
@@ -14,6 +15,21 @@ import static org.junit.jupiter.api.Assertions.*;
  * simulation needed since the row-navigation/adjust/go methods are public).
  */
 class TestTimeAttackMenuState {
+
+    @Test
+    void controllerBackDoesNotQueueOrDispatchLaunch(@TempDir Path root) {
+        java.util.concurrent.atomic.AtomicInteger launches = new java.util.concurrent.atomic.AtomicInteger();
+        TimeAttackMenu menu = new TimeAttackMenu(List.of("s2"), "s2", new GhostStore(root), null,
+                request -> launches.incrementAndGet());
+        InputHandler input = new InputHandler();
+        input.setLogicalOverride(LogicalInputSnapshot.ofPlayers(
+                PlayerInputState.of(0, 0, InputActionMasks.ACTION_C, InputActionMasks.ACTION_C, false, false),
+                PlayerInputState.neutral()));
+        menu.update(input);
+        assertTrue(menu.consumeCloseRequested());
+        assertEquals(0, launches.get());
+        assertNull(menu.state().consumeLaunchRequest());
+    }
 
     @Test
     void startsOnRequestedGameAndFirstTrack(@TempDir Path root) {
@@ -103,4 +119,37 @@ class TestTimeAttackMenuState {
         TimeAttackMenuState state = new TimeAttackMenuState(List.of("s3k"), "s3k", new GhostStore(root));
         assertFalse(state.consumeCloseRequested());
     }
+    @Test
+    void soloAndJoinNavigationSkipHiddenHostSettings(@TempDir Path root) {
+        TimeAttackMenuState state = new TimeAttackMenuState(List.of("s2"), "s2", new GhostStore(root));
+        state.moveFocus(-1);
+        assertEquals(TimeAttackMenuState.Row.MODE, state.focusedRow());
+        state.adjust(2); // JOIN_LAN
+        state.moveFocus(1);
+        assertEquals(TimeAttackMenuState.Row.GAME, state.focusedRow());
+        state.moveFocus(-1);
+        state.adjust(-1); // HOST_LAN
+        state.moveFocus(1);
+        assertEquals(TimeAttackMenuState.Row.POLICY, state.focusedRow());
+    }
+
+    @Test
+    void launchNeedsTheVisibleStartRow(@TempDir Path root) {
+        java.util.concurrent.atomic.AtomicInteger launches = new java.util.concurrent.atomic.AtomicInteger();
+        TimeAttackMenu menu = new TimeAttackMenu(List.of("s2"), "s2", new GhostStore(root), null,
+                request -> launches.incrementAndGet());
+        InputHandler input = new InputHandler();
+        for (int i = 0; i < 4; i++) press(menu, input, org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER);
+        assertEquals(0, launches.get(), "Field selection must not launch a run");
+        press(menu, input, org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER);
+        assertEquals(1, launches.get());
+    }
+
+    private static void press(TimeAttackMenu menu, InputHandler input, int key) {
+        input.handleKeyEvent(key, org.lwjgl.glfw.GLFW.GLFW_PRESS);
+        menu.update(input); input.update();
+        input.handleKeyEvent(key, org.lwjgl.glfw.GLFW.GLFW_RELEASE);
+        menu.update(input); input.update();
+    }
+
 }

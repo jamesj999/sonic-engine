@@ -45,8 +45,9 @@ class TestMasterTitleScreenAudio {
 
         MasterTitleScreen missingRomScreen = activeScreen(false);
         pressFrame(missingRomScreen, input, GLFW_KEY_ENTER);
+        pressFrame(missingRomScreen, input, GLFW_KEY_ENTER);
 
-        assertEquals(List.of("UI_NAVIGATE", "UI_CONFIRM", "UI_ERROR"),
+        assertEquals(List.of("UI_NAVIGATE", "UI_NAVIGATE", "UI_CONFIRM", "UI_NAVIGATE", "UI_ERROR"),
                 emittedSfxNames());
     }
 
@@ -87,6 +88,7 @@ class TestMasterTitleScreenAudio {
         screen.update(input);
         input.handleKeyEvent(key, GLFW_RELEASE);
         input.update();
+        screen.update(input);
     }
 
     private List<String> emittedSfxNames() {

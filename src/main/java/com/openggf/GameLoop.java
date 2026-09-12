@@ -1207,7 +1207,8 @@ public class GameLoop {
         if (paletteRegistry != null) {
             paletteRegistry.beginFrame();
         }
-        playbackDebugManager.handleInput(inputHandler);
+        com.openggf.game.TitleInputOwnership.routePlayback(currentGameMode,
+                () -> playbackDebugManager.handleInput(inputHandler));
         playbackDebugManager.setObservedMode(currentGameMode);
 
         if (RewindReleaseRetryCoordinator.consumePendingFrame(liveRewindManager, inputHandler)) return;

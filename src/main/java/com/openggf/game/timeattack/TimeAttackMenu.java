@@ -1,7 +1,10 @@
 package com.openggf.game.timeattack;
 
 import com.openggf.control.InputHandler;
+import com.openggf.control.MenuInput;
 import com.openggf.graphics.PixelFont;
+import com.openggf.game.MenuStyle;
+import com.openggf.game.MenuTextEditor;
 import com.openggf.game.timeattack.mp.MenuTextField;
 
 import java.util.List;
@@ -16,12 +19,12 @@ import java.util.Objects;
  */
 @com.openggf.game.ModApi
 public final class TimeAttackMenu {
-    private static final float SCALE = 0.5f;
-    private static final int LINE_HEIGHT = 12;
-    private static final int TOP_Y = 20;
+    private int focus;
+    private MenuTextEditor editor;
 
     private final TimeAttackMenuState state;
     private final PixelFont font;
+    private InputHandler menuInput;
     private final LaunchStarter launchStarter;
     private final MenuTextField joinAddress = new MenuTextField(64, ".:-");
     private NetworkStarter networkStarter = NetworkStarter.NONE;
@@ -34,10 +37,32 @@ public final class TimeAttackMenu {
     }
 
     public void update(InputHandler input) {
-        if (state.mode() == TimeAttackMenuState.Mode.JOIN_LAN) {
-            joinAddress.poll(input);
+        menuInput = input;
+        if (editor != null) {
+            editor.update(input);
+            switch (editor.consumeResult()) {
+                case ACCEPTED -> { joinAddress.setText(editor.value()); editor = null; }
+                case CANCELLED -> editor = null;
+                case NONE -> { }
+            }
+            return;
         }
-        state.update(input);
+        if (MenuInput.back(input)) { state.update(input); return; }
+        int count = state.visibleRows().size();
+        int go = count + (state.mode() == TimeAttackMenuState.Mode.JOIN_LAN ? 1 : 0);
+        if (MenuInput.up(input)) focus = Math.floorMod(focus - 1, go + 1);
+        if (MenuInput.down(input)) focus = (focus + 1) % (go + 1);
+        if (focus < count) {
+            while (state.focusedRow() != state.visibleRows().get(focus)) state.moveFocus(1);
+            if (MenuInput.left(input)) state.adjust(-1);
+            if (MenuInput.right(input)) state.adjust(1);
+        }
+        if (MenuInput.accept(input)) {
+            if (focus == go) state.pressGo();
+            else if (focus == count && state.mode() == TimeAttackMenuState.Mode.JOIN_LAN)
+                editor = new MenuTextEditor("JOIN ADDRESS", joinAddress.text(), 64);
+            else focus = Math.min(focus + 1, go);
+        }
         TimeAttackLaunchRequest request = state.consumeLaunchRequest();
         if (request != null) {
             switch (state.mode()) {
@@ -51,64 +76,51 @@ public final class TimeAttackMenu {
         }
     }
 
+    private String confirmHint() { return menuInput == null ? "Enter" : MenuInput.confirmLabel(menuInput); }
+    private String backHint() { return menuInput == null ? "Esc" : MenuInput.backLabel(menuInput); }
+
     public void render() {
-        if (font == null) {
-            return;
+        if (font == null) return;
+        if (editor != null) { editor.render(font, 320); return; }
+        MenuStyle.page(font, 320, "TIME ATTACK", "Choose a route and race mode");
+        int index = 0;
+        for (TimeAttackMenuState.Row row : state.visibleRows()) {
+            String label;
+            String value;
+            switch (row) {
+                case GAME -> { label = "Game"; value = state.currentGameId().toUpperCase(); }
+                case TRACK -> { label = "Track"; value = state.currentTrack() == null ? "No tracks" : state.currentTrack().label(); }
+                case CHARACTER -> { label = "Character"; value = state.currentCharacter() == null ? "None" : state.currentCharacter().toUpperCase(); }
+                case MODE -> { label = "Mode"; value = state.mode().name().replace('_', ' '); }
+                case POLICY -> { label = "Policy"; value = state.characterPolicy().equals("OPEN") ? "OPEN" : "LOCKED " + state.currentCharacter().toUpperCase(); }
+                case WINDOW -> { label = "Window"; value = (state.windowSeconds() / 60) + " minutes"; }
+                default -> throw new IllegalStateException("Unexpected row " + row);
+            }
+            drawRow(label, value, index++, false);
         }
-        font.beginMegaBatch();
-        try {
-            renderContents();
-        } finally {
-            font.endMegaBatch();
-        }
+        if (state.mode() == TimeAttackMenuState.Mode.JOIN_LAN)
+            drawRow("Address", joinAddress.text().isBlank() ? "Select to enter" : joinAddress.text(), index++, true);
+        String action = switch (state.mode()) {
+            case SOLO -> "START RUN";
+            case HOST_LAN -> "CREATE LAN ROOM";
+            case JOIN_LAN -> "JOIN LAN ROOM";
+            case BROWSE -> "BROWSE ROOMS";
+        };
+        int actionY = 47 + index * 18;
+        if (focus == index) MenuStyle.focus(font, 8, actionY - 3, 304, 16);
+        MenuStyle.label(font, action, 14, actionY, 292, 1, 1, 1);
+        MenuStyle.text(font, (state.bestExists() ? "Best: saved" : "Best: none")
+                + " / Imported ghosts: " + state.importCount(), 10, 181, 300, .7f, .8f, .9f);
+        MenuStyle.footer(font, 320, "Up/Down Select  Left/Right Change",
+                confirmHint() + " " + (focus == index ? "Go" : "Select") + "  " + backHint() + " Back");
     }
 
-    private void renderContents() {
-        font.drawText("TIME ATTACK", 8, 6, SCALE, 1f, 1f, 1f, 1f);
-
-        int y = TOP_Y;
-        y = drawRow("Game", state.currentGameId().toUpperCase(), TimeAttackMenuState.Row.GAME, y);
-
-        TimeAttackTrackCatalog.Track track = state.currentTrack();
-        String trackLabel = track == null ? "(no tracks)" : track.label();
-        y = drawRow("Track", trackLabel, TimeAttackMenuState.Row.TRACK, y);
-
-        String character = state.currentCharacter();
-        String characterLabel = character == null ? "(none)" : character.toUpperCase();
-        y = drawRow("Character", characterLabel, TimeAttackMenuState.Row.CHARACTER, y);
-        y = drawRow("Mode", state.mode().name().replace('_', ' '),
-                TimeAttackMenuState.Row.MODE, y);
-        if (state.mode() == TimeAttackMenuState.Mode.HOST_LAN
-                || state.mode() == TimeAttackMenuState.Mode.BROWSE) {
-            String policy = state.characterPolicy().equals("OPEN") ? "OPEN"
-                    : "LOCKED " + characterLabel;
-            y = drawRow("Policy", policy, TimeAttackMenuState.Row.POLICY, y);
-            y = drawRow("Window", (state.windowSeconds() / 60) + " min",
-                    TimeAttackMenuState.Row.WINDOW, y);
-        } else if (state.mode() == TimeAttackMenuState.Mode.JOIN_LAN) {
-            font.drawText("  Join: " + joinAddress.text() + "_", 12, y, SCALE,
-                    1f, 1f, 1f, 1f);
-            y += LINE_HEIGHT;
-        }
-
-        y += LINE_HEIGHT;
-        String bestLine = state.bestExists() ? "Best: saved" : "Best: none yet";
-        font.drawText(bestLine, 12, y, SCALE, 0.85f, 0.85f, 0.85f, 1f);
-        y += LINE_HEIGHT;
-        font.drawText(state.importCount() + " imported ghost(s) available", 12, y, SCALE,
-                0.85f, 0.85f, 0.85f, 1f);
-
-        y += LINE_HEIGHT;
-        font.drawText("Enter GO   Esc Back   Up/Down Select   Left/Right Change", 8, y, SCALE,
-                0.65f, 0.65f, 0.65f, 1f);
-    }
-
-    private int drawRow(String rowName, String value, TimeAttackMenuState.Row row, int y) {
-        boolean focused = state.focusedRow() == row;
-        float brightness = focused ? 1f : 0.62f;
-        String prefix = focused ? "> " : "  ";
-        font.drawText(prefix + rowName + ": " + value, 12, y, SCALE, brightness, brightness, brightness, 1f);
-        return y + LINE_HEIGHT;
+    private void drawRow(String label, String value, int index, boolean edit) {
+        int y = 47 + index * 18;
+        if (focus == index) MenuStyle.focus(font, 8, y - 3, 304, 17);
+        MenuStyle.label(font, label, 14, y, 81, .7f, .8f, .9f);
+        MenuStyle.label(font, (edit ? "" : "< ") + value + (edit ? "" : " >"),
+                112, y, 198, 1, 1, 1);
     }
 
     public boolean consumeCloseRequested() {

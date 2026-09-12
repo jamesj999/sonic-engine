@@ -148,6 +148,7 @@ class TraceReplaySessionBootstrapConfigTest {
 
     @Test
     void traceConfigurationUsesNativeViewportAndRecordedTeamThenRestoresAspect() throws Exception {
+        config.setConfigValue(SonicConfiguration.TEST_MODE_ENABLED, false);
         config.setConfigValue(SonicConfiguration.DISPLAY_ASPECT, "WIDE_16_9");
         config.setConfigValue(SonicConfiguration.MAIN_CHARACTER_CODE, "knuckles");
         config.setConfigValue(SonicConfiguration.SIDEKICK_CHARACTER_CODE, "");

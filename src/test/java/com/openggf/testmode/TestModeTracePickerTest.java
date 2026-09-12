@@ -1,6 +1,8 @@
 package com.openggf.testmode;
 
 import com.openggf.game.save.SelectedTeam;
+import com.openggf.control.*;
+import com.openggf.sprites.playable.AbstractPlayableSprite;
 import com.openggf.trace.TraceMetadata;
 import com.openggf.trace.catalog.TraceEntry;
 import org.junit.jupiter.api.Test;
@@ -17,6 +19,36 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * only exercise the pure navigation logic.
  */
 class TestModeTracePickerTest {
+
+    @Test
+    void controllerNavigatesAndBackDoesNotArmLaunch() {
+        TestModeTracePicker picker = new TestModeTracePicker(entries("s1", "s2"), null);
+        InputHandler input = new InputHandler();
+        input.setLogicalOverride(LogicalInputSnapshot.ofPlayers(
+                PlayerInputState.of(AbstractPlayableSprite.INPUT_DOWN, AbstractPlayableSprite.INPUT_DOWN,
+                        0, 0, false, false), PlayerInputState.neutral()));
+        picker.update(input);
+        assertEquals("s2", picker.selectedEntry().gameId());
+        input.setLogicalOverride(LogicalInputSnapshot.ofPlayers(
+                PlayerInputState.of(0, 0, InputActionMasks.ACTION_C, InputActionMasks.ACTION_C, false, false),
+                PlayerInputState.neutral()));
+        picker.update(input);
+        assertEquals(TestModeTracePicker.Result.BACK, picker.consumeResult());
+        input.setLogicalOverride(LogicalInputSnapshot.neutral());
+        picker.update(input);
+        assertEquals(TestModeTracePicker.Result.NONE, picker.consumeResult());
+    }
+
+    @Test
+    void emptyPickerCanBeClosedWithControllerBack() {
+        TestModeTracePicker picker = new TestModeTracePicker(List.of(), null);
+        InputHandler input = new InputHandler();
+        input.setLogicalOverride(LogicalInputSnapshot.ofPlayers(
+                PlayerInputState.of(0, 0, InputActionMasks.ACTION_C, InputActionMasks.ACTION_C, false, false),
+                PlayerInputState.neutral()));
+        picker.update(input);
+        assertEquals(TestModeTracePicker.Result.BACK, picker.consumeResult());
+    }
 
     @Test
     void nextGroupStartJumpsAcrossGames() {

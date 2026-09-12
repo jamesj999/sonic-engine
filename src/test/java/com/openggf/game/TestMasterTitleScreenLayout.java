@@ -392,7 +392,7 @@ class TestMasterTitleScreenLayout {
     }
 
     @Test
-    void closingLaunchPanelSavesAndReturnsToNormalMasterTitleInput() {
+    void cancellingLaunchPanelDoesNotSaveAndReturnsToNormalMasterTitleInput() {
         SonicConfigurationService config = SonicConfigurationService.createStandalone(tempDir);
         TrackingStore store = new TrackingStore(config);
         MasterTitleScreen screen = new MasterTitleScreen(config, store);
@@ -404,8 +404,10 @@ class TestMasterTitleScreenLayout {
         pressFrame(screen, input, GLFW_KEY_ESCAPE);
 
         assertFalse(screen.isLaunchConfigPanelOpenForTest());
-        assertEquals(1, store.saved.size());
+        assertEquals(0, store.saved.size());
 
+        pressFrame(screen, input, GLFW_KEY_ENTER);
+        assertFalse(screen.isGameSelected());
         pressFrame(screen, input, GLFW_KEY_ENTER);
         assertTrue(screen.isGameSelected());
         assertFalse(screen.isProgrammaticSelection());
@@ -426,13 +428,19 @@ class TestMasterTitleScreenLayout {
     }
 
     @Test
-    void logicalMenuAcceptConfirmsActiveGameSelection() {
+    void logicalBackDoesNotConfirmAndAcceptRequiresEnteringActions() {
         MasterTitleScreen screen = activeScreen();
         InputHandler input = new InputHandler();
-
         input.setLogicalOverride(logicalPress(0, InputActionMasks.ACTION_C, false));
         screen.update(input);
-
+        assertFalse(screen.isGameSelected());
+        input.setLogicalOverride(logicalPress(0, InputActionMasks.ACTION_A, false));
+        screen.update(input);
+        assertFalse(screen.isGameSelected());
+        input.setLogicalOverride(LogicalInputSnapshot.neutral());
+        screen.update(input);
+        input.setLogicalOverride(logicalPress(0, InputActionMasks.ACTION_A, false));
+        screen.update(input);
         assertTrue(screen.isGameSelected());
         assertFalse(screen.isProgrammaticSelection());
     }
@@ -460,6 +468,7 @@ class TestMasterTitleScreenLayout {
         screen.update(input);
         input.handleKeyEvent(key, GLFW_RELEASE);
         input.update();
+        screen.update(input);
     }
 
     private static boolean[] buttons(int... pressedButtons) {

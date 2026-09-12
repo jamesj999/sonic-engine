@@ -18,12 +18,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER;
-import static org.mockito.ArgumentMatchers.anyFloat;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.lwjgl.glfw.GLFW.GLFW_PRESS;
+import static org.lwjgl.glfw.GLFW.GLFW_KEY_RIGHT;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.mockingDetails;
 
 class TestModeTracePickerLaunchStatus {
 
@@ -51,7 +50,7 @@ class TestModeTracePickerLaunchStatus {
         verifyText(font, "LOADING TRACE...");
         verifyText(font, "s1/entry");
 
-        picker.update(mock(InputHandler.class));
+        picker.update(new InputHandler());
         assertEquals(TestModeTracePicker.Result.LAUNCH, picker.consumeResult());
     }
 
@@ -84,10 +83,15 @@ class TestModeTracePickerLaunchStatus {
         TestModeTracePicker picker = new TestModeTracePicker(List.of(run), font);
 
         picker.render();
-        verifyText(font, "> RUN s1-complete-run (2 segments)");
+        // The full-size list row may abbreviate its suffix, but the run ID
+        // and segment count must remain identifiable; details retain the full ID.
+        verifyText(font, "> RUN s1-complete-run (2");
+        verifyText(font, "SELECTED: s1/s1-complete-run");
+        clearInvocations(font);
         picker.update(inputWith(GLFW_KEY_ENTER));
         picker.render();
         verifyText(font, "s1/s1-complete-run");
+        clearInvocations(font);
 
         TraceLaunchStatus.record(run, "parser failed");
         picker.launchFailed();
@@ -95,14 +99,54 @@ class TestModeTracePickerLaunchStatus {
         verifyText(font, "Trace: s1/s1-complete-run");
     }
 
+    @Test
+    void longLaunchDiagnosticRemainsCompleteAcrossDetailPages() {
+        String reason = "contract violation ".repeat(40) + "final diagnostic";
+        PixelFont font = mock(PixelFont.class);
+        TestModeTracePicker picker = new TestModeTracePicker(List.of(entry()), font);
+        TraceLaunchStatus.record(entry(), reason);
+        StringBuilder displayedBody = new StringBuilder();
+
+        for (int page = 0; page < 2; page++) {
+            clearInvocations(font);
+            picker.render();
+            mockingDetails(font).getInvocations().stream()
+                    .filter(call -> call.getMethod().getName().equals("drawText"))
+                    .filter(call -> (Integer) call.getArgument(2) >= 67 && (Integer) call.getArgument(2) <= 177)
+                    .forEach(call -> displayedBody.append((String) call.getArgument(0)));
+            picker.update(inputWith(GLFW_KEY_RIGHT));
+        }
+
+        assertTrue(displayedBody.toString().contains("Trace: s1/entry"));
+        assertTrue(displayedBody.toString().contains("Reason: " + reason),
+                "Paging must preserve every diagnostic character, including the final detail");
+        assertTrue(TraceLaunchStatus.current().isPresent(), "Reading another page is not acknowledgement");
+        picker.update(inputWith(GLFW_KEY_ENTER));
+        assertFalse(TraceLaunchStatus.current().isPresent());
+        assertEquals(TestModeTracePicker.Result.NONE, picker.consumeResult());
+    }
+
     private static void verifyText(PixelFont font, String text) {
-        verify(font).drawText(eq(text), anyInt(), anyInt(), anyFloat(),
-                anyFloat(), anyFloat(), anyFloat(), anyFloat());
+        // Wrapping may split a diagnostic mid-word; concatenate actual draw calls
+        // without inserting characters, then ignore differences in whitespace.
+        assertTrue(displayedText(font).contains(normalized(text)),
+                () -> "Missing displayed diagnostic: " + text + " in " + displayedText(font));
+    }
+
+    private static String displayedText(PixelFont font) {
+        return normalized(mockingDetails(font).getInvocations().stream()
+                .filter(call -> call.getMethod().getName().equals("drawText"))
+                .map(call -> (String) call.getArgument(0))
+                .collect(java.util.stream.Collectors.joining()));
+    }
+
+    private static String normalized(String text) {
+        return text.replaceAll("\\s+", " ");
     }
 
     private static InputHandler inputWith(int key) {
-        InputHandler input = mock(InputHandler.class);
-        when(input.isKeyPressedWithoutModifiers(key)).thenReturn(true);
+        InputHandler input = new InputHandler();
+        input.handleKeyEvent(key, GLFW_PRESS);
         return input;
     }
 

@@ -207,12 +207,59 @@ Paths are relative to the working directory (where the JAR is launched).
 
 ## Launch Profiles
 
-The master title screen stores per-game launch defaults under `launch.s1`, `launch.s2`,
-and `launch.s3k`. Select a game on the master title screen and press `Tab` to open the
-launch profile panel; stock games show the hover line `Stock launch - Tab to configure`.
-The panel uses the configured `UP`/`DOWN` bindings to choose a row and the configured
-`LEFT`/`RIGHT` bindings to change that row. Hardcoded `Backspace` resets the profile
-to stock; hardcoded `Tab` or `Esc` closes and saves it.
+The master title stores per-game launch defaults under `launch.s1`, `launch.s2`,
+and `launch.s3k`. Left/right selects the game; `Enter` (controller A) enters its
+visible action menu. Up/down chooses an action; `Esc` (controller B) returns to
+game selection. Choose **Launch Options** to edit the selected game's profile.
+The original ROM-backed animated game logos remain, proportionally scaled into
+the left pane. Their original textures are drawn directly into the window
+viewport, so a larger window recovers source detail instead of enlarging a
+pre-reduced thumbnail. The default logical resolution remains 320x224.
+Primary text keeps the original 9x10 pixel font; supplementary details use a
+native 5x7 font with 6x8 cells. Neither is fractionally resampled. Checkerboard
+backgrounds and cyan focus frames are shared across the menu pages.
+
+In the launch panel, arrows/D-pad choose a row and change its value. `Enter`/A
+saves, `Esc`/B cancels draft edits, and the optional `Tab` or controller
+Back/Select shortcut closes and saves. The visible **Stock**, **Save**, and
+**Cancel** buttons are reached with up/down; left/right moves between those
+buttons. **Stock** restores the stock draft (`Backspace` remains a shortcut).
+Stock values are white, non-default/non-stock values amber, and experimental
+values red; a separate cyan cursor marks selection. Prompts follow the last
+intentional keyboard/controller input rather than the presence of a controller.
+
+### Engine settings from the title
+
+Choose **Settings** for persisted engine preferences. The category rail stays
+visible; confirm enters the selected category, Back returns to the rail, and
+up/down moves through paginated fields. Left/right changes booleans, enums and
+numbers; confirm opens a value picker or text editor. Text editing supports
+ordinary keyboard typing and a controller keyboard with all printable ASCII,
+case/symbol pages, cursor movement, deletion, and default restoration. Key
+bindings also offer physical key/chord capture. Values and categories with non-default settings remain
+amber, including after saving. **Apply** writes the draft atomically; save errors
+retain the draft for retry. **Cancel** asks before discarding unsaved edits.
+
+Settings requests an engine restart so cached subsystems can adopt all changes.
+Input bindings are read dynamically; ROM availability/logos are rescanned after
+Apply. Current launch/session overrides remain authoritative until the next
+launch. YAML remains an optional editing route.
+
+**Tools > Trace replays** opens the trace catalog without enabling test mode.
+Time Attack, Recordings, and Mods also have visible action-menu entries;
+existing function-key shortcuts remain optional accelerators. Global display and
+capture shortcuts remain available in game selection, but yield to the action
+menu and its child pages so typing or rebinding a key cannot change unrelated
+settings. Playback shortcuts do not run on the master title.
+
+Recordings has a separate options page for the target frame, pause-on-desync,
+fast-forward, playback, and full recording details. Time Attack exposes a
+visible **Start Run**, **Create LAN Room**, **Join LAN Room**, or **Browse Rooms** action; network addresses and lobby chat support the same
+keyboard/controller editor. Room creation, refresh, paging, and lobby actions
+are visible choices. Mods exposes **Details**, **Order**, **Notices**, and
+**Save + Back**, with paginated findings and confirmations. Trace replay lists,
+loading/failure pages, standalone New Game/Continue, and help share the same
+native typography and keyboard/controller navigation.
 
 Profiles are persistent defaults for future manual launches, but applying a profile is
 session-only. A launch can temporarily override live rewind, cross-game donation, debug
@@ -228,9 +275,10 @@ previous launch. When `crossGameSource` is `"s3k"`, the launch panel hides
 selection. When character rows are shown, their options follow the active donor:
 Sonic is always available, Tails requires Sonic 2 or Sonic 3&K data, and Knuckles
 requires Sonic 3&K data; hand-edited saved values outside that donor set are clamped
-before launch. `aspect: "global"` inherits the normal `display.aspect` setting and does not
-resize the window; pinned aspect values such as `"WIDE_16_9"` apply only for that game
-session and resize back when returning to the master title. In the launch panel, pinned
+before launch. `aspect: "global"` inherits the normal `display.aspect` setting; pinned
+aspect values such as `"WIDE_16_9"` apply only for that game session. They change the
+logical projection within the existing window, restoring the global projection
+when returning to the master title. In the launch panel, pinned
 16:10 and 16:9 aspects are amber non-standard choices. The 21:9 preset remains a
 best-effort smoke tier, while 32:9 is exploratory; both remain red choices so the panel
 does not imply the same support level as 16:10/16:9.

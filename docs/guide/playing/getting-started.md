@@ -24,7 +24,7 @@ incorrect results.
 | Sonic 2 | `s2.gen` | World, Revision 01; CRC32 `7B905383`; SHA-1 `8BCA5DCEF1AF3E00098666FD892DC1C2A76333F9` |
 | Sonic 3&K | `s3k.gen` | World lock-on combined ROM; CRC32 `63522553`; SHA-1 `CFBF98C36C776677290A872547AC47C53D2761D6` |
 
-ROM filenames can be changed in `config.yaml` if yours differ. See
+ROM filenames can be changed through master-title **Settings** or in `config.yaml` if yours differ. See
 [Configuration](configuration.md) for details.
 
 ## Install and Run
@@ -41,7 +41,7 @@ ROM filenames can be changed in `config.yaml` if yours differ. See
    - Windows: double-click `OpenGGF.exe`, or run it from a terminal.
    - macOS: open `OpenGGF.app`.
    - Linux: run `./OpenGGF` from the extracted `OpenGGF` directory.
-5. If your ROM filenames differ from the defaults, edit `config.yaml` in the extracted package.
+5. If your ROM filenames differ from the defaults, set their paths in master-title **Settings**, or edit `config.yaml` in the extracted package.
 
 Windows terminal example:
    ```
@@ -76,8 +76,11 @@ Linux terminal example:
 
 When the engine starts, you will see:
 
-1. **Master title screen** -- An engine-wide title screen with animated clouds and a game
-   selection menu. Use the arrow keys to highlight a game and press Space to select it.
+1. **Master title screen** -- Choose a game with left/right, then press Enter (controller
+   A) to open its action menu. Up/down selects Start Game, Launch Options, Time Attack,
+   Recordings, Mods, Settings, or Tools. Enter/A opens the selected action; Esc/B returns
+   one level. Prompts follow the last keyboard/controller input. The original animated
+   game logos remain, scaled proportionally into the game pane.
    When audio is enabled, navigation, confirmation, and missing-ROM errors use short
    host-owned cues that do not depend on the selected game's ROM.
 2. **Game title screen** -- The selected game's original title screen (e.g., the Sonic 2
@@ -88,12 +91,18 @@ If a ROM file is missing for the game you selected, the engine will show an erro
 
 ## Quick Configuration
 
+Choose **Settings** on the master title for a controller-accessible editor with
+visible categories, onscreen text/key editing, and draft Apply/Cancel. Non-default
+settings are amber. Restart the engine after saving to apply all subsystem changes.
+See [configuration](../../../CONFIGURATION.md#engine-settings-from-the-title) for
+navigation and current prototype limits.
+
 The engine reads settings from `config.yaml` in the working directory. If the file
 does not exist, defaults are used. A few settings you might want to change immediately:
 
 | Setting | What it does | Default |
 |---------|-------------|---------|
-| `roms.default` | Which game boots first (`"s1"`, `"s2"`, or `"s3k"`) | `"s2"` |
+| `roms.default` | Which game boots when the master title is bypassed (`"s1"`, `"s2"`, or `"s3k"`) | `"s2"` |
 | `startup.masterTitleScreen` | Show game picker on launch | `true` |
 | `display.windowAutosize` | Derive the window size from the aspect preset | `true` |
 | `audio.enabled` | Enable or disable sound | `true` |

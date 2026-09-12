@@ -1,11 +1,14 @@
 package com.openggf.game.launch;
 
 import com.openggf.configuration.SonicConfiguration;
+import com.openggf.configuration.ConfigurationPersistence;
 import com.openggf.configuration.SonicConfigurationService;
 import com.openggf.game.MasterTitleScreen;
 import com.openggf.game.patch.ModuleResolutionService;
 import com.openggf.game.patch.ResolutionContext;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -107,17 +110,27 @@ public class LaunchProfileStore {
                 .sanitizedFor(entry, patchMainCharacters(entry));
     }
 
+    /**
+     * Atomically saves a sanitized profile, then publishes it to configuration readers.
+     * @throws UncheckedIOException if persistence fails; live preferences remain unchanged
+     */
     public void save(MasterTitleScreen.GameEntry entry, LaunchProfile profile) {
         Objects.requireNonNull(profile, "profile");
         Keys keys = keysFor(entry);
         LaunchProfile sanitized = sanitize(profile, entry);
-        configService.setConfigValue(keys.rewind(), sanitized.rewind());
-        configService.setConfigValue(keys.crossGameSource(), sanitized.crossGameSource());
-        configService.setConfigValue(keys.debugTools(), sanitized.debugTools());
-        configService.setConfigValue(keys.aspect(), sanitized.aspect());
-        configService.setConfigValue(keys.mainCharacter(), sanitized.mainCharacter());
-        configService.setConfigValue(keys.sidekick(), sanitized.sidekick());
-        configService.saveConfig();
+        // Keep sanitization with the launch-profile owner; publish all six values together.
+        Map<SonicConfiguration, Object> values = Map.of(
+                keys.rewind(), sanitized.rewind(),
+                keys.crossGameSource(), sanitized.crossGameSource(),
+                keys.debugTools(), sanitized.debugTools(),
+                keys.aspect(), sanitized.aspect(),
+                keys.mainCharacter(), sanitized.mainCharacter(),
+                keys.sidekick(), sanitized.sidekick());
+        try {
+            ConfigurationPersistence.apply(configService, values);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Unable to save launch profile for " + entry.gameId, e);
+        }
     }
 
     public LaunchProfile sanitize(LaunchProfile profile, MasterTitleScreen.GameEntry entry) {

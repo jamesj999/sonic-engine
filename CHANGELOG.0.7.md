@@ -6,6 +6,19 @@ campaigns; feature/API publication remains subject to the 0.8 roadmap.
 
 ## Gameplay and presentation
 
+- **Master title hub:** controller-first game/action navigation keeps the existing
+  animated ROM logos, adds visible launch, time-attack, recordings, mods, settings,
+  and tools entries, and follows intentional input with keyboard/controller prompts.
+  Catalog-backed engine settings offer visible categories, onscreen value/path/key
+  editing, atomic Apply/Cancel, and amber non-default values. Launch options retain
+  white stock, amber changed, and red experimental status at native resolution.
+  Checkerboard pages retain full-size primary lettering and use an authored native
+  small font for metadata instead of fractional downscaling. Recordings, traces,
+  mods, time attack, room browsing, and lobbies have bounded pages and visible
+  actions; text entry works with keyboards or controllers without triggering global
+  shortcuts, and failed trace launches can be acknowledged and retried. Game logos render from
+  their original textures at window resolution, preserving detail as the window grows.
+
 - **Widescreen presentation:** ordinary UI/HUD surfaces, titles, results, endings,
   diagnostics, all three special stages, scene effects, and trace-video capture.
   Native 320x224 remains the gameplay/trace authority. 352x224 and 400x224 are

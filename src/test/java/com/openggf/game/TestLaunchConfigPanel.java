@@ -49,12 +49,12 @@ class TestLaunchConfigPanel {
     void configuredUpDownMoveSelectedRowAndWrap() {
         SonicConfigurationService config = configuredWasd();
         LaunchConfigPanel panel = panel(config, LaunchProfile.stockFor(SONIC_3K), new TrackingStore(config));
-        InputHandler input = new InputHandler();
+        InputHandler input = new InputHandler(InputBindingFactory.supplier(config));
 
-        pressFrame(panel, input, GLFW_KEY_W);
+        for (int i = 0; i < 4; i++) pressFrame(panel, input, GLFW_KEY_W);
         assertEquals(SIDEKICK, panel.selectedRowForTest());
 
-        pressFrame(panel, input, GLFW_KEY_S);
+        for (int i = 0; i < 4; i++) pressFrame(panel, input, GLFW_KEY_S);
         assertEquals(REWIND, panel.selectedRowForTest());
     }
 
@@ -62,7 +62,7 @@ class TestLaunchConfigPanel {
     void configuredLeftRightCycleSelectedRowAndWrap() {
         SonicConfigurationService config = configuredWasd();
         LaunchConfigPanel panel = panel(config, LaunchProfile.stockFor(SONIC_3K), new TrackingStore(config));
-        InputHandler input = new InputHandler();
+        InputHandler input = new InputHandler(InputBindingFactory.supplier(config));
 
         pressFrame(panel, input, GLFW_KEY_A);
         assertTrue(panel.currentProfileForTest().rewind());
@@ -76,7 +76,7 @@ class TestLaunchConfigPanel {
         SonicConfigurationService config = configuredWasd();
         LaunchProfile changed = new LaunchProfile(true, "s1", true, "WIDE_16_9", "tails", "none");
         LaunchConfigPanel panel = panel(config, changed, new TrackingStore(config));
-        InputHandler input = new InputHandler();
+        InputHandler input = new InputHandler(InputBindingFactory.supplier(config));
 
         pressFrame(panel, input, GLFW_KEY_BACKSPACE);
 
@@ -95,10 +95,10 @@ class TestLaunchConfigPanel {
     }
 
     @Test
-    void tabAndEscapeCloseWithClosedResult() {
+    void tabSavesAndEscapeCancels() {
         SonicConfigurationService config = configuredWasd();
         LaunchConfigPanel tabPanel = panel(config, LaunchProfile.stockFor(SONIC_3K), new TrackingStore(config));
-        InputHandler input = new InputHandler();
+        InputHandler input = new InputHandler(InputBindingFactory.supplier(config));
 
         pressFrame(tabPanel, input, GLFW_KEY_TAB);
         assertEquals(LaunchConfigPanel.Result.CLOSED, tabPanel.consumeResult());
@@ -106,7 +106,7 @@ class TestLaunchConfigPanel {
 
         LaunchConfigPanel escapePanel = panel(config, LaunchProfile.stockFor(SONIC_3K), new TrackingStore(config));
         pressFrame(escapePanel, input, GLFW_KEY_ESCAPE);
-        assertEquals(LaunchConfigPanel.Result.CLOSED, escapePanel.consumeResult());
+        assertEquals(LaunchConfigPanel.Result.CANCELLED, escapePanel.consumeResult());
     }
 
     @Test
@@ -119,10 +119,10 @@ class TestLaunchConfigPanel {
         FakeGamepadStateSource source = new FakeGamepadStateSource();
         InputHandler input = new InputHandler(InputBindingFactory.supplier(config), source);
 
-        pressGamepadFrame(panel, input, source, GLFW_GAMEPAD_BUTTON_DPAD_UP);
+        for (int i = 0; i < 4; i++) pressGamepadFrame(panel, input, source, GLFW_GAMEPAD_BUTTON_DPAD_UP);
         assertEquals(SIDEKICK, panel.selectedRowForTest());
 
-        pressGamepadFrame(panel, input, source, GLFW_GAMEPAD_BUTTON_DPAD_DOWN);
+        for (int i = 0; i < 4; i++) pressGamepadFrame(panel, input, source, GLFW_GAMEPAD_BUTTON_DPAD_DOWN);
         assertEquals(REWIND, panel.selectedRowForTest());
     }
 
@@ -165,7 +165,7 @@ class TestLaunchConfigPanel {
         SonicConfigurationService config = configuredWasd();
         TrackingStore store = new TrackingStore(config);
         LaunchConfigPanel panel = panel(config, LaunchProfile.stockFor(SONIC_3K), store);
-        InputHandler input = new InputHandler();
+        InputHandler input = new InputHandler(InputBindingFactory.supplier(config));
 
         pressFrame(panel, input, GLFW_KEY_TAB);
         input.handleKeyEvent(GLFW_KEY_TAB, GLFW_RELEASE);
@@ -207,7 +207,7 @@ class TestLaunchConfigPanel {
         SonicConfigurationService config = configuredWasd();
         LaunchProfile profile = new LaunchProfile(false, "s3k", false, "global", "knuckles", "tails");
         LaunchConfigPanel panel = panel(config, profile, new TrackingStore(config));
-        InputHandler input = new InputHandler();
+        InputHandler input = new InputHandler(InputBindingFactory.supplier(config));
 
         assertIterableEquals(List.of(
                         "Rewind",
@@ -216,7 +216,7 @@ class TestLaunchConfigPanel {
                         "Widescreen"),
                 panel.rowViews().stream().map(LaunchConfigPanel.RowView::label).toList());
 
-        pressFrame(panel, input, GLFW_KEY_W);
+        for (int i = 0; i < 4; i++) pressFrame(panel, input, GLFW_KEY_W);
 
         assertEquals(WIDESCREEN, panel.selectedRowForTest());
     }
@@ -279,6 +279,22 @@ class TestLaunchConfigPanel {
         }
     }
 
+    @Test
+    void visibleStockAndSaveButtonsAreReachableWithoutShortcuts() {
+        SonicConfigurationService config = configuredWasd();
+        LaunchConfigPanel panel = panel(config, LaunchProfile.stockFor(SONIC_3K), new TrackingStore(config));
+        InputHandler input = new InputHandler(InputBindingFactory.supplier(config));
+        pressFrame(panel, input, GLFW_KEY_D);
+        assertTrue(panel.currentProfileForTest().rewind());
+        for (int i = 0; i < 6; i++) pressFrame(panel, input, GLFW_KEY_S);
+        pressFrame(panel, input, org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER);
+        assertEquals(LaunchProfile.stockFor(SONIC_3K), panel.currentProfileForTest());
+        assertEquals(LaunchConfigPanel.Result.NONE, panel.consumeResult());
+        pressFrame(panel, input, GLFW_KEY_S);
+        pressFrame(panel, input, org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER);
+        assertEquals(LaunchConfigPanel.Result.CLOSED, panel.consumeResult());
+    }
+
     private SonicConfigurationService configuredWasd() {
         SonicConfigurationService config = SonicConfigurationService.createStandalone(tempDir);
         config.setConfigValue(SonicConfiguration.UP, GLFW_KEY_W);
@@ -305,9 +321,12 @@ class TestLaunchConfigPanel {
 
     private static void pressFrame(LaunchConfigPanel panel, InputHandler input, int key) {
         input.handleKeyEvent(key, GLFW_PRESS);
+        input.refreshLogicalSnapshot();
         panel.update(input);
         input.handleKeyEvent(key, GLFW_RELEASE);
         input.update();
+        input.refreshLogicalSnapshot();
+        panel.update(input);
     }
 
     private static void pressGamepadFrame(

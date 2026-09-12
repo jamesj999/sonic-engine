@@ -1,6 +1,7 @@
 package com.openggf;
 
 import com.openggf.control.InputHandler;
+import com.openggf.control.*;
 import com.openggf.graphics.PixelFont;
 import com.openggf.mods.EffectiveModCatalog;
 import com.openggf.mods.ModCatalog;
@@ -21,6 +22,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TestModManagerScreenHost {
     @TempDir Path temp;
+
+    @Test
+    void fixedKeysAndControllerBackReachNeutralModUi() {
+        InputHandler input = new InputHandler();
+        input.handleKeyEvent(org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER, org.lwjgl.glfw.GLFW.GLFW_PRESS);
+        input.handleKeyEvent(org.lwjgl.glfw.GLFW.GLFW_KEY_RIGHT, org.lwjgl.glfw.GLFW.GLFW_PRESS);
+        assertTrue(ModManagerScreenHost.menuInput(input).menuAccept());
+        assertTrue(ModManagerScreenHost.menuInput(input).menuRight());
+        var previous = ModManagerScreenHost.menuInput(input);
+        input.setLogicalOverride(LogicalInputSnapshot.ofPlayers(
+                PlayerInputState.of(0, 0, InputActionMasks.ACTION_C, InputActionMasks.ACTION_C, false, false),
+                PlayerInputState.neutral()));
+        assertTrue(ModManagerScreenHost.menuInput(input).menuBack());
+        assertTrue(previous.menuAccept(), "Retained input must preserve the earlier confirm edge");
+        org.junit.jupiter.api.Assertions.assertFalse(previous.menuBack(), "Retained input must not read the new back edge");
+        org.junit.jupiter.api.Assertions.assertFalse(ModManagerScreenHost.menuInput(input).menuAccept());
+    }
 
     @Test
     void hostMapsRealInputHandlerAndPixelFontAcrossTheNeutralModUiBoundary() {

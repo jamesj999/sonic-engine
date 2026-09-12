@@ -26,9 +26,13 @@ public class InputHandler {
 	private final GamepadInputManager gamepadInputManager;
 	private LogicalInputSnapshot logicalSnapshot = LogicalInputSnapshot.neutral();
 	private LogicalInputSnapshot logicalOverride;
+	private LogicalInputSnapshot physicalGamepadSnapshot = LogicalInputSnapshot.neutral();
 	private double mouseX;
 	private double mouseY;
 	private boolean mouseInputSeen;
+	private boolean controllerPresentation;
+	private boolean keyboardPresentationPending;
+	private final StringBuilder menuTypedText = new StringBuilder();
 
 	/**
 	 * Creates a new InputHandler.
@@ -70,6 +74,10 @@ public class InputHandler {
 	public void handleKeyEvent(int key, int action) {
 		if (key >= 0 && key < MAX_KEYS) {
 			if (action == GLFW_PRESS || action == GLFW_REPEAT) {
+				if (action == GLFW_PRESS && !keys[key]) {
+					controllerPresentation = false;
+					keyboardPresentationPending = true;
+				}
 				keys[key] = true;
 			} else if (action == GLFW_RELEASE) {
 				keys[key] = false;
@@ -195,7 +203,7 @@ public class InputHandler {
 		return logicalOverride == null && gamepadInputManager.isBackButtonPressed();
 	}
 
-	private boolean isRawKeyPressed(int keyCode) {
+	boolean isRawKeyPressed(int keyCode) {
 		if (keyCode >= 0 && keyCode < MAX_KEYS) {
 			return keys[keyCode] && !previousKeys[keyCode];
 		}
@@ -309,18 +317,50 @@ public class InputHandler {
 
 	public void refreshLogicalSnapshot() {
 		inputBindings = Objects.requireNonNull(inputBindingsSource.get(), "inputBindings");
+		PlayerInputState keyboardP1 = logicalOverride == null
+				? keyboardInputMapper.mapPlayer1(this, inputBindings) : PlayerInputState.neutral();
+		PlayerInputState keyboardP2 = logicalOverride == null
+				? keyboardInputMapper.mapPlayer2(this, inputBindings) : PlayerInputState.neutral();
+		LogicalInputSnapshot gamepadSnapshot = gamepadInputManager.poll(inputBindings);
+		physicalGamepadSnapshot = gamepadSnapshot;
+		if (gamepadInputManager.hasPresentationPress() && !keyboardPresentationPending) {
+			controllerPresentation = true;
+		}
+		keyboardPresentationPending = false;
 		if (logicalOverride != null) {
-			gamepadInputManager.poll(inputBindings);
 			logicalSnapshot = logicalOverride;
 			return;
 		}
-		PlayerInputState keyboardP1 = keyboardInputMapper.mapPlayer1(this, inputBindings);
-		PlayerInputState keyboardP2 = keyboardInputMapper.mapPlayer2(this, inputBindings);
-		LogicalInputSnapshot gamepadSnapshot = gamepadInputManager.poll(inputBindings);
 		PlayerInputState p1 = keyboardP1.merge(gamepadSnapshot.player1());
 		PlayerInputState p2 = keyboardP2.merge(gamepadSnapshot.player2());
 		logicalSnapshot = LogicalInputSnapshot.ofPlayers(p1, p2);
 	}
+
+	LogicalInputSnapshot menuWithoutMappedKeyboard() {
+		// An override already owns logical input; it contains no live keyboard mapping.
+		return logicalOverride != null ? logicalOverride : physicalGamepadSnapshot;
+	}
+
+	boolean usesControllerPresentation() {
+		return controllerPresentation;
+	}
+
+	void appendMenuCodepoint(int codepoint) {
+		if (Character.isValidCodePoint(codepoint) && !Character.isISOControl(codepoint)
+				&& menuTypedText.length() < 4096) {
+			menuTypedText.appendCodePoint(codepoint);
+			controllerPresentation = false;
+			keyboardPresentationPending = true;
+		}
+	}
+
+	String consumeMenuText() {
+		String text = menuTypedText.toString();
+		menuTypedText.setLength(0);
+		return text;
+	}
+
+	LogicalInputSnapshot physicalMenuGamepad() { return physicalGamepadSnapshot; }
 
 	public LogicalInputSnapshot logical() {
 		return logicalSnapshot;
@@ -336,6 +376,7 @@ public class InputHandler {
 	 * Updates the input handler state. Should be called at the end of the game loop.
 	 */
 	public void update() {
+		menuTypedText.setLength(0);
 		System.arraycopy(keys, 0, previousKeys, 0, MAX_KEYS);
 		System.arraycopy(mouseButtons, 0, previousMouseButtons, 0, MAX_MOUSE_BUTTONS);
 	}

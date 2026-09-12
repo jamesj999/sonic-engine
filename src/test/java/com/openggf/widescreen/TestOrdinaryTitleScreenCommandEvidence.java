@@ -77,7 +77,7 @@ class TestOrdinaryTitleScreenCommandEvidence {
     }
 
     @Test
-    void masterTitleDrawExpandsBackdropAndCentersForegroundAtEveryWidth() throws Exception {
+    void masterTitleDrawExpandsBackdropAndFitsActionPaneAtEveryWidth() throws Exception {
         SonicConfigurationService configuration = GameServices.configuration();
         MasterTitleScreen title = new MasterTitleScreen(configuration,
                 mock(LaunchProfileStore.class));
@@ -101,10 +101,12 @@ class TestOrdinaryTitleScreenCommandEvidence {
             drawForRecording.invoke(title);
 
             assertEquals(new Quad(1, 0, 0, width, 224), renderer.quads().get(0));
-            assertEquals(new Quad(3, (width - 31) / 2, 216, 31, 6), renderer.quads().get(1));
-            assertTrue(font.texts().stream().anyMatch(text -> text.text().equals("< >  Select    Enter  Confirm")
-                            && text.x() == (width - text.text().length() * 9) / 2),
-                    "navigation text must be centered by the real Master draw path at " + width);
+            assertTrue(renderer.quads().contains(new Quad(3, 10, 212, 31, 6)),
+                    "OpenGGF logo stays in the title header");
+            assertTrue(font.texts().stream().anyMatch(text -> text.text().equals("Left/Right Game  Enter Options")
+                            && text.x() == 9), "game-selection keyboard prompts at " + width);
+            assertTrue(font.texts().stream().anyMatch(text -> text.text().equals("LAUNCH OPTIONS")
+                            && text.x() == width / 2 + 5), "visible launch entry at " + width);
         }
     }
 

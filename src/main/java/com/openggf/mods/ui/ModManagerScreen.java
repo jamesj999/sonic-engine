@@ -36,11 +36,11 @@ import java.util.Set;
  * owns no activation seam: all changes are persisted for the next process start.
  */
 public final class ModManagerScreen {
-    public static final int MAX_VISIBLE_ROWS = 18;
-    public static final int MAX_VISIBLE_DETAILS = 10;
-    private static final float SCALE = 0.5f;
-    private static final int LINE_HEIGHT = 6;
-    private static final int MAX_RENDER_CHARS = 68;
+    public static final int MAX_VISIBLE_ROWS = 6;
+    public static final int MAX_VISIBLE_DETAILS = 12;
+    private static final float SCALE = 2f / 3f;
+    private static final int LINE_HEIGHT = 11;
+    private static final int MAX_RENDER_CHARS = 50;
 
     private final ModCatalog catalog;
     private final PendingModStateEditor editor;
@@ -66,6 +66,15 @@ public final class ModManagerScreen {
     private String statusMessage = "";
     private String saveFailure;
     private boolean closeRequested;
+    private boolean actionFocus;
+    private int selectedAction;
+    private boolean detailsPage;
+    private boolean noticesPage;
+    private boolean orderPage;
+    private int pageOffset;
+    private String confirmLabel = "Enter";
+    private String backLabel = "Esc";
+    private String directionLabel = "Arrows";
 
     public ModManagerScreen(ModCatalog catalog, PendingModStateEditor editor,
                             ModRuntimeFindingStore runtimeFindings, TextSink text) {
@@ -110,11 +119,15 @@ public final class ModManagerScreen {
         repositoryFailures = List.copyOf(failures);
         normalizeDependencyOrder();
         rebuildRows(null);
+        actionFocus = rows.isEmpty();
     }
 
     /** Engine-neutral state transition used by live composition and focused tests. */
     public void update(MenuInput input) {
         Objects.requireNonNull(input, "input");
+        confirmLabel = input.confirmLabel();
+        backLabel = input.backLabel();
+        directionLabel = input.directionLabel();
         boolean escapeEdge = input.escape() && !previousEscape;
         previousEscape = input.escape();
         if (suppressInputUntilNeutral) {
@@ -131,64 +144,172 @@ public final class ModManagerScreen {
         previousInput = input;
 
         if (escapeEdge || back) {
+            if (detailsPage || noticesPage || orderPage) { detailsPage = false; noticesPage = false; orderPage = false; return; }
+            if (actionFocus && !rows.isEmpty()) { actionFocus = false; return; }
             handleBack();
+            return;
+        }
+        if (orderPage) {
+            if (up || down || left || right) reorderSelected(down || right ? 1 : -1);
+            if (accept) orderPage = false;
+            return;
+        }
+        if (detailsPage || noticesPage) {
+            if (detailsPage) {
+                if (up || down || left || right) scrollDetails(down ? 1 : up ? -1
+                        : right ? MAX_VISIBLE_DETAILS : -MAX_VISIBLE_DETAILS);
+            } else {
+                if (up || down || left || right) pageOffset = Math.clamp(pageOffset
+                        + (down ? 1 : up ? -1 : right ? MAX_VISIBLE_DETAILS : -MAX_VISIBLE_DETAILS),
+                        0, Math.max(0, noticeLines().size() - MAX_VISIBLE_DETAILS));
+                if (accept && saveFailure != null) saveAndRequestClose();
+            }
+            return;
+        }
+        if ((armedTrust != null || armedCascade != null) && (left || right)) {
+            pageOffset = Math.clamp(pageOffset + (right ? MAX_VISIBLE_DETAILS : -MAX_VISIBLE_DETAILS),
+                    0, Math.max(0, confirmationLines().size() - MAX_VISIBLE_DETAILS));
+            return;
+        }
+        if (actionFocus || rows.isEmpty()) {
+            actionFocus = true;
+            if (left || right) selectedAction = Math.floorMod(selectedAction + (right ? 1 : -1), 4);
+            if ((up || down) && !rows.isEmpty()) { actionFocus = false; return; }
+            if (accept) {
+                pageOffset = 0;
+                if (selectedAction == 0) { detailsPage = true; detailScrollOffset = 0; }
+                else if (selectedAction == 1) orderPage = true;
+                else if (selectedAction == 2) noticesPage = true;
+                else saveAndRequestClose();
+            }
             return;
         }
         if (input.startHeld() && (up || down)) {
             cancelArmedConfirmation();
+            detailsPage = true;
             scrollDetails(down ? 1 : -1);
             return;
         }
         if (up || down || left || right) {
             cancelArmedConfirmation();
-            if (up) moveSelection(-1);
+            if ((up && selectedIndex == 0) || (down && selectedIndex == rows.size() - 1)) {
+                actionFocus = true;
+                selectedAction = 0;
+            } else if (up) moveSelection(-1);
             else if (down) moveSelection(1);
             else if (left) reorderSelected(-1);
-            else reorderSelected(1);
+            else { actionFocus = true; selectedAction = 0; }
             return;
         }
-        if (accept) toggleSelected();
+        if (accept) { pageOffset = 0; toggleSelected(); }
     }
 
     public void render() {
         if (text == null) return;
         text.begin();
         try {
-            int y = 4;
-            draw("MOD MANAGER", 6, y, 1f, 1f, 1f);
-            y += LINE_HEIGHT;
-            draw(patternBudgetLine(), 6, y, 0.72f, 0.72f, 0.72f);
-            y += LINE_HEIGHT;
-            for (String banner : bannerLines()) {
-                draw(banner, 6, y, 1f, 0.55f, 0.35f);
-                y += LINE_HEIGHT;
+            if (armedTrust != null || armedCascade != null) {
+                renderReadingPage(armedTrust != null ? "TRUST & ENABLE" : "CONFIRM MOD CHANGES",
+                        confirmationLines(), pageOffset,
+                        confirmLabel + " Confirm  " + backLabel + " Cancel", "Left/Right Read all affected mods");
+                return;
             }
-            y = Math.max(y + 2, 20);
+            if (orderPage) {
+                List<String> orderLines = new ArrayList<>();
+                orderLines.add(rows.isEmpty() ? "No mods to reorder" : rows.get(selectedIndex).identity());
+                orderLines.add("Position: " + (rows.isEmpty() ? 0 : selectedIndex + 1) + " / " + rows.size());
+                orderLines.add("Up moves earlier; Down moves later.");
+                orderLines.add("Dependencies must stay before their dependents.");
+                if (!statusMessage.isBlank()) orderLines.add(statusMessage);
+                renderReadingPage("MOD ORDER", wrapped(orderLines), 0,
+                        directionLabel + " Move  " + backLabel + " Actions", "Order is saved with Save+Back");
+                return;
+            }
+            if (detailsPage) {
+                renderReadingPage("MOD DETAILS", wrapped(detailLines()), detailScrollOffset,
+                        directionLabel + " Read  " + backLabel + " Back", "Left/Right Page  Up/Down Line");
+                return;
+            }
+            if (noticesPage) {
+                renderReadingPage("MOD NOTICES", noticeLines(), pageOffset,
+                        directionLabel + " Read  " + backLabel + " Back",
+                        saveFailure != null ? confirmLabel + " Retry save and return" : "Changes apply after restart");
+                return;
+            }
+            text.page("MOD MANAGER", patternBudgetLine());
+            text.panel(6, 48, 308, 88);
+            int y = 52;
+            if (rows.isEmpty()) drawPrimary("No mods discovered.", 12, y, 1f, 1f, 1f);
             for (RowView row : visibleRows()) {
                 boolean selected = rows.get(selectedIndex).identity().equals(row.identity());
-                String prefix = selected ? "> " : "  ";
-                String enabled = (!row.valid() || row.notLoaded()) ? "[--] "
-                        : (row.enabled() ? "[ON] " : "[OFF]");
+                if (selected && !actionFocus) text.focus(8, y - 2, 304, 12);
+                String enabled = (!row.valid() || row.notLoaded()) ? "[--] " : row.enabled() ? "[ON] " : "[OFF] ";
                 String badges = row.badges().isEmpty() ? "" : " [" + String.join(",", row.badges()) + "]";
-                float brightness = selected ? 1f : 0.62f;
-                draw(prefix + enabled + " " + row.label() + badges, 8, y,
-                        brightness, brightness, brightness);
-                y += LINE_HEIGHT;
+                float green = !row.valid() ? .4f : row.enabled() ? .75f : 1f;
+                float blue = !row.valid() ? .4f : row.enabled() ? .25f : 1f;
+                drawPrimary(enabled + row.label() + badges, 12, y, 1f, green, blue);
+                y += 14;
             }
-            y = Math.max(y + 3, 134);
-            for (String line : visibleDetailLines()) {
-                draw(line, 4, y, 0.88f, 0.88f, 0.88f);
-                y += LINE_HEIGHT;
+            draw((rows.isEmpty() ? "0" : Integer.toString(selectedIndex + 1)) + " / " + rows.size()
+                    + " mods; choose Details for full information", 9, 141, .7f, .8f, .95f);
+            List<String> banners = bannerLines();
+            String banner = saveFailure != null ? "Save failed: " + saveFailure
+                    : banners.isEmpty() ? "Changes apply after restart" : banners.getFirst();
+            draw(banner, 9, 153, 1f, .65f, .3f);
+            if (!statusMessage.isBlank()) draw(statusMessage, 9, 165, 1f, .75f, .25f);
+            String[] actions = {"Details", "Order", "Notices", "Save+Back"};
+            int[] actionX = {8, 86, 146, 226};
+            int[] actionWidth = {74, 56, 76, 86};
+            for (int i = 0; i < actions.length; i++) {
+                int x = actionX[i];
+                text.panel(x, 178, actionWidth[i], 16);
+                if (actionFocus && selectedAction == i) text.focus(x, 178, actionWidth[i], 16);
+                drawPrimary(actions[i], x + 4, 181, 1f, 1f, 1f);
             }
-            if (!statusMessage.isBlank()) {
-                draw(statusMessage, 4, y, 1f, 0.72f, 0.25f);
-                y += LINE_HEIGHT;
-            }
-            draw("A/ENTER Toggle  L/R Order  Start+Up/Down Details  Esc/B Back", 4, y,
-                    0.62f, 0.62f, 0.62f);
+            text.footer(actionFocus ? confirmLabel + " Open  " + backLabel + (rows.isEmpty() ? " Save+Back" : " List")
+                            : confirmLabel + " Toggle  Right Actions",
+                    actionFocus ? "Left/Right Choose  Up/Down List" : backLabel + " Save+Back  Up/Down Select");
         } finally {
             text.end();
         }
+    }
+
+    private void renderReadingPage(String title, List<String> lines, int requestedOffset,
+                                   String firstHint, String secondHint) {
+        int offset = Math.clamp(requestedOffset, 0, Math.max(0, lines.size() - MAX_VISIBLE_DETAILS));
+        text.page(title, "Lines " + (lines.isEmpty() ? 0 : offset + 1) + "-"
+                + Math.min(lines.size(), offset + MAX_VISIBLE_DETAILS) + " / " + lines.size());
+        text.panel(6, 47, 308, 143);
+        for (int i = 0; i < MAX_VISIBLE_DETAILS && offset + i < lines.size(); i++)
+            draw(lines.get(offset + i), 9, 52 + i * LINE_HEIGHT, 1f, 1f, 1f);
+        text.footer(firstHint, secondHint);
+    }
+
+    private List<String> noticeLines() {
+        List<String> lines = new ArrayList<>();
+        if (!statusMessage.isBlank()) lines.add(statusMessage);
+        lines.addAll(bannerLines());
+        if (lines.isEmpty()) lines.add("No notices. Changes apply after restart.");
+        return wrapped(lines);
+    }
+
+    private List<String> confirmationLines() {
+        return wrapped(List.of(statusMessage));
+    }
+
+    private static List<String> wrapped(List<String> source) {
+        List<String> result = new ArrayList<>();
+        for (String line : source) {
+            String remaining = normalizeText(line);
+            while (remaining.length() > MAX_RENDER_CHARS) {
+                int split = remaining.lastIndexOf(' ', MAX_RENDER_CHARS);
+                if (split <= 0) split = MAX_RENDER_CHARS;
+                result.add(remaining.substring(0, split));
+                remaining = remaining.substring(split).stripLeading();
+            }
+            result.add(remaining);
+        }
+        return List.copyOf(result);
     }
 
     public List<RowView> rows() {
@@ -212,7 +333,7 @@ public final class ModManagerScreen {
     }
 
     public List<String> visibleDetailLines() {
-        List<String> details = detailLines();
+        List<String> details = wrapped(detailLines());
         int maximum = Math.max(0, details.size() - MAX_VISIBLE_DETAILS);
         detailScrollOffset = Math.max(0, Math.min(detailScrollOffset, maximum));
         int end = Math.min(details.size(), detailScrollOffset + MAX_VISIBLE_DETAILS);
@@ -283,6 +404,10 @@ public final class ModManagerScreen {
             throw new IllegalArgumentException("Selection outside catalog rows: " + index);
         }
         selectedIndex = index;
+        actionFocus = false;
+        detailsPage = false;
+        noticesPage = false;
+        orderPage = false;
         keepSelectionVisible();
         detailScrollOffset = 0;
         armedCascade = null;
@@ -524,7 +649,7 @@ public final class ModManagerScreen {
     }
 
     private void scrollDetails(int delta) {
-        int maximum = Math.max(0, detailLines().size() - MAX_VISIBLE_DETAILS);
+        int maximum = Math.max(0, wrapped(detailLines()).size() - MAX_VISIBLE_DETAILS);
         detailScrollOffset = Math.max(0, Math.min(maximum, detailScrollOffset + delta));
         statusMessage = maximum == 0 ? "All details are visible" : "Detail scroll";
     }
@@ -690,18 +815,34 @@ public final class ModManagerScreen {
         throw new IllegalStateException("Scanned mod missing from normalized pending state: " + id);
     }
 
+    private void drawPrimary(String text, int x, int y, float r, float g, float b) {
+        String normalized = normalizeText(text);
+        int limit = (320 - x - 6) / 9;
+        String visible = normalized.length() <= limit ? normalized : normalized.substring(0, limit - 3) + "...";
+        this.text.draw(visible, x, y, 1, r, g, b, 1);
+    }
+
     private void draw(String text, int x, int y, float r, float g, float b) {
         this.text.draw(safeText(text), x, y, SCALE, r, g, b, 1f);
     }
 
     private static List<String> immutableSafeLines(List<String> lines) {
-        return lines.stream().map(ModManagerScreen::safeText).toList();
+        return lines.stream().map(ModManagerScreen::normalizeText).toList();
     }
 
     private static String safeText(String text) {
-        String normalized = Objects.requireNonNull(text, "text").replaceAll("\\s+", " ").trim();
+        String normalized = normalizeText(text);
         return normalized.length() <= MAX_RENDER_CHARS ? normalized
                 : normalized.substring(0, MAX_RENDER_CHARS - 3) + "...";
+    }
+
+    private static String primaryHint(String text) {
+        String normalized = normalizeText(text);
+        return normalized.length() <= 33 ? normalized : normalized.substring(0, 30) + "...";
+    }
+
+    private static String normalizeText(String text) {
+        return Objects.requireNonNull(text, "text").replaceAll("\\s+", " ").trim();
     }
 
     private static String filename(Path path) {
@@ -731,6 +872,16 @@ public final class ModManagerScreen {
         void begin();
         void draw(String text, int x, int y, float scale, float r, float g, float b, float a);
         void end();
+        default void page(String title, String subtitle) {
+            draw(title, 9, 7, 1, 1, 1, 1, 1);
+            draw(safeText(subtitle), 9, 34, SCALE, .7f, .8f, .95f, 1);
+        }
+        default void panel(int x, int y, int width, int height) { }
+        default void focus(int x, int y, int width, int height) { }
+        default void footer(String first, String second) {
+            draw(primaryHint(first), 9, 200, 1, .5f, .9f, 1, 1);
+            draw(primaryHint(second), 9, 212, 1, .8f, .86f, 1, 1);
+        }
     }
 
     public interface MenuInput {
@@ -744,6 +895,9 @@ public final class ModManagerScreen {
         default boolean menuBack() { return false; }
         default boolean startHeld() { return false; }
         default boolean escape() { return false; }
+        default String confirmLabel() { return "Enter"; }
+        default String backLabel() { return "Esc"; }
+        default String directionLabel() { return "Arrows"; }
     }
 
     private void normalizeDependencyOrder() {

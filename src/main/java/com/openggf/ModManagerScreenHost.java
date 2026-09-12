@@ -1,8 +1,10 @@
 package com.openggf;
 
 import com.openggf.control.InputHandler;
+import com.openggf.control.MenuInput;
 import com.openggf.graphics.PixelFont;
 import com.openggf.game.MasterTitleScreen;
+import com.openggf.game.MenuStyle;
 import com.openggf.mods.ui.ModManagerScreen;
 
 import java.util.Objects;
@@ -29,15 +31,29 @@ public final class ModManagerScreenHost implements MasterTitleScreen.ModManagerV
     static ModManagerScreen.MenuInput menuInput(InputHandler input) {
         var logical = input.logical();
         boolean escape = input.isKeyPressed(GLFW_KEY_ESCAPE);
+        // Mod UI retains this object as its previous frame; never close over mutable input.
+        boolean up = MenuInput.up(input);
+        boolean down = MenuInput.down(input);
+        boolean left = MenuInput.left(input);
+        boolean right = MenuInput.right(input);
+        boolean accept = MenuInput.accept(input);
+        boolean back = MenuInput.back(input);
+        String confirmLabel = MenuInput.confirmLabel(input);
+        String backLabel = MenuInput.backLabel(input);
+        String directionLabel = MenuInput.directionLabel(input);
+
         return new ModManagerScreen.MenuInput() {
-            @Override public boolean menuUp() { return logical.menuUp(); }
-            @Override public boolean menuDown() { return logical.menuDown(); }
-            @Override public boolean menuLeft() { return logical.menuLeft(); }
-            @Override public boolean menuRight() { return logical.menuRight(); }
-            @Override public boolean menuAccept() { return logical.menuAccept(); }
-            @Override public boolean menuBack() { return logical.menuBack(); }
+            @Override public boolean menuUp() { return up; }
+            @Override public boolean menuDown() { return down; }
+            @Override public boolean menuLeft() { return left; }
+            @Override public boolean menuRight() { return right; }
+            @Override public boolean menuAccept() { return accept; }
+            @Override public boolean menuBack() { return back; }
             @Override public boolean startHeld() { return logical.player1().startHeld(); }
             @Override public boolean escape() { return escape; }
+            @Override public String confirmLabel() { return confirmLabel; }
+            @Override public String backLabel() { return backLabel; }
+            @Override public String directionLabel() { return directionLabel; }
         };
     }
 
@@ -50,6 +66,14 @@ public final class ModManagerScreenHost implements MasterTitleScreen.ModManagerV
                 font.drawText(text, x, y, scale, r, g, b, a);
             }
             @Override public void end() { font.endMegaBatch(); }
+            @Override public void page(String title, String subtitle) { MenuStyle.page(font, 320, title, subtitle); }
+            @Override public void panel(int x, int y, int width, int height) { MenuStyle.panel(font, x, y, width, height); }
+            @Override public void focus(int x, int y, int width, int height) { MenuStyle.focus(font, x, y, width, height); }
+            @Override public void footer(String first, String second) {
+                MenuStyle.fill(font, 0, 198, 320, 26, .012f, .025f, .09f, 1);
+                MenuStyle.label(font, first, 9, 200, 302, .5f, .9f, 1);
+                MenuStyle.label(font, second, 9, 212, 302, .8f, .86f, 1);
+            }
         };
     }
 }

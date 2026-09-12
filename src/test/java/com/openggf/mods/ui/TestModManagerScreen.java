@@ -104,6 +104,9 @@ class TestModManagerScreen {
         assertTrue(screen.detailLines().stream().anyMatch(line -> line.contains("OGG decode failed")));
         screen.render();
         assertTrue(font.drawn.stream().anyMatch(line -> line.contains("MOD MANAGER")));
+        press(screen, Action.RIGHT); // visible actions for the selected addon
+        press(screen, Action.ACCEPT); // Details
+        screen.render();
         assertTrue(font.drawn.stream().anyMatch(line -> line.contains("OGG decode failed")));
     }
 
@@ -150,7 +153,7 @@ class TestModManagerScreen {
         }
         assertEquals(20, screen.selectedIndex());
         assertTrue(screen.scrollOffset() > 0);
-        assertEquals(18, screen.visibleRows().size());
+        assertEquals(ModManagerScreen.MAX_VISIBLE_ROWS, screen.visibleRows().size());
 
         screen.update(menu(down));
         screen.update(menu(down));
@@ -581,7 +584,10 @@ class TestModManagerScreen {
         assertTrue(font.drawn.stream().anyMatch(line -> line.contains("second.jar")));
 
         screen.select(0);
-        press(screen, Action.RIGHT);
+        press(screen, Action.RIGHT); // actions
+        press(screen, Action.RIGHT); // Order
+        press(screen, Action.ACCEPT);
+        press(screen, Action.DOWN);
         assertEquals(2, screen.rows().size());
         assertTrue(screen.statusMessage().contains("Duplicate"));
         screen.select(1);
@@ -812,6 +818,84 @@ class TestModManagerScreen {
         host.update(input);
     }
 
+    @Test
+    void visibleDetailsAndOrderActionsPreserveTheSelectedModAndSaveFlow() {
+        List<ModDescriptor> mods = List.of(descriptor("pack-a", "A", List.of(), List.of()),
+                descriptor("pack-b", "B", List.of(), List.of()),
+                descriptor("pack-c", "C", List.of(), List.of()));
+        RecordingFont font = new RecordingFont();
+        ModManagerScreen screen = screen(catalog(mods), state(false, false, false, "pack-a", "pack-b", "pack-c"),
+                new ModRuntimeFindingStore(), font, temp.resolve("visible-actions"));
+        press(screen, Action.DOWN);
+        press(screen, Action.RIGHT);
+        press(screen, Action.ACCEPT);
+        screen.render();
+        assertTrue(font.drawn.contains("MOD DETAILS"));
+        assertTrue(font.drawn.stream().anyMatch(line -> line.contains("Id: pack-b")));
+        assertEquals(1, screen.selectedIndex());
+        press(screen, Action.BACK);
+        assertFalse(screen.closeRequested());
+        press(screen, Action.RIGHT);
+        press(screen, Action.ACCEPT);
+        press(screen, Action.DOWN);
+        assertEquals(List.of("pack-a", "pack-c", "pack-b"), pendingIds(screen));
+        press(screen, Action.BACK);
+        press(screen, Action.RIGHT);
+        press(screen, Action.RIGHT);
+        press(screen, Action.ACCEPT);
+        assertTrue(screen.closeRequested());
+        assertTrue(Files.exists(temp.resolve("visible-actions/modstate.json")));
+    }
+
+    @Test
+    void longDetailsAndManyNoticesStayOnNativeGridAndRemainReadableByPaging() {
+        List<ModFinding> findings = new ArrayList<>();
+        for (int i = 0; i < 35; i++) findings.add(finding(ModFindingSeverity.WARNING, "LONG_" + i,
+                "A long explanation with exact useful information ".repeat(3) + "END_MARKER_" + i));
+        ModDescriptor mod = descriptor("pack-verbose", "A very long mod name ".repeat(8), List.of(), findings);
+        RecordingFont font = new RecordingFont();
+        ModManagerScreen screen = screen(catalog(List.of(mod)), state(false, "pack-verbose"),
+                new ModRuntimeFindingStore(), font, temp.resolve("verbose"));
+        screen.render();
+        press(screen, Action.RIGHT);
+        press(screen, Action.ACCEPT);
+        for (int i = 0; i < 300; i++) press(screen, Action.DOWN);
+        screen.render();
+        assertTrue(font.drawn.stream().anyMatch(line -> line.contains("END_MARKER_34")),
+                "Wrapping must retain the final text, not permanently truncate it");
+        for (RenderedLine line : font.lines) {
+            int advance = line.scale() < 1 ? 6 : 9;
+            int height = line.scale() < 1 ? 8 : 10;
+            assertTrue(line.x() >= 0 && line.x() + line.value().length() * advance <= 320,
+                    () -> "Horizontal overflow: " + line);
+            assertTrue(line.y() >= 0 && line.y() + height <= 224,
+                    () -> "Vertical overflow: " + line);
+            assertTrue(line.scale() == 1f || line.scale() == 2f / 3f,
+                    "Only native menu font sizes are used");
+        }
+    }
+
+    @Test
+    void adaptiveLabelsAndDetailsBackDoNotSaveOrToggle() {
+        RecordingFont font = new RecordingFont();
+        ModManagerScreen screen = screen(catalog(List.of(descriptor("pack-one", "One", List.of(), List.of()))),
+                state(false, "pack-one"), new ModRuntimeFindingStore(), font, temp.resolve("labels"));
+        screen.update(new ModManagerScreen.MenuInput() {
+            @Override public String confirmLabel() { return "A"; }
+            @Override public String backLabel() { return "B"; }
+            @Override public String directionLabel() { return "D-Pad"; }
+        });
+        screen.render();
+        assertTrue(font.drawn.stream().anyMatch(line -> line.startsWith("A Toggle")));
+        assertTrue(font.drawn.stream().anyMatch(line -> line.startsWith("B Save+Back")));
+        press(screen, Action.RIGHT);
+        press(screen, Action.ACCEPT);
+        press(screen, Action.BACK);
+        assertFalse(screen.closeRequested());
+        assertFalse(enabled(screen, "pack-one"));
+        assertFalse(Files.exists(temp.resolve("labels/modstate.json")));
+    }
+
     private static ModManagerScreen.MenuInput menu(LogicalInputSnapshot input) {
         return menu(input, false);
     }
@@ -842,8 +926,11 @@ class TestModManagerScreen {
 
     private enum Action { UP, DOWN, LEFT, RIGHT, ACCEPT, BACK }
 
+    private record RenderedLine(String value, int x, int y, float scale) { }
+
     private static final class RecordingFont extends PixelFont {
         private final List<String> drawn = new ArrayList<>();
+        private final List<RenderedLine> lines = new ArrayList<>();
 
         @Override
         public void beginMegaBatch() { }
@@ -855,6 +942,7 @@ class TestModManagerScreen {
         public void drawText(String text, int x, int y, float scale,
                              float r, float g, float b, float a) {
             drawn.add(text);
+            lines.add(new RenderedLine(text, x, y, scale));
         }
     }
 

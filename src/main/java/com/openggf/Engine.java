@@ -674,6 +674,7 @@ public class Engine {
 
 	private void installEditorTextInputCallback() {
 		glfwSetCharCallback(window, (windowHandle, codepoint) -> {
+			com.openggf.control.MenuInput.handleCharEvent(inputHandler, codepoint);
 			if (getCurrentGameMode() == GameMode.EDITOR) {
 				editorInputHandler.handleTextInputCodepoint(codepoint);
 			}
@@ -2955,13 +2956,12 @@ public class Engine {
 				&& inputHandler != null
 				&& inputHandler.isKeyPressed(
 						configService.getInt(SonicConfiguration.FRAME_STEP_KEY));
-		boolean displayShaderPickerHandledInput = updateDisplayShaderInput();
-		if (displayColorProfileController != null && !displayShaderPickerHandledInput) {
-			displayColorProfileController.update(inputHandler);
-		}
-		if (displayShaderController != null && !displayShaderPickerHandledInput) {
-			displayShaderController.update(inputHandler);
-		}
+		boolean displayShaderPickerHandledInput = com.openggf.game.TitleInputOwnership.routeDisplay(
+				getCurrentGameMode(), masterTitleScreen,
+				displayShaderPickerController != null && displayShaderPickerController.isOpen(),
+				this::updateDisplayShaderInput,
+				() -> { if (displayColorProfileController != null) displayColorProfileController.update(inputHandler); },
+				() -> { if (displayShaderController != null) displayShaderController.update(inputHandler); });
 		if (!displayShaderPickerHandledInput) {
 			update();
 		} else if (inputHandler != null) {
@@ -3310,9 +3310,10 @@ public class Engine {
 		if (inputHandler == null) {
 			return;
 		}
-		if (!shouldToggleLiveCapture(
-				configService.getKeyChord(SonicConfiguration.CAPTURE_TOGGLE_KEY),
-				liveCaptureChord, inputHandler)) {
+		if (!com.openggf.game.TitleInputOwnership.routeCapture(getCurrentGameMode(), masterTitleScreen,
+				() -> shouldToggleLiveCapture(
+						configService.getKeyChord(SonicConfiguration.CAPTURE_TOGGLE_KEY),
+						liveCaptureChord, inputHandler))) {
 			return;
 		}
 		switch (liveCaptureController.state()) {

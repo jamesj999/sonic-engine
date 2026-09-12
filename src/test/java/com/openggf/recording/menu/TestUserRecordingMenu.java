@@ -4,6 +4,10 @@ import com.openggf.GameLoop;
 import com.openggf.configuration.SonicConfiguration;
 import com.openggf.configuration.SonicConfigurationService;
 import com.openggf.control.InputHandler;
+import com.openggf.control.InputActionMasks;
+import com.openggf.control.LogicalInputSnapshot;
+import com.openggf.control.PlayerInputState;
+import com.openggf.sprites.playable.AbstractPlayableSprite;
 import com.openggf.game.GameMode;
 import com.openggf.game.MasterTitleScreen;
 import com.openggf.game.session.EngineContext;
@@ -181,6 +185,8 @@ class TestUserRecordingMenu {
             loop.setGameMode(GameMode.MASTER_TITLE_SCREEN);
 
             pressShiftRecord(loop, input, config);
+            // Let the hosted menu observe the opener released before confirming.
+            loop.step();
             pressLoopKey(loop, input, GLFW_KEY_ENTER);
             pressLoopKey(loop, input, GLFW_KEY_ENTER);
             pressLoopKey(loop, input, GLFW_KEY_ENTER);
@@ -297,6 +303,94 @@ class TestUserRecordingMenu {
         state.update(input);
 
         assertEquals(1, state.cursor(), "the menu responds again after focus loss");
+    }
+
+    @Test
+    void controllerCanChooseRecordingEditOptionsAndBackWithoutPlayback() {
+        UserRecordingMenuState state = new UserRecordingMenuState("s2", List.of(entry("s2", 60), entry("s2", 120)));
+        InputHandler input = new InputHandler();
+        controllerInput(input, AbstractPlayableSprite.INPUT_DOWN, 0);
+        state.update(input);
+        assertEquals(1, state.cursor());
+        controllerInput(input, 0, InputActionMasks.ACTION_B);
+        state.update(input);
+        assertTrue(state.isPromptingForTargetFrame());
+        controllerInput(input, AbstractPlayableSprite.INPUT_LEFT, 0);
+        state.update(input);
+        assertEquals("118", state.promptBuffer());
+        controllerInput(input, AbstractPlayableSprite.INPUT_UP, 0);
+        state.update(input);
+        assertTrue(state.options().pauseOnDesync());
+        controllerInput(input, AbstractPlayableSprite.INPUT_DOWN, 0);
+        state.update(input);
+        assertTrue(state.options().fastForward());
+        controllerInput(input, 0, InputActionMasks.ACTION_C);
+        state.update(input);
+        assertFalse(state.isPromptingForTargetFrame());
+        assertNull(state.consumePlaybackRequest());
+        state.update(input);
+        assertTrue(state.consumeCloseRequested());
+        assertNull(state.consumePlaybackRequest());
+    }
+
+    private static void controllerInput(InputHandler input, int direction, int action) {
+        input.setLogicalOverride(LogicalInputSnapshot.ofPlayers(
+                PlayerInputState.of(direction, direction, action, action, false, false),
+                PlayerInputState.neutral()));
+    }
+
+    @Test
+    void visibleOptionsRequireExplicitPlayAndTargetEditorCanUseKeyboard() {
+        AtomicReference<UserRecordingPlaybackOptions> played = new AtomicReference<>();
+        UserRecordingMenu menu = new UserRecordingMenu("s2", List.of(entry("s2", 120)), null,
+                (recording, options) -> played.set(options));
+        menuKey(menu, org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER);
+        assertNull(played.get());
+        for (int i = 0; i < 3; i++) menuKey(menu, org.lwjgl.glfw.GLFW.GLFW_KEY_UP);
+        menuKey(menu, org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER);
+        for (int i = 0; i < 3; i++) menuKey(menu, org.lwjgl.glfw.GLFW.GLFW_KEY_BACKSPACE);
+        InputHandler typing = new InputHandler();
+        com.openggf.control.MenuInput.handleCharEvent(typing, '4');
+        com.openggf.control.MenuInput.handleCharEvent(typing, '2');
+        menu.update(typing);
+        menuKey(menu, org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER);
+        for (int i = 0; i < 3; i++) menuKey(menu, org.lwjgl.glfw.GLFW.GLFW_KEY_DOWN);
+        menuKey(menu, org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER);
+        assertNotNull(played.get());
+        assertEquals(42, played.get().targetFrame());
+    }
+
+    @Test
+    void recordingsLibraryOptionsAndDetailsStayWithinNativeBounds() {
+        com.openggf.graphics.PixelFont font = new com.openggf.graphics.PixelFont() {
+            @Override public void beginMegaBatch() { }
+            @Override public void endMegaBatch() { }
+            @Override public void drawText(String value, int x, int y, float scale,
+                    float r, float g, float b, float a) {
+                int advance = scale < 1 ? 6 : 9;
+                assertTrue(x >= 0 && x + value.length() * advance <= 320, value);
+                assertTrue(y >= 0 && y + (scale < 1 ? 8 : 10) <= 224, value);
+                assertTrue(scale == 1f || scale == com.openggf.game.MenuStyle.COMPACT, value);
+            }
+        };
+        UserRecordingMenu menu = new UserRecordingMenu("s2", List.of(entry("s2", 120)), font, (e, o) -> { });
+        menu.render();
+        menuKey(menu, org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER);
+        menu.render();
+        menuKey(menu, org.lwjgl.glfw.GLFW.GLFW_KEY_DOWN);
+        menuKey(menu, org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER);
+        menu.render();
+        menuKey(menu, org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE);
+        assertFalse(menu.consumeCloseRequested());
+    }
+
+    private static void menuKey(UserRecordingMenu menu, int key) {
+        InputHandler input = new InputHandler();
+        input.handleKeyEvent(key, GLFW_PRESS);
+        menu.update(input);
+        input.handleKeyEvent(key, GLFW_RELEASE);
+        input.update();
+        menu.update(input);
     }
 
     private static UserRecordingEntry entry(String gameId, int frameCount) {
