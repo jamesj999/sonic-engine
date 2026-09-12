@@ -1,6 +1,14 @@
-# OpenGGF Roadmap Proposal
+# OpenGGF Roadmap
 
-This document is a proposal for how to prioritize OpenGGF after the `v0.4.20260304` release.
+Current release planning is owned by the [0.7 campaign roadmap](docs/project/v0.7-roadmap.md)
+and [0.8 feature roadmap](docs/project/v0.8-roadmap.md). After the September 12
+rollover, master retains 0.6.20260911, develop carries 0.7.prerelease, and next
+carries 0.8.prerelease. Implemented additions remain on develop with explicit
+experimental/support limits; 0.8 graduation does not require removing them
+from 0.7. See the [availability matrix](docs/project/v0.7-roadmap.md#feature-availability-during-07).
+
+The proposal and retrospectives below record planning after `v0.4.20260304`;
+their dated measurements and former scope statements are historical.
 
 It is intentionally opinionated:
 
@@ -8,7 +16,7 @@ It is intentionally opinionated:
 - Shared engine maturity is more important than one-off hacks.
 - A smaller number of release themes is better than a wide, vague backlog.
 
-## Current Position
+## Historical position after v0.4
 
 OpenGGF has crossed an important threshold:
 
@@ -82,7 +90,7 @@ and v0.7 gameplay gap work that was not originally planned for v0.5.
 
 ---
 
-## Proposed Priorities (Updated 2026-08-28)
+## Historical 0.6 priorities (updated 2026-08-28)
 
 ## v0.6 Theme: S3K Playable Slice Parity and Release Readiness
 
@@ -258,8 +266,8 @@ audio handoffs, ending and chain evidence so lifecycle defects surface early.
 Continue screens, fast/accurate FM selection, AIZ2 background level/art/tilemap
 preparation, native packaging and direct Maven already landed through 0.6.
 Retain them; do not schedule their invention again. Widescreen, modding, racing,
-editor and team work also have substantial implementations on `next`, with
-candidate/experimental boundaries and remaining release validation.
+editor and team work have substantial implementations promoted from next into
+develop, with candidate/experimental boundaries and remaining release validation.
 
 0.7 does not require a public Mod API freeze or broad new optimization work.
 Make narrow shared-policy, loading and audio fixes where campaign evidence
