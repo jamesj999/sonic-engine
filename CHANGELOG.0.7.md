@@ -8,7 +8,7 @@ campaigns; feature/API publication remains subject to the 0.8 roadmap.
 
 - **Master title hub:** controller-first navigation uses left/right to change games
   from either pane and up/down to enter and move through actions, with confirmation
-  on menu entry and error/cancel feedback on back. It keeps the existing
+  on menu entry and distinct cancel feedback on back. It keeps the existing
   animated ROM logos, adds visible launch, time-attack, recordings, mods, settings,
   advanced, and quit entries, and follows intentional input with keyboard/controller prompts.
   Catalog-backed engine settings offer visible categories, onscreen value/path/key
@@ -17,7 +17,8 @@ campaigns; feature/API publication remains subject to the 0.8 roadmap.
   Checkerboard pages retain full-size primary lettering and use an authored native
   small font with lowercase descenders for metadata instead of fractional downscaling.
   Visible game tabs dim missing ROMs, the sky remains visible beside the action list,
-  and error pages retain accurate diagnostics until dismissed. Settings help shows
+  unavailable games hide profile status, and missing-ROM hints have a dark backing.
+  Error pages retain accurate diagnostics until dismissed. Settings help shows
   two lines at once; launch rows use the shared left-aligned focus style. Recordings, traces,
   mods, time attack, room browsing, and lobbies have bounded pages and visible
   actions; text entry works with keyboards or controllers without triggering global

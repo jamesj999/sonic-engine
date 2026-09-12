@@ -84,7 +84,7 @@ When the engine starts, you will see:
    game logos remain, scaled proportionally into the game pane.
    When audio is enabled, navigation, confirmation, and missing-ROM errors use short
    host-owned cues that do not depend on the selected game's ROM. Opening menu screens
-   plays confirmation; backing out plays the same error/cancel sound as a missing ROM.
+   plays confirmation; backing out plays a distinct cancel sound.
 2. **Game title screen** -- The selected game's original title screen (e.g., the Sonic 2
    "PRESS START BUTTON" screen).
 3. **Gameplay** -- The first zone of the selected game.

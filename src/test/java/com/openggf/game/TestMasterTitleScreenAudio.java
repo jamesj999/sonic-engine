@@ -73,7 +73,7 @@ class TestMasterTitleScreenAudio {
     }
 
     @Test
-    void openingAndCancellingLaunchOptionsUseConfirmAndErrorOnce() {
+    void openingAndCancellingLaunchOptionsUseConfirmAndCancelOnce() {
         MasterTitleScreen screen = activeScreen(true);
         InputHandler input = new InputHandler();
         pressFrame(screen, input, GLFW_KEY_DOWN);
@@ -81,12 +81,12 @@ class TestMasterTitleScreenAudio {
         pressFrame(screen, input, GLFW_KEY_ENTER);
         pressFrame(screen, input, GLFW_KEY_ESCAPE);
         pressFrame(screen, input, GLFW_KEY_ESCAPE);
-        assertEquals(List.of("UI_NAVIGATE", "UI_NAVIGATE", "UI_CONFIRM", "UI_ERROR", "UI_ERROR"),
+        assertEquals(List.of("UI_NAVIGATE", "UI_NAVIGATE", "UI_CONFIRM", "UI_CANCEL", "UI_CANCEL"),
                 emittedSfxNames());
     }
 
     @Test
-    void settingsAndToolsEnterWithConfirmationAndBackWithError() {
+    void settingsAndToolsEnterWithConfirmationAndBackWithCancel() {
         MasterTitleScreen screen = activeScreen(true);
         InputHandler input = new InputHandler();
         pressFrame(screen, input, GLFW_KEY_DOWN);
@@ -100,8 +100,18 @@ class TestMasterTitleScreenAudio {
         pressFrame(screen, input, GLFW_KEY_DOWN);
         pressFrame(screen, input, GLFW_KEY_ENTER);
         pressFrame(screen, input, GLFW_KEY_ESCAPE);
-        assertEquals(List.of("UI_CONFIRM", "UI_ERROR", "UI_NAVIGATE", "UI_CONFIRM",
-                "UI_CONFIRM", "UI_ERROR"), emittedSfxNames());
+        assertEquals(List.of("UI_CONFIRM", "UI_CANCEL", "UI_NAVIGATE", "UI_CONFIRM",
+                "UI_CONFIRM", "UI_CANCEL"), emittedSfxNames());
+    }
+
+    @Test
+    void acknowledgingMissingRomUsesCancelWithoutRepeatingError() {
+        MasterTitleScreen screen = activeScreen(false);
+        InputHandler input = new InputHandler();
+        pressFrame(screen, input, GLFW_KEY_DOWN);
+        pressFrame(screen, input, GLFW_KEY_ENTER);
+        pressFrame(screen, input, GLFW_KEY_ESCAPE);
+        assertEquals(List.of("UI_NAVIGATE", "UI_ERROR", "UI_CANCEL"), emittedSfxNames());
     }
 
     private MasterTitleScreen activeScreen(boolean selectedRomAvailable) {
