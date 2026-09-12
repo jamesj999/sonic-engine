@@ -121,3 +121,29 @@ command and ROM properties as the earlier baseline. Its additional 23 passing
 tests belong to the menu work. This optimization changes a different test
 file, so the existing candidate correctness evidence remains attributed to
 `aaa45a0dd`; the integrated run must be compared with `8613f00db`.
+
+The first integrated ordinary run at `004fbdeaf`,
+`20260912T152901Z-d9f31c1f`, matched the `8613f00db` baseline exactly, including
+all outcome identities and full nonpassing diagnostics. Its guards lane was
+stopped cleanly when origin advanced; it is not guard-pass evidence.
+
+Origin then supplied the Java refactoring merge `76a5903be` and bounded
+validation controls `5d9ef4af4`. Both merged without conflicts. The latter
+adds a 40-minute total budget, a 10-minute no-output timeout, tool preflight,
+and explicit repeat reasons. Its 36 Python safety tests passed, and preflight
+found Java 21, Lua 5.4, and PowerShell. An extra broad baseline at `76a5903be`
+was stopped through the runner's cleanup handler after adopting the new policy;
+that incomplete run is not suite evidence. Disputed failures in the final
+selection must be attributed with matched focused tests, not another full pair.
+
+The final reconciled selection is pinned to upstream `5d9ef4af4` and includes
+all 2,503 candidate classes plus guards. Its repeat reason is the intervening
+material engine refactor, not the existing FBZ failures:
+
+```bash
+LUA_BIN=lua5.4 python3 tools/testing/run_categories.py --base 5d9ef4af4 \
+  --repeat-reason 'Origin added material Java refactoring and validation controls after the prior integrated run' --run
+```
+
+Completed final results and any focused attribution are retained in
+`$TASK_EVIDENCE_ROOT`; the earlier timing pair remains attributed to `aaa45a0dd`.
