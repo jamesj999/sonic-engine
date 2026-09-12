@@ -5,25 +5,11 @@ import com.openggf.level.scroll.compose.ScrollEffectComposer;
 import static com.openggf.level.scroll.M68KMath.*;
 
 /**
- * ROM-accurate implementation of Deform_SBZ (Scrap Brain Zone scroll routine).
- * Reference: s1disasm/_inc/DeformLayers.asm - Deform_SBZ
- *
- * SBZ has uniform horizontal scrolling with a 2x vertical parallax multiplier:
- * <ul>
- *   <li>BG X: 25% speed (scrshiftx &lt;&lt; 6 = 64/256)</li>
- *   <li>BG Y: 12.5% speed (scrshifty &lt;&lt; 4 &lt;&lt; 1 = 32/256)</li>
- *   <li>H-scroll: uniform (all 224 lines same)</li>
- * </ul>
- *
- * BgScroll_SBZ initial setup (from LevelSizeLoad &amp; BgScrollSpeed.asm):
- * <pre>
- *   asl.l  #4,d0          ; d0 = cameraY * 16 (long shift)
- *   asl.l  #1,d0          ; d0 = cameraY * 32
- *   asr.l  #8,d0          ; d0 = cameraY * 32 / 256
- *   move.w d0,bgscreenposy
- * </pre>
+ * Uniform S1 background scrolling: quarter-speed X and eighth-speed Y.
+ * SBZ and FZ currently share this implementation of Deform_SBZ2 and BgScroll_SBZ.
+ * Each route owns a separate instance, including fractional camera state.
  */
-public class SwScrlSbz extends AbstractZoneScrollHandler {
+public final class UniformQuarterSpeedScroll extends AbstractZoneScrollHandler {
 
     // Persistent BG camera (16.16 fixed point)
     private long bgXPos;
@@ -65,10 +51,10 @@ public class SwScrlSbz extends AbstractZoneScrollHandler {
         lastCameraX = cameraX;
         lastCameraY = cameraY;
 
-        // ScrollBlock1: d4 = scrshiftx << 6 = deltaX * 64 * 256
+        // Deform_SBZ2: d4 = scrshiftx << 6 = deltaX * 64 * 256
         bgXPos += (long) deltaX * 64 * 256;
 
-        // d5 = scrshifty << 4 << 1 = scrshifty * 32 = deltaY * 32 * 256
+        // Deform_SBZ2: d5 = scrshifty << 5 = deltaY * 32 * 256
         bgYPos += (long) deltaY * 32 * 256;
 
         int bgX = (int) (bgXPos >> 16);
@@ -76,7 +62,7 @@ public class SwScrlSbz extends AbstractZoneScrollHandler {
 
         composer.setVscrollFactorBG((short) bgY);
 
-        // Uniform h-scroll
+        // Uniform h-scroll (Deform_SBZ2: all 224 lines same)
         short fgScroll = negWord(cameraX);
         short bgScroll = negWord(bgX);
 

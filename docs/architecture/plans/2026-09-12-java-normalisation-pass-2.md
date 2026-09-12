@@ -1,7 +1,8 @@
 # Java normalisation: second review
 
 Status: candidates 1, 2, 3, 4 and 8 implemented on `develop`, one commit each.
-Candidates 5, 6, 7, 9, 10 and 11 remain deferred after the user ended this pass.
+Candidates 5, 6, 7, 9, 10 and 11 resumed at the user’s request. Validation uses
+one combined final selection against `c4b5325d25`, within a shared 40-minute budget.
 
 Reviewed `develop` at `5d9ef4af40d052050d37df2424e696608cff2647` on
 12 September 2026. Main workspace only; no worktrees or branch changes.
@@ -434,3 +435,20 @@ Python safety verification: 53 tests passed in approximately four seconds; actua
 Java 21/Lua 5.4/PowerShell preflight passed. No new engine suite was launched.
 Fetched `origin/develop` at `0f35005124` was merged with both changelog histories
 preserved. This integration is not claimed as a newly tested green engine suite.
+
+### Candidate 5 — shared uniform S1 scroll
+
+SBZ and FZ now use separate `UniformQuarterSpeedScroll` instances, preserving
+initial rounding, fractional deltas and all packed scanlines. REV01 `Deform_SBZ`
+has separate act-1 building bands missing from the existing Java behavior;
+that pre-existing parity gap is recorded in `docs/status/known-bugs.md` and is
+outside this extraction. Focused scroll ownership and packed-buffer checks run
+with the resumed delivery batch; combined validation is recorded below.
+
+Resumed focused batch on the six-candidate working tree at base `c4b5325d25`:
+`mvn -Dmse=off -Dtest=TestUniformQuarterSpeedScroll,Sonic1BackgroundScrollOwnershipTest,TestRomRingMappings,TestSmpsHeaderConstruction,TestSlotWindowGpuPassNative,TestHardwareTimingStreamLoader,TestHardwareTimingInterstitialStream -Dopenggf.slotNative=true test`,
+with absolute S1/S2/S3K ROM properties and native macOS access: 42 tests passed,
+no failures/errors/skips. The first attempt stopped at test compilation because
+an unchanged S1 class was absent from incremental build output; rebuilding local
+class output completed the batch. Both attempts totalled 119 seconds and were
+charged to the shared task budget. Inspected focused diagnostics were removed.

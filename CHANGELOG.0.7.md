@@ -94,6 +94,7 @@ campaigns; feature/API publication remains subject to the 0.8 roadmap.
   callbacks; manager-owned collision, riding and live callbacks are preserved.
   S2 player and dust art share the S2 mapping/DPLC decoder, with the public
   player DPLC entry point retained as a compatibility delegate.
+  SBZ and Final Zone share uniform scroll mechanics with independent camera state.
 
 ## Build and release
 

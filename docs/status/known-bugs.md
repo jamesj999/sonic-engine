@@ -23,6 +23,7 @@ Entries should include:
 2. [Persisted Editor Saves Disabled for S3K Gameplay Loads](#persisted-editor-saves-disabled-for-s3k-gameplay-loads)
 3. [Trace Replay Recorder Coverage Follow-Up](#trace-replay-recorder-coverage-follow-up)
 4. [S3K AIZ Items Carried From The 2026-03-25 Working List](#s3k-aiz-items-carried-from-the-2026-03-25-working-list)
+5. [Sonic 1 SBZ Act 1 Parallax Bands](#sonic-1-sbz-act-1-parallax-bands)
 
 ---
 
@@ -163,3 +164,16 @@ Unknown; the items predate the trace-replay suite and no trace exercises them.
 Remove each bullet once it is reproduced against the current engine and either fixed with a ROM citation or
 shown to match the ROM. Remove the entry when no bullet remains.
 
+
+## Sonic 1 SBZ Act 1 Parallax Bands
+
+REV01 `Deform_SBZ` checks `v_act` and gives act 1 separate building bands
+with different horizontal speeds (`docs/s1disasm/_inc/DeformLayers (REV01).asm`,
+`Deform_SBZ`, line 551). Nonzero acts use the uniform `Deform_SBZ2` path
+(line 653), including Final Zone.
+
+The current SBZ handler uses that uniform path for both acts. The second Java
+normalisation pass shares the existing implementation with Final Zone but does
+not add the missing act-1 effect. This is a pre-existing rendering parity gap,
+not an intentional discrepancy. Resolve it as separate ROM-backed zone work,
+including all packed scanlines and background-camera initialization.
