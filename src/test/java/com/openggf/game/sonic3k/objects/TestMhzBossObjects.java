@@ -473,8 +473,8 @@ class TestMhzBossObjects {
                 "Touch_Enemy_Part2 consumes the final Obj_MHZMiniboss collision_property count");
         assertEquals(0, miniboss.getState().invulnerabilityTimer,
                 "loc_75DCC replaces the boss routine instead of leaving the base hit-flash timer active");
-        assertEquals(Sonic3kSfx.EXPLODE.id, lastSfx[0],
-                "Child6_CreateBossExplosion subtype $10 starts the timed explosion controller");
+        assertEquals(1, spawned.stream().filter(MhzMinibossExplosionController.class::isInstance).count(),
+                "loc_75DCC allocates one independent subtype-$10 explosion controller");
         assertEquals(1, spawned.stream().filter(SongFadeTransitionInstance.class::isInstance).count(),
                 "Wait_FadeToLevelMusic allocates Obj_Song_Fade_ToLevelMusic when $2E underflows");
         assertEquals(1, spawned.stream().filter(S3kBossDefeatSignpostFlow.class::isInstance).count(),
@@ -492,8 +492,8 @@ class TestMhzBossObjects {
                 "MHZ's native results parent transforms as soon as its final child retires");
         assertTrue(readBooleanField(flow, "changeAct2SizesOnTitleComplete"),
                 "Obj_EndSignControlDoStart must create MHZ's gradual Act 2 size worker");
-        assertTrue(spawned.stream().anyMatch(S3kBossExplosionChild.class::isInstance),
-                "Child6_CreateBossExplosion subtype $10 emits normal explosion children every three frames");
+        assertEquals(Sonic3kSfx.BOSS_HIT.id, lastSfx[0],
+                "the body plays the final hit; explosion sounds belong to the children's initialization");
         assertEquals(true, miniboss.isDestroyed(),
                 "the boss body slot is replaced by the persistent signpost-flow controller");
         verify(levelState).pauseTimer();

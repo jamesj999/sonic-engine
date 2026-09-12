@@ -965,6 +965,19 @@ note and Task V1 (Step 5) reconciliation so they are tracked rather than silentl
   The first dash still intentionally leaves the screen and waits for the
   camera in `loc_75392`. A real-manager regression test checks offscreen
   retention, resumed movement, attached flames and explicit deletion.
+- **MHZ1 miniboss defeat visuals (corrected, 2026-09-12).**
+  Fresh MHZ1 loads lacked the shared boss explosion renderer. Boss initialization
+  now loads the ROM-backed sheet required by `PLC_MHZMiniboss_Explosion`.
+  The shared late-load helper also uploads its patterns: registration alone
+  left the renderer unready and still silently discarded explosion draws.
+  `loc_75DCC`'s independent `CreateBossExp10` controller now survives the
+  body's 64-update music/signpost handoff and completes 31 explosion attempts.
+  Random offsets use the native low/high words after successful allocation;
+  each explosion owns its initialization sound. Real-manager tests cover
+  fresh art registration, the complete burst count, and controller rewind
+  after body retirement. The initial checks missed upload readiness; the
+  strengthened check now passes, following the user's successful manual
+  verification. See [defeat validation](architecture/validation/2026-09-12-mhz1-boss-defeat.md).
 - **Mushmeanie shell-direction pointer (verified, 2026-09-12).**
   The earlier stale-pointer diagnosis was incorrect: `Check_PlayerCollision`
   explicitly stores the selected player pointer into the parent's `$44`.

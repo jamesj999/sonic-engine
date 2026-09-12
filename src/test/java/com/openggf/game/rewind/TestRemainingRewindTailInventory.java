@@ -117,7 +117,8 @@ class TestRemainingRewindTailInventory {
         // standalone object classes probe cleanly, and the parent-dependent
         // Sonic 2 Obj11 bridge segment has focused graph coverage.
         // The three game-over card implementations from develop pass the isolated sweep.
-        return new TailInventory(1009, 789, 220, 0, buckets);
+        // MHZ1's independent defeat-explosion controller also passes the isolated sweep.
+        return new TailInventory(1010, 790, 220, 0, buckets);
     }
 
     private static void loadBucketRows(String resource, Map<Bucket, TreeSet<String>> buckets) {

@@ -1407,19 +1407,26 @@ public class Sonic3kObjectArtProvider implements ObjectArtProvider,
     }
 
     /**
-     * Ensures the shared boss explosion art is registered.
+     * Ensures the shared boss explosion art is registered and ready to draw.
      * Used by bosses in zones that do not preload the explosion sheet during zone art setup.
      *
-     * @return true if the shared boss explosion sheet exists after the call
+     * @return true if the shared boss explosion renderer is ready after the call
      */
     public boolean ensureBossExplosionArtLoaded() {
+        PatternSpriteRenderer renderer = renderers.get(ObjectArtKeys.BOSS_EXPLOSION);
         if (sheets.containsKey(ObjectArtKeys.BOSS_EXPLOSION)
-                && renderers.containsKey(ObjectArtKeys.BOSS_EXPLOSION)) {
+                && renderer != null && renderer.isReady()) {
             return true;
         }
         loadSharedBossExplosionArt();
-        return sheets.containsKey(ObjectArtKeys.BOSS_EXPLOSION)
-                && renderers.containsKey(ObjectArtKeys.BOSS_EXPLOSION);
+        renderer = renderers.get(ObjectArtKeys.BOSS_EXPLOSION);
+        if (!sheets.containsKey(ObjectArtKeys.BOSS_EXPLOSION) || renderer == null) {
+            return false;
+        }
+        // Boss initialization can run after the level's atlas upload. Registering
+        // a sheet alone leaves patternBase=-1, so explosion draws are discarded.
+        ensurePatternsCached(GameServices.graphics(), PatternAtlasRange.OBJECTS.base());
+        return renderer.isReady();
     }
 
     /**

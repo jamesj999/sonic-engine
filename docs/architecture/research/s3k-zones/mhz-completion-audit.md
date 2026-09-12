@@ -128,3 +128,11 @@ attached flames could be removed by camera distance despite native draw-only
 lifetime tails. The correction and real-manager regression coverage are recorded
 in [the lifetime validation](../../validation/2026-09-12-mhz1-boss-lifetime.md).
 The boss's intentional offscreen dash/wait remains native behavior.
+
+## Follow-up: MHZ1 defeat visuals
+
+Fresh-level testing exposed missing boss explosion art and an explosion train
+that retired with the body before its final bursts. The initialization PLC
+and independent native controller are now represented; real-manager tests
+cover the full train and rewind after the body retires. See
+[defeat validation](../../validation/2026-09-12-mhz1-boss-defeat.md).

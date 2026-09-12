@@ -6,6 +6,7 @@ import com.openggf.game.sonic3k.S3kPaletteOwners;
 import com.openggf.game.sonic3k.S3kPaletteWriteSupport;
 import com.openggf.game.sonic3k.Sonic3kLevelEventManager;
 import com.openggf.game.sonic3k.Sonic3kObjectArtKeys;
+import com.openggf.game.sonic3k.Sonic3kObjectArtProvider;
 import com.openggf.game.sonic3k.audio.Sonic3kMusic;
 import com.openggf.game.sonic3k.audio.Sonic3kSfx;
 import com.openggf.game.sonic3k.constants.Sonic3kConstants;
@@ -45,10 +46,6 @@ public final class MhzMinibossInstance extends AbstractBossInstance implements S
     private static final int FIRST_SWING_Y_VELOCITY = 0x80;
     private static final int FIRST_SWING_ACCELERATION = 0x10;
     private static final int LEVEL_MUSIC_FADE_TIME = 2 * 60;
-    private static final int DEFEAT_EXPLOSION_TIMER = 0x20; // CreateBossExp10
-    private static final int DEFEAT_EXPLOSION_X_RANGE = 0x20;
-    private static final int DEFEAT_EXPLOSION_Y_RANGE = 0x20;
-    private static final int DEFEAT_EXPLOSION_INTERVAL = 3;
     private static final int CHOPPING_CALLBACK_COMMAND = 0xF4;
     // loc_845E4: re-point the script base by a signed relative offset, then fall through to $FC.
     private static final int SCRIPT_JUMP_COMMAND = 0xF8;
@@ -160,8 +157,6 @@ public final class MhzMinibossInstance extends AbstractBossInstance implements S
     // until the next Set_Raw_Animation-equivalent reset (a fresh script switch).
     private int scriptBase;
     private boolean defeatHandoffQueued;
-    private int defeatExplosionTimer;
-    private int defeatExplosionIntervalCounter;
     private boolean paletteLoaded;
 
     public MhzMinibossInstance(ObjectSpawn spawn) {
@@ -183,8 +178,6 @@ public final class MhzMinibossInstance extends AbstractBossInstance implements S
         scriptBase = 0;
         paletteLoaded = false;
         defeatHandoffQueued = false;
-        defeatExplosionTimer = -1;
-        defeatExplosionIntervalCounter = DEFEAT_EXPLOSION_INTERVAL - 1;
         setCustomFlag(SCRATCH_2E, INIT_TIMER);
         setCustomFlag(SCRATCH_42, 5);
         cameraInitPending = true;
@@ -301,8 +294,11 @@ public final class MhzMinibossInstance extends AbstractBossInstance implements S
         // decrement (sonic3k.asm:156704-156732,179656-179674,180819-180826).
         setCustomFlag(SCRATCH_2E, 0x3F);
         defeatHandoffQueued = false;
-        defeatExplosionTimer = DEFEAT_EXPLOSION_TIMER;
-        defeatExplosionIntervalCounter = DEFEAT_EXPLOSION_INTERVAL - 1;
+        // loc_75DCC allocates an independent CreateBossExp10 controller.
+        // Its 31 bursts continue beyond this body's 64-update fade waiter.
+        if (tryServices() != null) {
+            spawnChild(() -> new MhzMinibossExplosionController(state.x, state.y));
+        }
         ObjectServices svc = tryServices();
         if (svc != null && svc.levelGamestate() != null) {
             svc.levelGamestate().pauseTimer();
@@ -387,6 +383,12 @@ public final class MhzMinibossInstance extends AbstractBossInstance implements S
         // (Obj_Song_Fade_Transition, :180323) before swapping to the boss track.
         // Playing it instantly gave the miniboss music no time to fade in.
         spawnChild(() -> SongFadeTransitionInstance.transitionTo(Sonic3kMusic.MINIBOSS.id));
+        // loc_75220 loads PLC_MHZMiniboss_Explosion (ArtTile_BossExplosion2).
+        // Use the existing ROM-backed shared sheet path, also used by MHZ2.
+        if (svc.renderManager() != null
+                && svc.renderManager().getArtProvider() instanceof Sonic3kObjectArtProvider artProvider) {
+            artProvider.ensureBossExplosionArtLoaded();
+        }
         loadBossPalette();
         state.routine = ROUTINE_WAIT_AND_FALL;
         cameraInitPending = false;
@@ -930,7 +932,6 @@ public final class MhzMinibossInstance extends AbstractBossInstance implements S
     }
 
     private void updateDefeatHandoff() {
-        tickDefeatExplosionController();
         if (defeatHandoffQueued) {
             return;
         }
@@ -961,31 +962,6 @@ public final class MhzMinibossInstance extends AbstractBossInstance implements S
         }
         defeatHandoffQueued = true;
         setDestroyed(true);
-    }
-
-    private void tickDefeatExplosionController() {
-        if (defeatExplosionTimer <= 0) {
-            return;
-        }
-        defeatExplosionIntervalCounter--;
-        if (defeatExplosionIntervalCounter >= 0) {
-            return;
-        }
-
-        defeatExplosionTimer--;
-        if (defeatExplosionTimer <= 0) {
-            return;
-        }
-
-        ObjectServices svc = tryServices();
-        if (svc != null) {
-            int random = svc.rng().nextRaw();
-            int xOffset = (random & ((DEFEAT_EXPLOSION_X_RANGE * 2) - 1)) - DEFEAT_EXPLOSION_X_RANGE;
-            int yOffset = ((random >> 8) & ((DEFEAT_EXPLOSION_Y_RANGE * 2) - 1)) - DEFEAT_EXPLOSION_Y_RANGE;
-            svc.playSfx(Sonic3kSfx.EXPLODE.id);
-            spawnChild(() -> new S3kBossExplosionChild(state.x + xOffset, state.y + yOffset));
-        }
-        defeatExplosionIntervalCounter = DEFEAT_EXPLOSION_INTERVAL - 1;
     }
 
     private void applyVelocityWithGravity() {
