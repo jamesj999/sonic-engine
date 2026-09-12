@@ -37,7 +37,7 @@ Maven there. No concurrent Maven processes share a target directory.
 
 ## Verification and delivery
 
-Base: dcb14c65485b1f9e2ea2090bed92c1c65d07a11c (develop).
+Initial planning base: dcb14c65485b1f9e2ea2090bed92c1c65d07a11c (develop).
 Run ordinary full suite with mse=off and explicit verified REV01 S1/S2 and
 locked-on S3K ROM paths on base and task tree, structural guards separately,
 and focused menu/configuration/input tests. Compare failures by test identity
@@ -70,3 +70,34 @@ Title action and child pages own their input ahead of global display/capture
 shortcuts; playback shortcuts yield throughout the master title. An already-open
 global shader picker keeps its modal input. Failed trace launches release the
 picker loading latch while preserving the diagnostic for acknowledgement/retry.
+
+## Verified development tree
+
+The final development source is `61f0af999`, based on `967147a41`. Both intervening
+upstream deliveries merged cleanly: roadmap documentation and the FBZ traversal
+test-controller improvements. The latter changed ten expected failure diagnostics;
+the comparison uses that updated baseline and preserves all of those advances.
+Its completed integrated baseline logs and source hash were independently checked.
+
+| Run | Tests | Failures | Errors | Skips |
+| --- | ---: | ---: | ---: | ---: |
+| Updated baseline, `967147a41` | 20,217 | 14 | 0 | 25 |
+| Title development tree, `61f0af999` | 20,289 | 14 | 0 | 25 |
+| Separate structural guards, each tree | 656 | 0 | 0 | 0 |
+
+Failure identities and full messages match exactly, as do skipped cases and their
+reasons. The inherited failures are the FBZ native route and compatibility matrix.
+The title/input/settings focused run passed 401 tests; the corrected standalone
+integration and trace-status fixtures passed another 16, all without skips.
+
+Full runs used `mvn -Dmse=off -DmodApi.destinationBranch=develop test -B` plus the
+three explicit, verified absolute ROM properties. Guards used the same Maven
+properties with `-Pguards` and Lua 5.4 in a fresh JVM. Exact command arrays, commit
+identities, completed-run logs, per-test summaries and comparisons are retained
+outside the repository in the title-screen-prototypes task artifact directory.
+
+Actual OpenGL captures cover 51 page/states and 210 PNGs at native 320/400 widths,
+2x framebuffers, and same-frame 4x ROM logos. The 4x captures recover source-art
+detail; they are not enlarged native screenshots. Controller-source switching was
+exercised through the physical-state input seam, without physical device hardware.
+The capture gallery records illustrative fixture and network-isolation limits.
