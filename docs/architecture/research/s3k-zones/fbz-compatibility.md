@@ -1,10 +1,10 @@
 # Flying Battery Zone compatibility matrix
 
-> **Integration checkpoint (2026-07-17):** the complete-route and 13-row
-> compatibility gates remain pending. Reviewed projection and S1 squeeze-assist
-> foundations are present, but the native cold-Act 2 controller still needs the
-> bounded button-to-terrain stage-0 bridge described in
-> `fbz-outstanding-actions.md`. Do not infer PASS from the focused slices below.
+> **2026-09-12 investigation:** the complete-route and 13-row compatibility
+> gates remain pending. The native controller clears the former button/Obj28
+> recovery frontier and reaches a later spike/magnetic-platform interaction.
+> See [outstanding actions](fbz-outstanding-actions.md) for current measured
+> blockers. The focused slices below do not establish complete-route PASS.
 
 This is the extension-compatibility gate for the production FBZ runtime. It
 supplements, but never replaces, native disassembly parity, the uninterrupted
@@ -83,6 +83,13 @@ range in the virtual pattern-ID space, including all three duplicate Sonics.
 | explicit native-pixel override | 512 | PENDING | PASS |
 | explicit native-pixel override | 640 | PENDING | PASS |
 | `SUPER_32_9` | 800 | PENDING | PASS |
+
+The September controller checks advance the 640px row from frame 1455 to
+25729 and the 800px row from 1291 to 25751. The former now dies near the lower
+floating-platform/ceiling geometry; the latter reaches the lower spike at
+`$0C00`. Neither row is a complete-route pass. The early recovery commits
+preserve the other three viewport diagnostics exactly; the separate late-route
+repair advances the native-width row beyond Obj28 to the `$2360` platform.
 
 Every width asserts world-coordinate thresholds, ordinary nonpersistent
 placement entering at the right viewport frontier and culling at the left

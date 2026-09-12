@@ -21,24 +21,31 @@ receipt. All 21 native checkpoint ids in the frozen manifest have explicit
 executors; an unknown id or any failed precondition/readback emits a rejected
 receipt and no image.
 
-After `mvn package`, this PowerShell example captures the exact native start:
+After `mvn package`, run this PowerShell example from the checkout root to
+request the exact native start. The committed amendment is still awaiting
+fresh evidence and independent review: this invocation must reject publication
+until the observed first-visible state has been reviewed and hash-bound. It is
+not a command that currently produces accepted visual evidence.
 
 ```powershell
-$artifact = Resolve-Path target/OpenGGF-0.6.prerelease-jar-with-dependencies.jar
+$artifactProperties = ConvertFrom-StringData (Get-Content target/openggf-artifact.properties -Raw)
+$artifact = Resolve-Path "target/$($artifactProperties.finalName)-jar-with-dependencies.jar"
 $expectedS3kSha1 = 'CFBF98C36C776677290A872547AC47C53D2761D6'
 $rom = Get-ChildItem -Path . -Filter *.gen -File |
   Where-Object { (Get-FileHash $_.FullName -Algorithm SHA1).Hash -eq $expectedS3kSha1 } |
   Select-Object -First 1 -ExpandProperty FullName
+if (-not $rom) { throw 'No locked-on S3K ROM with the expected SHA-1 found in the checkout root' }
 $artifactHash = (Get-FileHash $artifact -Algorithm SHA256).Hash
-$amendment = Resolve-Path docs/s3k-zones/fbz-visual-evidence-amendment-proposal.json
+$amendment = Resolve-Path docs/architecture/research/s3k-zones/fbz-visual-evidence-amendment-proposal.json
 $amendmentHash = (Get-FileHash $amendment -Algorithm SHA256).Hash
+$outputRoot = New-Item -ItemType Directory -Force target/fbz-validation
 
 java -cp $artifact com.openggf.tools.fbzvisual.FbzVisualCaptureTool `
   --workspace (Resolve-Path .) `
   --rom $rom `
   --artifact $artifact `
   --artifact-sha256 $artifactHash `
-  --manifest (Resolve-Path docs/s3k-zones/fbz-visual-checkpoints.json) `
+  --manifest (Resolve-Path docs/architecture/research/s3k-zones/fbz-visual-checkpoints.json) `
   --manifest-sha256 D13D037BAF52BBD65D28096A71A54ACACB4229B8C4C560C76DCB921E90DC40DD `
   --evidence-amendment $amendment `
   --evidence-amendment-sha256 $amendmentHash `
@@ -47,7 +54,7 @@ java -cp $artifact com.openggf.tools.fbzvisual.FbzVisualCaptureTool `
   --framebuffer-width 320 `
   --framebuffer-height 224 `
   --native-crop-x 0 `
-  --output-root (Resolve-Path target/fbz-validation) `
+  --output-root $outputRoot.FullName `
   --input-schedule-source none:idle-one-frame `
   --input-schedule-sha256 AF69953468AA1D1DAE65A3435271BA1189DC51DCC9DAEDBF3FDD3A7ECD9D8837 `
   --savestate-source none:native-load `
@@ -63,10 +70,15 @@ Compatibility-mode image capture remains fail closed until each mode's feature
 configuration and receipt fields are implemented; native evidence must go green
 first.
 
-The PowerShell capture and validation entrypoints accept `-Rom <path>`. When it
-is omitted they first honor `SONIC_3K_ROM_PATH`, then hash-match root-level
-`*.gen` files against the locked-on SHA-1; they never assume a filename or pick
-the first ROM in the directory.
+The Java CLI requires an explicit `--rom <path>`; it does not discover a ROM
+or read `SONIC_3K_ROM_PATH`. The example above discovers the ROM by hash and
+selects the artifact using the POM-derived `target/openggf-artifact.properties`
+written during packaging. For a ROM outside the checkout, set `$rom` to its
+resolved absolute path and verify its SHA-1 before invoking the CLI.
+The emulator-side exporter is
+[`tools/bizhawk/capture_fbz_visual_references.lua`](../../../../tools/bizhawk/capture_fbz_visual_references.lua);
+the historical PowerShell host and aggregate validator are not available in
+the checkout.
 
 ### Superseded reference warning
 
