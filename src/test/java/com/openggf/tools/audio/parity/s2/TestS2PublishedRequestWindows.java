@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 // Minutes-long oracle sweep: excluded from the -Psmoke fast lane, still run by
 // the default suite on pull requests, the nightly schedule and release validation.
 @Tag("slow-suite")
+@org.junit.jupiter.api.Tag("audio-reference")
 class TestS2PublishedRequestWindows {
 
     @TempDir

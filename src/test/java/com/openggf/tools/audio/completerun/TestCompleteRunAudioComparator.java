@@ -3629,6 +3629,7 @@ class TestCompleteRunAudioComparator {
     }
 
     @Test
+    @org.junit.jupiter.api.Tag("audio-stress")
     void streamsMaximumCompleteRunHighEntropyFramesInSeparateThirtyTwoMiBJvm() throws Exception {
         int frames = 434_417;
         TestProfile profile = registerProfile(frames);

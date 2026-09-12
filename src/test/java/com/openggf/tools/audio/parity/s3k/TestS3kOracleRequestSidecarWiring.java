@@ -41,6 +41,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * carries reach neither the engine host nor the comparator.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@org.junit.jupiter.api.Tag("audio-reference")
 class TestS3kOracleRequestSidecarWiring {
     private List<S3kAudioTick> plainReference;
     private List<S3kAudioTick> resolvedReference;
@@ -52,7 +53,7 @@ class TestS3kOracleRequestSidecarWiring {
         resolvedReference = null;
         honestCapture = null;
     }
-    private static final Path FIXTURE_DIR = Path.of("src/test/resources/audio/parity/s3k");
+    private static final Path FIXTURE_DIR = com.openggf.tests.AudioReferenceFixtures.require("audio/parity/s3k");
     private static final Path REFERENCE = FIXTURE_DIR.resolve("s3k-aiz1-intro-reference-v2.jsonl.gz");
     private static final Path METADATA = FIXTURE_DIR.resolve("s3k-aiz1-intro-metadata-v2.json");
 
@@ -70,11 +71,11 @@ class TestS3kOracleRequestSidecarWiring {
 
     @Test
     void theCommittedSidecarMatchesItsMetadataProvenance() throws Exception {
-        assertTrue(Files.isRegularFile(S3kRequestObservationSidecar.COMMITTED),
+        assertTrue(Files.isRegularFile(com.openggf.tests.AudioReferenceFixtures.require("audio/parity/s3k/s3k-aiz1-intro-requests-v1.json")),
                 "the request sidecar must be committed beside the reference");
         JsonNode block = new ObjectMapper().readTree(METADATA.toFile()).path("request_sidecar");
-        byte[] bytes = Files.readAllBytes(S3kRequestObservationSidecar.COMMITTED);
-        assertEquals(S3kRequestObservationSidecar.COMMITTED.getFileName().toString(),
+        byte[] bytes = Files.readAllBytes(com.openggf.tests.AudioReferenceFixtures.require("audio/parity/s3k/s3k-aiz1-intro-requests-v1.json"));
+        assertEquals(com.openggf.tests.AudioReferenceFixtures.require("audio/parity/s3k/s3k-aiz1-intro-requests-v1.json").getFileName().toString(),
                 block.path("file").asText());
         assertEquals(HexFormat.of().formatHex(
                         MessageDigest.getInstance("SHA-256").digest(bytes)),
@@ -85,7 +86,7 @@ class TestS3kOracleRequestSidecarWiring {
                 "publication installs a comparison-side input, it binds no producer");
 
         S3kRequestObservationSidecar sidecar =
-                S3kRequestObservationSidecar.read(S3kRequestObservationSidecar.COMMITTED);
+                S3kRequestObservationSidecar.read(com.openggf.tests.AudioReferenceFixtures.require("audio/parity/s3k/s3k-aiz1-intro-requests-v1.json"));
         assertEquals(block.path("observations").asInt(), sidecar.size());
         assertEquals(java.util.Optional.of(STOP_SEGA_REQUEST), sidecar.requestAt(STOP_SEGA_ROW));
     }
@@ -137,7 +138,7 @@ class TestS3kOracleRequestSidecarWiring {
     /** A sidecar that contradicts a mailbox the stream did sample is a defect, not an input. */
     @Test
     void aSidecarThatDisagreesWithASampledMailboxIsRejected() throws Exception {
-        String json = Files.readString(S3kRequestObservationSidecar.COMMITTED)
+        String json = Files.readString(com.openggf.tests.AudioReferenceFixtures.require("audio/parity/s3k/s3k-aiz1-intro-requests-v1.json"))
                 .replace("\"row\": 62,\n      \"request\": 255", "\"row\": 62,\n      \"request\": 254");
         Path path = Files.writeString(temporaryDirectory.resolve("disagreeing.json"), json);
         assertThrows(IllegalArgumentException.class, () -> read(
@@ -155,7 +156,7 @@ class TestS3kOracleRequestSidecarWiring {
         assumeTrue(rom != null && rom.isFile(), "S3K locked-on ROM unavailable");
 
         List<S3kAudioTick> honest = resolvedReference().subList(0, STOP_SEGA_TICK + 1);
-        String corruptedJson = Files.readString(S3kRequestObservationSidecar.COMMITTED)
+        String corruptedJson = Files.readString(com.openggf.tests.AudioReferenceFixtures.require("audio/parity/s3k/s3k-aiz1-intro-requests-v1.json"))
                 .replace("\"row\": 242,\n      \"request\": 254",
                         "\"row\": 242,\n      \"request\": 1");
         Path corruptedPath = Files.writeString(temporaryDirectory.resolve("corrupt-value.json"),
@@ -476,7 +477,7 @@ class TestS3kOracleRequestSidecarWiring {
     }
 
     private static S3kRequestObservationSidecar committed() {
-        return S3kRequestObservationSidecar.read(S3kRequestObservationSidecar.COMMITTED);
+        return S3kRequestObservationSidecar.read(com.openggf.tests.AudioReferenceFixtures.require("audio/parity/s3k/s3k-aiz1-intro-requests-v1.json"));
     }
 
     private static List<S3kAudioTick> read(S3kRequestObservationSidecar sidecar) {

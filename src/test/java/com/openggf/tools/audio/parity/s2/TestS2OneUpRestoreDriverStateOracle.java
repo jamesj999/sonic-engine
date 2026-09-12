@@ -49,6 +49,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * every value it is checked against, and the reference supplies only the ROM
  * expectation it is checked against.
  */
+@org.junit.jupiter.api.Tag("audio-reference")
 class TestS2OneUpRestoreDriverStateOracle {
 
     private static final String RESOURCE =

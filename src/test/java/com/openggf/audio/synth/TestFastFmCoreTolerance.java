@@ -1,7 +1,9 @@
 package com.openggf.audio.synth;
 
+import com.openggf.tests.AudioReferenceFixtures;
 import org.junit.jupiter.api.Tag;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import com.openggf.audio.synth.fast.FastYm2612Dsp;
 import com.openggf.audio.synth.nuked.NukedOpn2ScriptRunner;
@@ -31,8 +33,7 @@ import org.junit.jupiter.api.TestFactory;
  * {@code -Dopenggf.fastfm.minCorrelation=0 -Dopenggf.fastfm.maxLevelRatio=1e9};
  * every script's metrics are printed either way.
  */
-// Minutes-long oracle sweep: excluded from the -Psmoke fast lane, still run by
-// the default suite on pull requests, the nightly schedule and release validation.
+// Synthetic scripts remain public; captured game scripts require audio-reference.
 @Tag("slow-suite")
 class TestFastFmCoreTolerance {
     private static final int LAG_SEARCH = 64;
@@ -64,14 +65,20 @@ class TestFastFmCoreTolerance {
 
     @TestFactory
     Stream<DynamicTest> scriptsStayWithinTolerance() throws IOException, URISyntaxException {
-        return scripts().filter(script -> !OUT_OF_SCOPE.contains(scriptName(script)))
+        return scripts(false).filter(script -> !OUT_OF_SCOPE.contains(scriptName(script)))
                 .map(script -> DynamicTest.dynamicTest(scriptName(script), () -> compare(script, false)));
+    }
+
+    @TestFactory
+    @Tag("audio-reference")
+    Stream<DynamicTest> capturedScriptsStayWithinTolerance() throws IOException, URISyntaxException {
+        return scripts(true).map(script -> DynamicTest.dynamicTest(scriptName(script), () -> compare(script, false)));
     }
 
     @TestFactory
     Stream<DynamicTest> outOfScopeDiagnostics() throws IOException, URISyntaxException {
         if (!Boolean.getBoolean("openggf.fastfm.outOfScopeDiagnostics")) return Stream.empty();
-        return scripts().filter(script -> OUT_OF_SCOPE.contains(scriptName(script)))
+        return scripts(false).filter(script -> OUT_OF_SCOPE.contains(scriptName(script)))
                 .map(script -> DynamicTest.dynamicTest("diagnostic: " + scriptName(script),
                         () -> compare(script, true)));
     }
@@ -80,25 +87,49 @@ class TestFastFmCoreTolerance {
         return script.getFileName().toString().replace(".txt.gz", "");
     }
 
-    private static Stream<Path> scripts() throws IOException, URISyntaxException {
-        Path directory = Path.of(TestFastFmCoreTolerance.class
-                .getResource("/audio/nuked-opn2/port/expected.txt").toURI()).getParent();
+    private static boolean isCaptured(String name) {
+        return name.startsWith("s1-") || name.startsWith("s2-") || name.startsWith("s3k-");
+    }
+
+    private static Stream<Path> scripts(boolean captured) throws IOException, URISyntaxException {
+        Path directory = captured
+                ? AudioReferenceFixtures.require("audio/nuked-opn2/port/expected.txt").getParent()
+                : Path.of(TestFastFmCoreTolerance.class
+                        .getResource("/audio/nuked-opn2/port/expected.txt").toURI()).getParent();
         List<Path> scripts;
         try (Stream<Path> listing = Files.list(directory)) {
             scripts = listing.filter(p -> p.toString().endsWith(".txt.gz")).sorted().toList();
         }
+        assertTrue(!scripts.isEmpty(), "No FM scripts in " + directory);
+        assertTrue(scripts.stream().allMatch(p -> isCaptured(scriptName(p)) == captured),
+                "FM scripts belong to the wrong fixture partition: " + directory);
+        java.util.Set<String> expectedNames = Files.readAllLines(directory.resolve("expected.txt")).stream()
+                .map(line -> line.trim().split("\\s+")[0]).collect(java.util.stream.Collectors.toSet());
+        assertEquals(expectedNames, scripts.stream().map(TestFastFmCoreTolerance::scriptName)
+                .collect(java.util.stream.Collectors.toSet()), "FM script inventory must match expected.txt");
         String extra = System.getProperty("openggf.fastfm.extraDir");
         if (extra != null && !extra.isBlank()) {
             try (Stream<Path> listing = Files.list(Path.of(extra))) {
                 scripts = Stream.concat(scripts.stream(),
-                        listing.filter(p -> p.toString().endsWith(".txt.gz")).sorted()).toList();
+                        listing.filter(p -> p.toString().endsWith(".txt.gz"))
+                                .filter(p -> isCaptured(scriptName(p)) == captured).sorted()).toList();
             }
         }
         String only = System.getProperty("openggf.fastfm.only");
         if (only != null && !only.isBlank()) {
-            java.util.Set<String> wanted = java.util.Set.of(only.split(","));
-            scripts = scripts.stream().filter(p -> wanted.contains(
-                    p.getFileName().toString().replace(".txt.gz", ""))).toList();
+            java.util.Set<String> wanted = java.util.Arrays.stream(only.split(",", -1))
+                    .map(String::trim).collect(java.util.stream.Collectors.toSet());
+            assertTrue(wanted.stream().noneMatch(String::isEmpty), "openggf.fastfm.only contains an empty name");
+            assertTrue(wanted.stream().allMatch(name -> isCaptured(name) == captured),
+                    "Requested FM scripts belong to another fixture partition; use -Paudio-reference "
+                            + "with -Dopenggf.audio.fixtures=<root> for captured game scripts, "
+                            + "or the ordinary public suite for synthetic scripts");
+            java.util.Set<String> available = scripts.stream().map(TestFastFmCoreTolerance::scriptName)
+                    .collect(java.util.stream.Collectors.toSet());
+            java.util.Set<String> missing = new java.util.TreeSet<>(wanted);
+            missing.removeAll(available);
+            assertTrue(missing.isEmpty(), "Requested FM scripts are missing: " + missing);
+            scripts = scripts.stream().filter(p -> wanted.contains(scriptName(p))).toList();
         }
         return scripts.stream();
     }

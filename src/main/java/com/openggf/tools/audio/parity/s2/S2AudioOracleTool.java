@@ -11,7 +11,7 @@ import java.nio.file.Path;
  *
  * <pre>
  * java ... com.openggf.tools.audio.parity.s2.S2AudioOracleTool \
- *     --fixture src/test/resources/audio/parity/s2/s2-ehz-reload-w10150-10900.raw.jsonl.gz \
+ *     --fixture /external/audio/parity/s2/s2-ehz-reload-w10150-10900.raw.jsonl.gz \
  *     --rom /abs/path/to/s2.gen [--report /abs/path/report.txt] [--ignore-digest]
  * </pre>
  *

@@ -404,7 +404,7 @@ class TestS1AudioStateNormalizer {
     @Test
     void openGgfGoldenInputProducesTheExistingCanonicalContract() throws IOException {
         JsonNode golden = JSON.readTree(Files.readString(Path.of(
-                "src/test/resources/audio/parity/s1/normalization-contract-v1.json")));
+                "src/test/resources/audio/contracts/normalization-contract-v1.json")));
         JsonNode input = golden.path("openGgf");
         Set<Integer> loopIndices = Set.copyOf(toInts(golden.path("activeLoopIndices")));
         List<SmpsTrackSnapshot> tracks = new ArrayList<>();

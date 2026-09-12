@@ -75,13 +75,20 @@ replay, native graphics, diagnostics, performance profiles and TraceChaser integ
 their existing commands and prerequisites. Gameplay category coverage does not replace affected
 replay fixtures or the domain skill's required checks. A category run is never a full trace sweep.
 
+Use `--workers 2` to opt into the `test-concurrent` Maven profile for the ordinary lane.
+The default is one reused JVM; the opt-in uses two reused JVMs, each with a 3 GiB maximum
+heap and serial JUnit execution. Allow memory for both heaps, Maven and native allocations.
+Guards keep their separate single-worker invocation. Selection, task accounting and retry
+limits are unchanged; compare matched runs before choosing two workers on a new machine.
+This distributes test classes between JVMs, so one long class cannot use both workers.
+
 The runner discovers existing root `.gen` files by the documented SHA-1 identities and passes
 absolute ROM paths. It never creates ROM links or copies. Missing ROMs still require inspecting
 skips; a successful exit alone does not establish ROM-backed coverage.
 
 Each run starts in `target/category-tests/<run-id>/`. The plan retains the tested head,
-working-tree fingerprint and selected source classes; command arrays record the exact Maven
-arguments. `results.json` records totals, skipped cases and failure details, and `status.json`
+working-tree fingerprint, ordinary worker count and selected source classes; command arrays record the exact Maven
+arguments. `results.json` records each lane's worker count, totals, skipped cases and failure details, and `status.json`
 distinguishes passed, failed and incomplete runs. Diagnostic lists are capped at 1,000 records
 per kind with explicit omitted counts; messages/stacks are bounded excerpts. Inspect skips,
 omissions and domain coverage before delivery. The runner checks exit status and nonempty

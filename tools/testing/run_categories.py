@@ -135,7 +135,9 @@ def select_changes(paths, data):
     return categories, full, reasons
 
 
-def make_plan(root, data, base, requested, guards=False):
+def make_plan(root, data, base, requested, guards=False, workers=1):
+    if workers not in (1, 2):
+        raise ValueError('Ordinary workers must be 1 or 2')
     tests = inventory(root, data)
     base_sha, paths = changed_files(root, base) if base else (None, [])
     selected, full, reasons = select_changes(paths, data) if base else ({'common'}, False, [])
@@ -153,6 +155,7 @@ def make_plan(root, data, base, requested, guards=False):
             'mode': 'change-based' if base else 'focused', 'full': full,
             'categories': sorted(selected), 'reasons': reasons, 'tests': chosen,
             'inventory_count': len(tests), 'guards': bool(base or full or guards),
+            'workers': workers,
             'scope': 'ordinary suite and guards; explicit trace/native profiles are separate'}
 
 
@@ -211,6 +214,9 @@ def tree_state(root):
 
 
 def run_plan(root, plan, max_minutes=DEFAULT_MINUTES, repeat_reason=None, keep_diagnostics=False, task_managed=False):
+    workers = plan.get('workers', 1)
+    if workers not in (1, 2):
+        raise ValueError('Ordinary workers must be 1 or 2')
     target = root / 'target'
     target.mkdir(exist_ok=True)
     lock = target / 'category-tests.lock'
@@ -235,7 +241,7 @@ def run_plan(root, plan, max_minutes=DEFAULT_MINUTES, repeat_reason=None, keep_d
         print(f'Bounded diagnostics: {run}', flush=True)
         print(f"Categories: {', '.join(plan['categories'])}; "
               f"{len(plan['tests'])}/{plan['inventory_count']} candidate classes; "
-              f"guards={'on' if plan['guards'] else 'off'}", flush=True)
+              f"ordinary workers={workers}; guards={'on (1 worker)' if plan['guards'] else 'off'}", flush=True)
         initial_state = tree_state(root)
         plan['working_tree_fingerprint'] = initial_state
         plan['max_minutes'] = max_minutes
@@ -256,8 +262,11 @@ def run_plan(root, plan, max_minutes=DEFAULT_MINUTES, repeat_reason=None, keep_d
                        f'-Dopenggf.test.tmpdir={temporary}']
             if lane == 'guards':
                 command.append('-Pguards')
-            elif not plan['full']:
-                command.append(f'-Dsurefire.includesFile={includes}')
+            else:
+                if workers == 2:
+                    command.append('-Ptest-concurrent')
+                if not plan['full']:
+                    command.append(f'-Dsurefire.includesFile={includes}')
             command.extend(rom_args(root))
             (run / f'{lane}-command.json').write_text(json.dumps(command, indent=2) + '\n')
             print(f'Running {lane}; rolling output: {run / (lane + ".log")}', flush=True)
@@ -267,7 +276,7 @@ def run_plan(root, plan, max_minutes=DEFAULT_MINUTES, repeat_reason=None, keep_d
                                        timeout=deadline - lane_started, idle_timeout=IDLE_SECONDS)
             except TimeoutError as error:
                 summary = summarize(reports)
-                summary.update(lane=lane, status='incomplete', reason=str(error),
+                summary.update(lane=lane, workers=1 if lane == 'guards' else workers, status='incomplete', reason=str(error),
                                elapsed_seconds=round(time.monotonic() - lane_started, 2))
                 results.append(summary)
                 (run / 'results.json').write_text(json.dumps(results, indent=2) + '\n')
@@ -277,7 +286,7 @@ def run_plan(root, plan, max_minutes=DEFAULT_MINUTES, repeat_reason=None, keep_d
                 # temporary files are removed, never another run's target/test-tmp.
                 shutil.rmtree(temporary)
             summary = summarize(reports)
-            summary.update(lane=lane, exit_code=exit_code, elapsed_seconds=round(time.monotonic() - lane_started, 2))
+            summary.update(lane=lane, workers=1 if lane == 'guards' else workers, exit_code=exit_code, elapsed_seconds=round(time.monotonic() - lane_started, 2))
             results.append(summary)
             (run / 'results.json').write_text(json.dumps(results, indent=2) + '\n')
             print(json.dumps({k: v for k, v in summary.items()
@@ -313,6 +322,8 @@ def main(argv=None):
     parser.add_argument('--base', help='compare the working tree against this integration/base commit')
     parser.add_argument('--category', action='append', default=[], help='add a category (repeatable), or all')
     parser.add_argument('--guards', action='store_true', help='also run guards during focused development (automatic with --base or all)')
+    parser.add_argument('--workers', type=int, choices=(1, 2), default=1,
+                        help='ordinary JVM workers (default: 1); guards always use one worker')
     parser.add_argument('--run', action='store_true', help='execute the plan; otherwise print JSON only')
     parser.add_argument('--preflight', action='store_true', help='check Java and guard tools without running tests')
     parser.add_argument('--max-minutes', type=float, default=DEFAULT_MINUTES, help='total Maven budget across lanes (default: 40 minutes)')
@@ -334,7 +345,7 @@ def main(argv=None):
         task_actions = [bool(args.start_task), args.finish_task, args.task_status, args.record_minutes is not None]
         if any(task_actions):
             if (sum(task_actions) != 1 or args.run or args.preflight or args.category or args.guards
-                    or args.list or args.json or args.keep_diagnostics or args.repeat_reason or args.acknowledge
+                    or args.list or args.json or args.keep_diagnostics or args.repeat_reason or args.acknowledge or args.workers != 1
                     or (args.base and not args.start_task)):
                 parser.error('task accounting actions must be used separately from validation')
             if bool(args.record_kind) != (args.record_minutes is not None):
@@ -353,7 +364,7 @@ def main(argv=None):
         if args.record_kind:
             parser.error('--record-kind requires --record-minutes')
         if args.acknowledge:
-            if args.run or args.preflight or args.base or args.category or args.guards or args.list or args.json or args.keep_diagnostics or args.repeat_reason:
+            if args.run or args.preflight or args.base or args.category or args.guards or args.list or args.json or args.keep_diagnostics or args.repeat_reason or args.workers != 1:
                 parser.error('--acknowledge must be used alone')
             acknowledge_run(ROOT, args.acknowledge)
             print('Diagnostics deleted; broad-attempt receipt preserved.')
@@ -370,7 +381,7 @@ def main(argv=None):
             parser.error('use --base for change-based checks or --category for focused development')
         if set(args.category) - (set(data['categories']) | {'all'}):
             parser.error('unknown category; use --list')
-        plan = make_plan(ROOT, data, args.base, args.category, args.guards)
+        plan = make_plan(ROOT, data, args.base, args.category, args.guards, args.workers)
         if args.run or args.preflight:
             if is_broad(plan):
                 print('BROAD selection: allow tens of minutes; the September normalization run '

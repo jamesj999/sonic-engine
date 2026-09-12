@@ -90,6 +90,8 @@ class TestS2RequestAwareOracleRawStream {
 
     @Test
     @ExtendWith(SessionInvocationExtension.class)
+    @org.junit.jupiter.api.Tag("audio-reference")
+    @org.junit.jupiter.api.Tag("performance-measurement")
     void realCandidateComparesAgainstIndependentProductionBk2Run() throws Exception {
         String romProperty = System.getProperty("sonic2.rom.path");
         String bk2Property = System.getProperty("s2.request.bk2.path");
@@ -112,6 +114,8 @@ class TestS2RequestAwareOracleRawStream {
 
     @Test
     @ExtendWith(SessionInvocationExtension.class)
+    @org.junit.jupiter.api.Tag("audio-reference")
+    @org.junit.jupiter.api.Tag("performance-measurement")
     void realCandidateAndBk2DrivenDriverStateCompare() throws Exception {
         String romProperty = System.getProperty("sonic2.rom.path");
         String bk2Property = System.getProperty("s2.request.bk2.path");
@@ -142,6 +146,8 @@ class TestS2RequestAwareOracleRawStream {
 
     @Test
     @ExtendWith(SessionInvocationExtension.class)
+    @org.junit.jupiter.api.Tag("audio-reference")
+    @org.junit.jupiter.api.Tag("performance-measurement")
     void levelPlayBgmPublishesEmeraldHillOnceAtTheNativeLoadBoundary()
             throws Exception {
         String romProperty = System.getProperty("sonic2.rom.path");

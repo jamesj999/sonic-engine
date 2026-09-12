@@ -1,9 +1,40 @@
 # Test concurrency and public audio follow-up
 
-Read-only findings from the user’s follow-up during the five-target performance
-pass. These proposals are not implemented or benchmarked. The source audit used
-`4ffc035dd`; the completed serial validation is recorded in the
-[performance ledger](../validation/2026-09-12-test-efficiency-five.md).
+The follow-up was implemented from pinned base
+`040ce4809420c809fd8f16eae295160afec8e12d` in
+`feature/ai-test-concurrency-public-audio`. The original source audit used
+`4ffc035dd`; earlier performance work is recorded in the
+[five-target ledger](../validation/2026-09-12-test-efficiency-five.md).
+
+## Delivery scope and validation
+
+Keep the single-worker default, add `test-concurrent` / category `--workers 2`,
+and retain serial Jupiter execution with per-fork temporary directories. Keep
+guards serial. Separate independently pinned external game captures from public
+synthetic tests; preserve the maximum streaming/memory test in `audio-stress`.
+The former optional local WAV comparisons have their own `audio-local-wave`
+lane because engine-generated snapshots are not independent reference evidence.
+Public fixture manifests retain identity and hashes; raw payloads stay external.
+Do not rewrite Git history.
+
+The shared task `20260912-concurrency-public-audio` has one 40-minute aggregate
+validation budget and one final broad attempt. Focused validation covers a matched
+serial/two-fork experiment, public mixed-class selection, explicit missing-fixture
+failure, external reference assertions and the retained stress case. Reserve about
+15 minutes for the final full ordinary selection plus separate guards; inspect
+identities, failures and skips, and attribute failures narrowly against the pinned
+base. The one-broad-attempt rule supersedes repeated full runs per integration step.
+No public-suite speedup claim includes cases moved into explicit deeper lanes.
+Completed checks and baseline failure attribution are in the
+[validation ledger](../validation/2026-09-12-test-concurrency-public-audio.md).
+
+The representative unchanged-base experiment ran six classes and the same 950
+identities with zero failures/errors/skips. Warm serial Maven took 92.541 seconds;
+two forks took 62.613 seconds (32.3% less elapsed time). Both compiled test sources;
+the initial 121.781-second serial run also compiled production sources and is not
+the matched timing baseline. A 70-second host sample observed 3,532,364 KiB summed
+RSS for matching project JVMs; this sampled subset is not a full-suite memory bound.
+
 
 ## Concurrency
 
@@ -33,12 +64,13 @@ already separates LWJGL extraction by fork number. See
    test execution needs a chip static-state audit and explicit isolation from the
    global teardown extension; source independence alone is not proof of safety.
 
-No speedup factor is claimed without a matched experiment. Forking divides class
+The measured subset above supports the opt-in profile; it is not a full-suite
+speedup guarantee. Forking divides class
 work; it does not split the single 83-second comparator class automatically.
 
 ## Audio value and asset policy
 
-The Git-tracked `src/test/resources/audio/parity` tree contains 58 files totaling
+At the audited base, the Git-tracked `src/test/resources/audio/parity` tree contained 58 files totaling
 42.72 MiB. These include ROM-derived sound-chip writes and RAM snapshots, not only
 non-reconstructable result digests. The committed S3K v2 reference includes 625,699
 writes to the YM2612 DAC sample register. The inspected S2 raw fixture carries a
@@ -66,9 +98,9 @@ user-supplied ROMs, with a pinned independent capture tool/reference provenance.
 Public manifests can retain identities/digests and expected outcomes while raw
 captures stay outside Git and public build artifacts. Ordinary public tests should
 run substantively without those references; an explicitly requested parity lane
-should fail clearly if prerequisites are missing. Seven current WAV regression
-cases skip when locally generated references are absent, so they currently provide
-no public-run sample comparison in that environment. Never regenerate a golden
+should fail clearly if prerequisites are missing. Seven former ordinary WAV regression
+cases skipped when locally generated references were absent; the explicit local
+WAV lane now fails on missing prerequisites instead. Never regenerate a golden
 from the candidate under test and call equality an independent correctness oracle.
 
 Changing file formats or re-rendering a soundtrack is not an asset-clearance

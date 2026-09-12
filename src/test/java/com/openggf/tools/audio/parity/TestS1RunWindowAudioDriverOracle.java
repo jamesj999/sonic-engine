@@ -43,9 +43,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * replays the reference's own recorded dispatch sequence through the real
  * {@link com.openggf.audio.driver.SmpsDriver} and compares driver state.
  */
+@org.junit.jupiter.api.Tag("audio-reference")
 class TestS1RunWindowAudioDriverOracle {
     private static final Path ROOT =
-            Path.of("src/test/resources/audio/parity/s1/runs");
+            com.openggf.tests.AudioReferenceFixtures.require("audio/parity/s1/runs");
 
     /**
      * Pinned first divergence per window, or {@code MATCH}. Keyed by the

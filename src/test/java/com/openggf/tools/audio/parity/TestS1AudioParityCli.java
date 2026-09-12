@@ -97,13 +97,14 @@ class TestS1AudioParityCli {
     }
 
     @Test
+    @org.junit.jupiter.api.Tag("audio-reference")
     void validationNamesMissingMovieAndBizHawkAfterRomIdentityPasses() {
         String configuredRom = System.getProperty("sonic1.rom.path");
         Assumptions.assumeTrue(configuredRom != null && Files.isRegularFile(Path.of(configuredRom)),
                 "-Dsonic1.rom.path supplies the pinned ROM for boundary diagnostics");
         Path repo = Path.of("").toAbsolutePath();
         Path output = repo.resolve("target/audio-parity/s1-ghz");
-        Path movie = repo.resolve("src/test/resources/audio/parity/s1/s1-soundtest-ghz.bk2");
+        Path movie = com.openggf.tests.AudioReferenceFixtures.require("audio/parity/s1/s1-soundtest-ghz.bk2");
 
         Invocation missingMovie = invoke("validate", "--repo", repo.toString(), "--rom", configuredRom,
                 "--movie", temp.resolve("missing.bk2").toString(), "--bizhawk-home",

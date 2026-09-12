@@ -1,23 +1,61 @@
 #!/usr/bin/env bash
 # Rebuilds the port-level bit-exactness harness against the pinned upstream
-# source, runs every script body under src/test/resources/audio/nuked-opn2/port/
+# source, runs every synthetic script body under src/test/resources/audio/nuked-opn2/port/
 # through it once per chip-type flag set (0..3) and rewrites expected.txt with
 # one line per (body, type):
 #   <body> <type> <cycles> <pin-stream fnv1a64> <side lines> <side fnv1a64>
 # TestNukedOpn2BitExactScripts asserts those numbers on the Java port.
 #
 # Usage: regenerate-bitexact-expectations.sh /abs/path/to/nuked-src [/abs/build/dir]
+#        [--audio-fixtures /abs/external/root]
+# With --audio-fixtures, regenerate only external captured game scripts under
+# audio/nuked-opn2/port; the public synthetic expectations are untouched.
 # (fetch the source first with ../fetch-source.sh --output /abs/path/to/nuked-src)
 set -euo pipefail
 SRC=${1:?pinned Nuked-OPN2 source directory}
+shift
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../../../.." && pwd)
 PORT="$REPO/src/test/resources/audio/nuked-opn2/port"
-BUILD=${2:-$(mktemp -d)}
+BUILD=""
+CAPTURED=false
+while (($#)); do
+    case "$1" in
+        --audio-fixtures)
+            PORT="${2:?external audio fixture root}/audio/nuked-opn2/port"
+            CAPTURED=true
+            shift 2
+            ;;
+        --*) echo "Unknown option: $1" >&2; exit 2 ;;
+        *)
+            if [[ -n "$BUILD" ]]; then
+                echo "Unexpected argument: $1" >&2; exit 2
+            fi
+            BUILD=$1
+            shift
+            ;;
+    esac
+done
+shopt -s nullglob
+bodies=("$PORT"/*.txt.gz)
+if ((${#bodies[@]} == 0)); then
+    echo "No FM script bodies in $PORT" >&2; exit 2
+fi
+for body in "${bodies[@]}"; do
+    name=$(basename "$body" .txt.gz)
+    case "$name" in
+        s1-*|s2-*|s3k-*) actual=true ;;
+        *) actual=false ;;
+    esac
+    if [[ "$actual" != "$CAPTURED" ]]; then
+        echo "Script belongs to the wrong fixture partition: $body" >&2; exit 2
+    fi
+done
+BUILD=${BUILD:-$(mktemp -d)}
 mkdir -p "$BUILD"
 cc -O2 -I"$SRC" "$HERE/bitexact_harness.c" "$SRC/ym3438.c" -o "$BUILD/bitexact_harness"
 : > "$BUILD/expected.txt"
-for body in "$PORT"/*.txt.gz; do
+for body in "${bodies[@]}"; do
     name=$(basename "$body" .txt.gz)
     for type in 0 1 2 3; do
         { echo "type $type"; gzip -dc "$body"; } > "$BUILD/script.txt"

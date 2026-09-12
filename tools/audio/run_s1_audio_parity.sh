@@ -18,7 +18,8 @@ Options:
                        a bounded power-on-through-GHZ1 window of the pinned
                        complete-run movie sonic1-complete-withemeralds.bk2)
   --rom PATH           Sonic 1 World REV01 .gen (otherwise discover at repository root)
-  --movie PATH         pinned sound-test BK2 fixture (default: the mode's committed BK2)
+  --movie PATH         pinned sound-test BK2 fixture
+  --audio-fixtures PATH external fixture root used for the mode's default BK2
   --bizhawk-home PATH  BizHawk 2.11 Linux x64 installation (or BIZHAWK_HOME)
   --output-root PATH   run parent OUTSIDE the repository (required: TraceChaser's
                        output policy rejects reference captures inside either tree)
@@ -42,6 +43,7 @@ TRACECHASER_BOOTSTRAP="$REPO/tools/tracechaser-bootstrap.sh"
 ROM_PATH=""
 MODE="music"
 MOVIE_PATH=""
+AUDIO_FIXTURES=""
 BIZHAWK_DIR="${BIZHAWK_HOME:-}"
 ARTIFACT_ROOT="$REPO/target"
 BUILD_ROOT="$REPO/target"
@@ -52,11 +54,12 @@ MAIN_REPO=""
 
 while [ "$#" -gt 0 ]; do
 	case "$1" in
-		--rom|--movie|--bizhawk-home|--output-root|--mode)
+		--rom|--movie|--audio-fixtures|--bizhawk-home|--output-root|--mode)
 			[ "$#" -ge 2 ] || { echo "Argument error: $1 requires a value" >&2; usage >&2; exit "$EXIT_USAGE"; }
 			case "$1" in
 				--rom) ROM_PATH=$2 ;;
 				--movie) MOVIE_PATH=$2 ;;
+				--audio-fixtures) AUDIO_FIXTURES=$2 ;;
 				--bizhawk-home) BIZHAWK_DIR=$2 ;;
 				--output-root) OUTPUT_ROOT=$2 ;;
 				--mode) MODE=$2 ;;
@@ -73,16 +76,21 @@ done
 case "$MODE" in
 	music)
 		PROBE="$REPO/tools/audio/probes/s1_audio_driver_parity_probe.lua"
-		DEFAULT_MOVIE="$REPO/src/test/resources/audio/parity/s1/s1-soundtest-ghz.bk2" ;;
+		DEFAULT_MOVIE="$AUDIO_FIXTURES/audio/parity/s1/s1-soundtest-ghz.bk2" ;;
 	sfx)
 		PROBE="$REPO/tools/audio/probes/s1_audio_sfx_parity_probe.lua"
-		DEFAULT_MOVIE="$REPO/src/test/resources/audio/parity/s1/s1-soundtest-sfx.bk2" ;;
+		DEFAULT_MOVIE="$AUDIO_FIXTURES/audio/parity/s1/s1-soundtest-sfx.bk2" ;;
 	gameplay)
 		PROBE="$REPO/tools/audio/probes/s1_gameplay_driver_parity_probe.lua"
 		DEFAULT_MOVIE="$REPO/src/test/resources/traces/s1/runs/s1-sonic-complete-withemeralds/sonic1-complete-withemeralds.bk2" ;;
 	*) echo "Argument error: --mode must be music, sfx, or gameplay" >&2; usage >&2; exit "$EXIT_USAGE" ;;
 esac
-[ -n "$MOVIE_PATH" ] || MOVIE_PATH=$DEFAULT_MOVIE
+if [ -z "$MOVIE_PATH" ]; then
+	if [ "$MODE" != gameplay ] && [ -z "$AUDIO_FIXTURES" ]; then
+		fail "--movie or --audio-fixtures is required for external sound-test references"
+	fi
+	MOVIE_PATH=$DEFAULT_MOVIE
+fi
 [ -f "$PROBE" ] || fail "consumer probe is missing: $PROBE"
 if [ -z "$OUTPUT_ROOT" ]; then
 	echo "Argument error: --output-root is required and must lie outside the repository" >&2

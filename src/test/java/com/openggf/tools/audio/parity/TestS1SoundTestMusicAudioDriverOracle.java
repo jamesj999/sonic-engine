@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
  * ROM-gated, comparison-only oracle for the S1 sound-test GHZ music reference
  * ({@code s1-soundtest-ghz-reference.v1.jsonl.gz}, captured from
  * {@code s1-soundtest-ghz.bk2}; see
- * {@code src/test/resources/audio/parity/s1/fixture-manifest.json} for its
+ * {@code audio/parity/s1/fixture-manifest.json} under the external fixture root for its
  * capture provenance). Until this test existed, the reference's own
  * {@code terminal_record_count} of 14,690 ticks was checked only through the
  * external {@code tools/audio/run_s1_audio_parity.sh} BizHawk wrapper
@@ -31,9 +31,9 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
  * capture --capture music} and the shell wrapper use) and compares the
  * resulting driver state with {@link AudioParityComparator}.
  */
+@org.junit.jupiter.api.Tag("audio-reference")
 class TestS1SoundTestMusicAudioDriverOracle {
-    private static final Path REFERENCE = Path.of(
-            "src/test/resources/audio/parity/s1/s1-soundtest-ghz-reference.v1.jsonl.gz");
+    private static final Path REFERENCE = com.openggf.tests.AudioReferenceFixtures.require("audio/parity/s1/s1-soundtest-ghz-reference.v1.jsonl.gz");
 
     @TempDir
     Path temp;

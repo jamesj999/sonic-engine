@@ -25,8 +25,8 @@ import org.junit.jupiter.api.io.TempDir;
  * gate only reports what a supplied input changes.</p>
  */
 class TestS3kRequestObservationSidecar {
-    private static final Path REFERENCE = Path.of(
-            "src/test/resources/audio/parity/s3k/s3k-aiz1-intro-reference-v1.jsonl.gz");
+    private static Path reference() { return com.openggf.tests.AudioReferenceFixtures.require(
+            "audio/parity/s3k/s3k-aiz1-intro-reference-v1.jsonl.gz"); }
     private static final String OBSERVATIONS_PROPERTY = "s3k.request.observations";
 
     @TempDir
@@ -114,10 +114,11 @@ class TestS3kRequestObservationSidecar {
      * a sidecar the reader keeps declaring the same producer-input limitation.
      */
     @Test
+    @org.junit.jupiter.api.Tag("audio-reference")
     void theDefaultReaderPathStillReportsTheProducerInputLimitation() {
-        assumeTrue(Files.isRegularFile(REFERENCE), "committed S3K oracle reference is required");
+        assertTrue(Files.isRegularFile(reference()), "committed S3K oracle reference is required");
         List<S3kAudioTick> ticks = new ArrayList<>();
-        S3kAudioReferenceReader.readDriverServices(REFERENCE, ticks::add);
+        S3kAudioReferenceReader.readDriverServices(reference(), ticks::add);
         List<Integer> unavailable = new ArrayList<>();
         for (int ordinal = 0; ordinal < ticks.size(); ordinal++) {
             if (ticks.get(ordinal).producerInputEvidence().unavailable()) {
@@ -135,8 +136,10 @@ class TestS3kRequestObservationSidecar {
      * limitation is gone, not that the comparison passes.
      */
     @Test
+    @org.junit.jupiter.api.Tag("audio-reference")
+    @org.junit.jupiter.api.Tag("performance-measurement")
     void supplyingTheObservedRequestRemovesTheProducerInputLimitation() {
-        assumeTrue(Files.isRegularFile(REFERENCE), "committed S3K oracle reference is required");
+        assertTrue(Files.isRegularFile(reference()), "committed S3K oracle reference is required");
         String configured = System.getProperty(OBSERVATIONS_PROPERTY);
         assumeTrue(configured != null && !configured.isBlank(),
                 "set -D" + OBSERVATIONS_PROPERTY + "=<observations.json> to run this measurement");
@@ -150,7 +153,7 @@ class TestS3kRequestObservationSidecar {
                 "the in-frame request the pre-invocation sampling cannot see must be observed");
 
         List<S3kAudioTick> ticks = new ArrayList<>();
-        S3kAudioReferenceReader.readDriverServices(REFERENCE, sidecar, ticks::add);
+        S3kAudioReferenceReader.readDriverServices(reference(), sidecar, ticks::add);
         for (S3kAudioTick tick : ticks) {
             assertTrue(!tick.producerInputEvidence().unavailable(),
                     "no producer input may remain unavailable once the request is supplied");

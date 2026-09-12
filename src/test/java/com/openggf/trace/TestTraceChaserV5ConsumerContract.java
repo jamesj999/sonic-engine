@@ -44,7 +44,7 @@ class TestTraceChaserV5ConsumerContract {
             "bizhawk-headless/fixtures/gpgx-audio-capability-v1.json",
                     "src/test/resources/tracechaser/gpgx-audio-capability-v1.json",
             "contracts/audio/normalization-contract-v1.json",
-                    "src/test/resources/audio/parity/s1/normalization-contract-v1.json");
+                    "src/test/resources/audio/contracts/normalization-contract-v1.json");
 
     @TempDir Path temporaryDirectory;
 
@@ -78,7 +78,7 @@ class TestTraceChaserV5ConsumerContract {
                 DynamicTest.dynamicTest("missing declared copy", () -> {
                     Path root = materializeProvenance("missing");
                     Files.delete(root.resolve(
-                            "src/test/resources/audio/parity/s1/normalization-contract-v1.json"));
+                            "src/test/resources/audio/contracts/normalization-contract-v1.json"));
                     assertThrows(AssertionError.class,
                             () -> validateProvenance(root.resolve("provenance.json"), root));
                 }),
