@@ -48,7 +48,6 @@ public class Sonic3kMHZEvents extends Sonic3kZoneEvents {
     private static final int ACT1_MINIBOSS_CAMERA_X = 0x4298;
     private static final int ACT1_MINIBOSS_CAMERA_Y = 0x0710;
     private static final int ACT1_LOWER_END_X = 0x4100;
-    private static final int ACT1_MIN_X_KNUCKLES_ROUTE = 0x0680;
     private static final int ACT1_MIN_X_UPPER_ROUTE = 0x00C0;
     private static final int ACT1_MIN_X_LOWER_ROUTE = 0x0000;
     private static final int ACT1_MIN_X_PLAYER_Y_THRESHOLD = 0x0580;
@@ -305,11 +304,11 @@ public class Sonic3kMHZEvents extends Sonic3kZoneEvents {
         Camera camera = camera();
         AbstractPlayableSprite player = focusedPlayer();
         int playerY = player == null ? 0 : player.getCentreY() & 0xFFFF;
-        int minX = playerCharacter() == com.openggf.game.PlayerCharacter.KNUCKLES
-                ? ACT1_MIN_X_KNUCKLES_ROUTE
-                : playerY >= ACT1_MIN_X_PLAYER_Y_THRESHOLD
-                        ? ACT1_MIN_X_LOWER_ROUTE
-                        : ACT1_MIN_X_UPPER_ROUTE;
+        // sub_54B80 tests SK_alone_flag, not character_id. The supported
+        // locked-on ROM keeps that flag clear even when playing as Knuckles.
+        int minX = playerY >= ACT1_MIN_X_PLAYER_Y_THRESHOLD
+                ? ACT1_MIN_X_LOWER_ROUTE
+                : ACT1_MIN_X_UPPER_ROUTE;
         camera.setMinX((short) minX);
         camera.setMinXTarget((short) minX);
     }

@@ -27,8 +27,13 @@ campaigns; feature/API publication remains subject to the 0.8 roadmap.
 - **S3K campaign work:** the promoted development baseline includes further MHZ
   and FBZ work, LBZ Big Arm, Super Emerald sanctuary/progression, and powered
   effects. Giant-ring sanctuary entry uses the same emerald ceremony, palette,
-  camera, and background setup as direct sanctuary loading. Complete routes,
-  finales, and continuous replay chains remain gates.
+  camera, and background setup as direct sanctuary loading. MHZ end-boss debris
+  retains the ROM trajectory when the boss faces left, and Madmole’s submerged
+  body keeps its final collision position until the ROM’s deferred deletion.
+  Cutscene doors retain their lowered state when streamed out and back in, and
+  boss debris follows the native initialization and flicker sequence. Act 1
+  camera limits use the locked-on ROM’s height rule for all characters.
+  Complete routes, finales, and continuous replay chains remain gates.
 
 ## Development features carried forward
 
