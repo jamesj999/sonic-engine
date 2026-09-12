@@ -128,7 +128,12 @@ final class LevelLostRingSpawnCoordinator
 
     @Override
     public void restore(Snapshot snapshot) {
-        reset();
+        // The object-manager snapshot deliberately owns only object-backed slots,
+        // not these queue reservations. During rewind it rebuilds its own slot
+        // bitmap later in the registry, so releasing the current reservations
+        // here would mutate an allocator that is about to be restored anyway.
+        // Keep lifecycle reset separate: it still releases live reservations.
+        pending.clear();
         for (PendingLostRingSpawnSnapshot saved : snapshot.pending()) {
             Sprite sprite = levelManager.spriteManager != null
                     ? levelManager.spriteManager.getSprite(saved.playerCode()) : null;
@@ -144,7 +149,31 @@ final class LevelLostRingSpawnCoordinator
 
     @Override
     public void resetForMissingSnapshot() {
-        reset();
+        // See restore: ObjectManager restores its authoritative occupancy as part
+        // of the same rewind operation. A missing queue snapshot means no queued
+        // external reservations should be reclaimed afterwards.
+        pending.clear();
+    }
+
+    /**
+     * Reclaims saved queue-owned slots after all rewindable subsystem owners
+     * have restored their own state. Kept separate from {@link #restore(Snapshot)}
+     * because ObjectManager intentionally excludes external reservations from its
+     * slot snapshot.
+     */
+    void reconcileReservationsAfterRewindRestore() {
+        ObjectManager objectManager = levelManager.objectManager;
+        if (objectManager == null) {
+            return;
+        }
+        for (PendingLostRingSpawn spawn : pending) {
+            for (int slot : spawn.preallocatedSlots()) {
+                if (!objectManager.reserveDynamicSlot(slot)) {
+                    throw new IllegalStateException(
+                            "Lost-ring rewind reservation is occupied: " + slot);
+                }
+            }
+        }
     }
 
     private void releaseReservedSlots() {

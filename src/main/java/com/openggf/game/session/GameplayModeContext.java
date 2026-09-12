@@ -835,7 +835,7 @@ public final class GameplayModeContext implements ModeContext {
             return;
         }
         rewindRegistry.deregister("level");
-        rewindRegistry.deregister("level-lost-ring-spawns");
+        LevelLostRingSpawnRewindAccess.unregister(rewindRegistry);
         rewindRegistry.deregister("level-transition");
         rewindRegistry.deregister("level-tilemap");
         rewindRegistry.deregister("object-manager");
@@ -847,11 +847,7 @@ public final class GameplayModeContext implements ModeContext {
         }
         levelEventExtraRewindKeys.clear();
         rewindRegistry.register(levelManager.levelRewindSnapshottable());
-        RewindSnapshottable<?> lostRingSpawnAdapter =
-                LevelLostRingSpawnRewindAccess.create(levelManager);
-        if (lostRingSpawnAdapter != null) {
-            rewindRegistry.register(lostRingSpawnAdapter);
-        }
+        LevelLostRingSpawnRewindAccess.register(levelManager, rewindRegistry);
         RewindSnapshottable<?> transitionAdapter =
                 levelManager.levelTransitionRewindSnapshottable();
         if (transitionAdapter != null) {

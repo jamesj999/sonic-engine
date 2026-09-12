@@ -88,14 +88,20 @@ class TestLevelLostRingSpawnCoordinator {
     @Test
     void rewindRestoreUsesTheCurrentPlayerForTheCapturedPendingQueue() {
         coordinator.queue(player, 40, true);
-        LevelLostRingSpawnCoordinator.Snapshot snapshot = coordinator.capture();
+        var registry = new com.openggf.game.rewind.RewindRegistry();
+        when(manager.createLostRingSpawnRewindAdapterInternal()).thenReturn(coordinator);
+        LevelLostRingSpawnRewindAccess.register(manager, registry);
+        registry.register(objects.rewindSnapshottable());
+        var snapshot = registry.capture();
         coordinator.reset();
 
         AbstractPlayableSprite restoredPlayer = mock(AbstractPlayableSprite.class);
         when(restoredPlayer.getCode()).thenReturn("p1");
         when(restoredPlayer.getRingCount()).thenReturn(3);
         manager.spriteManager.addSprite(restoredPlayer);
-        coordinator.restore(snapshot);
+        // Production restores the player graph before the queue and object slot occupancy.
+        registry.restore(snapshot);
+        assertEquals(3, objects.getAllocatedSlotCount());
 
         manager.frameCounter = 41;
         coordinator.processPending();
@@ -103,4 +109,52 @@ class TestLevelLostRingSpawnCoordinator {
         verify(rings).spawnLostRingsWithInitialObjectStep(
                 restoredPlayer, 3, 41, 0x120, 0x90, new int[] {4, 5, 6}, true, true);
     }
+
+    @Test
+    void exhaustedSlotsDoNotBecomeQueueReservationsOrGetReleasedByReset() {
+        while (objects.allocateDynamicSlot() >= 0) {
+            // Fill every available slot with unrelated owners.
+        }
+        int occupied = objects.getAllocatedSlotCount();
+        coordinator.queue(player, 40, false);
+        manager.frameCounter = 41;
+        coordinator.processPending();
+        verify(rings).spawnLostRingsWithInitialObjectStep(
+                player, 3, 41, 0x120, 0x90, new int[0], false, false);
+        coordinator.reset();
+        assertEquals(occupied, objects.getAllocatedSlotCount());
+    }
+
+    @Test
+    void partialReservationSurvivesRegistryRestoreWithoutAllocatingBeyondItsBoundary() {
+        int previousSlot = -1;
+        int lastSlot = -1;
+        int slot;
+        while ((slot = objects.allocateDynamicSlot()) >= 0) {
+            previousSlot = lastSlot;
+            lastSlot = slot;
+        }
+        int capacity = objects.getAllocatedSlotCount();
+        objects.releaseDynamicSlot(previousSlot);
+        objects.releaseDynamicSlot(lastSlot);
+        coordinator.queue(player, 40, true);
+        assertEquals(capacity, objects.getAllocatedSlotCount());
+
+        var registry = new com.openggf.game.rewind.RewindRegistry();
+        when(manager.createLostRingSpawnRewindAdapterInternal()).thenReturn(coordinator);
+        LevelLostRingSpawnRewindAccess.register(manager, registry);
+        registry.register(objects.rewindSnapshottable());
+        var snapshot = registry.capture();
+        coordinator.reset();
+        assertEquals(capacity - 2, objects.getAllocatedSlotCount());
+        registry.restore(snapshot);
+        assertEquals(2, objects.getAllocatedSlotCount(),
+                "ObjectManager only persists object-backed occupancy; the callback restores the two queue slots");
+
+        manager.frameCounter = 41;
+        coordinator.processPending();
+        verify(rings).spawnLostRingsWithInitialObjectStep(
+                player, 3, 41, 0x120, 0x90, new int[] {previousSlot, lastSlot}, true, true);
+    }
+
 }

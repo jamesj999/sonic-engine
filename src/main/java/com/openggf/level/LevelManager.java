@@ -4425,7 +4425,7 @@ public class LevelManager extends InitialProcessSpritesLevelManagerBase {
                 com.openggf.game.session.SessionManager.getCurrentGameplayMode();
         if (gameplayMode != null && gameplayMode.getRewindRegistry() != null) {
             gameplayMode.getRewindRegistry().deregister("level");
-            gameplayMode.getRewindRegistry().deregister("level-lost-ring-spawns");
+            LevelLostRingSpawnRewindAccess.unregister(gameplayMode.getRewindRegistry());
             gameplayMode.getRewindRegistry().deregister("level-transition");
             gameplayMode.getRewindRegistry().deregister("object-manager");
             gameplayMode.getRewindRegistry().deregister("level-event");
@@ -4836,7 +4836,7 @@ public class LevelManager extends InitialProcessSpritesLevelManagerBase {
         return LevelRewindSnapshotAdapter.create(this);
     }
 
-    RewindSnapshottable<?> createLostRingSpawnRewindAdapterInternal() {
+    LevelLostRingSpawnCoordinator createLostRingSpawnRewindAdapterInternal() {
         return lostRingSpawnCoordinator;
     }
 
