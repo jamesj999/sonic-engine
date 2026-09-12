@@ -683,3 +683,21 @@ jobs:
             artifacts/openggf-universal-jar/OpenGGF-universal.jar
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  notify-website:
+    # A separate job can be retried without trying to publish the same tag again.
+    needs: release
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Notify website
+        env:
+          GH_TOKEN: ${{ secrets.WEBZONE_DISPATCH_PAT }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error ::WEBZONE_DISPATCH_PAT is missing. The engine release is published; configure the secret and rerun this failed job, or refresh the website manually."
+            exit 1
+          fi
+          gh api --method POST repos/OpenGGF/OpenGGF-WebZone/dispatches \
+            -H 'Accept: application/vnd.github+json' \
+            -f event_type=engine-release

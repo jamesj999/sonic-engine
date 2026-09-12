@@ -58,6 +58,35 @@ publish job from running. A manual dispatch is not a way to publish.
    itself. For a failed or cancelled run, inspect its tag and any partial
    release before retrying.
 
+## Website refresh after publication
+
+After `release` succeeds, the separate `notify-website` job sends an
+`engine-release` repository dispatch to `OpenGGF/OpenGGF-WebZone`. That site's
+refresh workflow updates its release cache and pushes a commit when it changes;
+Cloudflare Pages then rebuilds the static site. The notification is part of the
+publishing workflow because a release created with `GITHUB_TOKEN` does not
+trigger another workflow listening for `release: published`.
+
+Configure the **engine repository's** Actions secret `WEBZONE_DISPATCH_PAT`
+with a fine-grained token whose resource owner is `OpenGGF`, repository access
+is limited to `OpenGGF-WebZone`, and repository permission is **Contents: write**
+(Metadata: read is included). Complete any organization approval required for
+the token. The engine's ordinary `GITHUB_TOKEN` cannot write to the website repo.
+See GitHub's [repository dispatch permissions](https://docs.github.com/en/rest/repos/repos#create-a-repository-dispatch-event).
+
+A missing secret or rejected API request fails `notify-website`; the engine
+release has already been published. Fix the credential and rerun **only the
+failed job**, rather than all jobs, to avoid attempting to publish the same tag.
+For immediate recovery, run:
+
+```bash
+gh workflow run refresh-on-release.yml --repo OpenGGF/OpenGGF-WebZone
+```
+
+The website also has a daily scheduled refresh as a backstop. Confirm the cache
+refresh run, its Cloudflare Pages check, and the version/download links served
+at [openggf.com](https://openggf.com) before reporting that the website updated.
+
 ## When `release` is skipped
 
 Inspect the run's event, branch, commit, and required `build` and
