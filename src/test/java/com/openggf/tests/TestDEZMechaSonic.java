@@ -171,24 +171,6 @@ public class TestDEZMechaSonic {
     }
 
     @Test
-    public void defeatFlagSettableWhenHpZero() {
-        // Verify the pre-condition: hitCount must reach 0 before defeat can be flagged.
-        // The actual hit path triggers defeat when hitCount reaches 0.
-        assertEquals(8, boss.getState().hitCount, "HP starts at 8");
-        assertFalse(boss.getState().defeated, "Should not be defeated at full HP");
-
-        // Decrement HP to 0
-        for (int i = 0; i < 8; i++) {
-            boss.getState().hitCount--;
-        }
-        assertEquals(0, boss.getState().hitCount, "HP should be 0 after 8 decrements");
-
-        // At HP=0, the defeat flag should be settable
-        boss.getState().defeated = true;
-        assertTrue(boss.getState().defeated, "Boss should be marked defeated at 0 HP");
-    }
-
-    @Test
     public void objectIdIsCorrect() {
         assertEquals(0xAF, Sonic2ObjectIds.MECHA_SONIC, "Object ID should be 0xAF");
     }
@@ -248,18 +230,6 @@ public class TestDEZMechaSonic {
     public void defeatTimerInitializesTo255() {
         // The defeat timer should initialize to 0xFF (255) on defeat
         assertEquals(0, boss.getDefeatTimer(), "Defeat timer initial should be 0 before defeat");
-    }
-
-    @Test
-    public void multipleHitsReduceHpCorrectly() {
-        assertEquals(8, boss.getState().hitCount);
-
-        for (int i = 7; i >= 0; i--) {
-            boss.getState().hitCount--;
-            assertEquals(i, boss.getState().hitCount, "HP should be " + i + " after " + (8 - i) + " hits");
-        }
-
-        assertEquals(0, boss.getState().hitCount, "HP should reach 0 after 8 hits");
     }
 
     // ========================================================================

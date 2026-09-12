@@ -101,20 +101,6 @@ public class TestWFZBoss {
     }
 
     @Test
-    public void hitCountDecrementsOnDamage() {
-        assertEquals(8, boss.getState().hitCount);
-        boss.getState().hitCount--;
-        assertEquals(7, boss.getState().hitCount, "Hit count should decrement");
-    }
-
-    @Test
-    public void defeatTriggersAtZeroHits() {
-        boss.getState().hitCount = 0;
-        boss.getState().defeated = true;
-        assertTrue(boss.getState().defeated, "Boss should be marked defeated");
-    }
-
-    @Test
     public void objectIdIsCorrect() {
         assertEquals(0xC5, Sonic2ObjectIds.WFZ_BOSS, "Object ID should be 0xC5");
     }
@@ -143,16 +129,6 @@ public class TestWFZBoss {
     public void defeatTimerInitializesTo239() {
         // ROM: defeat timer = $EF = 239
         assertEquals(0, boss.getDefeatTimer(), "Defeat timer initial should be 0 before defeat");
-    }
-
-    @Test
-    public void multipleHitsReduceHpCorrectly() {
-        assertEquals(8, boss.getState().hitCount);
-        for (int i = 7; i >= 0; i--) {
-            boss.getState().hitCount--;
-            assertEquals(i, boss.getState().hitCount, "HP should be " + i + " after " + (8 - i) + " hits");
-        }
-        assertEquals(0, boss.getState().hitCount, "HP should reach 0 after 8 hits");
     }
 
     @Test

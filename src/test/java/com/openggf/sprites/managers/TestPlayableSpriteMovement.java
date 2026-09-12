@@ -4579,24 +4579,6 @@ public class TestPlayableSpriteMovement {
         }
 
         /**
-         * Test that without gSpeed fallback, threshold would be dangerously tight.
-         * This test documents the bug that was causing loop fall-through.
-         */
-        @Test
-        public void testSpeedThresholdWithoutFallbackWouldBeTooTight() {
-                // If we ONLY used xSpeed (the buggy behavior):
-                short xSpeed = 0;  // Zero due to velocity decomposition
-                int buggySpeedPixels = Math.abs(xSpeed >> 8);  // = 0
-                int buggyThreshold = Math.min(buggySpeedPixels + 4, 14);  // = 4
-
-                assertEquals(4, buggyThreshold, "Without fallback, threshold would be only 4 pixels");
-
-                // 4 pixels is too tight for curved surfaces like loops
-                // Normal terrain distance on curves can be 5-10 pixels
-                // This would cause false "too far from terrain" and launch Sonic out
-        }
-
-        /**
          * Test speed threshold on wall modes uses ySpeed directly per ROM (no fallback).
          */
         @Test

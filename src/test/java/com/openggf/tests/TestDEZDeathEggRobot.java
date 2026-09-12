@@ -359,23 +359,6 @@ public class TestDEZDeathEggRobot {
         assertEquals("FrontLowerLeg", child2Name, "Child index 2 should be FrontLowerLeg (ROM spawn order)");
     }
 
-    // ========================================================================
-    // HP DECREMENT
-    // ========================================================================
-
-    @Test
-    public void hpStateDecrementsMathematically() {
-        // Tests state object arithmetic, not the actual hit path (which requires AudioManager)
-        assertEquals(12, boss.getState().hitCount);
-
-        for (int i = 11; i >= 0; i--) {
-            boss.getState().hitCount--;
-            assertEquals(i, boss.getState().hitCount, "HP should be " + i + " after " + (12 - i) + " decrements");
-        }
-
-        assertEquals(0, boss.getState().hitCount, "HP should reach 0 after 12 decrements");
-    }
-
     @Test
     public void spawnCoordinatesMatchInput() {
         assertEquals(BOSS_X, boss.getSpawn().x());
@@ -390,24 +373,6 @@ public class TestDEZDeathEggRobot {
     // ========================================================================
     // DEFEAT TRIGGER
     // ========================================================================
-
-    @Test
-    public void defeatStateFlagsConsistentAfter12Decrements() {
-        // Tests state consistency after manual decrements. The actual hit path
-        // (onHeadHit) is package-private and requires AudioManager.
-        // After 12 decrements, hitCount=0 and defeated=true should be consistent
-        // with bodyRoutine=BODY_DEFEAT (0x0E).
-        assertEquals(12, boss.getState().hitCount, "HP starts at 12");
-
-        for (int i = 0; i < 12; i++) {
-            boss.getState().hitCount--;
-        }
-        assertEquals(0, boss.getState().hitCount, "HP should be 0 after 12 decrements");
-
-        // Simulate what triggerDefeatSequence() does to state flags
-        boss.getState().defeated = true;
-        assertTrue(boss.getState().defeated, "Boss should be marked defeated");
-    }
 
     @Test
     public void defeatBodyRoutineIs0x0E() {

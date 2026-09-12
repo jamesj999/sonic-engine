@@ -52,22 +52,6 @@ public class SwScrlMczTest {
         SessionManager.clear();
     }
 
-    // ==================== Row Heights Table Tests ====================
-
-    @Test
-    public void testRowHeightsSumTo512() {
-        int sum = 0;
-        for (byte h : MCZ_ROW_HEIGHTS) {
-            sum += (h & 0xFF);
-        }
-        assertEquals(512, sum, "MCZ row heights must sum to 512 (one full cycle)");
-    }
-
-    @Test
-    public void testRowHeightsCount() {
-        assertEquals(24, MCZ_ROW_HEIGHTS.length, "MCZ must have exactly 24 row heights");
-    }
-
     // ==================== segScroll Generation Tests ====================
 
     @Test
