@@ -113,6 +113,31 @@ final class RewindRecreateConstructors {
         return true;
     }
 
+    static boolean allDefaultable(Class<?>[] parameterTypes, int offset) {
+        for (int i = offset; i < parameterTypes.length; i++) {
+            Class<?> parameterType = parameterTypes[i];
+            if (parameterType.isPrimitive()
+                    && parameterType != int.class
+                    && parameterType != boolean.class) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    static Object[] defaultArgs(Constructor<?> constructor) {
+        Class<?>[] parameterTypes = constructor.getParameterTypes();
+        Object[] args = new Object[parameterTypes.length];
+        for (int i = 0; i < parameterTypes.length; i++) {
+            if (parameterTypes[i] == boolean.class) {
+                args[i] = Boolean.FALSE;
+            } else if (parameterTypes[i] == int.class) {
+                args[i] = 0;
+            }
+        }
+        return args;
+    }
+
     static Class<? extends AbstractObjectInstance> objectClass(Object receiver) {
         return receiver.getClass().asSubclass(AbstractObjectInstance.class);
     }
