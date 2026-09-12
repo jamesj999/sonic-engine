@@ -67,7 +67,8 @@ campaigns; feature/API publication remains subject to the 0.8 roadmap.
 - **Java runtime ownership:** debug shortcuts, rewind constructor defaults, static
   object-art remapping, native player selection, shield playback, CPZ boss-child
   presentation and donated preview capture use shared implementations. Sidekick
-  diagnostic construction is separated from CPU decisions.
+  diagnostic construction is separated from CPU decisions. Results bonus digits
+  use one ROM-pattern writer while retaining each game's score and tally policy.
   Deferred lost-ring spawns retain their queue across rewind and release reserved
   slots when the owning level is reset or rebuilt. Public profile adapters retain
   their compatibility identities while using canonical profile mechanics.

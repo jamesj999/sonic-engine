@@ -12,6 +12,7 @@ import com.openggf.level.objects.AbstractResultsScreen;
 import com.openggf.level.objects.FixedRuntimeObjectInstance;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.Pattern;
+import com.openggf.level.render.NumericPatternWriter;
 import com.openggf.level.objects.ObjectLifetimeOps;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpriteSheet;
@@ -726,32 +727,9 @@ public class Sonic1ResultsScreenObjectInstance extends AbstractResultsScreen
      * Each digit occupies 2 tiles (column-major: top + bottom).
      */
     private void writeBonusValue(Pattern[] dest, int startIndex, int value, Pattern[] digits) {
-        int[] divisors = {1000, 100, 10, 1};
-        boolean hasDigit = false;
-        for (int i = 0; i < divisors.length; i++) {
-            int divisor = divisors[i];
-            int digit = value / divisor;
-            value %= divisor;
-            int tileIndex = startIndex + (i * 2);
-            boolean isLastDigit = (i == divisors.length - 1);
-            if (digit != 0 || hasDigit || isLastDigit) {
-                hasDigit = true;
-                copyDigit(dest, tileIndex, digit, digits);
-            } else {
-                dest[tileIndex].copyFrom(blankDigit);
-                dest[tileIndex + 1].copyFrom(blankDigit);
-            }
-        }
+        NumericPatternWriter.writeBonus(dest, startIndex, value, digits, blankDigit);
     }
 
-    private void copyDigit(Pattern[] dest, int destIndex, int digit, Pattern[] digits) {
-        int srcIndex = digit * 2;
-        if (srcIndex + 1 >= digits.length || destIndex + 1 >= dest.length) {
-            return;
-        }
-        dest[destIndex].copyFrom(digits[srcIndex]);
-        dest[destIndex + 1].copyFrom(digits[srcIndex + 1]);
-    }
 
     private void writeScoreValue(Pattern[] dest, int score, Pattern[] digits) {
         if (SCORE_DIGITS_START_INDEX + SCORE_DIGIT_TILES > dest.length) {
@@ -767,7 +745,7 @@ public class Sonic1ResultsScreenObjectInstance extends AbstractResultsScreen
             boolean isLastDigit = (i == SCORE_DIGITS_COUNT - 1);
             if (digit != 0 || hasDigit || isLastDigit) {
                 hasDigit = true;
-                copyDigit(dest, tileIndex, digit, digits);
+                NumericPatternWriter.copyDigit(dest, tileIndex, digit, digits);
             } else {
                 dest[tileIndex].copyFrom(blankDigit);
                 dest[tileIndex + 1].copyFrom(blankDigit);
