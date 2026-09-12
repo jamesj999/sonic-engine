@@ -69,6 +69,7 @@ campaigns; feature/API publication remains subject to the 0.8 roadmap.
   presentation and donated preview capture use shared implementations. Sidekick
   diagnostic construction is separated from CPU decisions. Results bonus digits
   use one ROM-pattern writer while retaining each game's score and tally policy.
+  Monitor contents share icon drawing while keeping their visibility and lifetime rules.
   Deferred lost-ring spawns retain their queue across rewind and release reserved
   slots when the owning level is reset or rebuilt. Public profile adapters retain
   their compatibility identities while using canonical profile mechanics.

@@ -305,3 +305,30 @@ Validation on the candidate working tree:
   were removed after inspection. The initial runner refusal reused no results:
   its prior broad-attempt receipt belonged to earlier work, and the accepted
   invocation explicitly recorded this candidate's new scope.
+
+### Candidate 4 — monitor icon drawing
+
+Both monitor-content objects now call `AbstractMonitorObjectInstance.drawMonitorIcon`.
+The callers retain frame offsets, subtype masks, visibility admission and expiration.
+The shared operation owns sheet/renderer admission and first-piece drawing only;
+no new mutable state or rewind shape is introduced. Focused tests cover differing
+inactive visibility, destroyed objects, frame selection and missing art.
+Validation base: `446a10ffc4` (candidate 3).
+
+Validation on the candidate working tree:
+- Focused icon, monitor, ROM-art and live rewind checks: 19 tests passed, no skips,
+  with absolute S1/S2 ROM properties.
+- Java 21/Lua 5.4.8/PowerShell preflight passed. Native macOS run
+  `run_categories.py --base 446a10ffc4 --run --repeat-reason
+  "New pass-2 candidate 4: shared monitor icon drawing with visibility, ROM-art,
+  and rewind tests; previous completed selection covered candidate 3."` selected
+  all 2,506 ordinary classes. Run `20260912T163441Z-70e4d808`: ordinary
+  20,373 tests, 29 failures, 8 errors, 97 skips (1,362 seconds); guards
+  656 tests passed without skips (566 seconds). The ordinary suite is not green.
+- Failures include the three previously matched baseline failures, FBZ routes,
+  donor-ROM lookup, GL 2.1 capture helpers, sample packaging, hook policy, and
+  macOS shell/secure-directory audio tooling. The additional failures were not
+  baseline-attributed here; none was reported by the focused monitor checks.
+- Inspected skips cover legacy ROM paths, absent audio/reference data, optional
+  capture/benchmark/soak measurements, EGL, and the spin-tube assumption.
+  Category diagnostics were acknowledged after inspection. No trace frontier changed.

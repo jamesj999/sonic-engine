@@ -5,13 +5,8 @@ import com.openggf.game.sonic2.constants.Sonic2ObjectIds;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractMonitorObjectInstance;
 import com.openggf.level.objects.ObjectLifetimeOps;
-import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
-import com.openggf.level.objects.ObjectSpriteSheet;
 import com.openggf.level.objects.SpawnNullableReferenceRewindRecreatable;
-import com.openggf.level.render.PatternSpriteRenderer;
-import com.openggf.level.render.SpriteMappingFrame;
-import com.openggf.level.render.SpriteMappingPiece;
 
 import java.util.List;
 
@@ -67,22 +62,6 @@ public final class MonitorContentsObjectInstance extends AbstractMonitorObjectIn
         if (isDestroyed() || !iconActive) {
             return;
         }
-        ObjectRenderManager renderManager = services().renderManager();
-        if (renderManager == null) {
-            return;
-        }
-        PatternSpriteRenderer renderer = renderManager.getMonitorRenderer();
-        ObjectSpriteSheet sheet = renderManager.getMonitorSheet();
-        int frameIndex = subtype + ICON_FRAME_OFFSET;
-        if (renderer == null || !renderer.isReady() || sheet == null
-                || frameIndex < 0 || frameIndex >= sheet.getFrameCount()) {
-            return;
-        }
-        SpriteMappingFrame frame = sheet.getFrame(frameIndex);
-        if (frame == null || frame.pieces().isEmpty()) {
-            return;
-        }
-        SpriteMappingPiece iconPiece = frame.pieces().get(0);
-        renderer.drawPieces(List.of(iconPiece), spawn.x(), iconSubY >> 8, false, false);
+        drawMonitorIcon(subtype + ICON_FRAME_OFFSET, spawn.x(), iconSubY >> 8);
     }
 }

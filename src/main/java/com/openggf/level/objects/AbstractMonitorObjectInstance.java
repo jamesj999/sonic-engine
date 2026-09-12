@@ -1,10 +1,15 @@
 package com.openggf.level.objects;
 
 import com.openggf.game.PlayableEntity;
+import com.openggf.level.render.PatternSpriteRenderer;
+import com.openggf.level.render.SpriteMappingFrame;
+
 import com.openggf.game.rewind.GenericFieldCapturer;
 import com.openggf.game.rewind.schema.RewindCaptureContext;
 import com.openggf.sprites.Sprite;
 import com.openggf.sprites.managers.SpriteManager;
+
+import java.util.List;
 
 /**
  * Shared base class for monitor (item box) objects across all games.
@@ -44,6 +49,25 @@ public abstract class AbstractMonitorObjectInstance extends AbstractObjectInstan
 
     protected AbstractMonitorObjectInstance(ObjectSpawn spawn, String name) {
         super(spawn, name);
+    }
+
+    /** Draws the first piece of a monitor mapping; visibility remains the caller's decision. */
+    protected final void drawMonitorIcon(int frameIndex, int x, int y) {
+        ObjectRenderManager renderManager = services().renderManager();
+        if (renderManager == null) {
+            return;
+        }
+        PatternSpriteRenderer renderer = renderManager.getMonitorRenderer();
+        ObjectSpriteSheet sheet = renderManager.getMonitorSheet();
+        if (renderer == null || !renderer.isReady() || sheet == null
+                || frameIndex < 0 || frameIndex >= sheet.getFrameCount()) {
+            return;
+        }
+        SpriteMappingFrame frame = sheet.getFrame(frameIndex);
+        if (frame == null || frame.pieces().isEmpty()) {
+            return;
+        }
+        renderer.drawPieces(List.of(frame.pieces().get(0)), x, y, false, false);
     }
 
     /**
