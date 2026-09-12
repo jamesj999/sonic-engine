@@ -100,6 +100,8 @@ campaigns; feature/API publication remains subject to the 0.8 roadmap.
   while preserving animation timing and the S3K pattern cap.
   SMPS music headers use an explicit format decoder, avoiding constructor-time
   virtual calls while retaining the legacy Mod API extension constructor.
+  CNZ and S3K slots share GPU drawing and quad ownership; CNZ releases its actual
+  draw resources so the renderer can be reused after graphics-context recreation.
 
 ## Build and release
 

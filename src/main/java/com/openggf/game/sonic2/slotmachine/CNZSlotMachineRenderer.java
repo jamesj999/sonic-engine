@@ -1,28 +1,21 @@
 package com.openggf.game.sonic2.slotmachine;
 
 import com.openggf.game.ZoneFeatureRenderer;
-import com.openggf.graphics.RenderContext;
 import org.lwjgl.system.MemoryUtil;
 import com.openggf.data.Rom;
 import com.openggf.game.sonic2.constants.Sonic2Constants;
-import com.openggf.graphics.QuadRenderer;
+import com.openggf.graphics.SlotWindowGpuPass;
 import com.openggf.graphics.ShaderProgram;
 
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.GLCommandable;
 
 import java.nio.ByteBuffer;
-import java.nio.FloatBuffer;
 import java.util.ArrayDeque;
 import java.util.logging.Logger;
 
 import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL13.*;
-import static org.lwjgl.opengl.GL15.*;
-import static org.lwjgl.opengl.GL20.*;
-import static org.lwjgl.opengl.GL30.glBindVertexArray;
-import static org.lwjgl.opengl.GL30.glDeleteVertexArrays;
-import static org.lwjgl.opengl.GL30.glGenVertexArrays;
 
 /**
  * Renders the CNZ slot machine visual display.
@@ -35,7 +28,6 @@ import static org.lwjgl.opengl.GL30.glGenVertexArrays;
  * linked PointPokey (subtype 0x01).
  */
 public class CNZSlotMachineRenderer implements ZoneFeatureRenderer {
-    private final int[] viewportScratch = new int[4];
     private final ArrayDeque<SlotRenderCommand> renderCommandPool = new ArrayDeque<>();
     private static final Logger LOGGER = Logger.getLogger(CNZSlotMachineRenderer.class.getName());
 
@@ -75,42 +67,15 @@ public class CNZSlotMachineRenderer implements ZoneFeatureRenderer {
     private int textureId = 0;
     private boolean initialized = false;
 
-    // VAO/VBO for fullscreen quad
-    private int vaoId = 0;
-    private int vboId = 0;
-    private int vertexPosLocation = -1;
-
-    // Cached uniform locations
-    private int locSlotFaceTexture = -1;
-    private int locPalette = -1;
-    private int locSlotFace0 = -1;
-    private int locSlotFace1 = -1;
-    private int locSlotFace2 = -1;
-    private int locSlotNextFace0 = -1;
-    private int locSlotNextFace1 = -1;
-    private int locSlotNextFace2 = -1;
-    private int locSlotOffset0 = -1;
-    private int locSlotOffset1 = -1;
-    private int locSlotOffset2 = -1;
-    private int locScreenX = -1;
-    private int locScreenY = -1;
-    private int locScreenWidth = -1;
-    private int locScreenHeight = -1;
-    private int locPaletteLine = -1;
-    private int locTotalPaletteLines = -1;
-    private int locViewportOffsetX = -1;
-    private int locViewportOffsetY = -1;
-    private int locViewportWidth = -1;
-    private int locViewportHeight = -1;
-
-    private final QuadRenderer quadRenderer = new QuadRenderer();
+    // Shared fullscreen draw and quad resource ownership
+    private final SlotWindowGpuPass gpuPass = new SlotWindowGpuPass();
 
     /**
      * Set the shader program. Called by GraphicsManager during initialization.
      */
     public void setShader(ShaderProgram shader) {
         this.shader = shader;
-        resetUniformLocations();
+        gpuPass.setShader(shader);
     }
 
     /**
@@ -130,49 +95,11 @@ public class CNZSlotMachineRenderer implements ZoneFeatureRenderer {
             return;
         }
 
-        // Initialize fullscreen quad VAO/VBO
-        initQuadVao();
-
-        // Cache uniform locations if shader is set
-        if (shader != null) {
-            cacheUniformLocations();
-        }
+        gpuPass.setShader(shader);
+        gpuPass.init();
 
         initialized = true;
         LOGGER.info("CNZ Slot Machine Renderer initialized");
-    }
-
-    /**
-     * Initialize VAO and VBO for the fullscreen quad.
-     * Uses GL_TRIANGLE_STRIP with 4 vertices to cover the entire viewport.
-     */
-    private void initQuadVao() {
-        if (vaoId != 0) {
-            return;
-        }
-
-        // Create and bind VAO
-        vaoId = glGenVertexArrays();
-        glBindVertexArray(vaoId);
-
-        // Create VBO with fullscreen quad vertices (normalized device coordinates)
-        // Order: bottom-left, bottom-right, top-left, top-right (for triangle strip)
-        FloatBuffer quadBuffer = MemoryUtil.memAllocFloat(8);
-        quadBuffer.put(-1f).put(-1f);  // bottom-left
-        quadBuffer.put(1f).put(-1f);   // bottom-right
-        quadBuffer.put(-1f).put(1f);   // top-left
-        quadBuffer.put(1f).put(1f);    // top-right
-        quadBuffer.flip();
-
-        vboId = glGenBuffers();
-        glBindBuffer(GL_ARRAY_BUFFER, vboId);
-        glBufferData(GL_ARRAY_BUFFER, quadBuffer, GL_STATIC_DRAW);
-
-        MemoryUtil.memFree(quadBuffer);
-
-        // Unbind
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-        glBindVertexArray(0);
     }
 
     /**
@@ -367,167 +294,8 @@ public class CNZSlotMachineRenderer implements ZoneFeatureRenderer {
                                int face0, int face1, int face2,
                                int nextFace0, int nextFace1, int nextFace2,
                                float offset0, float offset1, float offset2) {
-        // Get viewport dimensions to handle scaling
-        glGetIntegerv(GL_VIEWPORT, viewportScratch);
-        int viewportWidth = viewportScratch[2];
-        int viewportHeight = viewportScratch[3];
-
-        // Save OpenGL state
-        boolean blendWasEnabled = glIsEnabled(GL_BLEND);
-        boolean depthWasEnabled = glIsEnabled(GL_DEPTH_TEST);
-
-        // Set up for shader rendering
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        glDisable(GL_DEPTH_TEST);
-
-        // Use the slot shader
-        shader.use();
-
-        // Cache uniform locations if needed
-        if (locSlotFaceTexture < 0) {
-            cacheUniformLocations();
-        }
-
-        // Bind textures
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, textureId);
-        glUniform1i(locSlotFaceTexture, 0);
-
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, paletteTextureId);
-        glUniform1i(locPalette, 1);
-
-        // Set slot state uniforms
-        glUniform1i(locSlotFace0, face0);
-        glUniform1i(locSlotFace1, face1);
-        glUniform1i(locSlotFace2, face2);
-
-        // Set next face uniforms (for scroll wrapping - faces are non-sequential in sequence)
-        glUniform1i(locSlotNextFace0, nextFace0);
-        glUniform1i(locSlotNextFace1, nextFace1);
-        glUniform1i(locSlotNextFace2, nextFace2);
-
-        glUniform1f(locSlotOffset0, offset0);
-        glUniform1f(locSlotOffset1, offset1);
-        glUniform1f(locSlotOffset2, offset2);
-
-        // Set screen position uniforms
-        glUniform1f(locScreenX, screenX);
-        glUniform1f(locScreenY, screenY);
-        glUniform1f(locScreenWidth, 320.0f);
-        glUniform1f(locScreenHeight, 224.0f);
-        glUniform1f(locPaletteLine, 0.0f); // CNZ slot faces use palette line 0
-        if (locTotalPaletteLines >= 0) {
-            glUniform1f(locTotalPaletteLines, (float) RenderContext.getTotalPaletteLines());
-        }
-
-        // Fragment coordinates include the letterbox/pillarbox origin.
-        glUniform1f(locViewportOffsetX, viewportScratch[0]);
-        glUniform1f(locViewportOffsetY, viewportScratch[1]);
-
-        // Pass actual viewport dimensions for coordinate conversion
-        glUniform1f(locViewportWidth, viewportWidth);
-        glUniform1f(locViewportHeight, viewportHeight);
-
-        // Draw fullscreen quad using VAO/VBO (OpenGL 4.1 core compatible)
-        glBindVertexArray(vaoId);
-        glBindBuffer(GL_ARRAY_BUFFER, vboId);
-
-        // Enable vertex attribute for position
-        if (vertexPosLocation >= 0) {
-            glEnableVertexAttribArray(vertexPosLocation);
-            glVertexAttribPointer(vertexPosLocation, 2, GL_FLOAT, false, 0, 0L);
-        }
-
-        // Draw the fullscreen quad as a triangle strip
-        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-
-        // Disable vertex attribute
-        if (vertexPosLocation >= 0) {
-            glDisableVertexAttribArray(vertexPosLocation);
-        }
-
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-        glBindVertexArray(0);
-
-        // Stop using shader
-        shader.stop();
-
-        // Reset active texture
-        glActiveTexture(GL_TEXTURE0);
-
-        // Restore OpenGL state
-        if (!blendWasEnabled) {
-            glDisable(GL_BLEND);
-        }
-        if (depthWasEnabled) {
-            glEnable(GL_DEPTH_TEST);
-        }
-    }
-
-    /**
-     * Cache shader uniform locations.
-     */
-    private void cacheUniformLocations() {
-        if (shader == null) {
-            return;
-        }
-
-        int programId = shader.getProgramId();
-        locSlotFaceTexture = glGetUniformLocation(programId, "SlotFaceTexture");
-        locPalette = glGetUniformLocation(programId, "Palette");
-        locSlotFace0 = glGetUniformLocation(programId, "SlotFace0");
-        locSlotFace1 = glGetUniformLocation(programId, "SlotFace1");
-        locSlotFace2 = glGetUniformLocation(programId, "SlotFace2");
-        locSlotNextFace0 = glGetUniformLocation(programId, "SlotNextFace0");
-        locSlotNextFace1 = glGetUniformLocation(programId, "SlotNextFace1");
-        locSlotNextFace2 = glGetUniformLocation(programId, "SlotNextFace2");
-        locSlotOffset0 = glGetUniformLocation(programId, "SlotOffset0");
-        locSlotOffset1 = glGetUniformLocation(programId, "SlotOffset1");
-        locSlotOffset2 = glGetUniformLocation(programId, "SlotOffset2");
-        locScreenX = glGetUniformLocation(programId, "ScreenX");
-        locScreenY = glGetUniformLocation(programId, "ScreenY");
-        locScreenWidth = glGetUniformLocation(programId, "ScreenWidth");
-        locScreenHeight = glGetUniformLocation(programId, "ScreenHeight");
-        locPaletteLine = glGetUniformLocation(programId, "PaletteLine");
-        locTotalPaletteLines = glGetUniformLocation(programId, "TotalPaletteLines");
-        locViewportOffsetX = glGetUniformLocation(programId, "ViewportOffsetX");
-        locViewportOffsetY = glGetUniformLocation(programId, "ViewportOffsetY");
-        locViewportWidth = glGetUniformLocation(programId, "ViewportWidth");
-        locViewportHeight = glGetUniformLocation(programId, "ViewportHeight");
-
-        // Check for invalid uniform locations (shader might have failed to compile)
-        if (locSlotFaceTexture < 0 || locPalette < 0 || locViewportWidth < 0) {
-            LOGGER.warning("Some shader uniforms are invalid - shader may have failed to compile");
-        }
-    }
-
-    /**
-     * Reset cached uniform locations.
-     */
-    private void resetUniformLocations() {
-        locSlotFaceTexture = -1;
-        locPalette = -1;
-        locSlotFace0 = -1;
-        locSlotFace1 = -1;
-        locSlotFace2 = -1;
-        locSlotNextFace0 = -1;
-        locSlotNextFace1 = -1;
-        locSlotNextFace2 = -1;
-        locSlotOffset0 = -1;
-        locSlotOffset1 = -1;
-        locSlotOffset2 = -1;
-        locScreenX = -1;
-        locScreenY = -1;
-        locScreenWidth = -1;
-        locScreenHeight = -1;
-        locPaletteLine = -1;
-        locTotalPaletteLines = -1;
-        locViewportOffsetX = -1;
-        locViewportOffsetY = -1;
-        locViewportWidth = -1;
-        locViewportHeight = -1;
+        gpuPass.draw(textureId, paletteTextureId, screenX, screenY, 0.0f,
+                face0, face1, face2, nextFace0, nextFace1, nextFace2, offset0, offset1, offset2);
     }
 
     /**
@@ -616,7 +384,7 @@ public class CNZSlotMachineRenderer implements ZoneFeatureRenderer {
             glDeleteTextures(textureId);
         }
         textureId = 0;
-        quadRenderer.cleanup();
+        gpuPass.cleanup();
         initialized = false;
     }
 }

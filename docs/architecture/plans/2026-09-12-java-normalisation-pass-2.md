@@ -486,3 +486,17 @@ matched all previously recorded `1cd1175e` SHA-256 fingerprints exactly: S1 GHZ/
 S2 EHZ/HTZ, S&K AIZ2/miniboss and S3 miniboss/Knuckles. This checks engine-before/
 after parity, not an independent ROM audio oracle. The one current probe took
 2.7 seconds; the earlier baseline was reused without rerunning it.
+
+### Candidate 10 — slot GPU ownership
+
+`SlotWindowGpuPass` owns quad resources, uniform bindings and draw-state handling;
+games retain texture, palette and shader ownership. Inspection corrected the plan's
+vertex assumption: both production shaders use the fullscreen `gl_VertexID` contract,
+so the existing `QuadRenderer` is appropriate. CNZ viewport-origin uniforms and the
+S3K shader's existing behavior remain distinct. CNZ previously cleaned up an unused
+quad instead of its actual VAO/VBO; the shared owner fixes that lifecycle bug.
+The focused native test draws both ROM-backed renderers in two viewports and
+recreated OpenGL 4.1 contexts, checking visible pixels, repeatable context output
+and subsequent GL state. Earlier baseline measurement at `1cd1175e` failed CNZ's
+second-context draw with error 1282; S3K passed. No retained before/after pixel-hash
+comparison is claimed, and no second baseline run was needed.
