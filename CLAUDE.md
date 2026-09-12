@@ -28,9 +28,10 @@ workflow defaults.
 ```bash
 mvn -v                              # must report Java 21
 tools/testing/install-hooks.sh     # once per worktree
-mvn package
-mvn test
-mvn "-Dtest=TestCollisionLogic" test
+python3 tools/testing/run_categories.py --list
+python3 tools/testing/run_categories.py --base develop --run  # use the actual integration base
+mvn -Dmse=off "-Dtest=TestCollisionLogic" test  # focused iteration
+mvn -Dmse=off package              # full ordinary suite plus packaging
 mvn -Dmse=off -Psmoke test -B         # what every branch push runs in CI
 mvn -Dmse=off -Pguards test -B        # separate fresh JVM for structural guards
 ```
@@ -43,13 +44,26 @@ mvn -Dmse=off -Pguards test -B        # separate fresh JVM for structural guards
   with targeted searches and reads.
 - Use JUnit 5/Jupiter. `-Dmse=off` exposes full Maven logs. PowerShell quotes
   `-D...` arguments and uses `tools/testing/install-hooks.ps1`.
-- CI runs only `-Psmoke` on pushes. The full suite and `-Pguards` run on pull
-  requests, on a manually dispatched CI run, and in release validation; nothing
-  runs them unattended. `smoke` does not select the structural guards, so run
-  both the full suite and `-Pguards` locally before delivery -- a red guard on
-  develop will not surface on its own.
-- Match focused checks to the change and complete required integration
-  checks. Release evidence includes ordinary tests and `-Pguards` separately.
+- During implementation, run focused tests or `run_categories.py --category NAME --run`.
+  Before delivery, use `run_categories.py --base <integration-base> --run` against the
+  actual destination/base commit (not HEAD to hide committed work). Review the plan;
+  `--category NAME` adds semantic dependencies the path rules cannot infer. Never
+  narrow its selection manually. See [test categories](tools/testing/README.md#test-categories).
+- The change-based runner selects related ordinary categories plus common tests and
+  runs all structural guards in a separate JVM. This replaces the unconditional
+  local full-suite requirement for changes covered by the policy. Shared or unknown
+  changes automatically select the full ordinary suite; use `--category all` when
+  impact is uncertain. Run affected trace fixtures and domain-mandated checks as well:
+  ordinary categories do not cover the separate trace/native/diagnostic profiles.
+- Do not repeat completed checks on unchanged code without a concrete reason. The
+  runner retains at most two runs / 100 MiB under `target/category-tests/`: small summaries
+  on success, bounded failure logs on failure. It deletes raw XML and its per-invocation
+  temporary directories after Maven exits. Inspect summaries and relevant failures instead
+  of streaming logs into context. Do not create an unbounded validation archive.
+  It does not cache passes or enforce Git integration; the lock covers this runner only.
+- CI still runs `-Psmoke` on pushes and full tests plus `-Pguards` on pull requests and
+  manual dispatch. Releases retain full ordinary, guard and required ROM/trace validation.
+  Category runs are partial validation, never evidence that the full suite passed.
 - Before reporting suite results, read the measurement-hazard table in
   [briefing-trace-rounds.md](docs/agent-workflow/briefing-trace-rounds.md#measurement-hazards--all-produce-plausible-output).
   Attribute results to the command, commit, and completed run; inspect skips.

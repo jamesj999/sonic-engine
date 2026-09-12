@@ -1,0 +1,232 @@
+{
+  "version": 1,
+  "categories": {
+    "common": "Shared integration tests and tests without a narrower owner; always included.",
+    "physics": "Movement, collision, solid objects, playable sprites and rings.",
+    "gameplay": "Game objects, bosses, zone events, stages and game flow.",
+    "audio": "Audio drivers, synthesis, presentation and audio tooling, including slow oracles.",
+    "rendering": "Graphics, palettes, scrolling, sprite art and presentation.",
+    "rewind": "Rewind, recordings, playback and save state.",
+    "content": "ROM decoding, compression, resources and level loading.",
+    "mods": "Mod API, creator content and SDK tools.",
+    "network": "Networking and presence integration.",
+    "tooling": "Editor, configuration, diagnostics, launchers and build/tool tests."
+  },
+  "owners": [
+    [
+      "audio",
+      [
+        "audio/",
+        "tools/audio/",
+        "game/audio/"
+      ]
+    ],
+    [
+      "rewind",
+      [
+        "game/rewind/",
+        "level/rewind/",
+        "recording/",
+        "game/recording/",
+        "debug/playback/",
+        "tools/rewind/",
+        "game/save/"
+      ]
+    ],
+    [
+      "rendering",
+      [
+        "graphics/",
+        "render/",
+        "level/render/",
+        "level/scroll/",
+        "level/animation/",
+        "sprites/render/",
+        "sprites/art/",
+        "game/render/",
+        "game/palette/",
+        "tests/graphics/",
+        "widescreen/"
+      ]
+    ],
+    [
+      "physics",
+      [
+        "physics/",
+        "tests/physics/",
+        "sprites/playable/",
+        "game/solid/",
+        "level/rings/"
+      ]
+    ],
+    [
+      "mods",
+      [
+        "mods/",
+        "tools/modsdk/"
+      ]
+    ],
+    [
+      "network",
+      [
+        "net/",
+        "tools/net/",
+        "integration/presence/"
+      ]
+    ],
+    [
+      "content",
+      [
+        "data/",
+        "io/",
+        "level/resources/",
+        "game/resources/"
+      ]
+    ],
+    [
+      "tooling",
+      [
+        "tools/",
+        "editor/",
+        "configuration/",
+        "debug/",
+        "capture/",
+        "bench/",
+        "testmode/",
+        "version/",
+        "docs/",
+        "sonic/tools/"
+      ]
+    ],
+    [
+      "gameplay",
+      [
+        "game/",
+        "level/",
+        "sprites/",
+        "camera/",
+        "control/",
+        "timer/",
+        "tests/objects/",
+        "tests/game/"
+      ]
+    ]
+  ],
+  "name_owners": {
+    "audio": "Audio|Smps|SMPS|Ym2612|YM2612|Psg|PSG|FmCore|Nuked|Dac|DAC|Music|Sound",
+    "physics": "Physics|Collision|Solid|Movement|Sensor|Slope",
+    "rendering": "Render|Graphics|Palette|Parallax|Viewport|Widescreen",
+    "rewind": "Rewind|Recording|Playback|SaveState",
+    "content": "Rom|ROM|Decod|Compression|Kosinski|Nemesis|Enigma",
+    "mods": "ModApi|ModAPI|ModSdk|ModSDK",
+    "network": "Network",
+    "tooling": "TraceSessionLauncher|ModifierSupportDocumentation"
+  },
+  "change_rules": [
+    {
+      "prefixes": [
+        "src/main/java/com/openggf/audio/",
+        "src/main/java/com/openggf/tools/audio/",
+        "src/main/java/com/openggf/game/audio/",
+        "src/main/java/com/openggf/codec/wav/"
+      ],
+      "categories": [
+        "audio",
+        "rewind",
+        "tooling"
+      ]
+    },
+    {
+      "prefixes": [
+        "src/main/java/com/openggf/physics/",
+        "src/main/java/com/openggf/sprites/playable/",
+        "src/main/java/com/openggf/game/solid/",
+        "src/main/java/com/openggf/level/rings/"
+      ],
+      "categories": [
+        "physics",
+        "gameplay",
+        "rewind",
+        "rendering"
+      ]
+    },
+    {
+      "prefixes": [
+        "src/main/java/com/openggf/graphics/",
+        "src/main/java/com/openggf/render/",
+        "src/main/java/com/openggf/level/render/",
+        "src/main/java/com/openggf/sprites/render/",
+        "src/main/java/com/openggf/game/render/",
+        "src/main/java/com/openggf/game/palette/",
+        "src/main/java/com/openggf/level/scroll/"
+      ],
+      "categories": [
+        "rendering",
+        "gameplay",
+        "content",
+        "tooling"
+      ]
+    },
+    {
+      "prefixes": [
+        "src/main/java/com/openggf/net/",
+        "src/main/java/com/openggf/tools/net/",
+        "src/main/java/com/openggf/integration/presence/"
+      ],
+      "categories": [
+        "network",
+        "gameplay",
+        "rewind",
+        "mods",
+        "tooling"
+      ]
+    },
+    {
+      "prefixes": [
+        "src/main/java/com/openggf/editor/"
+      ],
+      "categories": [
+        "tooling",
+        "content",
+        "rendering",
+        "mods"
+      ]
+    },
+    {
+      "prefixes": [
+        "src/main/java/com/openggf/game/sonic1/objects/",
+        "src/main/java/com/openggf/game/sonic2/objects/",
+        "src/main/java/com/openggf/game/sonic3k/objects/"
+      ],
+      "categories": [
+        "gameplay",
+        "physics",
+        "rendering",
+        "rewind",
+        "content"
+      ]
+    },
+    {
+      "prefixes": [
+        "docs/",
+        "AGENTS.md",
+        "CLAUDE.md",
+        "AGENTS_S3K.md",
+        "CHANGELOG",
+        "README.md",
+        ".agents/skills/",
+        ".claude/skills/"
+      ],
+      "categories": [
+        "tooling"
+      ]
+    }
+  ],
+  "notes": [
+    "Unmatched changes select every category. Shared clocks, ROM pipelines, configuration, resources and build changes deliberately have no narrow rule.",
+    "Trace replay, native graphics, diagnostics and TraceChaser integration retain their existing explicit profiles and requirements. Category selection does not certify them."
+  ],
+  "fallback_name_owners": {
+    "gameplay": "Sonic[123]|S3[kK]|S[12](?=[A-Z])|Aiz|AIZ|Hcz|HCZ|Mgz|MGZ|Cnz|CNZ|Icz|ICZ|Lbz|LBZ|Mhz|MHZ|Fbz|FBZ|Soz|SOZ|Lrz|LRZ|Ssz|SSZ|Dez|DEZ|Ddz|DDZ|Ghz|GHZ|Mz[A-Z]|SYZ|LZ[A-Z]|SLZ|SBZ|Ehz|EHZ|Cpz|CPZ|Arz|ARZ|Htz|HTZ|Mcz|MCZ|Ooz|OOZ|Mtz|MTZ|Scz|SCZ|Wfz|WFZ"
+  }
+}

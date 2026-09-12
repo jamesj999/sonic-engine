@@ -1,5 +1,11 @@
 # Headless testing
 
+For local check selection, use the [test category runner](../../../tools/testing/README.md#test-categories).
+It selects ordinary tests from the change against the integration base and runs structural
+guards separately. Focused categories do not replace affected trace fixtures or native tests;
+CI and release full-suite coverage remains unchanged.
+
+
 `HeadlessTestRunner` (`com.openggf.tests.HeadlessTestRunner`) runs physics and collision
 integration tests without an OpenGL context.
 
