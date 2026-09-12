@@ -3,14 +3,17 @@ package com.openggf.configuration;
 import com.openggf.debug.DebugOverlayToggle;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.OptionalInt;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -34,18 +37,22 @@ import static org.lwjgl.glfw.GLFW.GLFW_KEY_P;
  *
  * <p>The row is therefore checked against the call sites rather than trusted.
  */
-// Minutes-long oracle sweep: excluded from the -Psmoke fast lane, still run by
-// the default suite on pull requests, the nightly schedule and release validation.
+// Excluded from smoke; exercised by the full ordinary suite.
 @Tag("slow-suite")
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class TestModifierSupportDocumentation {
 
     private static final Path CONFIGURATION_DOC = Path.of("CONFIGURATION.md");
     private static final Path BUNDLED_CONFIG = Path.of("src/main/resources/config.yaml");
     private static final Path SRC_MAIN = Path.of("src/main/java");
     private static final Pattern BINDING_NAME = Pattern.compile("`([A-Z][A-Z0-9_]+)`");
+    private static final Pattern CONFIGURATION_REFERENCE =
+            Pattern.compile("SonicConfiguration\\.([A-Z0-9_]+)(?![A-Z0-9_])");
     /** The "or a bare key such as X" example, in either surface's punctuation. */
     private static final Pattern BARE_KEY_EXAMPLE =
             Pattern.compile("bare key such as `?([A-Za-z0-9_]+)`?");
+
+    private Map<String, List<String>> productionReadSites;
 
     @TempDir
     Path configDir;
@@ -318,16 +325,24 @@ class TestModifierSupportDocumentation {
      * read. Hoisting is the dominant style in GameLoop.updateSpecialStageInput,
      * which is precisely the method these sweeps exist to see into.
      */
-    private static List<String> readSitesOf(String name) throws IOException {
-        return readSitesOf(name, mainSources());
+    private List<String> readSitesOf(String name) throws IOException {
+        // Production sources are fixed for this class's run. Retain only the
+        // immutable read sites, not whole source files or temporary fixtures.
+        if (productionReadSites == null) {
+            productionReadSites = indexReadSites(mainSources());
+        }
+        return productionReadSites.getOrDefault(name, List.of());
     }
 
     private static List<String> readSitesOf(String name, List<Path> sources) throws IOException {
-        Pattern reference = Pattern.compile("SonicConfiguration\\." + name + "(?![A-Z0-9_])");
-        List<String> reads = new ArrayList<>();
+        return indexReadSites(sources).getOrDefault(name, List.of());
+    }
+
+    private static Map<String, List<String>> indexReadSites(List<Path> sources) throws IOException {
+        Map<String, List<String>> reads = new LinkedHashMap<>();
         for (Path file : sources) {
             String flattened = flatten(Files.readString(file));
-            Matcher matcher = reference.matcher(flattened);
+            Matcher matcher = CONFIGURATION_REFERENCE.matcher(flattened);
             while (matcher.find()) {
                 // Narrow to the enclosing call when there is one. A single
                 // statement can OR together several binding reads, and only the
@@ -342,11 +357,13 @@ class TestModifierSupportDocumentation {
                 String site = HOISTED_LOCAL.matcher(statement).find()
                         ? statement
                         : callAround(flattened, matcher.start(), statement);
-                reads.add(file + ": " + site
-                        + checksOnHoistedLocal(flattened, matcher.start(), statement));
+                reads.computeIfAbsent(matcher.group(1), ignored -> new ArrayList<>())
+                        .add(file + ": " + site
+                                + checksOnHoistedLocal(flattened, matcher.start(), statement));
             }
         }
-        return reads;
+        reads.replaceAll((name, sites) -> List.copyOf(sites));
+        return Map.copyOf(reads);
     }
 
     /** {@code int leftKey =} — the local a hoisted binding read is assigned to. */
