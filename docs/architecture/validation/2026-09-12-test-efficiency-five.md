@@ -152,4 +152,30 @@ standalone slice 0.209s, master relay 1.201s, verified room 0.137s. Whole-suite
 FBZ timing differs substantially from the focused pair; the focused 53.265-second
 saving is not a claim of an equivalent measured whole-suite improvement.
 
-Integration and upstream reconciliation are pending.
+While validation ran, origin/develop advanced to `770ce255c`, adding SMPS header
+normalization, ROM ring mappings, graphics/timing refactors, test retirements and
+a delivery-wide validation budget. Main develop fast-forwarded without switching
+branches. Merging upstream into the task branch was conflict-free, including the
+combined release-note edits; develop then fast-forwarded to integrated `50631c5a0`.
+
+The post-integration focused command was `mvn -Dmse=off -Pguards -Dtest=<selection>
+test -B` with the same verified ROM properties and isolated main-workspace reports.
+Selection retained all eight final target/helper classes plus
+`TestSmpsHeaderConstruction`, `TestRomRingMappings`, `TestS3kAiz1SkipHeadless`,
+`TestSonic3kLevelLoading` (both matching classes), `TestSonic3kBootstrapResolver`,
+and `TestSonic3kDecodingUtils`. On `50631c5a0`, it completed 117 tests: 106 passed,
+11 FBZ failures, no errors/skips, 129.074 seconds including compilation. All 11
+full failure messages exactly matched the earlier candidate/base. New upstream
+SMPS and ring-mapping checks and all mandated S3K checks passed. No second full
+suite was run after that upstream merge; combined-tree evidence is this focused
+selection, not a claim that all upstream changes received full validation here.
+
+The newly introduced shared task receipt adopted this same delivery's completed
+broad attempt and historical time, preserving rather than resetting its allowance.
+Accounting totals 1,399.112 seconds (23m19s) against the 40-minute ceiling: one
+completed broad attempt, prior focused Maven totals, 177-second original baseline,
+a conservative 30-second allowance for the consumed placement baseline, and the
+129.074-second integrated check. Broad diagnostics were acknowledged and removed;
+focused diagnostics were consumed after exact-message comparison. Only the
+concise evidence and timing ledger is durable. Main-workspace dirty disassemblies
+and `raiscan-0.6-thoughts.md` were preserved.

@@ -25,3 +25,10 @@ must map to retained assertions and equivalent configuration/trajectory coverage
 Large oracle inputs, ROM routes, all unique configurations and gate scope remain.
 Temporary diagnostics are consumed and deleted; durable evidence is a concise
 validation ledger under docs/architecture/validation/.
+
+Implementation, equivalence proofs, one combined full ordinary/guard run and
+focused validation after upstream integration are complete. See the
+[validation ledger](../validation/2026-09-12-test-efficiency-five.md) for exact
+results, baseline failure mapping and remaining coverage limits. The subsequent
+[concurrency/audio-policy audit](2026-09-12-test-concurrency-and-public-audio.md)
+records recommendations separately from these implemented changes.
