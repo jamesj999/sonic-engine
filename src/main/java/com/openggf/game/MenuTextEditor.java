@@ -25,7 +25,8 @@ public final class MenuTextEditor {
     private String value;
     private int caret;
     private int page;
-    private int cell = 59;
+    private int cell;
+    private boolean keypadFocused;
     private int ticks;
     private Result result = Result.NONE;
     private boolean finished;
@@ -70,10 +71,11 @@ public final class MenuTextEditor {
     public void update(InputHandler input) {
         String beforeValue = value;
         int beforeCaret = caret, beforeCell = cell, beforePage = page;
+        boolean beforeKeypadFocused = keypadFocused;
         errorFeedback = false;
         try { updateInput(input); } finally {
             if (!finished && !errorFeedback && (!value.equals(beforeValue) || caret != beforeCaret
-                    || cell != beforeCell || page != beforePage)) MenuFeedback.emit(NAVIGATE);
+                    || cell != beforeCell || page != beforePage || keypadFocused != beforeKeypadFocused)) MenuFeedback.emit(NAVIGATE);
         }
     }
 
@@ -83,26 +85,28 @@ public final class MenuTextEditor {
         controller = MenuInput.controller(input);
         if (MenuInput.textBack(input)) { finish(Result.CANCELLED); return; }
         String typed = MenuInput.consumeText(input);
-        if (!typed.isEmpty()) insert(typed);
-        if (MenuInput.textKeyPressed(input, GLFW_KEY_ENTER)
-                || MenuInput.textKeyPressed(input, GLFW_KEY_KP_ENTER)) {
-            accept();
+        // Physical typing edits the field directly; device presentation never owns focus.
+        if (!typed.isEmpty()) { keypadFocused = false; insert(typed); }
+        if (MenuInput.textKeyPressed(input, GLFW_KEY_BACKSPACE)) { keypadFocused = false; eraseBefore(); }
+        if (MenuInput.textKeyPressed(input, GLFW_KEY_DELETE)) { keypadFocused = false; eraseAfter(); }
+        if (MenuInput.textKeyPressed(input, GLFW_KEY_HOME)) { keypadFocused = false; caret = 0; }
+        if (MenuInput.textKeyPressed(input, GLFW_KEY_END)) { keypadFocused = false; caret = value.length(); }
+
+        if (!keypadFocused) {
+            if (MenuInput.textDown(input)) { keypadFocused = true; cell %= COLUMNS; return; }
+            if (MenuInput.textLeft(input)) { moveCaret(-1); return; }
+            if (MenuInput.textRight(input)) { moveCaret(1); return; }
+            if (MenuInput.textAccept(input)) accept();
             return;
         }
-        if (MenuInput.textKeyPressed(input, GLFW_KEY_BACKSPACE)) eraseBefore();
-        if (MenuInput.textKeyPressed(input, GLFW_KEY_DELETE)) eraseAfter();
-        if (MenuInput.textKeyPressed(input, GLFW_KEY_HOME)) caret = 0;
-        if (MenuInput.textKeyPressed(input, GLFW_KEY_END)) caret = value.length();
-        // Arrows have conventional text-field meaning on a physical keyboard.
-        // Controller directions address the visible key grid instead.
-        if (MenuInput.textKeyPressed(input, GLFW_KEY_LEFT)) { moveCaret(-1); return; }
-        if (MenuInput.textKeyPressed(input, GLFW_KEY_RIGHT)) { moveCaret(1); return; }
-        if (MenuInput.textKeyPressed(input, GLFW_KEY_UP)) return;
-        if (MenuInput.textKeyPressed(input, GLFW_KEY_DOWN)) return;
-        if (MenuInput.textLeft(input)) cell = Math.floorMod(cell - 1, CELL_COUNT);
-        if (MenuInput.textRight(input)) cell = (cell + 1) % CELL_COUNT;
-        if (MenuInput.textUp(input)) cell = Math.floorMod(cell - COLUMNS, CELL_COUNT);
-        if (MenuInput.textDown(input)) cell = (cell + COLUMNS) % CELL_COUNT;
+        if (MenuInput.textLeft(input)) { cell = Math.floorMod(cell - 1, CELL_COUNT); return; }
+        if (MenuInput.textRight(input)) { cell = (cell + 1) % CELL_COUNT; return; }
+        if (MenuInput.textUp(input)) {
+            if (cell < COLUMNS) keypadFocused = false;
+            else cell -= COLUMNS;
+            return;
+        }
+        if (MenuInput.textDown(input)) { cell = (cell + COLUMNS) % CELL_COUNT; return; }
         if (MenuInput.textAccept(input)) chooseCell();
     }
 
@@ -177,6 +181,7 @@ public final class MenuTextEditor {
         width = Math.max(320, width);
         MenuStyle.page(font, width, title, null);
         MenuStyle.panel(font, 8, 37, width - 16, 31);
+        if (!keypadFocused) MenuStyle.focus(font, 8, 37, width - 16, 31);
         int columns = Math.max(1, (width - 32) / 9 - 1);
         int caretColumn = value.codePointCount(0, caret);
         int startColumn = Math.max(0, caretColumn - columns + 1);
@@ -188,19 +193,22 @@ public final class MenuTextEditor {
         String visible = display.substring(start, Math.min(display.length(), start + columns));
         MenuStyle.label(font, visible.isEmpty() ? " " : visible, 15, 45, width - 30, 1, 1, 1);
         if (ticks % 60 < 40) MenuStyle.label(font, "_", 15 + (caretColumn - startColumn) * 9, 54, 9, .3f, .9f, 1);
-        MenuStyle.text(font, controller ? "D-Pad chooses keys; A enters a key" : "Type normally. Enter accepts; Esc cancels", 9, 73, width - 18, .65f, .75f, .9f);
+        String hint = keypadFocused ? "Up from the top row returns to text"
+                : controller ? "Left/Right moves cursor; Down selects keys" : "Type normally; Down selects the keypad";
+        MenuStyle.text(font, hint, 9, 73, width - 18, .65f, .75f, .9f);
         int cellWidth = (width - 20) / COLUMNS;
         for (int i = 0; i < CELL_COUNT; i++) {
             int x = 10 + i % COLUMNS * cellWidth;
             int y = 91 + i / COLUMNS * 15;
-            if (controller && cell == i) MenuStyle.focusLabel(font, x - 2, y, cellWidth - 1, 14);
+            if (keypadFocused && cell == i) MenuStyle.focusLabel(font, x - 2, y, cellWidth - 1, 14);
             String label = cellLabel(i);
             MenuStyle.label(font, label, x, y, cellWidth - 3, i >= 50 ? 1 : .88f, i >= 50 ? .73f : .92f, i >= 50 ? .25f : 1);
         }
-        String detail = error != null ? error : controller ? cellDescription() : "Arrows: cursor   Home/End   Backspace/Delete";
+        String detail = error != null ? error : keypadFocused ? cellDescription() : "Arrows: cursor   Home/End   Backspace/Delete";
         MenuStyle.text(font, detail, 9, 185, width - 18, error == null ? .65f : 1, error == null ? .75f : .7f, error == null ? .9f : .2f);
         MenuStyle.footer(font, width, value.codePointCount(0, value.length()) + "/" + maxLength + " characters",
-                controller ? "A Choose  B Cancel  D-Pad Move" : "Enter Accept  Esc Cancel");
+                keypadFocused ? (controller ? "A Choose  B Cancel  D-Pad Move" : "Arrows Move  Enter Key  Esc Back")
+                        : (controller ? "A Accept  Down Keys  B Cancel" : "Enter OK  Down Keys  Esc Back"));
     }
 
     private String cellLabel(int index) {

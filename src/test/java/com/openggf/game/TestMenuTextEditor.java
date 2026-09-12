@@ -50,7 +50,7 @@ class TestMenuTextEditor {
     @Test
     void controllerCanChooseLettersAndAcceptWithoutAnyKeyboard() {
         Fixture f = new Fixture("", 64);
-        f.padPress(GLFW_GAMEPAD_BUTTON_DPAD_LEFT, 9); // 59 -> 50 switch page
+        f.padPress(GLFW_GAMEPAD_BUTTON_DPAD_DOWN, 6); // field -> 0 -> 50 switch page
         f.padPress(GLFW_GAMEPAD_BUTTON_A); // uppercase page
         f.padPress(GLFW_GAMEPAD_BUTTON_DPAD_UP, 3); // 50 -> 20 = A
         f.padPress(GLFW_GAMEPAD_BUTTON_A);
@@ -64,7 +64,8 @@ class TestMenuTextEditor {
     @Test
     void controllerCaretCommandsInsertInTheMiddleOfExistingText() {
         Fixture f = new Fixture("ab", 64);
-        f.padPress(GLFW_GAMEPAD_BUTTON_DPAD_LEFT, 4); // caret left button
+        f.padPress(GLFW_GAMEPAD_BUTTON_DPAD_DOWN, 6);
+        f.padPress(GLFW_GAMEPAD_BUTTON_DPAD_RIGHT, 5); // caret left button
         f.padPress(GLFW_GAMEPAD_BUTTON_A);
         f.padPress(GLFW_GAMEPAD_BUTTON_DPAD_UP, 3); // 55 -> 25 = h
         f.padPress(GLFW_GAMEPAD_BUTTON_A);
@@ -96,7 +97,7 @@ class TestMenuTextEditor {
         RecordingFont font = new RecordingFont();
         Set<Character> available = new HashSet<>();
         available.add(' '); // The grid labels space explicitly as SPC.
-        f.padPress(GLFW_GAMEPAD_BUTTON_DPAD_LEFT, 9); // page button
+        f.padPress(GLFW_GAMEPAD_BUTTON_DPAD_DOWN, 6); // page button
         for (int page = 0; page < 3; page++) {
             for (int width : new int[] {320, 426}) {
                 font.lines.clear();
@@ -126,6 +127,82 @@ class TestMenuTextEditor {
         f.press(GLFW_KEY_ESCAPE);
         assertEquals(MenuTextEditor.Result.CANCELLED, f.editor.consumeResult());
         assertEquals("preserve this", f.editor.value());
+    }
+
+    @Test
+    void keyboardCanEnterKeypadChooseAKeyAndReturnToText() {
+        Fixture f = new Fixture("ab", 64);
+        f.press(GLFW_KEY_DOWN); // field -> first keypad row
+        f.press(GLFW_KEY_RIGHT);
+        f.press(GLFW_KEY_ENTER);
+        assertEquals("ab2", f.editor.value());
+        assertEquals(MenuTextEditor.Result.NONE, f.editor.consumeResult());
+        f.press(GLFW_KEY_UP); // first row -> field
+        f.press(GLFW_KEY_LEFT);
+        f.type(GLFW_KEY_X, "x");
+        assertEquals("abx2", f.editor.value());
+        f.press(GLFW_KEY_ENTER);
+        assertEquals(MenuTextEditor.Result.ACCEPTED, f.editor.consumeResult());
+    }
+
+    @Test
+    void keypadFocusSurvivesDeviceSwitchesAndTypingReturnsToField() {
+        Fixture f = new Fixture("", 64);
+        f.padPress(GLFW_GAMEPAD_BUTTON_DPAD_DOWN);
+        f.press(GLFW_KEY_RIGHT);
+        f.padPress(GLFW_GAMEPAD_BUTTON_A);
+        assertEquals("2", f.editor.value());
+        f.press(GLFW_KEY_LEFT);
+        f.press(GLFW_KEY_ENTER);
+        assertEquals("21", f.editor.value());
+        f.type(GLFW_KEY_Z, "z");
+        f.press(GLFW_KEY_ENTER);
+        assertEquals("21z", f.editor.value());
+        assertEquals(MenuTextEditor.Result.ACCEPTED, f.editor.consumeResult());
+    }
+
+    @Test
+    void focusTransitionsHaveFeedbackAndHeldDownDoesNotSkipTheFirstRow() {
+        Fixture f = new Fixture("", 64);
+        List<MenuFeedback.Cue> cues = new ArrayList<>();
+        MenuFeedback.withSink(cues::add, () -> {
+            f.press(GLFW_KEY_UP); // already at the field: no action
+            f.input.handleKeyEvent(GLFW_KEY_DOWN, GLFW_PRESS);
+            f.frame(); f.frame(); f.frame();
+            f.input.handleKeyEvent(GLFW_KEY_DOWN, GLFW_RELEASE); f.frame();
+            f.press(GLFW_KEY_ENTER);
+            f.press(GLFW_KEY_UP);
+        });
+        assertEquals("1", f.editor.value());
+        assertEquals(List.of(MenuFeedback.Cue.NAVIGATE, MenuFeedback.Cue.NAVIGATE,
+                MenuFeedback.Cue.NAVIGATE), cues);
+        assertEquals(MenuTextEditor.Result.NONE, f.editor.consumeResult());
+    }
+
+    @Test
+    void keyboardKeypadFocusIsVisibleAndDeviceChangesDoNotHideIt() {
+        Fixture f = new Fixture("value", 64);
+        List<Integer> focusRows = new ArrayList<>();
+        var font = org.mockito.Mockito.mock(com.openggf.graphics.MenuPixelFont.class, invocation -> {
+            Object[] args = invocation.getArguments();
+            if (invocation.getMethod().getName().equals("fillRect")
+                    && (float) args[4] == .08f && (float) args[5] == .23f) {
+                focusRows.add((int) args[1]);
+            }
+            return org.mockito.Answers.RETURNS_DEFAULTS.answer(invocation);
+        });
+        f.editor.render(font, 320);
+        assertEquals(List.of(37), focusRows, "The text field starts visibly focused");
+        focusRows.clear();
+        f.press(GLFW_KEY_DOWN);
+        f.editor.render(font, 320);
+        assertEquals(1, focusRows.size());
+        assertTrue(focusRows.getFirst() > 80, "Keyboard navigation must visibly focus a keypad key");
+        int keypadRow = focusRows.getFirst();
+        focusRows.clear();
+        f.padPress(GLFW_GAMEPAD_BUTTON_DPAD_RIGHT);
+        f.editor.render(font, 320);
+        assertEquals(List.of(keypadRow), focusRows, "Changing device must preserve keypad focus");
     }
 
     private final class Fixture {
