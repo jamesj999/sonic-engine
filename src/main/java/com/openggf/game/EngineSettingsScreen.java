@@ -9,7 +9,6 @@ import com.openggf.configuration.SonicConfigurationService;
 import com.openggf.control.InputHandler;
 import com.openggf.control.MenuInput;
 import com.openggf.graphics.PixelFont;
-import com.openggf.graphics.TexturedQuadRenderer;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -20,6 +19,8 @@ import static org.lwjgl.glfw.GLFW.*;
 /** Controller-first preferences with readable native-pixel pages and a cancellable persisted draft. */
 public final class EngineSettingsScreen {
     private static final int VISIBLE_ROWS = 4;
+    private static final int DESCRIPTION_LINES = 2;
+    private static final int DESCRIPTION_PAGE_TICKS = 480;
     private static final EngineSettingsDraft.Category[] CATEGORIES = EngineSettingsDraft.Category.values();
     private static final float[] WHITE = {1, 1, 1};
     private static final float[] AMBER = {1, .73f, .25f};
@@ -46,8 +47,7 @@ public final class EngineSettingsScreen {
     private String backHint = "Esc";
     private String directionsHint = "Arrows";
 
-    public EngineSettingsScreen(SonicConfigurationService config, PixelFont font,
-                                TexturedQuadRenderer renderer, int solidTextureId) {
+    public EngineSettingsScreen(SonicConfigurationService config, PixelFont font) {
         this.config = config;
         this.draft = new EngineSettingsDraft(config);
         this.font = font;
@@ -92,12 +92,12 @@ public final class EngineSettingsScreen {
             return;
         }
         if (!fields) {
-            if (MenuInput.up(input)) { category = Math.floorMod(category - 1, CATEGORIES.length + 2); row = 0; }
-            if (MenuInput.down(input)) { category = (category + 1) % (CATEGORIES.length + 2); row = 0; }
+            if (MenuInput.up(input)) { category = Math.floorMod(category - 1, CATEGORIES.length + 2); row = 0; ticks = 0; }
+            if (MenuInput.down(input)) { category = (category + 1) % (CATEGORIES.length + 2); row = 0; ticks = 0; }
             if (MenuInput.accept(input)) {
                 if (category == CATEGORIES.length) apply();
                 else if (category == CATEGORIES.length + 1) requestClose();
-                else { fields = true; row = 0; }
+                else { fields = true; row = 0; ticks = 0; }
             }
             return;
         }
@@ -238,7 +238,7 @@ public final class EngineSettingsScreen {
             text("Page " + (page + 1) + "/" + ((keys.size() + VISIBLE_ROWS - 1) / VISIBLE_ROWS)
                     + "  " + (row + 1) + "/" + keys.size(), 111, 162, width - 120, MUTED);
             String description = fields ? ConfigCatalog.meta(selected()).description() : "Choose a category, then a setting. White: default. Amber: changed.";
-            description(description, width, 185);
+            description(description, width, 178);
         } else {
             label(category == CATEGORIES.length ? "Save all changes" : "Discard changes", 111, 48, width - 120, WHITE);
             text("Restart applies all settings", 111, 70, width - 120, MUTED);
@@ -306,8 +306,13 @@ public final class EngineSettingsScreen {
             lines.add(remaining.substring(0, end));
             remaining = remaining.substring(end).stripLeading();
         }
-        int first = lines.isEmpty() ? 0 : (ticks / 240) % lines.size();
-        for (int i = 0; i < 1 && first + i < lines.size(); i++) text(lines.get(first + i), 9, y + i * 10, width - 18, MUTED);
+        // Most descriptions fit immediately. Longer help advances in whole pairs,
+        // giving both lines eight seconds at the usual 60 Hz menu rate.
+        int pages = Math.max(1, (lines.size() + DESCRIPTION_LINES - 1) / DESCRIPTION_LINES);
+        int first = ((ticks / DESCRIPTION_PAGE_TICKS) % pages) * DESCRIPTION_LINES;
+        for (int i = 0; i < DESCRIPTION_LINES && first + i < lines.size(); i++) {
+            text(lines.get(first + i), 9, y + i * 10, width - 18, MUTED);
+        }
     }
     private String window(String value, int chars, boolean scroll) {
         if (value.length() <= chars) return value;

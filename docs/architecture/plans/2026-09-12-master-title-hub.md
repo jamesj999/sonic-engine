@@ -5,10 +5,13 @@
 The competition-style title remains a native 320x224 UI with proportional
 widescreen expansion. Preserve the existing ROM-backed animated game logos,
 scaled into the left pane without stretching or rectangular placeholder art.
-Left/right selects a game. Confirm enters the action pane; Back returns to
-game selection. Up/down selects Start, Launch options, Time attack, Recordings,
-Mods, Settings, or Tools. Existing shortcuts remain optional accelerators.
-Tools exposes the trace library without requiring a YAML test-mode gate.
+Left/right selects a game from either hub pane. Up/down enters the action list
+from game selection, then chooses Start, Launch options, Time attack, Recordings,
+Mods, Settings, Advanced, or Quit. Confirm remains an entry shortcut; Back returns
+to game selection with the error/cancel cue. Opening menu screens uses confirmation.
+Existing shortcuts remain optional accelerators. Advanced contains trace replays
+and help, without duplicating Settings. Quit uses a cancellable confirmation and
+the existing host fade/exit flow; game-pane Back also opens the confirmation.
 Standalone New Game/Continue remains available through Start.
 
 Keyboard prompts use Enter/Esc and arrows. Controller prompts use A/B and
@@ -50,7 +53,7 @@ and branch. Preserve dirty reference submodules and unrelated user files.
 ## Expanded working model
 
 Primary controls retain the prototype's original 9x10 lettering. A separately
-authored 5x7 font (6x8 cells) serves secondary descriptions and metadata; no menu
+authored compact font (6x8 cells with lowercase descenders) serves secondary descriptions and metadata; no menu
 font is fractionally resampled. Page density is handled through shorter labels,
 paging, and dedicated detail/confirmation screens. Shared blue/gold checkerboards
 and cyan focus connect settings, launch, recordings, traces, mods, time attack,
@@ -101,3 +104,14 @@ Actual OpenGL captures cover 51 page/states and 210 PNGs at native 320/400 width
 detail; they are not enlarged native screenshots. Controller-source switching was
 exercised through the physical-state input seam, without physical device hardware.
 The capture gallery records illustrative fixture and network-isolation limits.
+
+## Review refinements
+
+The hub shows three game tabs at once, dimming unavailable ROMs; longer mod lists
+scroll the tab window and show a selected-entry count. The left pane exposes the
+animated sky while the right keeps checkerboard styling. Error dialogs clear stale
+details, distinguish missing ROMs from unsupported standalone actions, and require
+explicit dismissal. Settings descriptions show two lines with longer paired pages;
+launch options use fixed left anchors and cyan focus. Removed the unreachable old
+menu/matte/hover render paths and their helper-only tests. Public Mod API signatures
+remain unchanged; title quit requests route through the host input seam.

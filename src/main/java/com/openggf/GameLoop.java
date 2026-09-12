@@ -1265,6 +1265,9 @@ public class GameLoop {
                     masterScreen,
                     inputHandler,
                     this::exitMasterTitleScreen);
+            if (!resolveFadeManager().isActive()) {
+                com.openggf.game.TitleInputOwnership.routeQuit(masterScreen, this::startEscapeApplicationExitTransition);
+            }
             finishTimeAttackMasterTitleFrame(masterScreen);
             return;
         }

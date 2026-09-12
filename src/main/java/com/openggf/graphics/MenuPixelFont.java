@@ -11,8 +11,8 @@ import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL12.GL_CLAMP_TO_EDGE;
 
 /**
- * Menu typography with two native pixel sizes: authored 5x7 compact lettering in
- * 6x8 cells, and the existing 9x10 font at integer multiples. Fractional caller
+ * Menu typography with two native pixel sizes: authored compact lettering with
+ * lowercase descenders in 6x8 cells, and the existing 9x10 font at integer multiples. Fractional caller
  * scales select the compact font; they never resample either font's artwork.
  */
 public final class MenuPixelFont extends PixelFont {

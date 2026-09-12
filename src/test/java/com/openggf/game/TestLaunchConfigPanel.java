@@ -222,14 +222,43 @@ class TestLaunchConfigPanel {
     }
 
     @Test
-    void textLineViewsCenterRowsAndFooterInViewport() {
+    void primaryRowsAndSupportingTextKeepStableLeftAnchorsAtNativeAndWideWidths() {
         SonicConfigurationService config = configuredWasd();
         LaunchConfigPanel panel = panel(config, LaunchProfile.stockFor(SONIC_3K), new TrackingStore(config));
 
-        for (LaunchConfigPanel.TextLineView line : panel.textLineViews(400)) {
-            int expectedX = Math.round((400 - line.measuredWidth()) / 2f);
-            assertEquals(expectedX, line.x(), "line should center on viewport: " + line.text());
+        for (int viewportWidth : new int[] {320, 400}) {
+            List<LaunchConfigPanel.TextLineView> lines = panel.textLineViews(viewportWidth);
+            for (int i = 0; i < panel.rowViews().size(); i++) {
+                LaunchConfigPanel.TextLineView line = lines.get(i);
+                assertEquals(17, line.x(), "Primary rows share a fixed left anchor");
+                assertEquals(1f, line.scale(), "Primary labels retain full-size lettering");
+                assertFalse(line.text().startsWith(" "), "No invisible centering/cursor padding");
+                assertFalse(line.text().startsWith(">"), "The shared cyan frame identifies focus");
+            }
+            for (LaunchConfigPanel.TextLineView line : lines.subList(panel.rowViews().size(), lines.size())) {
+                assertEquals(9, line.x(), "Supporting text aligns with the page heading");
+            }
         }
+    }
+
+    @Test
+    void movingFocusDoesNotReplaceStockAmberOrExperimentalColors() {
+        SonicConfigurationService config = configuredWasd();
+        LaunchConfigPanel panel = panel(config,
+                new LaunchProfile(true, "off", false, "ULTRA_21_9", "sonic", "tails"),
+                new TrackingStore(config));
+        InputHandler input = new InputHandler(InputBindingFactory.supplier(config));
+        List<LaunchConfigPanel.TextLineView> before = panel.textLineViews(320);
+        for (int i = 0; i < 3; i++) pressFrame(panel, input, GLFW_KEY_S);
+        List<LaunchConfigPanel.TextLineView> after = panel.textLineViews(320);
+        for (int i = 0; i < panel.rowViews().size(); i++) {
+            assertEquals(before.get(i).r(), after.get(i).r());
+            assertEquals(before.get(i).g(), after.get(i).g());
+            assertEquals(before.get(i).b(), after.get(i).b());
+        }
+        assertEquals(.72f, before.get(REWIND.ordinal()).g());
+        assertEquals(1f, before.get(DEBUG_TOOLS.ordinal()).g());
+        assertEquals(.25f, before.get(WIDESCREEN.ordinal()).g());
     }
 
     @Test

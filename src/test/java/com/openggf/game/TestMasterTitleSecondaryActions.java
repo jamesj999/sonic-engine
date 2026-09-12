@@ -53,65 +53,6 @@ class TestMasterTitleSecondaryActions {
     Path tempDir;
 
     @Test
-    void menuDownEntersSecondaryRowBeforeAcceptCanOpenMods() {
-        MasterTitleSecondaryActions actions = new MasterTitleSecondaryActions();
-
-        assertEquals(MasterTitleSecondaryActions.Result.CONSUMED,
-                actions.update(logical(AbstractPlayableSprite.INPUT_DOWN, InputActionMasks.ACTION_A), false));
-        assertTrue(actions.isModsFocused());
-
-        assertEquals(MasterTitleSecondaryActions.Result.CONSUMED,
-                actions.update(logical(AbstractPlayableSprite.INPUT_DOWN, InputActionMasks.ACTION_A), false),
-                "a held/stale transition snapshot must not double-trigger MODS");
-        actions.update(LogicalInputSnapshot.neutral(), false);
-
-        assertEquals(MasterTitleSecondaryActions.Result.OPEN_MODS,
-                actions.update(logical(0, InputActionMasks.ACTION_A), false));
-        assertTrue(actions.isModsFocused());
-    }
-
-    @Test
-    void menuUpAndBackReturnToGameSelectionWithoutOpeningMods() {
-        MasterTitleSecondaryActions actions = focusedActions();
-
-        assertEquals(MasterTitleSecondaryActions.Result.CONSUMED,
-                actions.update(logical(AbstractPlayableSprite.INPUT_UP, 0), false));
-        assertFalse(actions.isModsFocused());
-
-        actions.update(LogicalInputSnapshot.neutral(), false);
-        actions.update(logical(AbstractPlayableSprite.INPUT_DOWN, 0), false);
-        actions.update(LogicalInputSnapshot.neutral(), false);
-        assertEquals(MasterTitleSecondaryActions.Result.CONSUMED,
-                actions.update(logical(0, InputActionMasks.ACTION_C), false),
-                "back wins over the accept bit carried by the same logical action");
-        assertFalse(actions.isModsFocused());
-    }
-
-    @Test
-    void menuRightIsNeverInterceptedWhileModsIsFocused() {
-        MasterTitleSecondaryActions actions = focusedActions();
-
-        assertEquals(MasterTitleSecondaryActions.Result.NOT_CONSUMED,
-                actions.update(logical(AbstractPlayableSprite.INPUT_RIGHT, 0), false));
-        assertTrue(actions.isModsFocused());
-    }
-
-    @Test
-    void acceptAndShortcutAreEdgeTriggered() {
-        MasterTitleSecondaryActions actions = focusedActions();
-        LogicalInputSnapshot accept = logical(0, InputActionMasks.ACTION_A);
-
-        assertEquals(MasterTitleSecondaryActions.Result.OPEN_MODS, actions.update(accept, false));
-        assertEquals(MasterTitleSecondaryActions.Result.CONSUMED, actions.update(accept, false));
-
-        actions.update(LogicalInputSnapshot.neutral(), false);
-        assertEquals(MasterTitleSecondaryActions.Result.OPEN_MODS,
-                actions.update(LogicalInputSnapshot.neutral(), true));
-        assertEquals(MasterTitleSecondaryActions.Result.NOT_CONSUMED,
-                actions.update(LogicalInputSnapshot.neutral(), true));
-    }
-
-    @Test
     void masterTitleConsumesFocusTransitionAndOpensThroughHandlerExactlyOnce() {
         MasterTitleScreen screen = activeScreen(SonicConfigurationService.createStandalone(tempDir));
         AtomicInteger opened = new AtomicInteger();
@@ -134,7 +75,7 @@ class TestMasterTitleSecondaryActions {
     }
 
     @Test
-    void masterTitleKeepsGameLockedWhileActionsAreFocused() {
+    void masterTitleChangesGameWhilePreservingFocusedAction() {
         MasterTitleScreen screen = activeScreen(SonicConfigurationService.createStandalone(tempDir));
         InputHandler input = new InputHandler();
 
@@ -144,7 +85,7 @@ class TestMasterTitleSecondaryActions {
         input.setLogicalOverride(logical(AbstractPlayableSprite.INPUT_RIGHT, 0));
         screen.update(input);
 
-        assertEquals("s2", screen.getSelectedGameId());
+        assertEquals("s3k", screen.getSelectedGameId());
         assertTrue(screen.isModsFocusedForTest());
     }
 
@@ -207,16 +148,6 @@ class TestMasterTitleSecondaryActions {
         assertEquals(1, gamepadOpened.get());
         assertTrue(keyboardScreen.isModsFocusedForTest());
         assertTrue(gamepadScreen.isModsFocusedForTest());
-    }
-
-    @Test
-    void secondaryRowColorMakesFocusVisible() {
-        float[] unfocused = MasterTitleScreen.secondaryActionTextColor(false, 0);
-        float[] focused = MasterTitleScreen.secondaryActionTextColor(true, 0);
-
-        assertTrue(focused[0] > unfocused[0]);
-        assertTrue(focused[1] > unfocused[1]);
-        assertEquals(1f, focused[3]);
     }
 
     @Test
@@ -301,13 +232,6 @@ class TestMasterTitleSecondaryActions {
             input.setLogicalOverride(logical(AbstractPlayableSprite.INPUT_DOWN, 0)); screen.update(input);
         }
         input.setLogicalOverride(LogicalInputSnapshot.neutral()); screen.update(input);
-    }
-
-    private static MasterTitleSecondaryActions focusedActions() {
-        MasterTitleSecondaryActions actions = new MasterTitleSecondaryActions();
-        actions.update(logical(AbstractPlayableSprite.INPUT_DOWN, 0), false);
-        actions.update(LogicalInputSnapshot.neutral(), false);
-        return actions;
     }
 
     private static LogicalInputSnapshot logical(int direction, int action) {

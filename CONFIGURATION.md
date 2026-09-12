@@ -208,16 +208,22 @@ Paths are relative to the working directory (where the JAR is launched).
 ## Launch Profiles
 
 The master title stores per-game launch defaults under `launch.s1`, `launch.s2`,
-and `launch.s3k`. Left/right selects the game; `Enter` (controller A) enters its
-visible action menu. Up/down chooses an action; `Esc` (controller B) returns to
-game selection. Choose **Launch Options** to edit the selected game's profile.
+and `launch.s3k`. Left/right changes games from either hub pane. Up/down enters
+the action list from the game pane, then chooses an action within it.
+`Enter` (controller A) opens the selected action and also provides a shortcut
+into the action pane. `Esc` (controller B) backs out. Opening a menu screen plays
+the confirmation cue; backing out plays the same error/cancel cue as a missing ROM. Choose **Launch Options** to edit the selected game's profile.
 The original ROM-backed animated game logos remain, proportionally scaled into
 the left pane. Their original textures are drawn directly into the window
 viewport, so a larger window recovers source detail instead of enlarging a
 pre-reduced thumbnail. The default logical resolution remains 320x224.
 Primary text keeps the original 9x10 pixel font; supplementary details use a
-native 5x7 font with 6x8 cells. Neither is fractionally resampled. Checkerboard
-backgrounds and cyan focus frames are shared across the menu pages.
+native small font in 6x8 cells, including lowercase descenders. Neither is
+fractionally resampled. The game pane shows the sky and the available game tabs;
+missing ROMs are dimmed. Checkerboards and cyan focus frames connect menu pages.
+**Quit** opens a confirmation with **Return to menu** selected by default;
+`Esc`/B from the game pane also opens it. Error pages wait for `Enter`/A or
+`Esc`/B rather than dismissing on a timer.
 
 In the launch panel, arrows/D-pad choose a row and change its value. `Enter`/A
 saves, `Esc`/B cancels draft edits, and the optional `Tab` or controller
@@ -245,7 +251,7 @@ Input bindings are read dynamically; ROM availability/logos are rescanned after
 Apply. Current launch/session overrides remain authoritative until the next
 launch. YAML remains an optional editing route.
 
-**Tools > Trace replays** opens the trace catalog without enabling test mode.
+**Advanced > Trace replays** opens the trace catalog without enabling test mode.
 Time Attack, Recordings, and Mods also have visible action-menu entries;
 existing function-key shortcuts remain optional accelerators. Global display and
 capture shortcuts remain available in game selection, but yield to the action

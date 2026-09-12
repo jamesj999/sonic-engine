@@ -6,6 +6,11 @@ import java.util.function.BooleanSupplier;
 public final class TitleInputOwnership {
     private TitleInputOwnership() { }
 
+    /** Consume the title's confirmed quit request through the existing host exit flow. */
+    public static void routeQuit(MasterTitleScreen title, Runnable exit) {
+        if (title != null && title.consumeQuitRequest()) exit.run();
+    }
+
     /**
      * An already-open global picker keeps its input until it closes. Otherwise the
      * action pane and its children own all keys, including configurable shortcuts

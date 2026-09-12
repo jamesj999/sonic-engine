@@ -21,15 +21,44 @@ class TestMasterTitleHub {
         return screen;
     }
 
-    @Test void confirmEntersActionsBeforeLaunchingAndBackUnlocksGameSelection() {
+    @Test void horizontalInputChangesGamesAndVerticalInputEntersAndNavigatesActions() {
         var screen = screen();
+        press(screen, GLFW_KEY_LEFT);
+        assertEquals("s1", screen.getSelectedGameId());
+        press(screen, GLFW_KEY_DOWN);
+        assertFalse(screen.isGameSelected());
+        press(screen, GLFW_KEY_RIGHT);
+        assertEquals("s2", screen.getSelectedGameId());
+        press(screen, GLFW_KEY_DOWN);
         press(screen, GLFW_KEY_ENTER);
-        assertFalse(screen.isGameSelected(), "first confirmation opens the actions pane");
-        press(screen, GLFW_KEY_RIGHT);
-        assertEquals("s2", screen.getSelectedGameId(), "actions never cycle the selected game");
+        assertTrue(screen.isLaunchConfigPanelOpenForTest(), "down enters actions; another down selects Launch Options");
         press(screen, GLFW_KEY_ESCAPE);
-        press(screen, GLFW_KEY_RIGHT);
-        assertEquals("s3k", screen.getSelectedGameId());
+        press(screen, GLFW_KEY_ESCAPE);
+        press(screen, GLFW_KEY_UP);
+        press(screen, GLFW_KEY_ENTER);
+        assertTrue(screen.isGameSelected(), "up also enters actions at Start");
+    }
+
+    @Test void quitIsExplicitCancelableAndDispatchedToTheHostOnce() {
+        var screen = screen();
+        var exits = new java.util.concurrent.atomic.AtomicInteger();
+        press(screen, GLFW_KEY_ESCAPE);
+        press(screen, GLFW_KEY_ENTER); // Return is selected by default.
+        TitleInputOwnership.routeQuit(screen, exits::incrementAndGet);
+        assertEquals(0, exits.get());
+        press(screen, GLFW_KEY_DOWN);
+        for (int i = 0; i < 7; i++) press(screen, GLFW_KEY_DOWN);
+        press(screen, GLFW_KEY_ENTER);
+        press(screen, GLFW_KEY_ESCAPE);
+        TitleInputOwnership.routeQuit(screen, exits::incrementAndGet);
+        assertEquals(0, exits.get());
+        press(screen, GLFW_KEY_ENTER);
+        press(screen, GLFW_KEY_DOWN);
+        press(screen, GLFW_KEY_ENTER);
+        TitleInputOwnership.routeQuit(screen, exits::incrementAndGet);
+        TitleInputOwnership.routeQuit(screen, exits::incrementAndGet);
+        assertEquals(1, exits.get());
+        assertFalse(screen.isGameSelected());
     }
 
     @Test void launchOptionsAreReachableWithoutShortcut() {
