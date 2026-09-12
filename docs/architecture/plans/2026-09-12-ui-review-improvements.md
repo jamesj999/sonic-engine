@@ -33,8 +33,8 @@ white/default, amber/non-default, red/experimental status meanings.
 - [x] Update user/configuration documentation and existing unreleased changelog entry.
 - [x] Review combined change and fix regressions.
 - [x] Required change-based category selection and separate structural guards; inspect skips/failures.
-- [ ] Reconcile upstream, integrate into main workspace develop, package and push.
-- [ ] Acknowledge temporary diagnostics and safely remove fully integrated worktree/branch.
+- [x] Reconcile upstream, integrate into main workspace develop, package and push.
+- [x] Acknowledge temporary diagnostics and safely remove fully integrated worktree/branch.
 
 ## Design decisions and evidence
 
@@ -127,3 +127,32 @@ The missing guard lane completed with
 the unstarted lane, not a second ordinary selection. All production UI sources
 remained at `9b6f6d896`; only the three test expectations and validation prose
 changed after that run. Upstream performance delivery is now `2dd0de646`.
+
+
+Integration: `5b1a7d076` merged the UI branch into develop on top of performance
+commit `2dd0de646`. Git reconciled the shared changelog automatically; both entries
+were inspected. All 60 UI source/test files exactly match the verified task branch;
+upstream production changes are in separate host-clock/capture-store files.
+The focused integrated command selected `TestMenuInput,TestMenuRepeat,TestMasterTitle*,TestMenuTextEditor,TestMenuPathBrowser,TestMenuLoadTask,TestEngineSettings*,TestModManagerScreen,TestPendingModStateEditor,TestServerBrowserScreen,TestRaceLobbyScreen,TestDirectConnectEndToEnd,TestEditorCommandPalette,TestEditorRenderingSmoke,TestMenuPixelFont,TestPhase3StandaloneSampleIntegration,TestSamplePlatformerIntegration,TestOrdinaryTitleScreenCommandEvidence`
+with `mvn -Dmse=off -Dtest=... test -B`: 245 tests passed, zero skips, 1m02s.
+The complete ordinary/guard evidence above and the independently completed
+performance validation are retained; the merged overlap is checked narrowly,
+without repeating broad suites on already tested unchanged source.
+
+
+Integrated packaging: `mvn -Dmse=off -DskipTests package -B` completed successfully
+in 35.520 seconds at `5b1a7d076`. Test execution was deliberately skipped in this
+packaging invocation because the relevant validation was already complete.
+Native screenshots and benchmark harnesses are outside the repository at
+`<agent-scratch>/ui-review/`; `visuals/index.html` contains
+240 captures. The worktree contains no uncommitted or unmerged tracked work.
+Its ignored items are generated Maven/probe/image-cache outputs, checkout links,
+and a config example identical to the preserved main copy.
+
+
+Delivery: merge `5b1a7d076` was pushed to origin/develop. The category diagnostics
+were acknowledged and deleted. After confirming integration and push, the clean
+`ui-review` worktree and fully merged `feature/ai-ui-review` branch were removed,
+and stale worktree metadata pruned. Main-workspace disassembly changes and the
+unrelated review notes remain untouched. The task is complete with the 15
+explicitly inherited ordinary failures above; it is not an all-green suite claim.
