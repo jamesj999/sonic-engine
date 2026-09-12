@@ -465,6 +465,10 @@ public class MasterTitleScreen {
                     if (entry != null) {
                         if (TraceSessionLauncher.launch(entry)) {
                             tracePicker = null;
+                        } else if (tracePicker != null) {
+                            // Keep the diagnostic, but release the loading latch so
+                            // acknowledging it permits selection and another launch.
+                            tracePicker.launchFailed();
                         }
                     }
                 }
@@ -1586,6 +1590,15 @@ public class MasterTitleScreen {
     @com.openggf.game.ModApi
     public interface ModManagerScreenFactory {
         ModManagerView create(PixelFont font);
+    }
+
+    /** Menu ownership is intentionally separate from the exported title-screen API. */
+    boolean blocksGlobalShortcuts() {
+        return state != State.ACTIVE || navigation.actions() || childInputPending
+                || settingsScreen != null || launchConfigPanel != null || modManagerScreen != null
+                || timeAttackMenu != null || userRecordingMenu != null || raceLobbyScreen != null
+                || serverBrowserScreen != null || tracePicker != null || standaloneActionOpen
+                || toolsOpen || helpOpen || configService.getBoolean(SonicConfiguration.TEST_MODE_ENABLED);
     }
 
     @com.openggf.game.ModApi

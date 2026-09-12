@@ -65,3 +65,8 @@ art detail. Fixed native child pages center within wider viewports.
 
 Default resolution remains unchanged. Subsystem hot reload beyond dynamic input
 and ROM rescan remains a later refinement; the GUI explicitly requests restart.
+
+Title action and child pages own their input ahead of global display/capture
+shortcuts; playback shortcuts yield throughout the master title. An already-open
+global shader picker keeps its modal input. Failed trace launches release the
+picker loading latch while preserving the diagnostic for acknowledgement/retry.

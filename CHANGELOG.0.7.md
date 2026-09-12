@@ -15,7 +15,8 @@ campaigns; feature/API publication remains subject to the 0.8 roadmap.
   Checkerboard pages retain full-size primary lettering and use an authored native
   small font for metadata instead of fractional downscaling. Recordings, traces,
   mods, time attack, room browsing, and lobbies have bounded pages and visible
-  actions; text entry works with keyboards or controllers. Game logos render from
+  actions; text entry works with keyboards or controllers without triggering global
+  shortcuts, and failed trace launches can be acknowledged and retried. Game logos render from
   their original textures at window resolution, preserving detail as the window grows.
 
 - **Widescreen presentation:** ordinary UI/HUD surfaces, titles, results, endings,

@@ -24,7 +24,7 @@ incorrect results.
 | Sonic 2 | `s2.gen` | World, Revision 01; CRC32 `7B905383`; SHA-1 `8BCA5DCEF1AF3E00098666FD892DC1C2A76333F9` |
 | Sonic 3&K | `s3k.gen` | World lock-on combined ROM; CRC32 `63522553`; SHA-1 `CFBF98C36C776677290A872547AC47C53D2761D6` |
 
-ROM filenames can be changed in `config.yaml` if yours differ. See
+ROM filenames can be changed through master-title **Settings** or in `config.yaml` if yours differ. See
 [Configuration](configuration.md) for details.
 
 ## Install and Run
@@ -41,7 +41,7 @@ ROM filenames can be changed in `config.yaml` if yours differ. See
    - Windows: double-click `OpenGGF.exe`, or run it from a terminal.
    - macOS: open `OpenGGF.app`.
    - Linux: run `./OpenGGF` from the extracted `OpenGGF` directory.
-5. If your ROM filenames differ from the defaults, edit `config.yaml` in the extracted package.
+5. If your ROM filenames differ from the defaults, set their paths in master-title **Settings**, or edit `config.yaml` in the extracted package.
 
 Windows terminal example:
    ```
@@ -102,7 +102,7 @@ does not exist, defaults are used. A few settings you might want to change immed
 
 | Setting | What it does | Default |
 |---------|-------------|---------|
-| `roms.default` | Which game boots first (`"s1"`, `"s2"`, or `"s3k"`) | `"s2"` |
+| `roms.default` | Which game boots when the master title is bypassed (`"s1"`, `"s2"`, or `"s3k"`) | `"s2"` |
 | `startup.masterTitleScreen` | Show game picker on launch | `true` |
 | `display.windowAutosize` | Derive the window size from the aspect preset | `true` |
 | `audio.enabled` | Enable or disable sound | `true` |

@@ -247,11 +247,14 @@ launch. YAML remains an optional editing route.
 
 **Tools > Trace replays** opens the trace catalog without enabling test mode.
 Time Attack, Recordings, and Mods also have visible action-menu entries;
-existing function-key shortcuts remain optional accelerators.
+existing function-key shortcuts remain optional accelerators. Global display and
+capture shortcuts remain available in game selection, but yield to the action
+menu and its child pages so typing or rebinding a key cannot change unrelated
+settings. Playback shortcuts do not run on the master title.
 
 Recordings has a separate options page for the target frame, pause-on-desync,
 fast-forward, playback, and full recording details. Time Attack exposes a
-visible **Go** action; network addresses and lobby chat support the same
+visible **Start Run**, **Create LAN Room**, **Join LAN Room**, or **Browse Rooms** action; network addresses and lobby chat support the same
 keyboard/controller editor. Room creation, refresh, paging, and lobby actions
 are visible choices. Mods exposes **Details**, **Order**, **Notices**, and
 **Save + Back**, with paginated findings and confirmations. Trace replay lists,
@@ -272,9 +275,10 @@ previous launch. When `crossGameSource` is `"s3k"`, the launch panel hides
 selection. When character rows are shown, their options follow the active donor:
 Sonic is always available, Tails requires Sonic 2 or Sonic 3&K data, and Knuckles
 requires Sonic 3&K data; hand-edited saved values outside that donor set are clamped
-before launch. `aspect: "global"` inherits the normal `display.aspect` setting and does not
-resize the window; pinned aspect values such as `"WIDE_16_9"` apply only for that game
-session and resize back when returning to the master title. In the launch panel, pinned
+before launch. `aspect: "global"` inherits the normal `display.aspect` setting; pinned
+aspect values such as `"WIDE_16_9"` apply only for that game session. They change the
+logical projection within the existing window, restoring the global projection
+when returning to the master title. In the launch panel, pinned
 16:10 and 16:9 aspects are amber non-standard choices. The 21:9 preset remains a
 best-effort smoke tier, while 32:9 is exploratory; both remain red choices so the panel
 does not imply the same support level as 16:10/16:9.
