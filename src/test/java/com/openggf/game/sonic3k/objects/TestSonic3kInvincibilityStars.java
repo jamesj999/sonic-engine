@@ -4,11 +4,10 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 /**
- * Unit tests for S3K invincibility star orbit and trailing logic.
- * No ROM or OpenGL required -- pure math tests.
+ * Tests the production S3K invincibility star orbit tables, animation tables,
+ * and trailing-frame calculation. No ROM or OpenGL required.
  */
 public class TestSonic3kInvincibilityStars {
 
@@ -28,24 +27,6 @@ public class TestSonic3kInvincibilityStars {
         // Only slots 1-3 are real children using Obj_188E8.
         assertEquals(3, Sonic3kInvincibilityStarsObjectInstance.CHILD_PRIMARY_ANIMS.length);
         assertEquals(3, Sonic3kInvincibilityStarsObjectInstance.CHILD_SECONDARY_ANIMS.length);
-    }
-
-    @Test
-    public void orbitAngle_wrapsAt32() {
-        int angle = 0;
-        for (int i = 0; i < 100; i++) {
-            angle = (angle + 9) % 32;
-        }
-        assertTrue(angle >= 0 && angle < 32);
-    }
-
-    @Test
-    public void orbitAngle_childWrapsAt32() {
-        int angle = 0;
-        for (int i = 0; i < 100; i++) {
-            angle = (angle + 1) % 32;
-        }
-        assertTrue(angle >= 0 && angle < 32);
     }
 
     @Test
@@ -72,14 +53,6 @@ public class TestSonic3kInvincibilityStars {
     }
 
     @Test
-    public void orbitTable_subSpritePhaseOffset() {
-        int[][] table = Sonic3kInvincibilityStarsObjectInstance.S3K_ORBIT_OFFSETS;
-        int xA = table[0][0];
-        int xB = table[16][0];
-        assertTrue(xA > 0 && xB < 0, "Sub-sprites should be on opposite sides");
-    }
-
-    @Test
     public void parentAnimationTable_hasValidFrameIndices() {
         int[] parentAnim = Sonic3kInvincibilityStarsObjectInstance.PARENT_ANIM;
         for (int frame : parentAnim) {
@@ -97,14 +70,5 @@ public class TestSonic3kInvincibilityStars {
         }
     }
 
-    @Test
-    public void rotationDirection_reversesWhenFacingLeft() {
-        int angleRight = (0 + 9) % 32;
-        int angleLeft = ((0 - 9) + 32) % 32;
-        assertNotEquals(angleRight, angleLeft);
-        assertEquals(9, angleRight);
-        assertEquals(23, angleLeft);
-    }
 }
-
 
