@@ -63,3 +63,27 @@ and deleted, not archived.
 LUA_BIN=lua5.4 python3 tools/testing/run_categories.py --base 060ec5991 --preflight
 LUA_BIN=lua5.4 python3 tools/testing/run_categories.py --base 060ec5991 --run
 ```
+
+Run `20260912T162429Z-e51b993f` completed at candidate `5325ce49a` with the
+working tree unchanged. The runner supplied all three ROM paths after matching
+their expected SHA-1 identities. Ordinary selection: 8,873 tests in 953 reports,
+8,852 passing, one failure, zero errors, and 20 skips (490.94 seconds). Guards:
+657 tests in 82 reports, all passing without skips (228.20 seconds).
+
+The failure was
+`TestObjectPlacementEncoding.commonParserPreservesDescendingFullXOrderInsideOnePlacementColumn`:
+expected `[448, 384]`, actual `[384, 448]`. A focused run on unmodified develop
+`060ec5991` reproduced the exact test identity and complete failure diagnostic:
+
+```bash
+mvn -Dmse=off \
+  '-Dtest=TestObjectPlacementEncoding#commonParserPreservesDescendingFullXOrderInsideOnePlacementColumn' \
+  -Dopenggf.surefire.reports=target/raw-stream-baseline-placement/reports test -B
+```
+
+This pre-existing placement-order disagreement is outside the oracle change.
+The 20 skips were inspected: optional reference audio/BK2 data, opt-in rewind
+measurements/soak tests, and explicitly requested captures or observations.
+No failure or skip diagnostics were omitted. The runner exited 1 because of
+that baseline failure; this is a completed category comparison, not a claim
+that the full engine suite is green.
