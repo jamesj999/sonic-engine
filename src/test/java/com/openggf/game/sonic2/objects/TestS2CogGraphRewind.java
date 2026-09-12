@@ -2,7 +2,6 @@ package com.openggf.game.sonic2.objects;
 
 import com.openggf.camera.Camera;
 import com.openggf.game.rewind.CompositeSnapshot;
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.game.rewind.RewindRegistry;
 import com.openggf.game.rewind.identity.ObjectRefId;
 import com.openggf.game.sonic2.constants.Sonic2ObjectIds;
@@ -24,7 +23,6 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -125,10 +123,6 @@ class TestS2CogGraphRewind {
                 "Cog must restore through RewindRecreatable");
         assertTrue(RewindRecreatable.class.isAssignableFrom(childClass),
                 "Cog slot child must restore through RewindRecreatable");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(CogObjectInstance.class.getName()),
-                "Cog must not use an explicit S2 dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(SLOT_CHILD_CLASS),
-                "Cog slot child must not use an explicit S2 dynamic codec");
     }
 
     private record Harness(ObjectManager objectManager) {

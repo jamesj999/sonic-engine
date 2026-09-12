@@ -1,10 +1,8 @@
 package com.openggf.game.sonic1.objects;
 
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.level.objects.RewindRecreatable;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -48,9 +46,6 @@ class TestRewindFixS1InnerBatch1Codecs {
                 + "$OrbSpikeObjectInstance";
         Class<?> orbSpikeClass = Class.forName(orbSpike);
 
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(orbSpike),
-                "OrbSpikeObjectInstance should restore via RewindRecreatable genericRecreate, "
-                        + "not a Sonic1ObjectRegistry explicit codec");
         assertTrue(RewindRecreatable.class.isAssignableFrom(orbSpikeClass),
                 "OrbSpikeObjectInstance must opt into the generic RewindRecreatable path");
     }
@@ -61,9 +56,6 @@ class TestRewindFixS1InnerBatch1Codecs {
                 "com.openggf.game.sonic1.objects.bosses.Sonic1FalseFloorInstance"
                         + "$FalseFloorBlock";
 
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(falseFloorBlock),
-                "FalseFloorBlock should restore via RewindRecreatable genericRecreate, "
-                        + "not a Sonic1ObjectRegistry explicit codec");
         assertTrue(RewindRecreatable.class.isAssignableFrom(
                         com.openggf.game.sonic1.objects.bosses.Sonic1FalseFloorInstance
                                 .FalseFloorBlock.class),

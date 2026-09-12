@@ -1,6 +1,5 @@
 package com.openggf.game.sonic1.objects;
 
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.game.rewind.RewindRoundTripHarness;
 import com.openggf.game.rewind.RewindRoundTripHarness.RoundTripSweepResult;
 import com.openggf.game.sonic1.objects.bosses.FZCylinder;
@@ -12,7 +11,6 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -52,9 +50,6 @@ class TestRewindFixS1Batch3Codecs {
     @Test
     void fzBossChildrenUseGenericRecreatablePathInsteadOfRegisteredCodecs() {
         for (Class<?> type : List.of(FZCylinder.class, FZPlasmaLauncher.class, FZPlasmaBall.class)) {
-            assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(type.getName()),
-                    type.getSimpleName() + " must restore through RewindRecreatable generic recreate, "
-                            + "not an explicit S1 dynamic codec");
             assertTrue(RewindRecreatable.class.isAssignableFrom(type),
                     type.getSimpleName() + " must opt into the generic RewindRecreatable path");
         }
@@ -62,18 +57,12 @@ class TestRewindFixS1Batch3Codecs {
 
     @Test
     void syzBossBlockUsesGenericRecreateInsteadOfRegisteredCodec() {
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(Sonic1BossBlockInstance.class.getName()),
-                "Sonic1BossBlockInstance must restore through RewindRecreatable generic recreate, "
-                        + "not an explicit S1 dynamic codec");
         assertTrue(RewindRecreatable.class.isAssignableFrom(Sonic1BossBlockInstance.class),
                 "Sonic1BossBlockInstance must opt into the generic RewindRecreatable path");
     }
 
     @Test
     void eggPrisonBodyUsesGenericRecreateInsteadOfRegisteredCodec() {
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(Sonic1EggPrisonObjectInstance.class.getName()),
-                "Sonic1EggPrisonObjectInstance must restore through RewindRecreatable generic recreate, "
-                        + "not an explicit S1 dynamic codec");
         assertTrue(RewindRecreatable.class.isAssignableFrom(Sonic1EggPrisonObjectInstance.class),
                 "Sonic1EggPrisonObjectInstance must opt into the generic RewindRecreatable path");
 
@@ -86,9 +75,6 @@ class TestRewindFixS1Batch3Codecs {
 
     @Test
     void ringFlashUsesGenericRecreateInsteadOfRegisteredCodec() {
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(Sonic1RingFlashObjectInstance.class.getName()),
-                "Sonic1RingFlashObjectInstance must restore through RewindRecreatable generic recreate, "
-                        + "not an explicit S1 dynamic codec");
         assertTrue(RewindRecreatable.class.isAssignableFrom(Sonic1RingFlashObjectInstance.class),
                 "Sonic1RingFlashObjectInstance must opt into the generic RewindRecreatable path");
     }

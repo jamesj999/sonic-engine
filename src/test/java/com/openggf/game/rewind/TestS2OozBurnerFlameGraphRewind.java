@@ -28,7 +28,6 @@ import java.util.Comparator;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -151,12 +150,6 @@ class TestS2OozBurnerFlameGraphRewind {
                 "OOZPoppingPlatformObjectInstance must restore through RewindRecreatable");
         assertTrue(RewindRecreatable.class.isAssignableFrom(OOZBurnerFlameObjectInstance.class),
                 "OOZBurnerFlameObjectInstance must restore through RewindRecreatable");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        OOZPoppingPlatformObjectInstance.class.getName()),
-                "OOZPoppingPlatformObjectInstance must not keep an explicit S2 dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        OOZBurnerFlameObjectInstance.class.getName()),
-                "OOZBurnerFlameObjectInstance must not keep an explicit S2 dynamic codec");
     }
 
     private static void spawnFlameChildren(ObjectManager objectManager) {

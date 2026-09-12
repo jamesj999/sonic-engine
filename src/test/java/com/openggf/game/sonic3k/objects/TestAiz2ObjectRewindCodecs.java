@@ -1,12 +1,10 @@
 package com.openggf.game.sonic3k.objects;
 
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.level.objects.RewindRecreatable;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -29,8 +27,6 @@ class TestAiz2ObjectRewindCodecs {
     }
 
     private static void assertGenericBacked(Class<?> type) {
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(type.getName()),
-                type.getSimpleName() + " codec should be deleted via Phase-2 generic recreate");
         assertTrue(RewindRecreatable.class.isAssignableFrom(type),
                 type.getSimpleName() + " must implement RewindRecreatable after codec deletion");
         assertTrue(hasDynamicRecreatePath(type),
@@ -48,8 +44,6 @@ class TestAiz2ObjectRewindCodecs {
                 "missing dynamic recreate path for AizMinibossNapalmProjectile");
 
         // Tier 2: non-final differentiator reapplied after recreate.
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(AizBattleshipInstance.class.getName()),
-                "AizBattleshipInstance codec should be deleted via Phase-2 generic recreate");
         assertTrue(RewindRecreatable.class.isAssignableFrom(AizBattleshipInstance.class),
                 "AizBattleshipInstance must implement RewindRecreatable after codec deletion");
         assertTrue(hasDynamicRecreatePath(AizBattleshipInstance.class),

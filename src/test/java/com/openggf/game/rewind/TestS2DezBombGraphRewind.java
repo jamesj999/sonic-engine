@@ -125,8 +125,6 @@ class TestS2DezBombGraphRewind {
     void bombUsesRewindRecreatableWithoutExplicitS2DynamicCodec() throws Exception {
         assertTrue(RewindRecreatable.class.isAssignableFrom(bombClass()),
                 "DEZ BombChild must restore through RewindRecreatable graph recreate");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(BOMB_CLASS),
-                "DEZ BombChild must not keep an explicit S2 dynamic rewind codec");
     }
 
     private static ObjectInstance genericRecreateBomb(ObjectManager objectManager, ObjectSpawn spawn) {

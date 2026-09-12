@@ -27,7 +27,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -155,8 +154,6 @@ class TestS1SyzBossBlockGraphRewind {
         assertTrue(RewindRecreatable.class.isAssignableFrom(Sonic1BossBlockInstance.class),
                 "SYZ boss block must restore through RewindRecreatable");
 
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(Sonic1BossBlockInstance.class.getName()),
-                "SYZ boss block must not keep an explicit S1 dynamic rewind codec");
     }
 
     @Test
@@ -164,8 +161,6 @@ class TestS1SyzBossBlockGraphRewind {
         assertTrue(RewindRecreatable.class.isAssignableFrom(Sonic1SYZBossInstance.class),
                 "Sonic1SYZBossInstance must restore through RewindRecreatable graph recreate");
 
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(Sonic1SYZBossInstance.class.getName()),
-                "Sonic1SYZBossInstance must not keep an explicit S1 dynamic rewind codec");
     }
 
     private static ObjectInstance genericRecreate(ObjectManager objectManager) {

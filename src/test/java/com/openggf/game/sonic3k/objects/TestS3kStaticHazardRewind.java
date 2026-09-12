@@ -2,7 +2,6 @@ package com.openggf.game.sonic3k.objects;
 
 import com.openggf.camera.Camera;
 import com.openggf.game.rewind.CompositeSnapshot;
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.game.rewind.RewindRegistry;
 import com.openggf.game.rewind.identity.ObjectRefId;
 import com.openggf.game.rewind.identity.RewindIdentityTable;
@@ -116,12 +115,6 @@ class TestS3kStaticHazardRewind {
                 "StillSpriteInstance must restore through generic recreate");
         assertTrue(RewindRecreatable.class.isAssignableFrom(Sonic3kSpikeObjectInstance.class),
                 "Sonic3kSpikeObjectInstance must restore through generic recreate");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        StillSpriteInstance.class.getName()),
-                "StillSpriteInstance must not keep an explicit S3K dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        Sonic3kSpikeObjectInstance.class.getName()),
-                "Sonic3kSpikeObjectInstance must not keep an explicit S3K dynamic codec");
     }
 
     private record Harness(ObjectManager objectManager) {

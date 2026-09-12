@@ -2,7 +2,6 @@ package com.openggf.game.sonic3k.objects.bosses;
 
 import com.openggf.camera.Camera;
 import com.openggf.game.rewind.CompositeSnapshot;
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.game.rewind.RewindRegistry;
 import com.openggf.game.rewind.identity.ObjectRefId;
 import com.openggf.game.rewind.identity.RewindIdentityTable;
@@ -127,9 +126,6 @@ class TestMhzEndBossRobotnikHeadRewind {
         assertEquals(restoredParent.isHighPriority(), restoredHead.isHighPriority(),
                 "restored Robotnik head high-priority flag must derive from the restored parent");
 
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(MhzEndBossRobotnikHeadChild.class.getName()),
-                "MhzEndBossRobotnikHeadChild must restore through RewindRecreatable genericRecreate, "
-                        + "not a handwritten S3K dynamic codec");
     }
 
     private static ObjectManager installObjectManager() {

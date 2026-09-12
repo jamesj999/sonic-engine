@@ -99,8 +99,6 @@ class TestS3kLbzPlayerLauncherGraphRewind {
         Class<?> armType = Class.forName(ARM_CLASS);
         assertTrue(RewindRecreatable.class.isAssignableFrom(armType),
                 "LBZ player launcher arm must restore through RewindRecreatable graph recreate");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(ARM_CLASS),
-                "LBZ player launcher arm must not keep an explicit S3K dynamic codec");
     }
 
     @Test

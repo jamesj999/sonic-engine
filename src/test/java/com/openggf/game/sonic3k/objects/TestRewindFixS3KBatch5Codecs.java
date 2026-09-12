@@ -1,6 +1,5 @@
 package com.openggf.game.sonic3k.objects;
 
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.game.sonic3k.objects.bosses.MhzEndBossArenaHelperInstance;
 import com.openggf.game.sonic3k.objects.bosses.MhzEndBossDefeatFragmentChild;
 import com.openggf.game.sonic3k.objects.bosses.MhzEndBossEggCapsuleInstance;
@@ -18,7 +17,6 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -72,19 +70,5 @@ class TestRewindFixS3KBatch5Codecs {
             assertTrue(hasDynamicRecreatePath(name),
                     "missing rewind recreate path for " + name);
         }
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(MhzEndBossArenaHelperInstance.class.getName()),
-                "MhzEndBossArenaHelperInstance must use the RewindRecreatable generic path, not an explicit codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(MhzEndBossRobotnikHeadChild.class.getName()),
-                "MhzEndBossRobotnikHeadChild must use the RewindRecreatable generic path, not an explicit codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(MhzEndBossSpikeChild.class.getName()),
-                "MhzEndBossSpikeChild must use the RewindRecreatable generic path, not an explicit codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(MhzEndBossVisualChild.class.getName()),
-                "MhzEndBossVisualChild must use the RewindRecreatable generic path, not an explicit codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(MhzEndBossWeatherMachineChild.class.getName()),
-                "MhzEndBossWeatherMachineChild must use the RewindRecreatable generic path, not an explicit codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(MhzEndBossWeatherVisualChild.class.getName()),
-                "MhzEndBossWeatherVisualChild must use the RewindRecreatable generic path, not an explicit codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(MhzEndBossHitProxyChild.class.getName()),
-                "MhzEndBossHitProxyChild must use the RewindRecreatable generic path, not an explicit codec");
     }
 }

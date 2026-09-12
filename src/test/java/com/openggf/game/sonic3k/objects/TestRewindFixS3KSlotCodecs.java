@@ -1,7 +1,6 @@
 package com.openggf.game.sonic3k.objects;
 
 import com.openggf.game.BonusStageProvider;
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.game.rewind.snapshot.ObjectManagerSnapshot;
 import com.openggf.game.sonic3k.Sonic3kBonusStageCoordinator;
 import com.openggf.game.sonic3k.bonusstage.slots.S3kSlotBonusStageRuntime;
@@ -26,7 +25,6 @@ import java.lang.reflect.Field;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -99,8 +97,6 @@ class TestRewindFixS3KSlotCodecs {
 
     private void assertUsesGenericRecreateWithLiveSlotController(
             Class<? extends AbstractObjectInstance> targetClass) throws Exception {
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(targetClass.getName()),
-                targetClass.getSimpleName() + " must not keep its hand-written dynamic codec");
         assertTrue(RewindRecreatable.class.isAssignableFrom(targetClass),
                 targetClass.getSimpleName() + " must opt into generic recreate");
 

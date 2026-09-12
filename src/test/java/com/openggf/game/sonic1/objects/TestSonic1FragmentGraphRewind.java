@@ -2,7 +2,6 @@ package com.openggf.game.sonic1.objects;
 
 import com.openggf.camera.Camera;
 import com.openggf.game.rewind.CompositeSnapshot;
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.game.rewind.RewindRegistry;
 import com.openggf.game.rewind.identity.ObjectRefId;
 import com.openggf.graphics.GraphicsManager;
@@ -105,12 +104,6 @@ class TestSonic1FragmentGraphRewind {
         assertTrue(RewindRecreatable.class.isAssignableFrom(
                         Sonic1SmashBlockObjectInstance.SmashBlockFragmentInstance.class),
                 "smash-block fragments must restore through RewindRecreatable generic recreate");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        Sonic1BreakableWallObjectInstance.WallFragmentInstance.class.getName()),
-                "wall fragments must not use an explicit dynamic rewind codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        Sonic1SmashBlockObjectInstance.SmashBlockFragmentInstance.class.getName()),
-                "smash-block fragments must not use an explicit dynamic rewind codec");
     }
 
     @Test

@@ -1,10 +1,8 @@
 package com.openggf.game.sonic2.objects;
 
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.level.objects.RewindRecreatable;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -47,9 +45,6 @@ class TestRewindFixS2InnerBatch2Codecs {
                 "com.openggf.game.sonic2.objects.bosses.Sonic2DeathEggRobotInstance"
                         + "$BombChild";
 
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(bombChildClassName),
-                "DEZ BombChild must restore through RewindRecreatable generic recreate, "
-                        + "not an explicit dynamic codec");
         assertTrue(RewindRecreatable.class.isAssignableFrom(Class.forName(bombChildClassName)),
                 "DEZ BombChild must opt into the generic RewindRecreatable path");
     }

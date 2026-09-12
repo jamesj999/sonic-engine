@@ -484,24 +484,6 @@ class TestS3kNestedHurtboxGraphRewind {
                 "ICZ tension-platform support must restore through RewindRecreatable generic recreate");
         assertTrue(RewindRecreatable.class.isAssignableFrom(Class.forName(ICZ_CRUSHING_COLUMN_DECORATION_CLASS)),
                 "ICZ crushing-column bottom decoration must restore through RewindRecreatable generic recreate");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(IczIceSpikesObjectInstance.class.getName()),
-                "ICZ ice spikes root must not keep an explicit S3K dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(MGZ_DRILL_ARM_CLASS),
-                "MGZ drill arm must not keep an explicit S3K dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(MGZ_CEILING_DEBRIS_CLASS),
-                "MGZ ceiling debris must not keep an explicit S3K dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(MGZ_DEFEAT_FRAGMENT_CLASS),
-                "MGZ defeat fragment must not keep an explicit S3K dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(MGZ_SPIKE_PLATFORM_CLASS),
-                "MGZ spike platform must not keep an explicit S3K dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(MGZ_CAMERA_SCROLL_HELPER_CLASS),
-                "MGZ camera scroll helper must not keep an explicit S3K dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(ICZ_HURT_CHILD_CLASS),
-                "ICZ ice-spike hurt child must not keep an explicit S3K dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(ICZ_TENSION_SUPPORT_CLASS),
-                "ICZ tension-platform support must not keep an explicit S3K dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(ICZ_CRUSHING_COLUMN_DECORATION_CLASS),
-                "ICZ crushing-column bottom decoration must not keep an explicit S3K dynamic codec");
     }
 
     @Test

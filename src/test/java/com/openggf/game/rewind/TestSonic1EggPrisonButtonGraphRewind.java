@@ -152,9 +152,6 @@ class TestSonic1EggPrisonButtonGraphRewind {
     void s1EggPrisonButtonGraphUsesRewindRecreatableWithoutExplicitDynamicCodec() {
         assertTrue(RewindRecreatable.class.isAssignableFrom(Sonic1EggPrisonButtonObjectInstance.class),
                 "Sonic1EggPrisonButtonObjectInstance must restore through RewindRecreatable");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        Sonic1EggPrisonButtonObjectInstance.class.getName()),
-                "Sonic1EggPrisonButtonObjectInstance must not keep an explicit dynamic codec");
     }
 
     /**

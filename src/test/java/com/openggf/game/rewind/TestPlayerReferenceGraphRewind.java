@@ -11,7 +11,6 @@ import com.openggf.game.sonic3k.objects.HyperSonicStarsObjectInstance;
 import com.openggf.graphics.GraphicsManager;
 import com.openggf.level.objects.ObjectInstance;
 import com.openggf.level.objects.ObjectManager;
-import com.openggf.level.objects.ObjectServices;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.StubObjectServices;
@@ -206,15 +205,6 @@ class TestPlayerReferenceGraphRewind {
                 "MHZ sticky vine must restore through RewindRecreatable generic recreate");
         assertTrue(RewindRecreatable.class.isAssignableFrom(loadMadmoleSideDrillClass()),
                 "Madmole side drill must restore through RewindRecreatable generic recreate");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(GrabberBadnikInstance.class.getName()),
-                "S2 Grabber must not keep an explicit dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        MhzMushroomParachuteObjectInstance.class.getName()),
-                "MHZ mushroom parachute must not keep an explicit dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(MhzStickyVineObjectInstance.class.getName()),
-                "MHZ sticky vine must not keep an explicit dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(MADMOLE_SIDE_DRILL_CLASS),
-                "Madmole side drill must not keep an explicit dynamic codec");
     }
 
     @Test

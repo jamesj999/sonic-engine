@@ -2,7 +2,6 @@ package com.openggf.game.sonic3k.objects.bosses;
 
 import com.openggf.camera.Camera;
 import com.openggf.game.rewind.CompositeSnapshot;
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.game.rewind.RewindRegistry;
 import com.openggf.game.rewind.identity.ObjectRefId;
 import com.openggf.game.rewind.identity.RewindIdentityTable;
@@ -115,9 +114,6 @@ class TestMhzEndBossHitProxyRewind {
         assertEquals(hitsBefore - 1, restoredParent.getState().hitCount,
                 "restored proxy must delegate accepted attacks to the restored parent");
 
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(MhzEndBossHitProxyChild.class.getName()),
-                "MhzEndBossHitProxyChild must restore through RewindRecreatable genericRecreate, "
-                        + "not a handwritten S3K dynamic codec");
     }
 
     private static ObjectManager installObjectManager() {

@@ -2,7 +2,6 @@ package com.openggf.game.sonic1.objects;
 
 import com.openggf.camera.Camera;
 import com.openggf.game.rewind.CompositeSnapshot;
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.game.rewind.RewindRegistry;
 import com.openggf.game.rewind.identity.ObjectRefId;
 import com.openggf.game.sonic1.constants.Sonic1ObjectIds;
@@ -188,9 +187,6 @@ class TestSonic1LavaWallGraphRewind {
     void lavaWallUsesGenericRecreateWithoutExplicitDynamicCodec() {
         assertTrue(RewindRecreatable.class.isAssignableFrom(Sonic1LavaWallObjectInstance.class),
                 "lava wall must restore through RewindRecreatable generic recreate");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        Sonic1LavaWallObjectInstance.class.getName()),
-                "lava wall must not keep an explicit S1 dynamic rewind codec");
     }
 
     private static void seedMain(

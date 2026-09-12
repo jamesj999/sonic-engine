@@ -28,7 +28,6 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -114,9 +113,6 @@ class TestS3kSsEntryFlashGraphRewind {
     void flashUsesRewindRecreatableWithoutExplicitS3kDynamicCodec() {
         assertTrue(RewindRecreatable.class.isAssignableFrom(Sonic3kSSEntryFlashObjectInstance.class),
                 "S3K SS-entry flash must restore through RewindRecreatable generic recreate");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        Sonic3kSSEntryFlashObjectInstance.class.getName()),
-                "S3K SS-entry flash must not keep an explicit S3K dynamic codec");
     }
 
     @Test

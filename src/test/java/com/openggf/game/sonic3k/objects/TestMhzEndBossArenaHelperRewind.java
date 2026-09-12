@@ -3,7 +3,6 @@ package com.openggf.game.sonic3k.objects;
 import com.openggf.camera.Camera;
 import com.openggf.game.LevelEventProvider;
 import com.openggf.game.rewind.CompositeSnapshot;
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.game.rewind.RewindRegistry;
 import com.openggf.game.rewind.identity.ObjectRefId;
 import com.openggf.game.rewind.identity.RewindIdentityTable;
@@ -97,10 +96,6 @@ class TestMhzEndBossArenaHelperRewind {
         assertEquals(0, restored.getCollisionFlags(),
                 "restored spike helper must keep using the live MHZ events owner after restore");
 
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        MhzEndBossArenaHelperInstance.class.getName()),
-                "MhzEndBossArenaHelperInstance must restore through RewindRecreatable genericRecreate, "
-                        + "not a handwritten S3K dynamic codec");
     }
 
     private static ObjectManager installObjectManager(Sonic3kLevelEventManager eventManager) {

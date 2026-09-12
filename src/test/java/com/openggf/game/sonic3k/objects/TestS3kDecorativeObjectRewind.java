@@ -2,7 +2,6 @@ package com.openggf.game.sonic3k.objects;
 
 import com.openggf.camera.Camera;
 import com.openggf.game.rewind.CompositeSnapshot;
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.game.rewind.RewindRegistry;
 import com.openggf.game.rewind.identity.ObjectRefId;
 import com.openggf.game.rewind.identity.RewindIdentityTable;
@@ -26,7 +25,6 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -126,12 +124,6 @@ class TestS3kDecorativeObjectRewind {
                 "AizForegroundPlantInstance must restore through generic recreate");
         assertTrue(RewindRecreatable.class.isAssignableFrom(AnimatedStillSpriteInstance.class),
                 "AnimatedStillSpriteInstance must restore through generic recreate");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        AizForegroundPlantInstance.class.getName()),
-                "AizForegroundPlantInstance must not keep an explicit S3K dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        AnimatedStillSpriteInstance.class.getName()),
-                "AnimatedStillSpriteInstance must not keep an explicit S3K dynamic codec");
     }
 
     private record Harness(ObjectManager objectManager) {

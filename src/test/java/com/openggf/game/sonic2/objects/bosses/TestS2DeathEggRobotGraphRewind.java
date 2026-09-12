@@ -2,7 +2,6 @@ package com.openggf.game.sonic2.objects.bosses;
 
 import com.openggf.camera.Camera;
 import com.openggf.game.rewind.CompositeSnapshot;
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.game.rewind.RewindRegistry;
 import com.openggf.game.rewind.identity.ObjectRefId;
 import com.openggf.game.rewind.identity.RewindIdentityTable;
@@ -30,7 +29,6 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -183,8 +181,6 @@ class TestS2DeathEggRobotGraphRewind {
                 Sonic2DeathEggRobotInstance.SensorChild.class)) {
             assertTrue(RewindRecreatable.class.isAssignableFrom(type),
                     type.getSimpleName() + " must restore through generic recreate support");
-            assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(type.getName()),
-                    type.getSimpleName() + " must not rely on an explicit dynamic rewind codec");
         }
     }
 

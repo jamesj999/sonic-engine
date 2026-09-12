@@ -239,12 +239,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** RED-GREEN test for Phase-2 codec-deletion batch. */
+/** Tests generic recreation, captured state, and type opt-ins after codec deletion. */
 public class TestScalarOnlyCodecDeletion {
 
     private static final String HTZ_GROUND_FIRE_FQN =
@@ -3582,15 +3581,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void batch2ClassesHaveNoRegisteredCodec() {
-        for (String fqn : BATCH2_DELETED_CODEC_FQNS) {
-            assertFalse(hasRegisteredDynamicCodec(fqn),
-                    fqn + " must have NO registered dynamic rewind codec after batch-2 deletion; "
-                            + "it should round-trip purely via genericRecreate Path 1");
-        }
-    }
-
-    @Test
     void batch2ClassesGenericRecreateProducesInstance() {
         for (String fqn : BATCH2_DELETED_CODEC_FQNS) {
             ObjectInstance result = invokeGenericRecreate(fqn, 0x120, 0x240, GameId.S3K);
@@ -3621,15 +3611,6 @@ public class TestScalarOnlyCodecDeletion {
             catch (ClassNotFoundException e) { throw new AssertionError(e); }
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable (codec deleted in batch 3)");
-        }
-    }
-
-    @Test
-    void batch3ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH3_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-3 deletion; "
-                            + "it should round-trip purely via genericRecreate Path 1");
         }
     }
 
@@ -3670,15 +3651,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void auditedLiveReferenceClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : AUDITED_LIVE_REFERENCE_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after deletion; "
-                            + "it should round-trip via genericRecreate Path 1 plus compact field restore");
-        }
-    }
-
-    @Test
     void auditedLiveReferenceClassesGenericRecreateProducesInstance() {
         for (CodecDeletionCandidate candidate : AUDITED_LIVE_REFERENCE_DELETED_CODECS) {
             ObjectInstance result = invokeGenericRecreate(candidate.fqn(), 0x120, 0x240, candidate.gameId());
@@ -3711,15 +3683,6 @@ public class TestScalarOnlyCodecDeletion {
             catch (ClassNotFoundException e) { throw new AssertionError(e); }
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable (codec deleted in batch 4)");
-        }
-    }
-
-    @Test
-    void batch4ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH4_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-4 deletion; "
-                            + "it should round-trip purely via genericRecreate Path 1");
         }
     }
 
@@ -3760,15 +3723,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void batch5ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH5_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-5 deletion; "
-                            + "it should round-trip purely via genericRecreate Path 1");
-        }
-    }
-
-    @Test
     void batch5ClassesGenericRecreateProducesInstance() {
         for (CodecDeletionCandidate candidate : BATCH5_DELETED_CODECS) {
             ObjectInstance result = invokeGenericRecreate(candidate.fqn(), 0x120, 0x240, candidate.gameId());
@@ -3801,15 +3755,6 @@ public class TestScalarOnlyCodecDeletion {
             catch (ClassNotFoundException e) { throw new AssertionError(e); }
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable (codec deleted in batch 6)");
-        }
-    }
-
-    @Test
-    void batch6ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH6_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-6 deletion; "
-                            + "it should round-trip purely via genericRecreate Path 1");
         }
     }
 
@@ -3850,15 +3795,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void batch7ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH7_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-7 deletion; "
-                            + "it should round-trip purely via genericRecreate Path 1");
-        }
-    }
-
-    @Test
     void batch7ClassesGenericRecreateProducesInstance() {
         for (CodecDeletionCandidate candidate : BATCH7_DELETED_CODECS) {
             ObjectInstance result = invokeGenericRecreate(candidate.fqn(), 0x120, 0x240, candidate.gameId());
@@ -3891,15 +3827,6 @@ public class TestScalarOnlyCodecDeletion {
             catch (ClassNotFoundException e) { throw new AssertionError(e); }
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable (codec deleted in batch 8)");
-        }
-    }
-
-    @Test
-    void batch8ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH8_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-8 deletion; "
-                            + "it should round-trip purely via genericRecreate Path 1");
         }
     }
 
@@ -3943,15 +3870,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void batch9ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH9_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-9 deletion; "
-                            + "it should round-trip purely via genericRecreate Path 1");
-        }
-    }
-
-    @Test
     void batch9ClassesGenericRecreateProducesInstance() {
         for (CodecDeletionCandidate candidate : BATCH9_DELETED_CODECS) {
             ObjectInstance result = invokeGenericRecreate(candidate.fqn(), 0x120, 0x240, candidate.gameId());
@@ -3987,15 +3905,6 @@ public class TestScalarOnlyCodecDeletion {
             }
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable (codec deleted in batch 10)");
-        }
-    }
-
-    @Test
-    void batch10ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH10_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-10 deletion; "
-                            + "it should round-trip purely via genericRecreate Path 1");
         }
     }
 
@@ -4081,15 +3990,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void batch11ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH11_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-11 deletion; "
-                            + "it should round-trip purely via genericRecreate Path 1");
-        }
-    }
-
-    @Test
     void batch11ClassesGenericRecreateProducesInstance() {
         for (CodecDeletionCandidate candidate : BATCH11_DELETED_CODECS) {
             ObjectInstance result = invokeGenericRecreate(candidate.fqn(), 0x120, 0x240, candidate.gameId());
@@ -4125,15 +4025,6 @@ public class TestScalarOnlyCodecDeletion {
             }
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable (codec deleted in batch 12)");
-        }
-    }
-
-    @Test
-    void batch12ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH12_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-12 deletion; "
-                            + "it should round-trip purely via genericRecreate Path 1");
         }
     }
 
@@ -4177,15 +4068,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void batch13ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH13_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-13 deletion; "
-                            + "it should round-trip purely via genericRecreate Path 1");
-        }
-    }
-
-    @Test
     void batch13ClassesGenericRecreateProducesInstance() {
         for (CodecDeletionCandidate candidate : BATCH13_DELETED_CODECS) {
             ObjectInstance result = invokeGenericRecreate(candidate.fqn(), 0x120, 0x240, candidate.gameId());
@@ -4221,15 +4103,6 @@ public class TestScalarOnlyCodecDeletion {
             }
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable (codec deleted in batch 14)");
-        }
-    }
-
-    @Test
-    void batch14ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH14_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-14 deletion; "
-                            + "it should round-trip purely via genericRecreate Path 1");
         }
     }
 
@@ -4273,15 +4146,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void batch15ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH15_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-15 deletion; "
-                            + "it should round-trip purely via genericRecreate Path 1");
-        }
-    }
-
-    @Test
     void batch15ClassesGenericRecreateProducesInstance() {
         for (CodecDeletionCandidate candidate : BATCH15_DELETED_CODECS) {
             ObjectInstance result = invokeGenericRecreate(candidate.fqn(), 0x120, 0x240, candidate.gameId());
@@ -4317,15 +4181,6 @@ public class TestScalarOnlyCodecDeletion {
             }
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable (codec deleted in batch 16)");
-        }
-    }
-
-    @Test
-    void batch16ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH16_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-16 deletion; "
-                            + "it should round-trip purely via genericRecreate Path 1");
         }
     }
 
@@ -4369,15 +4224,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void batch17ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH17_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-17 deletion; "
-                            + "it should round-trip purely via genericRecreate Path 1");
-        }
-    }
-
-    @Test
     void batch17ClassesGenericRecreateProducesInstance() {
         for (CodecDeletionCandidate candidate : BATCH17_DELETED_CODECS) {
             ObjectInstance result = invokeGenericRecreate(candidate.fqn(), 0x120, 0x240, candidate.gameId());
@@ -4413,15 +4259,6 @@ public class TestScalarOnlyCodecDeletion {
             }
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable (codec deleted in batch 18)");
-        }
-    }
-
-    @Test
-    void batch18ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH18_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-18 deletion; "
-                            + "it should round-trip purely via genericRecreate Path 1");
         }
     }
 
@@ -4465,15 +4302,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void batch19ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH19_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-19 deletion; "
-                            + "it should round-trip purely via genericRecreate Path 1");
-        }
-    }
-
-    @Test
     void batch19ClassesGenericRecreateProducesInstance() {
         for (CodecDeletionCandidate candidate : BATCH19_DELETED_CODECS) {
             ObjectInstance result = invokeGenericRecreate(candidate.fqn(), 0x120, 0x240, candidate.gameId());
@@ -4509,15 +4337,6 @@ public class TestScalarOnlyCodecDeletion {
             }
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable (codec deleted in batch 20)");
-        }
-    }
-
-    @Test
-    void batch20ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH20_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-20 deletion; "
-                            + "it should round-trip purely via genericRecreate Path 1");
         }
     }
 
@@ -4561,15 +4380,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void batch21ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH21_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-21 deletion; "
-                            + "it should round-trip purely via genericRecreate Path 1");
-        }
-    }
-
-    @Test
     void batch21ClassesGenericRecreateProducesInstance() {
         for (CodecDeletionCandidate candidate : BATCH21_DELETED_CODECS) {
             ObjectInstance result = invokeGenericRecreate(candidate.fqn(), 0x120, 0x240, candidate.gameId());
@@ -4605,15 +4415,6 @@ public class TestScalarOnlyCodecDeletion {
             }
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable (codec deleted in batch 22)");
-        }
-    }
-
-    @Test
-    void batch22ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH22_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-22 deletion; "
-                            + "it should round-trip purely via genericRecreate Path 1");
         }
     }
 
@@ -4657,15 +4458,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void batch23ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH23_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-23 deletion; "
-                            + "it should round-trip purely via genericRecreate Path 1");
-        }
-    }
-
-    @Test
     void batch23ClassesGenericRecreateProducesInstance() {
         for (CodecDeletionCandidate candidate : BATCH23_DELETED_CODECS) {
             ObjectInstance result = invokeGenericRecreate(candidate.fqn(), 0x120, 0x240, candidate.gameId());
@@ -4705,15 +4497,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void batch24ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH24_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-24 deletion; "
-                            + "it should round-trip purely via genericRecreate Path 1");
-        }
-    }
-
-    @Test
     void batch24ClassesGenericRecreateProducesInstance() {
         for (CodecDeletionCandidate candidate : BATCH24_DELETED_CODECS) {
             ObjectInstance result = invokeGenericRecreate(candidate.fqn(), 0x120, 0x240, candidate.gameId());
@@ -4749,15 +4532,6 @@ public class TestScalarOnlyCodecDeletion {
             }
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable (codec deleted in batch 25)");
-        }
-    }
-
-    @Test
-    void batch25ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH25_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-25 deletion; "
-                            + "it should round-trip purely via genericRecreate Path 1");
         }
     }
 
@@ -5685,15 +5459,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void batch26ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH26_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-26 deletion; "
-                            + "it should round-trip purely via genericRecreate Path 1");
-        }
-    }
-
-    @Test
     void batch26ClassesGenericRecreateProducesInstance() {
         for (CodecDeletionCandidate candidate : BATCH26_DELETED_CODECS) {
             ObjectInstance result = invokeGenericRecreate(candidate.fqn(), 0x120, 0x240, candidate.gameId());
@@ -5729,15 +5494,6 @@ public class TestScalarOnlyCodecDeletion {
             }
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable (codec deleted in batch 27)");
-        }
-    }
-
-    @Test
-    void batch27ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH27_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-27 deletion; "
-                            + "it should round-trip purely via genericRecreate Path 1");
         }
     }
 
@@ -5781,15 +5537,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void batch28ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH28_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-28 deletion; "
-                            + "it should round-trip purely via genericRecreate Path 1");
-        }
-    }
-
-    @Test
     void batch28ClassesGenericRecreateProducesInstance() {
         for (CodecDeletionCandidate candidate : BATCH28_DELETED_CODECS) {
             ObjectInstance result = invokeGenericRecreate(candidate.fqn(), 0x120, 0x240, candidate.gameId());
@@ -5825,15 +5572,6 @@ public class TestScalarOnlyCodecDeletion {
             }
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable (codec deleted in batch 29)");
-        }
-    }
-
-    @Test
-    void batch29ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH29_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-29 deletion; "
-                            + "it should round-trip purely via genericRecreate Path 1");
         }
     }
 
@@ -5877,15 +5615,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void batch30ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH30_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-30 deletion; "
-                            + "it should round-trip purely via genericRecreate Path 1");
-        }
-    }
-
-    @Test
     void batch30ClassesGenericRecreateProducesInstance() {
         for (CodecDeletionCandidate candidate : BATCH30_DELETED_CODECS) {
             ObjectInstance result = invokeGenericRecreate(candidate.fqn(), 0x120, 0x240, candidate.gameId());
@@ -5925,15 +5654,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void batch31ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH31_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-31 deletion; "
-                            + "it should round-trip purely via genericRecreate Path 1");
-        }
-    }
-
-    @Test
     void batch31ClassesGenericRecreateProducesInstance() {
         for (CodecDeletionCandidate candidate : BATCH31_DELETED_CODECS) {
             ObjectInstance result = invokeGenericRecreate(candidate.fqn(), 0x120, 0x240, candidate.gameId());
@@ -5969,15 +5689,6 @@ public class TestScalarOnlyCodecDeletion {
             }
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable (codec deleted in batch 32)");
-        }
-    }
-
-    @Test
-    void batch32ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH32_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-32 deletion; "
-                            + "session restore must use genericRecreate Path 1");
         }
     }
 
@@ -6026,15 +5737,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void batch33ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH33_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-33 deletion; "
-                            + "session restore must use genericRecreate Path 1");
-        }
-    }
-
-    @Test
     void batch33ClassesGenericRecreateProducesInstance() {
         for (CodecDeletionCandidate candidate : BATCH33_DELETED_CODECS) {
             ObjectInstance result = invokeGenericRecreate(candidate.fqn(), 0x120, 0x240, candidate.gameId());
@@ -6070,15 +5772,6 @@ public class TestScalarOnlyCodecDeletion {
             }
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable (codec deleted in batch 34)");
-        }
-    }
-
-    @Test
-    void batch34ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH34_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-34 deletion; "
-                            + "session restore must use genericRecreate Path 1");
         }
     }
 
@@ -6129,15 +5822,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void batch35ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH35_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-35 deletion; "
-                            + "session restore must use genericRecreate Path 1");
-        }
-    }
-
-    @Test
     void batch35ClassesGenericRecreateProducesInstance() {
         for (CodecDeletionCandidate candidate : BATCH35_DELETED_CODECS) {
             ObjectInstance result = invokeGenericRecreate(candidate.fqn(), 0x120, 0x240, candidate.gameId());
@@ -6180,15 +5864,6 @@ public class TestScalarOnlyCodecDeletion {
             }
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable (codec deleted in batch 36)");
-        }
-    }
-
-    @Test
-    void batch36ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH36_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-36 deletion; "
-                            + "session restore must use genericRecreate Path 1");
         }
     }
 
@@ -6239,15 +5914,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void batch37ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH37_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-37 deletion; "
-                            + "session restore must use genericRecreate Path 1");
-        }
-    }
-
-    @Test
     void batch37ClassesGenericRecreateProducesInstance() {
         for (CodecDeletionCandidate candidate : BATCH37_DELETED_CODECS) {
             ObjectInstance result = invokeGenericRecreate(candidate.fqn(), 0x120, 0x240, candidate.gameId());
@@ -6290,15 +5956,6 @@ public class TestScalarOnlyCodecDeletion {
             }
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable (codec deleted in batch 38)");
-        }
-    }
-
-    @Test
-    void batch38ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH38_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-38 deletion; "
-                            + "session restore must use genericRecreate Path 1");
         }
     }
 
@@ -6349,15 +6006,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void batch39ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH39_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-39 deletion; "
-                            + "session restore must use genericRecreate Path 1");
-        }
-    }
-
-    @Test
     void batch39ClassesGenericRecreateProducesInstance() {
         for (CodecDeletionCandidate candidate : BATCH39_DELETED_CODECS) {
             ObjectInstance result = invokeGenericRecreate(candidate.fqn(), 0x120, 0x240, candidate.gameId());
@@ -6393,15 +6041,6 @@ public class TestScalarOnlyCodecDeletion {
             }
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable (codec deleted in batch 40)");
-        }
-    }
-
-    @Test
-    void batch40ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH40_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-40 deletion; "
-                            + "session restore must use genericRecreate Path 1");
         }
     }
 
@@ -6448,15 +6087,6 @@ public class TestScalarOnlyCodecDeletion {
             }
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable (codec deleted in batch 41)");
-        }
-    }
-
-    @Test
-    void batch41ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH41_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-41 deletion; "
-                            + "session restore must use genericRecreate Path 1");
         }
     }
 
@@ -6513,15 +6143,6 @@ public class TestScalarOnlyCodecDeletion {
             }
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable (codec deleted in batch 42)");
-        }
-    }
-
-    @Test
-    void batch42ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH42_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-42 deletion; "
-                            + "session restore must use genericRecreate Path 1");
         }
     }
 
@@ -6594,15 +6215,6 @@ public class TestScalarOnlyCodecDeletion {
             }
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable (codec deleted in batch 43)");
-        }
-    }
-
-    @Test
-    void batch43ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH43_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-43 deletion; "
-                            + "session restore must use genericRecreate Path 1");
         }
     }
 
@@ -6706,15 +6318,6 @@ public class TestScalarOnlyCodecDeletion {
             }
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable (codec deleted in batch 44)");
-        }
-    }
-
-    @Test
-    void batch44ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH44_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-44 deletion; "
-                            + "session restore must use genericRecreate Path 1");
         }
     }
 
@@ -6879,15 +6482,6 @@ public class TestScalarOnlyCodecDeletion {
             }
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable (codec deleted in batch 45)");
-        }
-    }
-
-    @Test
-    void batch45ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH45_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-45 deletion; "
-                            + "session restore must use genericRecreate Path 1");
         }
     }
 
@@ -7062,15 +6656,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void batch46ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH46_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-46 deletion; "
-                            + "session restore must use genericRecreate Path 1");
-        }
-    }
-
-    @Test
     void batch46ClassesGenericRecreateProducesInstance() {
         for (CodecDeletionCandidate candidate : BATCH46_DELETED_CODECS) {
             ObjectInstance result = invokeGenericRecreate(candidate.fqn(), 0x3220, 0x280, candidate.gameId());
@@ -7224,15 +6809,6 @@ public class TestScalarOnlyCodecDeletion {
             }
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable (codec deleted in batch 47)");
-        }
-    }
-
-    @Test
-    void batch47ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH47_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-47 deletion; "
-                            + "session restore must use genericRecreate Path 1");
         }
     }
 
@@ -7421,15 +6997,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void batch48ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH48_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-48 deletion; "
-                            + "session restore must use genericRecreate Path 1 with restore-time parent relink");
-        }
-    }
-
-    @Test
     void batch48ClassesGenericRecreateProducesInstanceAndRelinksParent() {
         ObjectManager[] holder = new ObjectManager[1];
         Camera camera = mockCamera();
@@ -7496,15 +7063,6 @@ public class TestScalarOnlyCodecDeletion {
             }
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable (codec deleted in batch 49)");
-        }
-    }
-
-    @Test
-    void batch49ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH49_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-49 deletion; "
-                            + "session restore must use genericRecreate Path 1 with live Buggernaut relink");
         }
     }
 
@@ -7581,15 +7139,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void batch50ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH50_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-50 deletion; "
-                            + "session restore must use genericRecreate Path 1 with live parent relink");
-        }
-    }
-
-    @Test
     void batch50ClassesGenericRecreateProducesInstanceAndRelinksParent() {
         for (CodecDeletionCandidate candidate : BATCH50_DELETED_CODECS) {
             ObjectManager[] holder = new ObjectManager[1];
@@ -7659,15 +7208,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void batch51ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH51_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-51 deletion; "
-                            + "session restore must use genericRecreate Path 1 with live parent relink");
-        }
-    }
-
-    @Test
     void batch51ClassesGenericRecreateProducesInstanceAndRelinksParent() {
         for (CodecDeletionCandidate candidate : BATCH51_DELETED_CODECS) {
             ObjectManager[] holder = new ObjectManager[1];
@@ -7732,15 +7272,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable (codec deleted in batch 52)");
-        }
-    }
-
-    @Test
-    void batch52ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : BATCH52_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn() + " must have NO registered dynamic rewind codec after batch-52 deletion; "
-                            + "session restore must use genericRecreate Path 1 with live parent relink");
         }
     }
 
@@ -7821,15 +7352,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void sharedHelperClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : SHARED_HELPER_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through shared generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void sharedHelperClassesRoundTripThroughGenericRecreate() {
         for (CodecDeletionCandidate candidate : SHARED_HELPER_DELETED_CODECS) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -7862,15 +7384,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void sharedSparkleClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : SHARED_SPARKLE_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through shared generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void sharedSparkleClassesRoundTripThroughGenericRecreate() {
         for (CodecDeletionCandidate candidate : SHARED_SPARKLE_DELETED_CODECS) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -7890,15 +7403,6 @@ public class TestScalarOnlyCodecDeletion {
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn()
                             + " must implement RewindRecreatable after shared placeholder coverage");
-        }
-    }
-
-    @Test
-    void sharedPlaceholderClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : SHARED_PLACEHOLDER_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through shared placeholder generic recreate, not a dynamic codec");
         }
     }
 
@@ -7925,15 +7429,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void sharedWaterEffectClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : SHARED_WATER_EFFECT_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through shared water-effect generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void sharedWaterEffectClassesRoundTripThroughGenericRecreate() {
         for (CodecDeletionCandidate candidate : SHARED_WATER_EFFECT_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -7952,15 +7447,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after Speed Launcher coverage");
-        }
-    }
-
-    @Test
-    void s2SpeedLauncherClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S2_SPEED_LAUNCHER_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through Speed Launcher generic recreate, not a dynamic codec");
         }
     }
 
@@ -7987,15 +7473,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s2MtzSpinTubeClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S2_MTZ_SPIN_TUBE_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through MTZ Spin Tube generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s2MtzSpinTubeClassesRoundTripThroughGenericRecreate() {
         for (CodecDeletionCandidate candidate : S2_MTZ_SPIN_TUBE_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -8014,15 +7491,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after CPZ Spin Tube coverage");
-        }
-    }
-
-    @Test
-    void s2CpzSpinTubeClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S2_CPZ_SPIN_TUBE_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through CPZ Spin Tube generic recreate, not a dynamic codec");
         }
     }
 
@@ -8066,15 +7534,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s2MtzLongPlatformClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S2_MTZ_LONG_PLATFORM_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through MTZ Long Platform generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s2MtzLongPlatformClassesRoundTripThroughGenericRecreate() {
         for (CodecDeletionCandidate candidate : S2_MTZ_LONG_PLATFORM_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -8093,15 +7552,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after collapsing-platform coverage");
-        }
-    }
-
-    @Test
-    void s2CollapsingPlatformClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S2_COLLAPSING_PLATFORM_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through collapsing-platform generic recreate, not a dynamic codec");
         }
     }
 
@@ -8137,15 +7587,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after collapsing-platform fragment coverage");
-        }
-    }
-
-    @Test
-    void s2CollapsingPlatformFragmentClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S2_COLLAPSING_PLATFORM_FRAGMENT_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through collapsing-platform fragment generic recreate, not a dynamic codec");
         }
     }
 
@@ -8189,15 +7630,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void cpzGraphBatchAClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : CPZ_GRAPH_BATCH_A_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through CPZ graph generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void cpzGraphBatchBClassesAllImplementRewindRecreatable() {
         for (CodecDeletionCandidate candidate : CPZ_GRAPH_BATCH_B_DELETED_CODECS) {
             Class<?> cls = loadClass(candidate.fqn());
@@ -8207,29 +7639,11 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void cpzGraphBatchBClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : CPZ_GRAPH_BATCH_B_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through CPZ graph generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s2BossGraphParentClassesAllImplementRewindRecreatable() {
         for (CodecDeletionCandidate candidate : S2_BOSS_GRAPH_PARENT_DELETED_CODECS) {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S2 boss graph parent batch");
-        }
-    }
-
-    @Test
-    void s2BossGraphParentClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S2_BOSS_GRAPH_PARENT_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S2 boss graph parent generic recreate, not a dynamic codec");
         }
     }
 
@@ -8247,29 +7661,11 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void aizMinibossGraphClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : AIZ_MINIBOSS_GRAPH_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through AIZ miniboss graph generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void aizMinibossParentClassesAllImplementRewindRecreatable() {
         for (CodecDeletionCandidate candidate : AIZ_MINIBOSS_PARENT_DELETED_CODECS) {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after AIZ miniboss parent batch");
-        }
-    }
-
-    @Test
-    void aizMinibossParentClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : AIZ_MINIBOSS_PARENT_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through AIZ miniboss parent generic recreate, not a dynamic codec");
         }
     }
 
@@ -8286,15 +7682,6 @@ public class TestScalarOnlyCodecDeletion {
         }
     }
 
-    @Test
-    void aizEndBossGraphClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : AIZ_END_BOSS_GRAPH_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through AIZ end-boss graph generic recreate, not a dynamic codec");
-        }
-    }
-
     // =====================================================================
     // AIZ ship-bomb graph batch: battleship-linked dynamic bomb
     // =====================================================================
@@ -8305,15 +7692,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after AIZ ship-bomb graph batch");
-        }
-    }
-
-    @Test
-    void aizShipBombGraphClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : AIZ_SHIP_BOMB_GRAPH_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through AIZ ship-bomb graph generic recreate, not a dynamic codec");
         }
     }
 
@@ -8330,15 +7708,6 @@ public class TestScalarOnlyCodecDeletion {
         }
     }
 
-    @Test
-    void aizSpikedLogGraphClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : AIZ_SPIKED_LOG_GRAPH_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through AIZ spiked-log graph generic recreate, not a dynamic codec");
-        }
-    }
-
     // =====================================================================
     // AIZ falling-log graph batch: bidirectional log/splash pair
     // =====================================================================
@@ -8349,15 +7718,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after AIZ falling-log graph batch");
-        }
-    }
-
-    @Test
-    void aizFallingLogGraphClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : AIZ_FALLING_LOG_GRAPH_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through AIZ falling-log graph generic recreate, not a dynamic codec");
         }
     }
 
@@ -8375,16 +7735,6 @@ public class TestScalarOnlyCodecDeletion {
         }
     }
 
-    @Test
-    void aizDisappearingFloorGraphClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : AIZ_DISAPPEARING_FLOOR_GRAPH_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through AIZ disappearing-floor graph generic recreate, "
-                            + "not a dynamic codec");
-        }
-    }
-
     // =====================================================================
     // AIZ collapsing-log bridge graph batch: parent and falling segment
     // =====================================================================
@@ -8396,16 +7746,6 @@ public class TestScalarOnlyCodecDeletion {
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn()
                             + " must implement RewindRecreatable after AIZ collapsing-log bridge graph batch");
-        }
-    }
-
-    @Test
-    void aizCollapsingLogBridgeGraphClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : AIZ_COLLAPSING_LOG_BRIDGE_GRAPH_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through AIZ collapsing-log bridge graph generic recreate, "
-                            + "not a dynamic codec");
         }
     }
 
@@ -8423,16 +7763,6 @@ public class TestScalarOnlyCodecDeletion {
         }
     }
 
-    @Test
-    void aizFlippingBridgeClassHasNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : AIZ_FLIPPING_BRIDGE_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through AIZ flipping-bridge generic recreate, "
-                            + "not a dynamic codec");
-        }
-    }
-
     // =====================================================================
     // AIZ1 static scenery scalar batch: tree and zipline peg
     // =====================================================================
@@ -8444,16 +7774,6 @@ public class TestScalarOnlyCodecDeletion {
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn()
                             + " must implement RewindRecreatable after AIZ1 static scenery batch");
-        }
-    }
-
-    @Test
-    void aiz1StaticSceneryClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : AIZ1_STATIC_SCENERY_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through AIZ1 static scenery generic recreate, "
-                            + "not a dynamic codec");
         }
     }
 
@@ -8471,16 +7791,6 @@ public class TestScalarOnlyCodecDeletion {
         }
     }
 
-    @Test
-    void s3kDecorativeClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_DECORATIVE_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K decorative generic recreate, "
-                            + "not a dynamic codec");
-        }
-    }
-
     // =====================================================================
     // S3K static/hazard scalar batch: still sprite and S3K spike object
     // =====================================================================
@@ -8492,16 +7802,6 @@ public class TestScalarOnlyCodecDeletion {
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn()
                             + " must implement RewindRecreatable after S3K static hazard batch");
-        }
-    }
-
-    @Test
-    void s3kStaticHazardClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_STATIC_HAZARD_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K static hazard generic recreate, "
-                            + "not a dynamic codec");
         }
     }
 
@@ -8531,16 +7831,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s3kButtonPathSwapClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_BUTTON_PATH_SWAP_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K button/path-swap generic recreate, "
-                            + "not a dynamic codec");
-        }
-    }
-
-    @Test
     void s3kButtonPathSwapClassesRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S3K_BUTTON_PATH_SWAP_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -8562,16 +7852,6 @@ public class TestScalarOnlyCodecDeletion {
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn()
                             + " must implement RewindRecreatable after S3K utility batch");
-        }
-    }
-
-    @Test
-    void s3kUtilityClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_UTILITY_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K utility generic recreate, "
-                            + "not a dynamic codec");
         }
     }
 
@@ -8601,16 +7881,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s3kCnzLocalMechanicsClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_CNZ_LOCAL_MECHANICS_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K CNZ local mechanics generic recreate, "
-                            + "not a dynamic codec");
-        }
-    }
-
-    @Test
     void s3kCnzLocalMechanicsClassesRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S3K_CNZ_LOCAL_MECHANICS_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -8631,15 +7901,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S3K CNZ mechanism batch");
-        }
-    }
-
-    @Test
-    void s3kCnzMechanismClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_CNZ_MECHANISM_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K CNZ mechanism generic recreate, not a dynamic codec");
         }
     }
 
@@ -8668,15 +7929,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s3kIczIceObjectClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_ICZ_ICE_OBJECT_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K ICZ ice-object generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s3kIczIceObjectClassesRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S3K_ICZ_ICE_OBJECT_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -8697,15 +7949,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S3K HCZ mechanism batch");
-        }
-    }
-
-    @Test
-    void s3kHczMechanismClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_HCZ_MECHANISM_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K HCZ mechanism generic recreate, not a dynamic codec");
         }
     }
 
@@ -8734,15 +7977,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s3kIczPlatformHazardClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_ICZ_PLATFORM_HAZARD_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K ICZ platform/hazard generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s3kIczPlatformHazardClassesRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S3K_ICZ_PLATFORM_HAZARD_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -8763,15 +7997,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S3K utility/motion batch");
-        }
-    }
-
-    @Test
-    void s3kUtilityMotionClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_UTILITY_MOTION_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K utility/motion generic recreate, not a dynamic codec");
         }
     }
 
@@ -8800,15 +8025,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s3kPachinkoStandaloneClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_PACHINKO_STANDALONE_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K pachinko standalone generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s3kPachinkoStandaloneClassesRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S3K_PACHINKO_STANDALONE_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -8829,15 +8045,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S3K controller batch");
-        }
-    }
-
-    @Test
-    void s3kControllerClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_CONTROLLER_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K controller generic recreate, not a dynamic codec");
         }
     }
 
@@ -8866,15 +8073,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void standaloneControllerClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : STANDALONE_CONTROLLER_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through standalone controller generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void standaloneControllerClassesRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : STANDALONE_CONTROLLER_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -8898,15 +8096,6 @@ public class TestScalarOnlyCodecDeletion {
         }
     }
 
-    @Test
-    void hczEndBossGraphClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : HCZ_END_BOSS_GRAPH_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through HCZ end-boss graph generic recreate, not a dynamic codec");
-        }
-    }
-
     // =====================================================================
     // AIZ intro graph batch: biplane parent-linked dynamic children
     // =====================================================================
@@ -8921,29 +8110,11 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void aizIntroGraphClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : AIZ_INTRO_GRAPH_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through AIZ intro graph generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void aizIntroParentClassesAllImplementRewindRecreatable() {
         for (CodecDeletionCandidate candidate : AIZ_INTRO_PARENT_DELETED_CODECS) {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after AIZ intro parent batch");
-        }
-    }
-
-    @Test
-    void aizIntroParentClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : AIZ_INTRO_PARENT_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through AIZ intro parent generic recreate, not a dynamic codec");
         }
     }
 
@@ -8961,29 +8132,11 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s2BadnikChildGraphClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S2_BADNIK_CHILD_GRAPH_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S2 badnik child graph generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s2BadnikParentGraphClassesImplementRewindRecreatable() {
         for (CodecDeletionCandidate candidate : S2_BADNIK_PARENT_GRAPH_DELETED_CODECS) {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S2 badnik parent graph batch");
-        }
-    }
-
-    @Test
-    void s2BadnikParentGraphClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S2_BADNIK_PARENT_GRAPH_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S2 badnik parent graph generic recreate, not a dynamic codec");
         }
     }
 
@@ -9000,15 +8153,6 @@ public class TestScalarOnlyCodecDeletion {
         }
     }
 
-    @Test
-    void checkpointStarpostGraphClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : CHECKPOINT_STARPOST_GRAPH_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through checkpoint/starpost graph generic recreate, not a dynamic codec");
-        }
-    }
-
     // =====================================================================
     // S1 MZ glass reflection graph batch: layout-parent-linked dynamic shine
     // =====================================================================
@@ -9022,15 +8166,6 @@ public class TestScalarOnlyCodecDeletion {
         }
     }
 
-    @Test
-    void s1MzGlassReflectionGraphClassesHaveNoRegisteredS1Codec() {
-        for (CodecDeletionCandidate candidate : S1_MZ_GLASS_REFLECTION_GRAPH_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S1 MZ glass graph generic recreate, not a dynamic codec");
-        }
-    }
-
     // =====================================================================
     // S1 ring flash graph batch: optional live-parent-linked special-stage flash
     // =====================================================================
@@ -9041,15 +8176,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S1 ring flash graph batch");
-        }
-    }
-
-    @Test
-    void s1RingFlashGraphClassesHaveNoRegisteredS1Codec() {
-        for (CodecDeletionCandidate candidate : S1_RING_FLASH_GRAPH_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S1 ring flash graph generic recreate, not a dynamic codec");
         }
     }
 
@@ -9067,15 +8193,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s1BossGraphParentClassesHaveNoRegisteredS1Codec() {
-        for (CodecDeletionCandidate candidate : S1_BOSS_GRAPH_PARENT_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S1 boss graph parent generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s1SyzBossSpikeGraphBatch246ClassesAllImplementRewindRecreatable() {
         for (CodecDeletionCandidate candidate : S1_SYZ_BOSS_SPIKE_GRAPH_BATCH246_RECREATE_CLASSES) {
             Class<?> cls = loadClass(candidate.fqn());
@@ -9085,29 +8202,11 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s1SyzBossSpikeGraphBatch246ClassesHaveNoRegisteredS1Codec() {
-        for (CodecDeletionCandidate candidate : S1_SYZ_BOSS_SPIKE_GRAPH_BATCH246_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S1 SYZ spike batch 246 generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s3kMinibossRootGraphBatch247ClassesAllImplementRewindRecreatable() {
         for (CodecDeletionCandidate candidate : S3K_MINIBOSS_ROOT_GRAPH_BATCH247_RECREATE_CLASSES) {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S3K miniboss root batch 247");
-        }
-    }
-
-    @Test
-    void s3kMinibossRootGraphBatch247ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_MINIBOSS_ROOT_GRAPH_BATCH247_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K miniboss root batch 247 generic recreate, not a dynamic codec");
         }
     }
 
@@ -9124,15 +8223,6 @@ public class TestScalarOnlyCodecDeletion {
         }
     }
 
-    @Test
-    void s1FzBossGraphClassesHaveNoRegisteredS1Codec() {
-        for (CodecDeletionCandidate candidate : S1_FZ_BOSS_GRAPH_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S1 FZ boss graph generic recreate, not a dynamic codec");
-        }
-    }
-
     // =====================================================================
     // S1 GHZ boss graph batch: boss-linked wrecking ball
     // =====================================================================
@@ -9143,15 +8233,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S1 GHZ boss graph batch");
-        }
-    }
-
-    @Test
-    void s1GhzBossGraphClassesHaveNoRegisteredS1Codec() {
-        for (CodecDeletionCandidate candidate : S1_GHZ_BOSS_GRAPH_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S1 GHZ boss graph generic recreate, not a dynamic codec");
         }
     }
 
@@ -9168,16 +8249,6 @@ public class TestScalarOnlyCodecDeletion {
         }
     }
 
-    @Test
-    void s1SlzBossSpikeballGraphClassesHaveNoRegisteredS1Codec() {
-        for (CodecDeletionCandidate candidate : S1_SLZ_BOSS_SPIKEBALL_GRAPH_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S1 SLZ boss spikeball graph generic recreate, "
-                            + "not a dynamic codec");
-        }
-    }
-
     // =====================================================================
     // S1 ending Sonic graph batch: ending Sonic plus emerald family refs
     // =====================================================================
@@ -9188,16 +8259,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S1 ending Sonic graph batch");
-        }
-    }
-
-    @Test
-    void s1EndingSonicGraphClassesHaveNoRegisteredS1Codec() {
-        for (CodecDeletionCandidate candidate : S1_ENDING_SONIC_GRAPH_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S1 ending Sonic graph generic recreate, "
-                            + "not a dynamic codec");
         }
     }
 
@@ -9214,16 +8275,6 @@ public class TestScalarOnlyCodecDeletion {
         }
     }
 
-    @Test
-    void s1GrassFireGraphClassesHaveNoRegisteredS1Codec() {
-        for (CodecDeletionCandidate candidate : S1_GRASS_FIRE_GRAPH_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S1 Grass Fire graph generic recreate, "
-                            + "not a dynamic codec");
-        }
-    }
-
     // =====================================================================
     // S1 badnik child graph batch: live-parent-linked dynamic children
     // =====================================================================
@@ -9234,15 +8285,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S1 badnik graph batch");
-        }
-    }
-
-    @Test
-    void s1BadnikChildGraphClassesHaveNoRegisteredS1Codec() {
-        for (CodecDeletionCandidate candidate : S1_BADNIK_GRAPH_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S1 badnik graph generic recreate, not a dynamic codec");
         }
     }
 
@@ -9260,29 +8302,11 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s2WfzBossGraphClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S2_WFZ_BOSS_GRAPH_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S2 WFZ boss graph generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s2WfzBossParentClassesAllImplementRewindRecreatable() {
         for (CodecDeletionCandidate candidate : S2_WFZ_BOSS_PARENT_DELETED_CODECS) {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S2 WFZ boss parent batch");
-        }
-    }
-
-    @Test
-    void s2WfzBossParentClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S2_WFZ_BOSS_PARENT_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S2 WFZ boss parent generic recreate, not a dynamic codec");
         }
     }
 
@@ -9299,15 +8323,6 @@ public class TestScalarOnlyCodecDeletion {
         }
     }
 
-    @Test
-    void s2HtzBossGraphClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S2_HTZ_BOSS_GRAPH_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S2 HTZ boss graph generic recreate, not a dynamic codec");
-        }
-    }
-
     // =====================================================================
     // S1/S2 seesaw graph batch: parent-linked child dynamics
     // =====================================================================
@@ -9318,15 +8333,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after seesaw graph batch");
-        }
-    }
-
-    @Test
-    void seesawGraphClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : SEESAW_GRAPH_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through seesaw graph generic recreate, not a dynamic codec");
         }
     }
 
@@ -9344,29 +8350,11 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s3kBadnikChildGraphClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_BADNIK_CHILD_GRAPH_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K badnik child graph generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s3kDragonflyGraphBatch219ClassesImplementRewindRecreatable() {
         for (CodecDeletionCandidate candidate : S3K_DRAGONFLY_GRAPH_BATCH219_RECREATE_CLASSES) {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S3K Dragonfly graph batch 219");
-        }
-    }
-
-    @Test
-    void s3kDragonflyGraphBatch219ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_DRAGONFLY_GRAPH_BATCH219_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K Dragonfly graph batch 219 generic recreate, not a dynamic codec");
         }
     }
 
@@ -9391,15 +8379,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s3kSpikerGraphBatch220ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_SPIKER_GRAPH_BATCH220_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K Spiker graph batch 220 generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s3kSpikerGraphBatch220ClassesRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S3K_SPIKER_GRAPH_BATCH220_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -9420,15 +8399,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s3kTurboSpikerGraphBatch221ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_TURBO_SPIKER_GRAPH_BATCH221_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K Turbo Spiker graph batch 221 generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s3kTurboSpikerGraphBatch221ParentRoundTripsPassedWithoutCodec() {
         CodecDeletionCandidate candidate = S3K_TURBO_SPIKER_GRAPH_BATCH221_RECREATE_CLASSES.getFirst();
         RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -9444,15 +8414,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S3K MegaChopper batch 222");
-        }
-    }
-
-    @Test
-    void s3kMegaChopperBatch222ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_MEGA_CHOPPER_BATCH222_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K MegaChopper batch 222 generic recreate, not a dynamic codec");
         }
     }
 
@@ -9477,15 +8438,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s3kCluckoidArrowBatch223ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_CLUCKOID_ARROW_BATCH223_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K Cluckoid arrow batch 223 generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s3kCluckoidArrowBatch223ClassesRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S3K_CLUCKOID_ARROW_BATCH223_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -9502,15 +8454,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S3K Mushmeanie graph batch 224");
-        }
-    }
-
-    @Test
-    void s3kMushmeanieGraphBatch224ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_MUSHMEANIE_GRAPH_BATCH224_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K Mushmeanie graph batch 224 generic recreate, not a dynamic codec");
         }
     }
 
@@ -9535,15 +8478,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s3kMantisGraphBatch225ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_MANTIS_GRAPH_BATCH225_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K Mantis graph batch 225 generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s3kMantisGraphBatch225ClassesRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S3K_MANTIS_GRAPH_BATCH225_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -9560,15 +8494,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S3K Ribot visual graph batch 226");
-        }
-    }
-
-    @Test
-    void s3kRibotVisualGraphBatch226ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_RIBOT_VISUAL_GRAPH_BATCH226_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K Ribot visual graph batch 226 generic recreate, not a dynamic codec");
         }
     }
 
@@ -9593,15 +8518,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s3kSnaleBlasterGraphBatch227ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_SNALE_BLASTER_GRAPH_BATCH227_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K SnaleBlaster graph batch 227 generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s3kSnaleBlasterGraphBatch227ClassesRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S3K_SNALE_BLASTER_GRAPH_BATCH227_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -9618,15 +8534,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S3K Caterkiller Jr graph batch 228");
-        }
-    }
-
-    @Test
-    void s3kCaterkillerJrGraphBatch228ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_CATERKILLER_JR_GRAPH_BATCH228_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K Caterkiller Jr graph batch 228 generic recreate, not a dynamic codec");
         }
     }
 
@@ -9651,15 +8558,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s3kTunnelbotGraphBatch229ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_TUNNELBOT_GRAPH_BATCH229_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K Tunnelbot graph batch 229 generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s3kTunnelbotGraphBatch229ClassesRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S3K_TUNNELBOT_GRAPH_BATCH229_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -9676,15 +8574,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S3K collapsing bridge batch 230");
-        }
-    }
-
-    @Test
-    void s3kCollapsingBridgeBatch230ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_COLLAPSING_BRIDGE_BATCH230_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K collapsing bridge batch 230 generic recreate, not a dynamic codec");
         }
     }
 
@@ -9709,15 +8598,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s3kTensionBridgeBatch231ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_TENSION_BRIDGE_BATCH231_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K tension bridge batch 231 generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s3kTensionBridgeBatch231ClassesRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S3K_TENSION_BRIDGE_BATCH231_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -9734,15 +8614,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S3K fragment batch 232");
-        }
-    }
-
-    @Test
-    void s3kDestructibleFragmentBatch232ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_DESTRUCTIBLE_FRAGMENT_BATCH232_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K fragment batch 232 generic recreate, not a dynamic codec");
         }
     }
 
@@ -9767,29 +8638,11 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s3kGumballGraphBatch233ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_GUMBALL_GRAPH_BATCH233_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K gumball graph batch 233 generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s3kPachinkoTrapGraphBatch234ClassesImplementRewindRecreatable() {
         for (CodecDeletionCandidate candidate : S3K_PACHINKO_TRAP_GRAPH_BATCH234_RECREATE_CLASSES) {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S3K pachinko trap graph batch 234");
-        }
-    }
-
-    @Test
-    void s3kPachinkoTrapGraphBatch234ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_PACHINKO_TRAP_GRAPH_BATCH234_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K pachinko trap graph batch 234 generic recreate, not a dynamic codec");
         }
     }
 
@@ -9803,29 +8656,11 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s3kIczSupportGraphBatch235ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_ICZ_SUPPORT_GRAPH_BATCH235_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K ICZ support graph batch 235 generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s3kIczSnowGraphBatch236ClassesImplementRewindRecreatable() {
         for (CodecDeletionCandidate candidate : S3K_ICZ_SNOW_GRAPH_BATCH236_RECREATE_CLASSES) {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S3K ICZ snow graph batch 236");
-        }
-    }
-
-    @Test
-    void s3kIczSnowGraphBatch236ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_ICZ_SNOW_GRAPH_BATCH236_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K ICZ snow graph batch 236 generic recreate, not a dynamic codec");
         }
     }
 
@@ -9839,29 +8674,11 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s3kMgzMechanismGraphBatch245ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_MGZ_MECHANISM_GRAPH_BATCH245_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K MGZ mechanism batch 245 generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void sharedBoxBatch237ClassesImplementRewindRecreatable() {
         for (CodecDeletionCandidate candidate : SHARED_BOX_BATCH237_RECREATE_CLASSES) {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after shared box batch 237");
-        }
-    }
-
-    @Test
-    void sharedBoxBatch237ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : SHARED_BOX_BATCH237_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through shared box batch 237 generic recreate, not a dynamic codec");
         }
     }
 
@@ -9886,15 +8703,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s3kLbzTriggerBridgeBatch238ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_LBZ_TRIGGER_BRIDGE_BATCH238_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through LBZ trigger bridge batch 238 generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s3kLbzTriggerBridgeBatch238ClassesRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S3K_LBZ_TRIGGER_BRIDGE_BATCH238_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -9911,15 +8719,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after AIZ emerald scatter batch 240");
-        }
-    }
-
-    @Test
-    void s3kAizEmeraldScatterBatch240ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_AIZ_EMERALD_SCATTER_BATCH240_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through AIZ emerald scatter batch 240 generic recreate, not a dynamic codec");
         }
     }
 
@@ -9948,15 +8747,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s3kBadnikParentClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_BADNIK_PARENT_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K badnik parent generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s3kBadnikParentClassesRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S3K_BADNIK_PARENT_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -9973,15 +8763,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S3K badnik parent batch 87");
-        }
-    }
-
-    @Test
-    void s3kBadnikParentBatch87ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_BADNIK_PARENT_BATCH87_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K badnik parent batch 87 generic recreate, not a dynamic codec");
         }
     }
 
@@ -10006,15 +8787,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s3kBadnikParentBatch88ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_BADNIK_PARENT_BATCH88_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K badnik parent batch 88 generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s3kBadnikParentBatch88ClassesRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S3K_BADNIK_PARENT_BATCH88_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -10031,15 +8803,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S3K object parent batch 89");
-        }
-    }
-
-    @Test
-    void s3kObjectParentBatch89ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_OBJECT_PARENT_BATCH89_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K object parent batch 89 generic recreate, not a dynamic codec");
         }
     }
 
@@ -10064,15 +8827,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s3kObjectParentBatch90ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_OBJECT_PARENT_BATCH90_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K object parent batch 90 generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s3kObjectParentBatch90ClassesRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S3K_OBJECT_PARENT_BATCH90_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -10089,15 +8843,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S3K object parent batch 91");
-        }
-    }
-
-    @Test
-    void s3kObjectParentBatch91ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_OBJECT_PARENT_BATCH91_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K object parent batch 91 generic recreate, not a dynamic codec");
         }
     }
 
@@ -10122,15 +8867,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s3kObjectParentBatch92ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_OBJECT_PARENT_BATCH92_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K object parent batch 92 generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s3kObjectParentBatch92ClassesRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S3K_OBJECT_PARENT_BATCH92_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -10147,15 +8883,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S3K ICZ debris batch 93");
-        }
-    }
-
-    @Test
-    void s3kIczDebrisBatch93ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_ICZ_DEBRIS_BATCH93_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K ICZ debris batch 93 generic recreate, not a dynamic codec");
         }
     }
 
@@ -10180,15 +8907,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s3kDynamicChildBatch94ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_DYNAMIC_CHILD_BATCH94_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K dynamic child batch 94 generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s3kDynamicChildBatch94ClassesRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S3K_DYNAMIC_CHILD_BATCH94_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -10205,15 +8923,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S3K dynamic child batch 95");
-        }
-    }
-
-    @Test
-    void s3kDynamicChildBatch95ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_DYNAMIC_CHILD_BATCH95_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K dynamic child batch 95 generic recreate, not a dynamic codec");
         }
     }
 
@@ -10238,15 +8947,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s3kWaterWallChildBatch96ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_WATER_WALL_CHILD_BATCH96_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K water-wall child batch 96 generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s3kWaterWallChildBatch96ClassesRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S3K_WATER_WALL_CHILD_BATCH96_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -10263,15 +8963,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S3K particle child batch 97");
-        }
-    }
-
-    @Test
-    void s3kParticleChildBatch97ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_PARTICLE_CHILD_BATCH97_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K particle child batch 97 generic recreate, not a dynamic codec");
         }
     }
 
@@ -10296,15 +8987,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s3kTurboSpikerParticleBatch98ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_TURBO_SPIKER_PARTICLE_BATCH98_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K Turbo Spiker particle batch 98 generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s3kTurboSpikerParticleBatch98ClassesRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S3K_TURBO_SPIKER_PARTICLE_BATCH98_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -10321,15 +9003,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S3K MHZ tree-chip batch 99");
-        }
-    }
-
-    @Test
-    void s3kMhzTreeChipBatch99ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_MHZ_TREE_CHIP_BATCH99_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K MHZ tree-chip batch 99 generic recreate, not a dynamic codec");
         }
     }
 
@@ -10354,15 +9027,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s3kMhz2LeafParticleBatch100ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_MHZ2_LEAF_PARTICLE_BATCH100_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K MHZ2 leaf batch 100 generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s3kMhz2LeafParticleBatch100ClassesRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S3K_MHZ2_LEAF_PARTICLE_BATCH100_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -10379,15 +9043,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S3K ICZ frost puff batch 101");
-        }
-    }
-
-    @Test
-    void s3kIczFrostPuffBatch101ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_ICZ_FROST_PUFF_BATCH101_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K ICZ frost puff batch 101 generic recreate, not a dynamic codec");
         }
     }
 
@@ -10412,15 +9067,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s3kAizDrawBridgeBatch102ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_AIZ_DRAW_BRIDGE_BATCH102_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K AIZ draw bridge batch 102 generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s3kAizDrawBridgeBatch102ClassesRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S3K_AIZ_DRAW_BRIDGE_BATCH102_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -10437,15 +9083,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S3K AIZ/LRZ rock batch 218");
-        }
-    }
-
-    @Test
-    void s3kAizLrzRockBatch218ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_AIZ_LRZ_ROCK_BATCH218_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K AIZ/LRZ rock batch 218 generic recreate, not a dynamic codec");
         }
     }
 
@@ -10470,15 +9107,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s3kSparkleChildBatch103ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_SPARKLE_CHILD_BATCH103_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K Sparkle child batch 103 generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s3kSparkleChildBatch103ClassesRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S3K_SPARKLE_CHILD_BATCH103_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -10495,15 +9123,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S3K MHZ swing-bar batch 104");
-        }
-    }
-
-    @Test
-    void s3kMhzSwingBarBatch104ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_MHZ_SWING_BAR_BATCH104_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K MHZ swing-bar batch 104 generic recreate, not a dynamic codec");
         }
     }
 
@@ -10528,15 +9147,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s3kMhzMechanismBatch105ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_MHZ_MECHANISM_BATCH105_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K MHZ mechanism batch 105 generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s3kMhzMechanismBatch105ClassesRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S3K_MHZ_MECHANISM_BATCH105_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -10553,15 +9163,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S3K mechanism batch 106");
-        }
-    }
-
-    @Test
-    void s3kMechanismBatch106ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_MECHANISM_BATCH106_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K mechanism batch 106 generic recreate, not a dynamic codec");
         }
     }
 
@@ -10586,15 +9187,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s3kLbzMechanismBatch107ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_LBZ_MECHANISM_BATCH107_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K LBZ mechanism batch 107 generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s3kLbzMechanismBatch107ClassesRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S3K_LBZ_MECHANISM_BATCH107_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -10611,15 +9203,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S3K batch 108");
-        }
-    }
-
-    @Test
-    void s3kMhzMgzMechanismBatch108ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_MHZ_MGZ_MECHANISM_BATCH108_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K batch 108 generic recreate, not a dynamic codec");
         }
     }
 
@@ -10643,15 +9226,6 @@ public class TestScalarOnlyCodecDeletion {
         }
     }
 
-    @Test
-    void s3kCorkeyNozzleGraphBatch109ClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_CORKEY_NOZZLE_GRAPH_BATCH109_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K Corkey nozzle graph generic recreate, not a dynamic codec");
-        }
-    }
-
     // =====================================================================
     // S3K signpost stub graph batch: signpost-linked dynamic child
     // =====================================================================
@@ -10662,15 +9236,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S3K signpost stub graph batch");
-        }
-    }
-
-    @Test
-    void s3kSignpostStubGraphClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_SIGNPOST_STUB_GRAPH_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K signpost stub graph generic recreate, not a dynamic codec");
         }
     }
 
@@ -10687,15 +9252,6 @@ public class TestScalarOnlyCodecDeletion {
         }
     }
 
-    @Test
-    void s3kLbz1CutsceneGraphClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_LBZ1_CUTSCENE_GRAPH_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K LBZ1 cutscene graph generic recreate, not a dynamic codec");
-        }
-    }
-
     // =====================================================================
     // S3K MHZ cutscene graph batch: cutscene-parent-linked helpers
     // =====================================================================
@@ -10709,15 +9265,6 @@ public class TestScalarOnlyCodecDeletion {
         }
     }
 
-    @Test
-    void s3kMhzCutsceneGraphClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_MHZ_CUTSCENE_GRAPH_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K MHZ cutscene graph generic recreate, not a dynamic codec");
-        }
-    }
-
     // =====================================================================
     // S3K MHZ miniboss flame graph batch: boss-parent-linked flame children
     // =====================================================================
@@ -10728,15 +9275,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S3K MHZ flame graph batch");
-        }
-    }
-
-    @Test
-    void s3kMhzMinibossFlameGraphClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_MHZ_MINIBOSS_FLAME_GRAPH_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K MHZ flame graph generic recreate, not a dynamic codec");
         }
     }
 
@@ -10754,15 +9292,6 @@ public class TestScalarOnlyCodecDeletion {
         }
     }
 
-    @Test
-    void s3kMhzMinibossEscapeShardGraphClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_MHZ_MINIBOSS_ESCAPE_SHARD_GRAPH_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K MHZ escape-shard graph generic recreate, not a dynamic codec");
-        }
-    }
-
     // =====================================================================
     // S3K MHZ end-boss controller graph batch: invisible control helpers
     // =====================================================================
@@ -10774,15 +9303,6 @@ public class TestScalarOnlyCodecDeletion {
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn()
                             + " must implement RewindRecreatable after S3K MHZ end-boss controller graph batch");
-        }
-    }
-
-    @Test
-    void s3kMhzEndBossControllerGraphClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_MHZ_END_BOSS_CONTROLLER_GRAPH_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K MHZ end-boss controller generic recreate, not a dynamic codec");
         }
     }
 
@@ -10799,15 +9319,6 @@ public class TestScalarOnlyCodecDeletion {
         }
     }
 
-    @Test
-    void s3kNestedHurtboxGraphClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_NESTED_HURTBOX_GRAPH_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K nested hurtbox graph generic recreate, not a dynamic codec");
-        }
-    }
-
     // =====================================================================
     // S3K cutscene Knuckles graph batch: AIZ rock and CNZ blocking wall
     // =====================================================================
@@ -10818,15 +9329,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S3K cutscene Knuckles graph batch");
-        }
-    }
-
-    @Test
-    void s3kCutsceneKnucklesGraphClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_CUTSCENE_KNUCKLES_GRAPH_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K cutscene Knuckles graph generic recreate, not a dynamic codec");
         }
     }
 
@@ -10841,16 +9343,6 @@ public class TestScalarOnlyCodecDeletion {
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn()
                             + " must implement RewindRecreatable after S3K Knuckles cutscene controller coverage");
-        }
-    }
-
-    @Test
-    void s3kKnucklesCutsceneControllersHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_KNUCKLES_CUTSCENE_CONTROLLER_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K Knuckles cutscene controller generic recreate, "
-                            + "not a dynamic codec");
         }
     }
 
@@ -10880,16 +9372,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s3kStandaloneCutsceneControllersHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_STANDALONE_CUTSCENE_CONTROLLER_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K standalone cutscene generic recreate, "
-                            + "not a dynamic codec");
-        }
-    }
-
-    @Test
     void s3kStandaloneCutsceneControllersRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S3K_STANDALONE_CUTSCENE_CONTROLLER_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -10911,16 +9393,6 @@ public class TestScalarOnlyCodecDeletion {
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn()
                             + " must implement RewindRecreatable after S3K stage controller coverage");
-        }
-    }
-
-    @Test
-    void s3kStageControllersHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_STAGE_CONTROLLER_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K stage controller generic recreate, "
-                            + "not a dynamic codec");
         }
     }
 
@@ -10950,15 +9422,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s2BossControllersHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S2_BOSS_CONTROLLER_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S2 boss controller generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s2BossControllersRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S2_BOSS_CONTROLLER_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -10979,15 +9442,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S1 Egg Prison button graph batch");
-        }
-    }
-
-    @Test
-    void s1EggPrisonButtonGraphClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S1_EGG_PRISON_BUTTON_GRAPH_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S1 Egg Prison button graph generic recreate, not a dynamic codec");
         }
     }
 
@@ -11015,15 +9469,6 @@ public class TestScalarOnlyCodecDeletion {
         }
     }
 
-    @Test
-    void s2EggPrisonButtonGraphClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S2_EGG_PRISON_BUTTON_GRAPH_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S2 Egg Prison button graph generic recreate, not a dynamic codec");
-        }
-    }
-
     // =====================================================================
     // S2 OOZ burner flame graph batch: constructor-required platform relink
     // =====================================================================
@@ -11034,15 +9479,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S2 OOZ burner flame graph batch");
-        }
-    }
-
-    @Test
-    void s2OozBurnerFlameGraphClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S2_OOZ_BURNER_FLAME_GRAPH_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S2 OOZ burner flame graph generic recreate, not a dynamic codec");
         }
     }
 
@@ -11059,14 +9495,6 @@ public class TestScalarOnlyCodecDeletion {
         }
     }
 
-    @Test
-    void s2ArzArrowGraphClassesHaveNoRegisteredCodec() {
-        assertFalse(hasRegisteredDynamicCodec(ARZBossArrow.class.getName(), GameId.S2),
-                "ARZBossArrow must restore through S2 ARZ graph generic recreate, not a dynamic codec");
-        assertFalse(hasRegisteredDynamicCodec(ARZBossEyes.class.getName(), GameId.S2),
-                "ARZBossEyes graph support must not add a dynamic codec");
-    }
-
     // =====================================================================
     // S2 DEZ bomb graph support: parent-dependent Death Egg Robot bomb dynamic
     // =====================================================================
@@ -11081,15 +9509,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s2DezBombGraphClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S2_DEZ_BOMB_GRAPH_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S2 DEZ bomb graph generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s2DezEggmanGraphClassesImplementRewindRecreatable() {
         for (CodecDeletionCandidate candidate : S2_DEZ_EGGMAN_GRAPH_COVERED_CLASSES) {
             Class<?> cls = loadClass(candidate.fqn());
@@ -11099,29 +9518,11 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s2DezEggmanGraphClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S2_DEZ_EGGMAN_GRAPH_COVERED_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S2 DEZ Eggman graph generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s1ScrapEggmanGraphClassesImplementRewindRecreatable() {
         for (CodecDeletionCandidate candidate : S1_SCRAP_EGGMAN_GRAPH_COVERED_CLASSES) {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S1 Scrap Eggman graph coverage");
-        }
-    }
-
-    @Test
-    void s1ScrapEggmanGraphClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S1_SCRAP_EGGMAN_GRAPH_COVERED_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S1 Scrap Eggman graph generic recreate, not a dynamic codec");
         }
     }
 
@@ -11146,29 +9547,11 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s1GargoyleFireballGraphClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S1_GARGOYLE_FIREBALL_GRAPH_COVERED_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S1 Gargoyle fireball graph generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s1JunctionChildClassImplementsRewindRecreatable() {
         for (CodecDeletionCandidate candidate : S1_JUNCTION_CHILD_RECREATE_CLASSES) {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S1 junction child coverage");
-        }
-    }
-
-    @Test
-    void s1JunctionChildClassHasNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S1_JUNCTION_CHILD_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S1 junction child generic recreate, not a dynamic codec");
         }
     }
 
@@ -11193,15 +9576,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s1LavaWallGraphClassHasNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S1_LAVA_WALL_GRAPH_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S1 lava wall graph generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s1LavaWallGraphClassRoundTripsWithoutCodec() {
         for (CodecDeletionCandidate candidate : S1_LAVA_WALL_GRAPH_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -11218,15 +9592,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S1 lava geyser graph coverage");
-        }
-    }
-
-    @Test
-    void s1LavaGeyserGraphClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S1_LAVA_GEYSER_GRAPH_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S1 lava geyser graph generic recreate, not a dynamic codec");
         }
     }
 
@@ -11251,15 +9616,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s1RuntimeSpawnRecreateClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S1_RUNTIME_SPAWN_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S1 runtime spawn generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s1ScalarSpawnRecreateClassesImplementRewindRecreatable() {
         for (CodecDeletionCandidate candidate : S1_SCALAR_SPAWN_RECREATE_CLASSES) {
             Class<?> cls = loadClass(candidate.fqn());
@@ -11269,29 +9625,11 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s1ScalarSpawnRecreateClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S1_SCALAR_SPAWN_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S1 scalar spawn generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s1EffectScalarRecreateClassesImplementRewindRecreatable() {
         for (CodecDeletionCandidate candidate : S1_EFFECT_SCALAR_RECREATE_CLASSES) {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S1 effect scalar coverage");
-        }
-    }
-
-    @Test
-    void s1EffectScalarRecreateClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S1_EFFECT_SCALAR_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S1 effect scalar generic recreate, not a dynamic codec");
         }
     }
 
@@ -11316,15 +9654,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s1BossFireScalarRecreateClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S1_BOSS_FIRE_SCALAR_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S1 boss-fire scalar generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s1BossFireScalarRecreateClassesRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S1_BOSS_FIRE_SCALAR_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -11341,15 +9670,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S1 collapsing fragment coverage");
-        }
-    }
-
-    @Test
-    void s1CollapsingFragmentsHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S1_COLLAPSING_FRAGMENT_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S1 collapsing fragment generic recreate, not a dynamic codec");
         }
     }
 
@@ -11395,15 +9715,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s1DestructionFragmentsHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S1_DESTRUCTION_FRAGMENT_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S1 destruction fragment generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s1DestructionFragmentsRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S1_DESTRUCTION_FRAGMENT_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -11420,15 +9731,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S1 chain graph coverage");
-        }
-    }
-
-    @Test
-    void s1SpikedBallChainChildrenHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S1_SPIKED_BALL_CHAIN_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S1 chain graph generic recreate, not a dynamic codec");
         }
     }
 
@@ -11453,15 +9755,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s1FalseFloorFragmentHasNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S1_FALSE_FLOOR_FRAGMENT_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S1 false-floor fragment generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s1FalseFloorFragmentRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S1_FALSE_FLOOR_FRAGMENT_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -11478,15 +9771,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S1 boss controller coverage");
-        }
-    }
-
-    @Test
-    void s1BossControllersHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S1_BOSS_CONTROLLER_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S1 boss controller generic recreate, not a dynamic codec");
         }
     }
 
@@ -11511,29 +9795,11 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s2ScalarNamedRecreateClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S2_SCALAR_NAMED_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S2 scalar named generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s2CnzScalarRecreateClassesImplementRewindRecreatable() {
         for (CodecDeletionCandidate candidate : S2_CNZ_SCALAR_RECREATE_CLASSES) {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S2 CNZ scalar coverage");
-        }
-    }
-
-    @Test
-    void s2CnzScalarRecreateClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S2_CNZ_SCALAR_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S2 CNZ scalar generic recreate, not a dynamic codec");
         }
     }
 
@@ -11575,15 +9841,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s2UtilityScalarRecreateClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S2_UTILITY_SCALAR_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S2 utility scalar generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s2UtilityScalarRecreateClassesRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S2_UTILITY_SCALAR_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -11621,15 +9878,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s2PlatformVisualRecreateClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S2_PLATFORM_VISUAL_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S2 platform/visual generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s2PlatformVisualRecreateClassesRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S2_PLATFORM_VISUAL_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -11646,15 +9894,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S2 mechanism scalar coverage");
-        }
-    }
-
-    @Test
-    void s2MechanismScalarRecreateClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S2_MECHANISM_SCALAR_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S2 mechanism scalar generic recreate, not a dynamic codec");
         }
     }
 
@@ -11696,15 +9935,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s2BoxSolidScalarRecreateClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S2_BOX_SOLID_SCALAR_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S2 box/solid scalar generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s2BoxSolidScalarRecreateClassesRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S2_BOX_SOLID_SCALAR_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -11738,15 +9968,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S2 trigger/motion scalar coverage");
-        }
-    }
-
-    @Test
-    void s2TriggerMotionScalarRecreateClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S2_TRIGGER_MOTION_SCALAR_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S2 trigger/motion scalar generic recreate, not a dynamic codec");
         }
     }
 
@@ -11788,15 +10009,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s2BadnikScalarRecreateClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S2_BADNIK_SCALAR_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S2 badnik scalar generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s2BadnikScalarRecreateClassesRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S2_BADNIK_SCALAR_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -11834,15 +10046,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s2MiscScalarRecreateClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S2_MISC_SCALAR_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S2 misc scalar generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s2MiscScalarRecreateClassesRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S2_MISC_SCALAR_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -11876,15 +10079,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S2 mechanism tail coverage");
-        }
-    }
-
-    @Test
-    void s2MechanismTailRecreateClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S2_MECHANISM_TAIL_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S2 mechanism tail generic recreate, not a dynamic codec");
         }
     }
 
@@ -11927,15 +10121,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s2MechanismFragmentParentRecreateClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S2_MECHANISM_FRAGMENT_PARENT_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S2 mechanism fragment-parent generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s2MechanismFragmentParentRecreateClassesRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S2_MECHANISM_FRAGMENT_PARENT_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -11969,15 +10154,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S2 debris fragment coverage");
-        }
-    }
-
-    @Test
-    void s2DebrisFragmentRecreateClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S2_DEBRIS_FRAGMENT_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S2 debris fragment generic recreate, not a dynamic codec");
         }
     }
 
@@ -12019,15 +10195,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s2InteractionScalarRecreateClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S2_INTERACTION_SCALAR_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S2 interaction scalar generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s2InteractionScalarRecreateClassesRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S2_INTERACTION_SCALAR_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -12061,15 +10228,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S2 MCZ graph coverage");
-        }
-    }
-
-    @Test
-    void s2MczRotPformsGraphRecreateClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S2_MCZ_ROT_PFORMS_GRAPH_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S2 MCZ graph generic recreate, not a dynamic codec");
         }
     }
 
@@ -12111,15 +10269,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s2SidewaysPformGraphRecreateClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S2_SIDEWAYS_PFORM_GRAPH_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S2 Sideways graph generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s2SidewaysPformGraphRecreateClassesRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S2_SIDEWAYS_PFORM_GRAPH_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -12136,15 +10285,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S2 Falling Pillar graph coverage");
-        }
-    }
-
-    @Test
-    void s2FallingPillarGraphRecreateClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S2_FALLING_PILLAR_GRAPH_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S2 Falling Pillar graph generic recreate, not a dynamic codec");
         }
     }
 
@@ -12186,15 +10326,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s2SwingingPlatformGraphRecreateClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S2_SWINGING_PLATFORM_GRAPH_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S2 Swinging Platform graph generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s2SwingingPlatformGraphRecreateClassesRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S2_SWINGING_PLATFORM_GRAPH_RECREATE_ROUND_TRIP_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -12228,15 +10359,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S2 Cog graph coverage");
-        }
-    }
-
-    @Test
-    void s2CogGraphRecreateClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S2_COG_GRAPH_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S2 Cog graph generic recreate, not a dynamic codec");
         }
     }
 
@@ -12278,15 +10400,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s2LauncherGraphRecreateClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S2_LAUNCHER_GRAPH_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S2 launcher graph generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s2LauncherGraphRecreateClassesRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S2_LAUNCHER_GRAPH_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -12307,15 +10420,6 @@ public class TestScalarOnlyCodecDeletion {
     }
 
     @Test
-    void s2FlipperGraphRecreateClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S2_FLIPPER_GRAPH_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S2 flipper graph generic recreate, not a dynamic codec");
-        }
-    }
-
-    @Test
     void s2FlipperGraphRecreateClassesRoundTripPassedWithoutCodec() {
         for (CodecDeletionCandidate candidate : S2_FLIPPER_GRAPH_RECREATE_CLASSES) {
             RoundTripSweepResult result = RewindRoundTripHarness.probeClass(candidate.fqn());
@@ -12332,15 +10436,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S2 spiral graph coverage");
-        }
-    }
-
-    @Test
-    void s2SpiralGraphRecreateClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S2_SPIRAL_GRAPH_RECREATE_CLASSES) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S2 spiral graph generic recreate, not a dynamic codec");
         }
     }
 
@@ -12419,15 +10514,6 @@ public class TestScalarOnlyCodecDeletion {
         }
     }
 
-    @Test
-    void s3kSsEntryFlashGraphClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_SS_ENTRY_FLASH_GRAPH_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K SS-entry flash graph generic recreate, not a dynamic codec");
-        }
-    }
-
     // =====================================================================
     // S3K CNZ2 cutscene button graph support: parent-side spawned-flash link
     // =====================================================================
@@ -12438,15 +10524,6 @@ public class TestScalarOnlyCodecDeletion {
             Class<?> cls = loadClass(candidate.fqn());
             assertTrue(RewindRecreatable.class.isAssignableFrom(cls),
                     candidate.fqn() + " must implement RewindRecreatable after S3K CNZ2 button graph deletion");
-        }
-    }
-
-    @Test
-    void s3kCnz2CutsceneButtonGraphClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_CNZ2_CUTSCENE_BUTTON_GRAPH_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K CNZ2 button graph generic recreate, not a dynamic codec");
         }
     }
 
@@ -12462,29 +10539,6 @@ public class TestScalarOnlyCodecDeletion {
                     candidate.fqn()
                             + " must implement RewindRecreatable after S3K CNZ cork-floor graph deletion");
         }
-    }
-
-    @Test
-    void s3kCnzWaterLevelCorkFloorGraphClassesHaveNoRegisteredCodec() {
-        for (CodecDeletionCandidate candidate : S3K_CNZ_WATER_LEVEL_CORK_FLOOR_GRAPH_DELETED_CODECS) {
-            assertFalse(hasRegisteredDynamicCodec(candidate.fqn(), candidate.gameId()),
-                    candidate.fqn()
-                            + " must restore through S3K CNZ cork-floor graph generic recreate, not a dynamic codec");
-        }
-    }
-
-    /**
-     * Returns true if the given FQN has an explicit game-registry dynamic rewind
-     * codec. Game registries no longer expose dynamic rewind codecs, so this
-     * stays false while the architecture guard prevents the deleted API from
-     * returning.
-     */
-    private static boolean hasRegisteredDynamicCodec(String fqn) {
-        return false;
-    }
-
-    private static boolean hasRegisteredDynamicCodec(String fqn, GameId gameId) {
-        return false;
     }
 
     // Private helpers

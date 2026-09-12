@@ -1,7 +1,6 @@
 package com.openggf.game.sonic3k.objects;
 
 import com.openggf.game.LevelEventProvider;
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.game.rewind.RewindRegistry;
 import com.openggf.game.rewind.snapshot.ObjectManagerSnapshot;
 import com.openggf.game.sonic3k.Sonic3kLevelEventManager;
@@ -72,9 +71,6 @@ class TestRewindFixS3KIczBigSnowPileCodec {
 
     @Test
     void bigSnowPileUsesGenericRecreateWithLiveIczEventsOwner() throws Exception {
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        IczBigSnowPileInstance.class.getName()),
-                "IczBigSnowPileInstance must not keep its hand-written dynamic codec");
         assertTrue(RewindRecreatable.class.isAssignableFrom(IczBigSnowPileInstance.class),
                 "IczBigSnowPileInstance must opt into generic recreate");
 
@@ -92,9 +88,6 @@ class TestRewindFixS3KIczBigSnowPileCodec {
 
     @Test
     void bigSnowPileRestoresThroughObjectManagerWithoutDropsDoublesOrStaleOwner() throws Exception {
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        IczBigSnowPileInstance.class.getName()),
-                "IczBigSnowPileInstance must not keep its hand-written dynamic codec");
 
         IczBigSnowPileInstance captured = objectManager.createDynamicObject(
                 () -> new IczBigSnowPileInstance(snowPileSpawn(), iczEvents));

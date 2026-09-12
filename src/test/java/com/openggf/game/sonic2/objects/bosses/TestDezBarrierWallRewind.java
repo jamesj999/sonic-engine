@@ -2,7 +2,6 @@ package com.openggf.game.sonic2.objects.bosses;
 
 import com.openggf.camera.Camera;
 import com.openggf.game.rewind.CompositeSnapshot;
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.game.rewind.RewindRegistry;
 import com.openggf.game.rewind.identity.ObjectRefId;
 import com.openggf.game.sonic2.constants.Sonic2ObjectIds;
@@ -20,7 +19,6 @@ import java.lang.reflect.Field;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
@@ -111,7 +109,6 @@ class TestDezBarrierWallRewind {
         assertTrueBooleanField(restoredWall, "eggmanRunning",
                 "parent run transition must signal the restored wall, not the removed wall");
 
-        assertNoRegisteredS2DynamicCodec(BARRIER_WALL_CLASS);
     }
 
     private static Sonic2DEZEggmanInstance liveParent(ObjectManager objectManager) {
@@ -156,12 +153,6 @@ class TestDezBarrierWallRewind {
         Field field = target.getClass().getDeclaredField(name);
         field.setAccessible(true);
         assertEquals(true, field.getBoolean(target), message);
-    }
-
-    private static void assertNoRegisteredS2DynamicCodec(String className) {
-        boolean hasCodec = DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(className);
-        assertFalse(hasCodec, className
-                + " must restore through RewindRecreatable generic recreate, not an explicit S2 codec");
     }
 
     private static Camera mockCameraAtOrigin() {

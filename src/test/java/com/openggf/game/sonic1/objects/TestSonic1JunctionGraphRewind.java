@@ -2,7 +2,6 @@ package com.openggf.game.sonic1.objects;
 
 import com.openggf.camera.Camera;
 import com.openggf.game.rewind.CompositeSnapshot;
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.game.rewind.RewindRegistry;
 import com.openggf.game.rewind.identity.ObjectRefId;
 import com.openggf.game.sonic1.Sonic1SwitchManager;
@@ -22,7 +21,6 @@ import java.lang.reflect.Field;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -149,16 +147,6 @@ class TestSonic1JunctionGraphRewind {
                 () -> registryFor(objectManager).capture(),
                 "required junction child backrefs must fail loudly when the target has no rewind identity");
         assertTrue(thrown.getMessage().contains("no registered id for object reference"));
-    }
-
-    @Test
-    void junctionParentAndDisplayChildUseGenericRecreateWithoutExplicitDynamicCodecs() {
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        Sonic1JunctionObjectInstance.class.getName()),
-                "junction parent must restore through generic recreate, not a dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        Sonic1JunctionObjectInstance.Sonic1JunctionChildInstance.class.getName()),
-                "junction display child must restore through generic recreate, not a dynamic codec");
     }
 
     private record Harness(ObjectManager objectManager) {

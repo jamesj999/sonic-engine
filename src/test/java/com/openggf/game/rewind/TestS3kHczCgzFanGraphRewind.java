@@ -22,7 +22,6 @@ import java.lang.reflect.Field;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -128,13 +127,6 @@ class TestS3kHczCgzFanGraphRewind {
                 "HCZ/CGZ fan platform must restore through generic graph recreate");
         assertTrue(RewindRecreatable.class.isAssignableFrom(Class.forName(BUBBLE_CLASS)),
                 "HCZ/CGZ fan bubble must restore through generic recreate");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        HCZCGZFanObjectInstance.class.getName()),
-                "HCZ/CGZ fan must not keep an explicit S3K dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(PLATFORM_CLASS),
-                "HCZ/CGZ fan platform must not keep an explicit S3K dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(BUBBLE_CLASS),
-                "HCZ/CGZ fan bubble must not keep an explicit S3K dynamic codec");
     }
 
     private record Harness(ObjectManager objectManager, ObjectServices services) {

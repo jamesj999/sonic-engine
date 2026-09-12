@@ -7,7 +7,6 @@ import com.openggf.tests.TestEnvironment;
 import com.openggf.game.session.EngineContext;
 import com.openggf.game.GameModuleRegistry;
 import com.openggf.game.GameServices;
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.game.rewind.RewindRegistry;
 import com.openggf.game.sonic3k.Sonic3kGameModule;
 import com.openggf.game.sonic3k.Sonic3kLevelEventManager;
@@ -248,10 +247,6 @@ class TestSonic3kMgz2CollapseEvents {
         RewindIdentityTable restoredTable = objectManager.captureIdentityContext().requireIdentityTable();
         assertTrue(restoredSolids.stream().anyMatch(solid -> firstCapturedId.equals(restoredTable.idFor(solid))),
                 "restored collapse solids should retain their captured dynamic rewind identities");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        Mgz2LevelCollapseSolidInstance.class.getName()),
-                "Mgz2LevelCollapseSolidInstance must restore through RewindRecreatable genericRecreate, "
-                        + "not a handwritten S3K dynamic codec");
     }
 
     @Test

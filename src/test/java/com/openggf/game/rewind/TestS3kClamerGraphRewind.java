@@ -120,11 +120,6 @@ class TestS3kClamerGraphRewind {
                 "Clamer must restore through generic recreate");
         assertTrue(RewindRecreatable.class.isAssignableFrom(Class.forName(SPRING_CLASS)),
                 "Clamer spring must restore through generic graph recreate");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        ClamerObjectInstance.class.getName()),
-                "Clamer must not keep an explicit S3K dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(SPRING_CLASS),
-                "Clamer spring must not keep an explicit S3K dynamic codec");
     }
 
     @Test

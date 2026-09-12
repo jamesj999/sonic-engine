@@ -177,14 +177,6 @@ class TestS3kIczFreezerGraphRewind {
                 "ICZ capture cloud must restore through RewindRecreatable");
         assertTrue(RewindRecreatable.class.isAssignableFrom(IczFreezerObjectInstance.FrozenPlayerBlock.class),
                 "ICZ frozen-player block must restore through RewindRecreatable");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(IczFreezerObjectInstance.class.getName()),
-                "ICZ freezer must not keep an explicit dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        IczFreezerObjectInstance.CaptureCloud.class.getName()),
-                "ICZ capture cloud must not keep an explicit dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        IczFreezerObjectInstance.FrozenPlayerBlock.class.getName()),
-                "ICZ frozen-player block must not keep an explicit dynamic codec");
     }
 
     @Test

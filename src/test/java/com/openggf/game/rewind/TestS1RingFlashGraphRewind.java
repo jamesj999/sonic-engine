@@ -27,7 +27,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -111,9 +110,6 @@ class TestS1RingFlashGraphRewind {
         assertTrue(RewindRecreatable.class.isAssignableFrom(Sonic1RingFlashObjectInstance.class),
                 "S1 ring flash must restore through RewindRecreatable generic recreate");
 
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        Sonic1RingFlashObjectInstance.class.getName()),
-                "S1 ring flash must not keep an explicit S1 dynamic rewind codec");
     }
 
     private static RewindRegistry registryFor(ObjectManager objectManager) {

@@ -202,8 +202,6 @@ class TestS1GrassFireGraphRewind {
                 "Grass Fire compact capture must stay supported so required parent/list refs are captured");
         assertTrue(RewindRecreatable.class.isAssignableFrom(Sonic1GrassFireObjectInstance.class),
                 "Grass Fire must restore through RewindRecreatable generic recreate");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(Sonic1GrassFireObjectInstance.class.getName()),
-                "Grass Fire must not keep an explicit S1 dynamic rewind codec");
     }
 
     private static FireGraph createCapturedFireGraph(

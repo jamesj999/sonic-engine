@@ -49,8 +49,6 @@ class TestS3kMgzMechanismGraphRewind {
                 PachinkoItemOrbObjectInstance.class)) {
             assertTrue(RewindRecreatable.class.isAssignableFrom(type),
                     type.getSimpleName() + " must restore through RewindRecreatable");
-            assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(type.getName()),
-                    type.getSimpleName() + " must not rely on an explicit dynamic rewind codec");
         }
     }
 

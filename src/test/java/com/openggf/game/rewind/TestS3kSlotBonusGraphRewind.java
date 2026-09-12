@@ -31,7 +31,6 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -286,8 +285,6 @@ class TestS3kSlotBonusGraphRewind {
     private static void assertRewindRecreatableWithoutCodec(Class<? extends AbstractObjectInstance> type) {
         assertTrue(RewindRecreatable.class.isAssignableFrom(type),
                 type.getSimpleName() + " must use RewindRecreatable generic recreate");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(type.getName()),
-                type.getSimpleName() + " must not keep an explicit S3K dynamic rewind codec");
     }
 
     private static ObjectInstance genericRecreate(

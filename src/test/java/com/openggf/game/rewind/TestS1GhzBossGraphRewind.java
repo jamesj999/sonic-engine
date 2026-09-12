@@ -186,8 +186,6 @@ class TestS1GhzBossGraphRewind {
         assertTrue(RewindRecreatable.class.isAssignableFrom(GHZBossWreckingBall.class),
                 "GHZ wrecking ball must restore through RewindRecreatable");
 
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(GHZBossWreckingBall.class.getName()),
-                "GHZ wrecking ball must not keep an explicit S1 dynamic rewind codec");
     }
 
     @Test
@@ -195,8 +193,6 @@ class TestS1GhzBossGraphRewind {
         assertTrue(RewindRecreatable.class.isAssignableFrom(Sonic1GHZBossInstance.class),
                 "Sonic1GHZBossInstance must restore through RewindRecreatable graph recreate");
 
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(Sonic1GHZBossInstance.class.getName()),
-                "Sonic1GHZBossInstance must not keep an explicit S1 dynamic rewind codec");
     }
 
     private static void spawnWreckingBallThroughBossUpdate(

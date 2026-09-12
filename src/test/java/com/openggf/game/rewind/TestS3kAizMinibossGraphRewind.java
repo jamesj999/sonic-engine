@@ -35,7 +35,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -93,9 +92,6 @@ class TestS3kAizMinibossGraphRewind {
     void aizMinibossParentUsesGenericRecreateWithoutExplicitDynamicCodec() {
         assertTrue(RewindRecreatable.class.isAssignableFrom(AizMinibossInstance.class),
                 "AizMinibossInstance must restore through RewindRecreatable graph recreate");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        AizMinibossInstance.class.getName()),
-                "AizMinibossInstance must not keep an explicit S3K dynamic rewind codec");
     }
 
     @Test

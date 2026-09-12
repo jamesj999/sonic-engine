@@ -37,7 +37,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -93,9 +92,6 @@ class TestS2CpzBossGraphRewind {
     void cpzBossParentUsesGenericRecreateWithoutExplicitS2Codec() {
         assertTrue(RewindRecreatable.class.isAssignableFrom(Sonic2CPZBossInstance.class),
                 "Sonic2CPZBossInstance must restore through RewindRecreatable graph recreate");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        Sonic2CPZBossInstance.class.getName()),
-                "Sonic2CPZBossInstance must not keep an explicit S2 dynamic codec");
     }
 
     @Test

@@ -2,7 +2,6 @@ package com.openggf.game.sonic2.objects;
 
 import com.openggf.camera.Camera;
 import com.openggf.game.rewind.CompositeSnapshot;
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.game.rewind.RewindRegistry;
 import com.openggf.game.rewind.identity.ObjectRefId;
 import com.openggf.game.sonic2.constants.Sonic2ObjectIds;
@@ -115,9 +114,6 @@ class TestS2FallingPillarGraphRewind {
     void fallingPillarUsesRewindRecreatableWithoutExplicitDynamicCodec() {
         assertTrue(RewindRecreatable.class.isAssignableFrom(FallingPillarObjectInstance.class),
                 "Falling Pillar must restore through RewindRecreatable");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        FallingPillarObjectInstance.class.getName()),
-                "Falling Pillar must not use an explicit S2 dynamic codec");
     }
 
     private record Harness(ObjectManager objectManager) {

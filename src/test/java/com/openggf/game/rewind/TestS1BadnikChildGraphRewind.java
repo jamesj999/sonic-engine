@@ -33,7 +33,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -128,14 +127,6 @@ class TestS1BadnikChildGraphRewind {
         assertTrue(RewindRecreatable.class.isAssignableFrom(Sonic1CaterkillerBodyInstance.class));
         assertTrue(RewindRecreatable.class.isAssignableFrom(Class.forName(ORB_SPIKE_CLASS)));
 
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        Sonic1BombFuseInstance.class.getName()),
-                "Bomb fuse must not keep an explicit S1 dynamic rewind codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        Sonic1CaterkillerBodyInstance.class.getName()),
-                "Caterkiller body must not keep an explicit S1 dynamic rewind codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(ORB_SPIKE_CLASS),
-                "Orbinaut spike must not keep an explicit S1 dynamic rewind codec");
     }
 
     @Test
@@ -143,12 +134,6 @@ class TestS1BadnikChildGraphRewind {
         assertTrue(RewindRecreatable.class.isAssignableFrom(Sonic1CaterkillerBadnikInstance.class));
         assertTrue(RewindRecreatable.class.isAssignableFrom(Sonic1OrbinautBadnikInstance.class));
 
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        Sonic1CaterkillerBadnikInstance.class.getName()),
-                "Caterkiller parent must not keep an explicit S1 dynamic rewind codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        Sonic1OrbinautBadnikInstance.class.getName()),
-                "Orbinaut parent must not keep an explicit S1 dynamic rewind codec");
     }
 
     private static ObjectInstance genericRecreate(

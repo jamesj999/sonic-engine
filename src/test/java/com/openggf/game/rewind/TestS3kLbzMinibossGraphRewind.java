@@ -21,7 +21,6 @@ import java.util.Comparator;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -106,8 +105,6 @@ class TestS3kLbzMinibossGraphRewind {
     void lbzMinibossUsesGenericRecreateWithoutExplicitS3kCodec() {
         assertTrue(RewindRecreatable.class.isAssignableFrom(LbzMinibossInstance.class),
                 "LBZ miniboss must restore through RewindRecreatable generic recreate");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(LbzMinibossInstance.class.getName()),
-                "LBZ miniboss must not keep an explicit S3K dynamic codec");
     }
 
     @Test

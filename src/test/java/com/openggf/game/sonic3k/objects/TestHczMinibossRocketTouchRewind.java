@@ -2,7 +2,6 @@ package com.openggf.game.sonic3k.objects;
 
 import com.openggf.game.GameServices;
 import com.openggf.game.rewind.CompositeSnapshot;
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.game.rewind.RewindRegistry;
 import com.openggf.game.sonic3k.constants.Sonic3kObjectIds;
 import com.openggf.game.sonic3k.constants.Sonic3kZoneIds;
@@ -112,8 +111,6 @@ class TestHczMinibossRocketTouchRewind {
                     "restore must recreate the removed child instance rather than retaining a stale reference");
         }
         assertParentSlots(restoredParent, restoredChildren);
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(ROCKET_TOUCH_CLASS),
-                "RocketTouchChild must be restored by generic recreate, not by an explicit S3K codec");
     }
 
     private static HczMinibossInstance installPlacedHczMinibossParent(ObjectManager objectManager) throws Exception {

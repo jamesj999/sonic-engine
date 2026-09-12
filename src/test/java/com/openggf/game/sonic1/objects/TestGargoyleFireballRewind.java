@@ -2,7 +2,6 @@ package com.openggf.game.sonic1.objects;
 
 import com.openggf.camera.Camera;
 import com.openggf.game.rewind.CompositeSnapshot;
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.game.rewind.RewindRegistry;
 import com.openggf.game.rewind.identity.ObjectRefId;
 import com.openggf.graphics.GraphicsManager;
@@ -18,7 +17,6 @@ import java.lang.reflect.Field;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -84,9 +82,6 @@ class TestGargoyleFireballRewind {
 
         assertTrue(RewindRecreatable.class.isAssignableFrom(Sonic1GargoyleObjectInstance.Fireball.class),
                 "gargoyle fireballs must opt into ObjectManager generic dynamic recreate");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        Sonic1GargoyleObjectInstance.Fireball.class.getName()),
-                "gargoyle fireballs must restore through generic recreate, not an explicit dynamic codec");
     }
 
     private static ObjectManager objectManager() {

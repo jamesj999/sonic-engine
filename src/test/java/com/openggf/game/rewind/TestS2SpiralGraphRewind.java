@@ -46,8 +46,6 @@ class TestS2SpiralGraphRewind {
     void spiralUsesRewindRecreatableWithoutExplicitDynamicCodec() {
         assertTrue(RewindRecreatable.class.isAssignableFrom(SpiralObjectInstance.class),
                 "Spiral must restore through RewindRecreatable");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(SpiralObjectInstance.class.getName()),
-                "Spiral must not rely on an explicit dynamic rewind codec");
     }
 
     @Test

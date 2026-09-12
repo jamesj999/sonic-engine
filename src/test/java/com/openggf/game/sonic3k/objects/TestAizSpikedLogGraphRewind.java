@@ -2,7 +2,6 @@ package com.openggf.game.sonic3k.objects;
 
 import com.openggf.camera.Camera;
 import com.openggf.game.rewind.CompositeSnapshot;
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.game.rewind.RewindRegistry;
 import com.openggf.game.rewind.identity.ObjectRefId;
 import com.openggf.game.rewind.identity.RewindIdentityTable;
@@ -25,7 +24,6 @@ import java.util.Comparator;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -147,18 +145,12 @@ class TestAizSpikedLogGraphRewind {
         assertTrue(RewindRecreatable.class.isAssignableFrom(
                         AizSpikedLogObjectInstance.SpikedLogCollisionChild.class),
                 "SpikedLogCollisionChild must restore through RewindRecreatable generic recreate");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        AizSpikedLogObjectInstance.SpikedLogCollisionChild.class.getName()),
-                "SpikedLogCollisionChild must restore through graph-tested generic recreate, not a codec");
     }
 
     @Test
     void spikedLogParentUsesGenericRecreateWithoutExplicitDynamicCodec() {
         assertTrue(RewindRecreatable.class.isAssignableFrom(AizSpikedLogObjectInstance.class),
                 "AizSpikedLogObjectInstance must restore through RewindRecreatable graph recreate");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        AizSpikedLogObjectInstance.class.getName()),
-                "AizSpikedLogObjectInstance must not keep an explicit S3K dynamic rewind codec");
     }
 
     @Test

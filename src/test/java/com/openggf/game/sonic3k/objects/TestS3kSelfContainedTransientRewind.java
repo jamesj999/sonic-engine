@@ -5,7 +5,6 @@ import com.openggf.game.PlayerCharacter;
 import com.openggf.game.PowerUpObject;
 import com.openggf.game.ShieldType;
 import com.openggf.game.rewind.CompositeSnapshot;
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.game.rewind.RewindRegistry;
 import com.openggf.game.sonic3k.Sonic3kObjectArtKeys;
 import com.openggf.game.sonic3k.objects.bosses.HczEndBossEggCapsuleInstance;
@@ -75,42 +74,6 @@ class TestS3kSelfContainedTransientRewind {
     @AfterEach
     void cleanup() {
         TestEnvironment.resetAll();
-    }
-
-    @Test
-    void phase2BatchCandidatesHaveNoExplicitDynamicCodec() {
-        assertNoRegisteredS3kDynamicCodec(S3kSignpostSparkleChild.class);
-        assertNoRegisteredS3kDynamicCodec(S3kAirCountdownObjectInstance.class);
-        assertNoRegisteredS3kDynamicCodec(CaterkillerJrBodyInstance.class);
-        assertNoRegisteredS3kDynamicCodec(AizBgTreeInstance.class);
-        assertNoRegisteredS3kDynamicCodec(Aiz2BossEndSequenceController.class);
-        assertNoRegisteredS3kDynamicCodec(CutsceneKnucklesLbz1ThrownBomb.class);
-        assertNoRegisteredS3kDynamicCodec(S3kBadnikProjectileInstance.class);
-        assertNoRegisteredS3kDynamicCodec(MhzShipSequenceControllerInstance.class);
-        assertNoRegisteredS3kDynamicCodec(S3kBossDefeatSignpostFlow.class);
-        assertNoRegisteredS3kDynamicCodec(Aiz2EndEggCapsuleInstance.class);
-        assertNoRegisteredS3kDynamicCodec(HczEndBossEggCapsuleInstance.class);
-        assertNoRegisteredS3kDynamicCodec(IczEndBossEggCapsuleInstance.class);
-        assertNoRegisteredS3kDynamicCodec(MhzEndBossEggCapsuleInstance.class);
-        assertNoRegisteredS3kDynamicCodec(Mgz2EndEggCapsuleInstance.class);
-        assertNoRegisteredS3kDynamicCodec(S3kSignpostInstance.class);
-        assertNoRegisteredS3kDynamicCodec(HczEndBossGeyserCutscene.class);
-        assertNoRegisteredS3kDynamicCodec(Mgz2CapsuleAnimalInstance.class);
-        assertNoRegisteredS3kDynamicCodec(Mgz2ResultsScreenObjectInstance.class);
-        assertNoRegisteredS3kDynamicCodec(AizHollowTreeObjectInstance.AizTreeRevealControlObjectInstance.class);
-        assertNoRegisteredS3kDynamicCodec(classForName(MGZ_HEAD_TRIGGER_STONE_CHIP_CLASS));
-        assertNoRegisteredS3kDynamicCodec(classForName(MGZ_CEILING_SPIRE_CLASS));
-        assertNoRegisteredS3kDynamicCodec(classForName(BLASTOID_PROJECTILE_CLASS));
-        assertNoRegisteredS3kDynamicCodec(classForName(SNALE_BLASTER_PROJECTILE_CLASS));
-        assertNoRegisteredS3kDynamicCodec(classForName(SPIKER_SPIKE_PROJECTILE_CLASS));
-        assertNoRegisteredS3kDynamicCodec(classForName(ICZ_END_BOSS_ESCAPE_SHIP_CLASS));
-        assertNoRegisteredS3kDynamicCodec(FireShieldObjectInstance.class);
-        assertNoRegisteredS3kDynamicCodec(LightningShieldObjectInstance.class);
-        assertNoRegisteredS3kDynamicCodec(BubbleShieldObjectInstance.class);
-        assertNoRegisteredS3kDynamicCodec(InstaShieldObjectInstance.class);
-        assertNoRegisteredS3kDynamicCodec(Sonic3kInvincibilityStarsObjectInstance.class);
-        assertNoRegisteredS3kDynamicCodec(classForName(AIZ2_HIGH_PRIORITY_ANIMAL_CLASS));
-        assertNoRegisteredS3kDynamicCodec(classForName(AIZ2_RESULTS_SCREEN_CLASS));
     }
 
     @Test
@@ -814,12 +777,6 @@ class TestS3kSelfContainedTransientRewind {
         assertSimpleStateRoundTrip(objectManager, classForName(BLASTOID_PROJECTILE_CLASS), capturedState);
         assertSimpleStateRoundTrip(objectManager, classForName(SNALE_BLASTER_PROJECTILE_CLASS), capturedState);
         assertSimpleStateRoundTrip(objectManager, classForName(SPIKER_SPIKE_PROJECTILE_CLASS), capturedState);
-    }
-
-    private static void assertNoRegisteredS3kDynamicCodec(Class<?> type) {
-        boolean hasCodec = DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(type.getName());
-        assertFalse(hasCodec, type.getSimpleName()
-                + " must restore through RewindRecreatable generic recreate, not an explicit S3K dynamic codec");
     }
 
     private static <T extends AbstractObjectInstance> void assertSimpleStateRoundTrip(

@@ -2,7 +2,6 @@ package com.openggf.game.sonic2.objects;
 
 import com.openggf.camera.Camera;
 import com.openggf.game.rewind.CompositeSnapshot;
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.game.rewind.RewindRegistry;
 import com.openggf.game.rewind.identity.ObjectRefId;
 import com.openggf.game.sonic2.constants.Sonic2ObjectIds;
@@ -22,7 +21,6 @@ import java.lang.reflect.Field;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -126,11 +124,6 @@ class TestS2SwingingPlatformGraphRewind {
                 "Swinging Platform must restore through RewindRecreatable");
         assertTrue(RewindRecreatable.class.isAssignableFrom(childClass),
                 "Swinging Platform display child must restore through RewindRecreatable");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        SwingingPlatformObjectInstance.class.getName()),
-                "Swinging Platform must not use an explicit S2 dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(DISPLAY_CHILD_CLASS),
-                "Swinging Platform display child must not use an explicit S2 dynamic codec");
     }
 
     private record Harness(ObjectManager objectManager) {

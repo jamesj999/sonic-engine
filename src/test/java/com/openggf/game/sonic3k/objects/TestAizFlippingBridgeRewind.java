@@ -2,7 +2,6 @@ package com.openggf.game.sonic3k.objects;
 
 import com.openggf.camera.Camera;
 import com.openggf.game.rewind.CompositeSnapshot;
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.game.rewind.RewindRegistry;
 import com.openggf.game.rewind.identity.ObjectRefId;
 import com.openggf.game.rewind.identity.RewindIdentityTable;
@@ -104,9 +103,6 @@ class TestAizFlippingBridgeRewind {
     void flippingBridgeUsesRewindRecreatableWithoutExplicitCodec() {
         assertTrue(RewindRecreatable.class.isAssignableFrom(AizFlippingBridgeObjectInstance.class),
                 "AizFlippingBridgeObjectInstance must restore through generic recreate");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        AizFlippingBridgeObjectInstance.class.getName()),
-                "AizFlippingBridgeObjectInstance must not keep an explicit S3K dynamic codec");
     }
 
     @Test

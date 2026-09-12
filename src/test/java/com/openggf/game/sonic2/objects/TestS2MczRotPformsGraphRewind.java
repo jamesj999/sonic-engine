@@ -2,7 +2,6 @@ package com.openggf.game.sonic2.objects;
 
 import com.openggf.camera.Camera;
 import com.openggf.game.rewind.CompositeSnapshot;
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.game.rewind.RewindRegistry;
 import com.openggf.game.rewind.identity.ObjectRefId;
 import com.openggf.game.sonic2.constants.Sonic2ObjectIds;
@@ -222,9 +221,6 @@ class TestS2MczRotPformsGraphRewind {
     void mczRotPformsUsesRewindRecreatableWithoutExplicitDynamicCodec() {
         assertTrue(RewindRecreatable.class.isAssignableFrom(MCZRotPformsObjectInstance.class),
                 "MCZ rotating platforms must restore through RewindRecreatable");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        MCZRotPformsObjectInstance.class.getName()),
-                "MCZ rotating platforms must not use an explicit S2 dynamic codec");
     }
 
     private record Harness(ObjectManager objectManager) {

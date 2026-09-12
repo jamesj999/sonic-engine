@@ -2,7 +2,6 @@ package com.openggf.game.sonic2.objects;
 
 import com.openggf.game.GameServices;
 import com.openggf.game.rewind.CompositeSnapshot;
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.game.rewind.RewindRegistry;
 import com.openggf.game.sonic2.constants.Sonic2ObjectIds;
 import com.openggf.game.sonic2.audio.Sonic2Sfx;
@@ -52,30 +51,6 @@ class TestS2SelfContainedTransientRewind {
     @AfterEach
     void cleanup() {
         TestEnvironment.resetAll();
-    }
-
-    @Test
-    void phase2BatchCandidatesHaveNoExplicitDynamicCodec() {
-        assertNoRegisteredS2DynamicCodec(HtzFireProjectileObjectInstance.class);
-        assertNoRegisteredS2DynamicCodec(ArrowProjectileInstance.class);
-        assertNoRegisteredS2DynamicCodec(SteamPuffObjectInstance.class);
-        assertNoRegisteredS2DynamicCodec(LeafParticleObjectInstance.class);
-        assertNoRegisteredS2DynamicCodec(SpikerDrillObjectInstance.class);
-        assertNoRegisteredS2DynamicCodec(WallTurretShotInstance.class);
-        assertNoRegisteredS2DynamicCodec(VerticalLaserObjectInstance.class);
-        assertNoRegisteredS2DynamicCodec(LavaBubbleObjectInstance.class);
-        assertNoRegisteredS2DynamicCodec(MCZFallingDebrisInstance.class);
-        assertNoRegisteredS2DynamicCodec(BubbleObjectInstance.class);
-        assertNoRegisteredS2DynamicCodec(DestroyedEggPrisonObjectInstance.class);
-        assertNoRegisteredS2DynamicCodec(BossExplosionObjectInstance.class);
-        assertNoRegisteredS2DynamicCodec(BadnikProjectileInstance.class);
-        assertNoRegisteredS2DynamicCodec(CPZBossFallingPart.class);
-        assertNoRegisteredS2DynamicCodec(SpikyBlockSpikeInstance.class);
-        assertNoRegisteredS2DynamicCodec(MonitorContentsObjectInstance.class);
-        assertNoRegisteredS2DynamicCodec(BombPrizeObjectInstance.class);
-        assertNoRegisteredS2DynamicCodec(ResultsScreenObjectInstance.class);
-        assertNoRegisteredS2DynamicCodec(RingPrizeObjectInstance.class);
-        assertNoRegisteredS2DynamicCodec(Sonic2MTZBossInstance.MTZBossLaser.class);
     }
 
     @Test
@@ -416,12 +391,6 @@ class TestS2SelfContainedTransientRewind {
         assertSimpleStateRoundTrip(objectManager, ResultsScreenObjectInstance.class, capturedState);
         assertSimpleStateRoundTrip(objectManager, RingPrizeObjectInstance.class, capturedState);
         assertSimpleStateRoundTrip(objectManager, Sonic2MTZBossInstance.MTZBossLaser.class, capturedState);
-    }
-
-    private static void assertNoRegisteredS2DynamicCodec(Class<?> type) {
-        boolean hasCodec = DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(type.getName());
-        assertFalse(hasCodec, type.getSimpleName()
-                + " must restore through RewindRecreatable generic recreate, not an explicit S2 dynamic codec");
     }
 
     private static <T extends AbstractObjectInstance> void assertSimpleStateRoundTrip(

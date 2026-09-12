@@ -1,7 +1,6 @@
 package com.openggf.game.rewind;
 
 import com.openggf.camera.Camera;
-import com.openggf.game.PlayableEntity;
 import com.openggf.game.rewind.identity.ObjectRefId;
 import com.openggf.level.objects.BreathingBubbleInstance;
 import com.openggf.level.objects.ObjectArtKeys;
@@ -49,8 +48,6 @@ class TestSharedWaterEffectGraphRewind {
         for (Class<?> type : List.of(BreathingBubbleInstance.class, SplashObjectInstance.class)) {
             assertTrue(RewindRecreatable.class.isAssignableFrom(type),
                     type.getSimpleName() + " must restore through RewindRecreatable");
-            assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(type.getName()),
-                    type.getSimpleName() + " must not rely on an explicit dynamic rewind codec");
         }
     }
 

@@ -22,7 +22,6 @@ import java.lang.reflect.Field;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -108,11 +107,6 @@ class TestS3kMgzPulleyGraphRewind {
                 "MGZ pulley must restore through generic recreate");
         assertTrue(RewindRecreatable.class.isAssignableFrom(Class.forName(CHAIN_CLASS)),
                 "MGZ pulley chain must restore through generic graph recreate");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        MGZPulleyObjectInstance.class.getName()),
-                "MGZ pulley must not keep an explicit S3K dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(CHAIN_CLASS),
-                "MGZ pulley chain must not keep an explicit S3K dynamic codec");
     }
 
     private record Harness(ObjectManager objectManager, ObjectServices services) {

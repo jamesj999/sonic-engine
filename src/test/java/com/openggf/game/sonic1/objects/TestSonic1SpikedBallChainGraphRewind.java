@@ -2,7 +2,6 @@ package com.openggf.game.sonic1.objects;
 
 import com.openggf.camera.Camera;
 import com.openggf.game.rewind.CompositeSnapshot;
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.game.rewind.RewindRegistry;
 import com.openggf.game.rewind.identity.ObjectRefId;
 import com.openggf.game.sonic1.constants.Sonic1ObjectIds;
@@ -24,8 +23,6 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -98,8 +95,6 @@ class TestSonic1SpikedBallChainGraphRewind {
         Class<?> childClass = loadClass(CHAIN_CHILD_FQN);
         assertTrue(RewindRecreatable.class.isAssignableFrom(childClass),
                 "chain children must restore through RewindRecreatable generic recreate");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(CHAIN_CHILD_FQN),
-                "chain children must not use an explicit dynamic rewind codec");
     }
 
     private record Harness(ObjectManager objectManager) {

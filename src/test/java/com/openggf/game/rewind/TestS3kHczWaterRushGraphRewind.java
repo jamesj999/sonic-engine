@@ -22,7 +22,6 @@ import java.lang.reflect.Field;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -112,11 +111,6 @@ class TestS3kHczWaterRushGraphRewind {
                 "HCZ water-rush block must restore through generic graph recreate");
         assertTrue(HCZWaterRushObjectInstance.class.isAnnotationPresent(RewindRecreateOnRestore.class),
                 "HCZ water rush constructor mutates global state and must stay recreate-pinned");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        HCZWaterRushObjectInstance.class.getName()),
-                "HCZ water rush must not keep an explicit S3K dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(BLOCK_CLASS),
-                "HCZ water-rush block must not keep an explicit S3K dynamic codec");
     }
 
     private record Harness(ObjectManager objectManager, ObjectServices services) {

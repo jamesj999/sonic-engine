@@ -29,7 +29,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -210,9 +209,6 @@ class TestS1SlzBossSpikeballGraphRewind {
         assertTrue(RewindRecreatable.class.isAssignableFrom(Sonic1SLZBossSpikeball.class),
                 "SLZ boss spikeball must restore through RewindRecreatable graph recreate");
 
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        Sonic1SLZBossSpikeball.class.getName()),
-                "SLZ boss spikeball must not keep an explicit S1 dynamic rewind codec");
     }
 
     @Test
@@ -220,9 +216,6 @@ class TestS1SlzBossSpikeballGraphRewind {
         assertTrue(RewindRecreatable.class.isAssignableFrom(Sonic1SLZBossInstance.class),
                 "Sonic1SLZBossInstance must restore through RewindRecreatable graph recreate");
 
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        Sonic1SLZBossInstance.class.getName()),
-                "Sonic1SLZBossInstance must not keep an explicit S1 dynamic rewind codec");
     }
 
     private static PerObjectRewindSnapshot capturedNonFragmentState() {

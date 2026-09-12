@@ -2,7 +2,6 @@ package com.openggf.game.sonic2.objects.bosses;
 
 import com.openggf.camera.Camera;
 import com.openggf.game.rewind.CompositeSnapshot;
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.game.rewind.RewindRegistry;
 import com.openggf.game.rewind.identity.ObjectRefId;
 import com.openggf.game.sonic2.objects.Sonic2ObjectRegistry;
@@ -19,7 +18,6 @@ import java.lang.reflect.Field;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -94,8 +92,6 @@ class TestDezExhaustPuffRewind {
 
         assertTrue(RewindRecreatable.class.isAssignableFrom(Sonic2DEZEggmanInstance.ExhaustPuff.class),
                 "DEZ exhaust puffs must opt into ObjectManager generic dynamic recreate");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(EXHAUST_PUFF_CLASS),
-                "DEZ exhaust puffs must restore through generic recreate, not an explicit dynamic codec");
     }
 
     private static ObjectManager objectManager() {

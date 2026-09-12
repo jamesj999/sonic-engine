@@ -22,7 +22,6 @@ import java.lang.reflect.Field;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -112,13 +111,6 @@ class TestS3kLbzCupElevatorGraphRewind {
                 "LBZ cup attach child must restore through generic graph recreate");
         assertTrue(RewindRecreatable.class.isAssignableFrom(Class.forName(BASE_CLASS)),
                 "LBZ cup base child must restore through generic graph recreate");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        LbzCupElevatorInstance.class.getName()),
-                "LBZ cup elevator must not keep an explicit S3K dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(ATTACH_CLASS),
-                "LBZ cup attach child must not keep an explicit S3K dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(BASE_CLASS),
-                "LBZ cup base child must not keep an explicit S3K dynamic codec");
     }
 
     private record Harness(ObjectManager objectManager, ObjectServices services) {

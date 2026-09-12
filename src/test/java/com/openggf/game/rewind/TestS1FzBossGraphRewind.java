@@ -27,14 +27,11 @@ import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
-import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -183,12 +180,6 @@ class TestS1FzBossGraphRewind {
         assertTrue(RewindRecreatable.class.isAssignableFrom(FZPlasmaBall.class),
                 "FZPlasmaBall must restore through RewindRecreatable");
 
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(FZCylinder.class.getName()),
-                "FZCylinder must not keep an explicit S1 dynamic rewind codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(FZPlasmaLauncher.class.getName()),
-                "FZPlasmaLauncher must not keep an explicit S1 dynamic rewind codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(FZPlasmaBall.class.getName()),
-                "FZPlasmaBall must not keep an explicit S1 dynamic rewind codec");
     }
 
     @Test
@@ -196,8 +187,6 @@ class TestS1FzBossGraphRewind {
         assertTrue(RewindRecreatable.class.isAssignableFrom(Sonic1FZBossInstance.class),
                 "Sonic1FZBossInstance must restore through RewindRecreatable graph recreate");
 
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(Sonic1FZBossInstance.class.getName()),
-                "Sonic1FZBossInstance must not keep an explicit S1 dynamic rewind codec");
     }
 
     private static ObjectInstance genericRecreate(

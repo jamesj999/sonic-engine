@@ -1,12 +1,10 @@
 package com.openggf.game.sonic3k.objects;
 
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.level.objects.RewindRecreatable;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -39,8 +37,6 @@ class TestRewindFixS3KInnerBatch1Codecs {
     void fallingLogChildHasDynamicRecreatePathWithoutExplicitCodec() {
         assertTrue(dynamicRecreatePathExists(FALLING_LOG_CHILD),
                 "FallingLogChild must keep a dynamic recreate path after codec deletion");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(FALLING_LOG_CHILD),
-                "FallingLogChild must no longer be registered as an explicit dynamic codec");
     }
 
     private static boolean dynamicRecreatePathExists(String className) {

@@ -21,7 +21,6 @@ import java.lang.reflect.Method;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -105,8 +104,6 @@ class TestS2TornadoGraphRewind {
     void tornadoGraphUsesRewindRecreatableWithoutExplicitDynamicCodec() {
         assertTrue(RewindRecreatable.class.isAssignableFrom(TornadoObjectInstance.class),
                 "Tornado parent and child subtypes must restore through RewindRecreatable");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(TornadoObjectInstance.class.getName()),
-                "Tornado must not rely on an explicit dynamic rewind codec");
     }
 
     @Test

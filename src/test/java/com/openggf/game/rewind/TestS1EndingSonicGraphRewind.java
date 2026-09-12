@@ -201,9 +201,6 @@ class TestS1EndingSonicGraphRewind {
     void endingSonicUsesRewindRecreatableWithoutExplicitS1DynamicCodec() {
         assertTrue(RewindRecreatable.class.isAssignableFrom(Sonic1EndingSonicObjectInstance.class),
                 "Ending Sonic must restore through RewindRecreatable generic recreate");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        Sonic1EndingSonicObjectInstance.class.getName()),
-                "Ending Sonic must not keep an explicit S1 dynamic rewind codec");
 
         ObjectInstance recreated = ObjectRewindDynamicCodecs.genericRecreate(
                 new com.openggf.game.rewind.snapshot.ObjectManagerSnapshot.DynamicObjectEntry(

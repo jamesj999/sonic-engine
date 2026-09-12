@@ -25,7 +25,6 @@ import java.util.Comparator;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -156,9 +155,6 @@ class TestS3kCnz2CutsceneButtonGraphRewind {
     void cnz2CutsceneButtonUsesGenericRecreateWithoutExplicitDynamicCodec() {
         assertTrue(RewindRecreatable.class.isAssignableFrom(Cnz2CutsceneButtonInstance.class),
                 "CNZ2 cutscene button must restore through generic recreate");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        Cnz2CutsceneButtonInstance.class.getName()),
-                "CNZ2 cutscene button must not keep an explicit S3K dynamic codec");
     }
 
     @Test

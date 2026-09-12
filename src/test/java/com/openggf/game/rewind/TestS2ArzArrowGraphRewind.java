@@ -27,7 +27,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -187,13 +186,6 @@ class TestS2ArzArrowGraphRewind {
                 "ARZBossArrow must restore through RewindRecreatable graph recreate");
         assertTrue(RewindRecreatable.class.isAssignableFrom(ARZBossEyes.class),
                 "ARZBossEyes must support generic RewindRecreatable recreate");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        Sonic2ARZBossInstance.class.getName()),
-                "Sonic2ARZBossInstance must not have an explicit S2 dynamic rewind codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(ARZBossArrow.class.getName()),
-                "ARZBossArrow must not have an explicit S2 dynamic rewind codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(ARZBossEyes.class.getName()),
-                "ARZBossEyes graph support must not add an explicit S2 dynamic rewind codec");
     }
 
     private static ObjectInstance genericRecreateArrow(ObjectManager objectManager, ObjectSpawn spawn) {

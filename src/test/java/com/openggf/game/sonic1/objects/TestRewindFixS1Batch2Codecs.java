@@ -1,6 +1,5 @@
 package com.openggf.game.sonic1.objects;
 
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.game.sonic1.objects.badniks.Sonic1BombFuseInstance;
 import com.openggf.game.sonic1.objects.badniks.Sonic1CaterkillerBodyInstance;
 import com.openggf.game.sonic1.objects.bosses.GHZBossWreckingBall;
@@ -10,7 +9,6 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -46,8 +44,6 @@ class TestRewindFixS1Batch2Codecs {
                 "com.openggf.game.sonic1.objects.badniks.Sonic1CrabmeatProjectileInstance",
                 Sonic1SLZBossSpikeball.class.getName());
         for (String name : genericRecreate) {
-            assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(name),
-                    name + " must restore through RewindRecreatable generic recreate, not a batch-2 codec");
         }
 
         List<Class<?>> graphRecreate = List.of(
@@ -56,9 +52,6 @@ class TestRewindFixS1Batch2Codecs {
                 Sonic1CaterkillerBodyInstance.class,
                 Sonic1SLZBossSpikeball.class);
         for (Class<?> type : graphRecreate) {
-            assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(type.getName()),
-                    type.getName() + " must restore through graph-tested RewindRecreatable, "
-                            + "not a batch-2 codec");
             assertTrue(RewindRecreatable.class.isAssignableFrom(type),
                     type.getName() + " must opt into RewindRecreatable graph restore");
         }

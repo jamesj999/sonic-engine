@@ -4,7 +4,6 @@ import com.openggf.camera.Camera;
 import com.openggf.configuration.SonicConfigurationService;
 import com.openggf.game.ObjectArtProvider;
 import com.openggf.game.rewind.CompositeSnapshot;
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.game.rewind.RewindRegistry;
 import com.openggf.game.sonic1.constants.Sonic1Constants;
 import com.openggf.game.sonic1.constants.Sonic1ObjectIds;
@@ -33,7 +32,6 @@ import java.util.Map;
 import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TestRewindFixS1Batch10Codecs {
@@ -87,15 +85,6 @@ class TestRewindFixS1Batch10Codecs {
             assertTrue(RewindRecreatable.class.isAssignableFrom(candidate.type()),
                     candidate.type().getName()
                             + " must implement RewindRecreatable before its explicit codec is removed");
-        }
-    }
-
-    @Test
-    void batch10S1SessionDynamicsHaveNoExplicitCodec() {
-        for (Candidate candidate : CANDIDATES) {
-            assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(candidate.type().getName()),
-                    candidate.type().getName()
-                            + " must restore through genericRecreate, not an explicit S1 dynamic codec");
         }
     }
 

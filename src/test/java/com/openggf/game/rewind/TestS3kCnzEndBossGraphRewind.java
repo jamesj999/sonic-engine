@@ -111,8 +111,6 @@ class TestS3kCnzEndBossGraphRewind {
     void cnzEndBossUsesGenericRecreateWithoutExplicitS3kCodec() {
         assertTrue(RewindRecreatable.class.isAssignableFrom(CnzEndBossInstance.class),
                 "CNZ end boss must restore through RewindRecreatable generic recreate");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(CnzEndBossInstance.class.getName()),
-                "CNZ end boss must not keep an explicit S3K dynamic codec");
     }
 
     @Test

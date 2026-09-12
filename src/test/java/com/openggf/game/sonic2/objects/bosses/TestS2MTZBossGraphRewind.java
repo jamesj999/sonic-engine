@@ -2,7 +2,6 @@ package com.openggf.game.sonic2.objects.bosses;
 
 import com.openggf.camera.Camera;
 import com.openggf.game.rewind.CompositeSnapshot;
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.game.rewind.RewindRegistry;
 import com.openggf.game.rewind.identity.ObjectRefId;
 import com.openggf.game.rewind.identity.RewindIdentityTable;
@@ -85,8 +84,6 @@ class TestS2MTZBossGraphRewind {
                 Sonic2MTZBossInstance.MTZLaserShooter.class)) {
             assertTrue(RewindRecreatable.class.isAssignableFrom(type),
                     type.getSimpleName() + " must restore through generic recreate support");
-            assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(type.getName()),
-                    type.getSimpleName() + " must not rely on an explicit dynamic rewind codec");
         }
     }
 

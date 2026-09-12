@@ -22,7 +22,6 @@ import java.util.Comparator;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -186,11 +185,6 @@ class TestS3kIczSegmentColumnGraphRewind {
                 "ICZ segment column root must restore through generic recreate");
         assertTrue(RewindRecreatable.class.isAssignableFrom(Class.forName(SEGMENT_CLASS)),
                 "ICZ segment child must restore through generic graph recreate");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        IczSegmentColumnObjectInstance.class.getName()),
-                "ICZ segment column root must not keep an explicit S3K dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(SEGMENT_CLASS),
-                "ICZ segment child must not keep an explicit S3K dynamic codec");
     }
 
     private record Harness(ObjectManager objectManager, Camera camera, ObjectServices services) {

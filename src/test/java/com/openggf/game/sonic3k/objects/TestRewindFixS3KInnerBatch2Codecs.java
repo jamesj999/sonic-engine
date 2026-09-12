@@ -1,11 +1,9 @@
 package com.openggf.game.sonic3k.objects;
 
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -50,8 +48,6 @@ class TestRewindFixS3KInnerBatch2Codecs {
                 "com.openggf.game.sonic3k.objects.IczIceSpikesObjectInstance$SpikeHurtChild");
 
         for (String className : genericRecreateClasses) {
-            assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(className),
-                    className + " must restore through RewindRecreatable generic recreate");
             assertTrue(com.openggf.level.objects.RewindRecreatable.class.isAssignableFrom(loadClass(className)),
                     className + " must opt into generic recreate");
         }

@@ -16,7 +16,6 @@ import com.openggf.level.objects.DynamicObjectRecreateContext;
 import com.openggf.level.objects.ObjectInstance;
 import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectRewindDynamicCodecs;
-import com.openggf.level.objects.ObjectRegistry;
 import com.openggf.level.objects.ObjectServices;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.PerObjectRewindSnapshot;
@@ -99,9 +98,6 @@ class TestS3kAizIntroGraphRewind {
     void aizIntroParentUsesGenericRecreateWithoutExplicitDynamicCodec() {
         assertTrue(RewindRecreatable.class.isAssignableFrom(AizPlaneIntroInstance.class),
                 "AizPlaneIntroInstance must restore through RewindRecreatable graph recreate");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        AizPlaneIntroInstance.class.getName()),
-                "AizPlaneIntroInstance must not keep an explicit S3K dynamic rewind codec");
     }
 
     @Test

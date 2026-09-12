@@ -2,7 +2,6 @@ package com.openggf.game.sonic3k.objects.bosses;
 
 import com.openggf.camera.Camera;
 import com.openggf.game.rewind.CompositeSnapshot;
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.game.rewind.RewindRegistry;
 import com.openggf.game.rewind.identity.ObjectRefId;
 import com.openggf.game.rewind.identity.RewindIdentityTable;
@@ -143,9 +142,6 @@ class TestMhzEndBossWeatherMachineRewind {
                 liveObjects(objectManager, MhzEndBossWeatherVisualChild.class).size(),
                 "restored visualChildrenSpawned=true latch must prevent duplicate weather visual children");
 
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(MhzEndBossWeatherMachineChild.class.getName()),
-                "MhzEndBossWeatherMachineChild must restore through RewindRecreatable genericRecreate, "
-                        + "not a handwritten S3K dynamic codec");
     }
 
     @Test

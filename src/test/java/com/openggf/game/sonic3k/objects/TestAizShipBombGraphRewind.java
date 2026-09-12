@@ -2,7 +2,6 @@ package com.openggf.game.sonic3k.objects;
 
 import com.openggf.camera.Camera;
 import com.openggf.game.rewind.CompositeSnapshot;
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.game.rewind.RewindRegistry;
 import com.openggf.game.rewind.identity.ObjectRefId;
 import com.openggf.game.rewind.identity.RewindIdentityTable;
@@ -114,9 +113,6 @@ class TestAizShipBombGraphRewind {
 
         assertTrue(RewindRecreatable.class.isAssignableFrom(AizShipBombInstance.class),
                 "AizShipBombInstance must restore through RewindRecreatable generic recreate");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(AizShipBombInstance.class.getName()),
-                "AizShipBombInstance must restore through graph-tested generic recreate, "
-                        + "not a handwritten S3K dynamic codec");
     }
 
     private static ObjectManager installObjectManager() {

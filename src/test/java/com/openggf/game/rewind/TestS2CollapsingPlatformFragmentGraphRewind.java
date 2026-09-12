@@ -7,7 +7,6 @@ import com.openggf.graphics.GraphicsManager;
 import com.openggf.level.objects.ObjectInstance;
 import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectServices;
-import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.StubObjectServices;
 import org.junit.jupiter.api.AfterEach;
@@ -21,7 +20,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -74,9 +72,6 @@ class TestS2CollapsingPlatformFragmentGraphRewind {
         assertTrue(RewindRecreatable.class.isAssignableFrom(CollapsingPlatformFragmentInstance.class),
                 "collapsing-platform fragments must restore through RewindRecreatable");
 
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        CollapsingPlatformFragmentInstance.class.getName()),
-                "collapsing-platform fragments must not rely on an explicit dynamic rewind codec");
     }
 
     private static CollapsingPlatformFragmentInstance newFragment(

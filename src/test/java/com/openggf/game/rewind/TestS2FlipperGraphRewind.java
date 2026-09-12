@@ -45,8 +45,6 @@ class TestS2FlipperGraphRewind {
     void flipperUsesRewindRecreatableWithoutExplicitDynamicCodec() {
         assertTrue(RewindRecreatable.class.isAssignableFrom(FlipperObjectInstance.class),
                 "Flipper must restore through RewindRecreatable");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(FlipperObjectInstance.class.getName()),
-                "Flipper must not rely on an explicit dynamic rewind codec");
     }
 
     @Test

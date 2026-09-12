@@ -21,7 +21,6 @@ import java.util.Comparator;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -122,9 +121,6 @@ class TestS3kMhzEndBossGraphRewind {
         assertTrue(RewindRecreatable.class.isAssignableFrom(Class.forName(SIDEKICK_LOCK_CLASS)));
         assertTrue(RewindRecreatable.class.isAssignableFrom(Class.forName(WALKOFF_PREP_CLASS)));
         assertTrue(RewindRecreatable.class.isAssignableFrom(Class.forName(PLAYER_TWO_CARRY_CLASS)));
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(SIDEKICK_LOCK_CLASS));
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(WALKOFF_PREP_CLASS));
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(PLAYER_TWO_CARRY_CLASS));
     }
 
     private record Harness(ObjectManager objectManager, ObjectServices services) {

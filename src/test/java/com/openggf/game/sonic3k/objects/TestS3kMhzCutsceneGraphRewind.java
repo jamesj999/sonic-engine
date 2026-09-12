@@ -4,7 +4,6 @@ import com.openggf.camera.Camera;
 import com.openggf.game.PlayableEntity;
 import com.openggf.game.PlayerCharacter;
 import com.openggf.game.rewind.CompositeSnapshot;
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.game.rewind.RewindRegistry;
 import com.openggf.game.rewind.identity.ObjectRefId;
 import com.openggf.game.rewind.identity.RewindIdentityTable;
@@ -30,7 +29,6 @@ import java.lang.reflect.Field;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -295,24 +293,6 @@ class TestS3kMhzCutsceneGraphRewind {
                 "MHZ2 route-switch child must restore through RewindRecreatable");
         assertTrue(RewindRecreatable.class.isAssignableFrom(childClass(LIFT_CLASS)),
                 "MHZ2 lift child must restore through RewindRecreatable");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        Mhz1CutsceneDoorInstance.class.getName()),
-                "MHZ1 cutscene door must not keep an explicit S3K dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        Mhz1CutsceneButtonInstance.class.getName()),
-                "MHZ1 cutscene button must not keep an explicit S3K dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        CutsceneKnucklesMhz1Instance.class.getName()),
-                "MHZ1 spawned Knuckles actor must not keep an explicit S3K dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        CutsceneKnucklesMhz1PeerInstance.class.getName()),
-                "MHZ1 peering Knuckles child must not keep an explicit S3K dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(P2_STOPPER_CLASS),
-                "MHZ1 P2 stopper must not keep an explicit S3K dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(ROUTE_SWITCH_CLASS),
-                "MHZ2 route-switch child must not keep an explicit S3K dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(LIFT_CLASS),
-                "MHZ2 lift child must not keep an explicit S3K dynamic codec");
     }
 
     @Test

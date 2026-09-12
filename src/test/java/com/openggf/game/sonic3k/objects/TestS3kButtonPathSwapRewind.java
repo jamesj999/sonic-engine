@@ -2,7 +2,6 @@ package com.openggf.game.sonic3k.objects;
 
 import com.openggf.camera.Camera;
 import com.openggf.game.rewind.CompositeSnapshot;
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.game.rewind.RewindRegistry;
 import com.openggf.game.rewind.identity.ObjectRefId;
 import com.openggf.game.rewind.identity.RewindIdentityTable;
@@ -25,7 +24,6 @@ import java.util.Comparator;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -118,12 +116,6 @@ class TestS3kButtonPathSwapRewind {
                 "Sonic3kButtonObjectInstance must restore through generic recreate");
         assertTrue(RewindRecreatable.class.isAssignableFrom(Sonic3kPathSwapObjectInstance.class),
                 "Sonic3kPathSwapObjectInstance must restore through generic recreate");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        Sonic3kButtonObjectInstance.class.getName()),
-                "Sonic3kButtonObjectInstance must not keep an explicit S3K dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        Sonic3kPathSwapObjectInstance.class.getName()),
-                "Sonic3kPathSwapObjectInstance must not keep an explicit S3K dynamic codec");
     }
 
     private record Harness(ObjectManager objectManager) {

@@ -26,7 +26,6 @@ import java.util.Comparator;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -169,15 +168,6 @@ class TestS3kCutsceneKnucklesGraphRewind {
                 "AIZ rock child must restore through RewindRecreatable generic recreate");
         assertTrue(RewindRecreatable.class.isAssignableFrom(CutsceneKnuxCnz2WallInstance.class),
                 "CNZ wall must restore through RewindRecreatable generic recreate");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        CutsceneKnucklesCnz2AInstance.class.getName()),
-                "CNZ2 Knuckles cutscene parent must not keep an explicit S3K dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        CutsceneKnucklesRockChild.class.getName()),
-                "AIZ rock child must not keep an explicit S3K dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        CutsceneKnuxCnz2WallInstance.class.getName()),
-                "CNZ wall must not keep an explicit S3K dynamic codec");
     }
 
     @Test

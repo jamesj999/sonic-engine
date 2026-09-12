@@ -4,7 +4,6 @@ import com.openggf.camera.Camera;
 import com.openggf.configuration.SonicConfigurationService;
 import com.openggf.game.ObjectArtProvider;
 import com.openggf.game.rewind.CompositeSnapshot;
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.game.rewind.RewindRegistry;
 import com.openggf.game.sonic1.objects.badniks.Sonic1BombShrapnelInstance;
 import com.openggf.game.sonic1.objects.badniks.Sonic1BuzzBomberMissileDissolveInstance;
@@ -16,7 +15,6 @@ import com.openggf.graphics.GraphicsManager;
 import com.openggf.level.Pattern;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectConstructionContext;
-import com.openggf.level.objects.ObjectInstance;
 import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectServices;
@@ -37,8 +35,6 @@ import java.util.Map;
 import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TestRewindFixS1Batch8Codecs {
@@ -106,15 +102,6 @@ class TestRewindFixS1Batch8Codecs {
             assertTrue(RewindRecreatable.class.isAssignableFrom(candidate.type()),
                     candidate.type().getName()
                             + " must implement RewindRecreatable before its explicit codec is removed");
-        }
-    }
-
-    @Test
-    void batch8S1ProjectileDynamicsHaveNoExplicitCodec() {
-        for (Candidate candidate : CANDIDATES) {
-            assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(candidate.type().getName()),
-                    candidate.type().getName()
-                            + " must restore through genericRecreate, not an explicit S1 dynamic codec");
         }
     }
 

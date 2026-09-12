@@ -3,7 +3,6 @@ package com.openggf.game.sonic1.objects;
 import com.openggf.camera.Camera;
 import com.openggf.game.OscillationManager;
 import com.openggf.game.rewind.CompositeSnapshot;
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.game.rewind.RewindRegistry;
 import com.openggf.game.rewind.identity.ObjectRefId;
 import com.openggf.game.rewind.snapshot.ObjectManagerSnapshot;
@@ -396,16 +395,6 @@ class TestSonic1GlassReflectionGraphRewind {
                 () -> registryFor(objectManager).capture(),
                 "required glass reflection backrefs must fail loudly when the target has no rewind identity");
         assertTrue(thrown.getMessage().contains("no registered id for object reference"));
-    }
-
-    @Test
-    void glassBlockAndReflectionUseGenericRecreateWithoutExplicitDynamicCodecs() {
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        Sonic1GlassBlockObjectInstance.class.getName()),
-                "glass block must restore through generic recreate, not a dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        Sonic1GlassReflectionInstance.class.getName()),
-                "glass reflection must restore through generic recreate, not a dynamic codec");
     }
 
     private static ObjectInstance genericRecreate(ObjectManager objectManager, ObjectSpawn spawn) {

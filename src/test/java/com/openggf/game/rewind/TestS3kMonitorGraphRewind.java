@@ -23,7 +23,6 @@ import java.lang.reflect.Method;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -119,11 +118,6 @@ class TestS3kMonitorGraphRewind {
                 "S3K monitor must restore through generic recreate");
         assertTrue(RewindRecreatable.class.isAssignableFrom(Class.forName(CONTENTS_CLASS)),
                 "S3K monitor contents slot must restore through generic graph recreate");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        Sonic3kMonitorObjectInstance.class.getName()),
-                "S3K monitor must not keep an explicit dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(CONTENTS_CLASS),
-                "S3K monitor contents slot must not keep an explicit dynamic codec");
     }
 
     private record Harness(ObjectManager objectManager, Camera camera, ObjectServices services) {

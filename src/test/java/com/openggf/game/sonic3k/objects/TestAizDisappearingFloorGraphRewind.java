@@ -2,7 +2,6 @@ package com.openggf.game.sonic3k.objects;
 
 import com.openggf.camera.Camera;
 import com.openggf.game.rewind.CompositeSnapshot;
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.game.rewind.RewindRegistry;
 import com.openggf.game.rewind.identity.ObjectRefId;
 import com.openggf.game.rewind.identity.RewindIdentityTable;
@@ -24,7 +23,6 @@ import java.util.Comparator;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -130,12 +128,6 @@ class TestAizDisappearingFloorGraphRewind {
         assertTrue(RewindRecreatable.class.isAssignableFrom(
                         AizDisappearingFloorObjectInstance.BorderChild.class),
                 "BorderChild must restore through RewindRecreatable generic recreate");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        AizDisappearingFloorObjectInstance.class.getName()),
-                "AizDisappearingFloorObjectInstance must not keep an explicit S3K dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        AizDisappearingFloorObjectInstance.BorderChild.class.getName()),
-                "BorderChild must not keep an explicit S3K dynamic codec");
     }
 
     private record Harness(ObjectManager objectManager) {

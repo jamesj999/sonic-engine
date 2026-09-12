@@ -2,7 +2,6 @@ package com.openggf.game.sonic3k.objects;
 
 import com.openggf.camera.Camera;
 import com.openggf.game.rewind.CompositeSnapshot;
-import com.openggf.game.rewind.DeletedDynamicRewindCodecs;
 import com.openggf.game.rewind.RewindRegistry;
 import com.openggf.game.rewind.identity.ObjectRefId;
 import com.openggf.game.rewind.identity.RewindIdentityTable;
@@ -31,7 +30,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -104,12 +102,6 @@ class TestS3kLbz1CutsceneGraphRewind {
                 "range helper must restore through RewindRecreatable");
         assertTrue(RewindRecreatable.class.isAssignableFrom(CutsceneKnucklesLbz1CollapseChild.class),
                 "collapse child must restore through RewindRecreatable");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        CutsceneKnucklesLbz1RangeHelper.class.getName()),
-                "range helper must not keep an explicit S3K dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        CutsceneKnucklesLbz1CollapseChild.class.getName()),
-                "collapse child must not keep an explicit S3K dynamic codec");
     }
 
     @Test

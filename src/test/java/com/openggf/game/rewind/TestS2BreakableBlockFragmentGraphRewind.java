@@ -19,7 +19,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -72,9 +71,6 @@ class TestS2BreakableBlockFragmentGraphRewind {
         assertTrue(RewindRecreatable.class.isAssignableFrom(BreakableBlockFragmentInstance.class),
                 "breakable-block fragments must restore through RewindRecreatable");
 
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        BreakableBlockFragmentInstance.class.getName()),
-                "breakable-block fragments must not rely on an explicit dynamic rewind codec");
     }
 
     private static void seedFragmentState(BreakableBlockFragmentInstance fragment) {

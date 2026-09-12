@@ -1,7 +1,6 @@
 package com.openggf.game.rewind;
 
 import com.openggf.camera.Camera;
-import com.openggf.game.PlayableEntity;
 import com.openggf.game.rewind.identity.ObjectRefId;
 import com.openggf.game.sonic2.objects.RisingPillarObjectInstance;
 import com.openggf.game.sonic2.objects.SmashableGroundObjectInstance;
@@ -46,8 +45,6 @@ class TestS2DebrisFragmentGraphRewind {
                 SmashableGroundObjectInstance.SmashableGroundFragmentInstance.class)) {
             assertTrue(RewindRecreatable.class.isAssignableFrom(type),
                     type.getSimpleName() + " must restore through RewindRecreatable");
-            assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(type.getName()),
-                    type.getSimpleName() + " must not rely on an explicit dynamic rewind codec");
         }
     }
 

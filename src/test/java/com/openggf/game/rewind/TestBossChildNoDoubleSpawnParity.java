@@ -20,7 +20,6 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * Parity guard: construction-spawned boss children must NOT double-spawn after a
@@ -57,12 +56,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  *       {@code EHZBossPropeller}, {@code EHZBossWheel} ×3, {@code EHZBossSpike} — 7
  *       construction children (initializeBossState → spawnChildComponents). All five
  *       distinct classes had codecs (the bug: 7 → 14). Test asserts count stays at 7.</li>
- *   <li><b>S2 MTZ Boss</b> and <b>S2 Mecha Sonic</b>: their construction children
- *       ({@code MTZBossOrb}/{@code MTZLaserShooter}; {@code MechaSonicLEDWindow}/
- *       {@code MechaSonicTargetingSensor}/{@code MechaSonicDEZWindow}) never had codecs,
- *       so they never double-spawned. Guarded statically here: those construction children
- *       must never gain a codec ({@code MTZBossLaser}/{@code MechaSonicSpikeball} are
- *       routine-fired and can use their own graph recreate or codec path as needed).</li>
  * </ul>
  */
 public class TestBossChildNoDoubleSpawnParity {
@@ -275,65 +268,8 @@ public class TestBossChildNoDoubleSpawnParity {
     }
 
     // =========================================================================
-    // S2 MTZ Boss — construction children must have NO codecs (static guard)
-    // =========================================================================
-
-    /**
-     * MTZ boss: construction children are {@code MTZLaserShooter} ×1 and
-     * {@code MTZBossOrb} ×7 (both spawned in initializeBossState). These must NOT
-     * have rewind codecs (reconstruction re-establishes them). {@code MTZBossLaser}
-     * is fired from a routine ({@code fireLaser}) and correctly KEEPS its codec.
-     *
-     * <p>MTZ is event-spawned (no registry factory), so it is not reconstructed via
-     * {@code registry.create()} during restore the way EHZ/DEZ are; the relevant
-     * invariant here is purely that no construction child carries a codec.
-     */
-    @Test
-    void mtzBossConstructionChildrenHaveNoCodecs() {
-        assertNoCodec(
-                "com.openggf.game.sonic2.objects.bosses.Sonic2MTZBossInstance$MTZBossOrb",
-                "MTZBossOrb is spawned in initializeBossState() (spawnOrbs) — construction child");
-        assertNoCodec(
-                "com.openggf.game.sonic2.objects.bosses.Sonic2MTZBossInstance$MTZLaserShooter",
-                "MTZLaserShooter is spawned in initializeBossState() — construction child");
-    }
-
-    // =========================================================================
-    // S2 Mecha Sonic — construction children must have NO codecs (static guard)
-    // =========================================================================
-
-    /**
-     * Mecha Sonic (DEZ Silver Sonic): construction children are
-     * {@code MechaSonicLEDWindow}, {@code MechaSonicTargetingSensor}, and
-     * {@code MechaSonicDEZWindow} (all spawned in initializeBossState →
-     * spawnChildObjects). None must have a codec. {@code MechaSonicSpikeball} is
-     * routine-spawned (fireSpikeballs) and may keep a codec if one is ever added.
-     */
-    @Test
-    void mechaSonicConstructionChildrenHaveNoCodecs() {
-        assertNoCodec(
-                "com.openggf.game.sonic2.objects.bosses.Sonic2MechaSonicInstance$MechaSonicLEDWindow",
-                "MechaSonicLEDWindow is spawned in initializeBossState() — construction child");
-        assertNoCodec(
-                "com.openggf.game.sonic2.objects.bosses.Sonic2MechaSonicInstance$MechaSonicTargetingSensor",
-                "MechaSonicTargetingSensor is spawned in initializeBossState() — construction child");
-        assertNoCodec(
-                "com.openggf.game.sonic2.objects.bosses.Sonic2MechaSonicInstance$MechaSonicDEZWindow",
-                "MechaSonicDEZWindow is spawned in initializeBossState() — construction child");
-    }
-
-    // =========================================================================
     // Helpers
     // =========================================================================
-
-    /** Assert that the given construction-child class has NO registered codec. */
-    private static void assertNoCodec(String childClassName, String why) {
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(childClassName),
-                "Construction-spawned boss child must NOT have a rewind codec (double-spawn): "
-                        + childClassName + " — " + why
-                        + ". Reconstruction re-establishes it; a codec adds a duplicate.");
-    }
-
 
     /** Count live non-destroyed objects whose class name starts with the given prefix. */
     private static int countByPrefix(ObjectManager om, String prefix) {

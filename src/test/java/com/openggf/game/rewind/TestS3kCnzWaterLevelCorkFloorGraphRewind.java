@@ -25,7 +25,6 @@ import java.util.Comparator;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -116,11 +115,6 @@ class TestS3kCnzWaterLevelCorkFloorGraphRewind {
                 "CNZ water-level cork helper must restore through generic recreate");
         assertTrue(RewindRecreatable.class.isAssignableFrom(CorkFloorObjectInstance.class),
                 "Cork floor must restore through generic recreate");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(
-                        CnzWaterLevelCorkFloorInstance.class.getName()),
-                "CNZ water-level cork helper must not keep an explicit S3K dynamic codec");
-        assertFalse(DeletedDynamicRewindCodecs.hasRegisteredDynamicCodec(CorkFloorObjectInstance.class.getName()),
-                "Cork floor must not keep an explicit S3K dynamic codec");
     }
 
     @Test
