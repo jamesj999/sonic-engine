@@ -1,6 +1,8 @@
 package com.openggf.level;
 
+import com.openggf.game.rewind.RewindSnapshottable;
 import com.openggf.level.objects.ObjectManager;
+import com.openggf.sprites.Sprite;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 
 import java.util.ArrayList;
@@ -17,7 +19,8 @@ import java.util.List;
  * the slots reserved on the object manager so the owner lands where the ROM
  * puts it.
  */
-final class LevelLostRingSpawnCoordinator {
+final class LevelLostRingSpawnCoordinator
+        implements RewindSnapshottable<LevelLostRingSpawnCoordinator.Snapshot> {
     private final LevelManager levelManager;
     private final List<PendingLostRingSpawn> pending = new ArrayList<>();
 
@@ -101,8 +104,94 @@ final class LevelLostRingSpawnCoordinator {
         }
     }
 
+    void reset() {
+        releaseReservedSlots();
+        pending.clear();
+    }
+
+    @Override
+    public String key() {
+        return "level-lost-ring-spawns";
+    }
+
+    @Override
+    public Snapshot capture() {
+        PendingLostRingSpawnSnapshot[] pendingSnapshots = new PendingLostRingSpawnSnapshot[pending.size()];
+        for (int i = 0; i < pending.size(); i++) {
+            PendingLostRingSpawn spawn = pending.get(i);
+            pendingSnapshots[i] = new PendingLostRingSpawnSnapshot(
+                    spawn.player().getCode(), spawn.ringCount(), spawn.x(), spawn.y(), spawn.frameCounter(),
+                    spawn.preallocatedSlots(), spawn.slotsFullyReserved(), spawn.deferOwnerRingClear());
+        }
+        return new Snapshot(pendingSnapshots);
+    }
+
+    @Override
+    public void restore(Snapshot snapshot) {
+        reset();
+        for (PendingLostRingSpawnSnapshot saved : snapshot.pending()) {
+            Sprite sprite = levelManager.spriteManager != null
+                    ? levelManager.spriteManager.getSprite(saved.playerCode()) : null;
+            if (!(sprite instanceof AbstractPlayableSprite player)) {
+                throw new IllegalStateException(
+                        "Lost-ring rewind owner is unavailable: " + saved.playerCode());
+            }
+            pending.add(new PendingLostRingSpawn(
+                    player, saved.ringCount(), saved.x(), saved.y(), saved.frameCounter(),
+                    saved.preallocatedSlots(), saved.slotsFullyReserved(), saved.deferOwnerRingClear()));
+        }
+    }
+
+    @Override
+    public void resetForMissingSnapshot() {
+        reset();
+    }
+
+    private void releaseReservedSlots() {
+        if (levelManager.objectManager == null) {
+            return;
+        }
+        for (PendingLostRingSpawn spawn : pending) {
+            for (int slot : spawn.preallocatedSlots()) {
+                levelManager.objectManager.releaseDynamicSlot(slot);
+            }
+        }
+    }
+
     private record PendingLostRingSpawn(
             AbstractPlayableSprite player, int ringCount, int x, int y, int frameCounter,
             int[] preallocatedSlots, boolean slotsFullyReserved, boolean deferOwnerRingClear) {
+        private PendingLostRingSpawn {
+            preallocatedSlots = preallocatedSlots.clone();
+        }
+
+        @Override
+        public int[] preallocatedSlots() {
+            return preallocatedSlots.clone();
+        }
+    }
+
+    record Snapshot(PendingLostRingSpawnSnapshot[] pending) {
+        Snapshot {
+            pending = pending.clone();
+        }
+
+        @Override
+        public PendingLostRingSpawnSnapshot[] pending() {
+            return pending.clone();
+        }
+    }
+
+    private record PendingLostRingSpawnSnapshot(
+            String playerCode, int ringCount, int x, int y, int frameCounter,
+            int[] preallocatedSlots, boolean slotsFullyReserved, boolean deferOwnerRingClear) {
+        private PendingLostRingSpawnSnapshot {
+            preallocatedSlots = preallocatedSlots.clone();
+        }
+
+        @Override
+        public int[] preallocatedSlots() {
+            return preallocatedSlots.clone();
+        }
     }
 }
