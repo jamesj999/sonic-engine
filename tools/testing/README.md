@@ -106,20 +106,50 @@ Both terminate the Maven process tree and report incomplete validation. Compilat
 the same budget. Tool probes have separate 20-second limits. A timeout never authorizes
 silently increasing the budget or restarting the suite.
 
-A single, overwritten `target/category-tests-last-broad.json` receipt records the latest
-broad attempt, including incomplete attempts. It survives diagnostic rotation and focused
-runs. Further broad attempts in that worktree require `--repeat-reason "<concrete reason>"`,
-even after edits or a new task; the explanation is retained with the plan and receipt. A
-new task/scope or a repaired prerequisite can justify a new attempt. A red result alone
-cannot. This is a retry brake, not a pass cache or a claim that agent-written explanations
-are authenticated. Direct Maven bypasses it; agent instructions prohibit that workaround.
+Validation is budgeted for the **whole user-requested delivery**, independently of
+commit boundaries. Start it once, before implementation, and use the printed immutable
+base through the entire delivery:
 
-The agent stopping rule is one completed required selection per candidate, followed by
-focused regression fixes and, where needed, matched baseline/current tests for disputed
-failures. Keep unrelated failures as explicit limitations. Do not chase unrelated test
-infrastructure or repeat full suites to establish a baseline. Report changed code, tested
-revision, counts/skips, incomplete lanes and unresolved attribution. CI/release coverage is
-unchanged and must still pass where required; this workflow does not waive those gates.
+```bash
+python3 tools/testing/run_categories.py --start-task 20260912-example --base <pre-task-commit>
+python3 tools/testing/run_categories.py --task-status
+# Focused category invocations are timed automatically:
+python3 tools/testing/run_categories.py --category physics --run
+# After a directly launched focused Maven or matched baseline check, record its elapsed time:
+python3 tools/testing/run_categories.py --record-minutes 1.5 --record-kind focused
+python3 tools/testing/run_categories.py --record-minutes 0.5 --record-kind baseline
+# Once implementation is complete, run ONE combined change-based selection:
+python3 tools/testing/run_categories.py --base <pinned-start-commit> --run
+# Only on delivery or cancellation:
+python3 tools/testing/run_categories.py --finish-task
+```
+
+The task receipt and exclusive lock live under the repository's **shared Git directory**,
+`openggf-validation/task.json` and `task.lock`, so linked worktrees use the same accounting.
+One active task is supported per repository. Commits, worktrees, changed bases and
+`--repeat-reason` cannot grant another broad attempt. The receipt stores only identity,
+pinned base, cumulative elapsed seconds, externally recorded focused/baseline time and
+attempt/outcome counts; it is not a pass cache. The previous worktree-local broad receipt
+remains a small outcome summary and does not authorize execution.
+
+The default task ceiling is **40 minutes including focused and baseline checks**.
+`--max-minutes` may choose a smaller task budget at creation; it cannot create a budget
+above 40 minutes. During execution it is an invocation ceiling, further reduced by the
+remaining task time. Compilation and interrupted runs count. A first failed/interrupted
+broad attempt still consumes the one-broad allowance. Plan the aggregate cost before
+launching; report mandatory coverage that cannot fit instead of starting an unaffordable
+run. Use focused checks after the combined selection for task-caused regressions and
+bounded matched attribution; keep unrelated failures explicit. Never restart the full
+suite merely because another planned item or commit is ready.
+
+`--repeat-reason` is explanation only: there is no self-service broad-repeat or task-budget
+override. Finishing/restarting a task to evade the limit is prohibited. A new task identity
+requires a new user request or an explicitly user-authorized exception for material changes
+made after combined validation, or corrected prerequisites that invalidated it. Red results
+and continuing the original plan do not qualify. The CLI cannot authenticate user intent
+or observe raw Maven launched elsewhere; agents must record that elapsed time and must not
+use raw commands, receipt edits/deletion or fabricated task identities as bypasses.
+CI/release gates remain unchanged; incomplete or partial coverage never certifies a pass.
 
 Changes confined to the Python runner/tests and this prose guidance use the Python safety
 suite below plus actual tool preflight. Changes to selection policy, POM, Java, workflows
@@ -138,6 +168,7 @@ python3 tools/testing/run_categories.py --acknowledge <run-id>
 This deletes the **entire run directory**, including summaries, plans and commands, without
 running Maven. It takes the same lock as validation and refuses cleanup while a runner
 owns that lock. Only exact runner IDs are accepted, never paths or symlinked directories.
+Acknowledgment leaves both the task accounting and broad-attempt receipt intact.
 A repeated acknowledgment is harmless. Agents must acknowledge consumed results before
 delivery; there is no background process that can detect when a human has read a file.
 

@@ -258,16 +258,13 @@ and follow the documentation checklist and commit hooks. Work directly on
 `develop` unless the user changes that instruction. This plan alone makes no
 runtime changes and requires no engine-suite run.
 
-For implementation validation, pin the actual pre-change integration commit,
-finish focused fixes and documentation, and run category-runner `--preflight` in
-the real launch environment. Before a broad run, report the selected class count,
-cost and stop rule. Budget one completed required selection per candidate; the
-previous broad normalisation measured approximately 24 minutes ordinary plus
-10 minutes guards. Preserve the runner's timeout/repeat controls and known
-working native macOS access. Use focused matched attribution for disputed
-failures, not repeated full suites. Report remaining failures and skips honestly.
-Affected traces and the mandatory S3K loading/bootstrap checks remain required
-where applicable; do not rerun previous unchanged evidence just for this review.
+For future implementation, pin the pre-task integration commit once. Commit each
+item separately, use focused checks while implementing, and run at most one combined
+change-based selection for the requested delivery. Review aggregate cost against the
+shared task budget before launching. A new numbered candidate or commit does not
+justify a new broad selection or base. Follow the current task-wide controls in
+`AGENTS.md` and `tools/testing/README.md`; the per-item runs recorded below are historical
+evidence of the workflow that prompted these stronger controls, not a procedure to repeat.
 
 ## Implementation record
 
@@ -425,3 +422,15 @@ Validation on the candidate working tree:
   the repository are not delivered implementations. Follow-up priorities are ROM
   ring mappings (7), audio construction (9), slot GPU ownership (10), then the
   smaller scroll/dead-helper/strict-field extractions (5, 6, 11).
+
+### Validation-policy follow-up
+
+The user requested task-wide cost controls after stopping the per-item validation
+workflow. `AGENTS.md`/`CLAUDE.md` and the runner now separate commit granularity
+from combined delivery validation. One shared Git task receipt pins the original
+base, limits cumulative time and permits only one broad attempt; retry prose cannot
+authorize another. External focused/baseline time must be recorded explicitly.
+Python safety verification: 53 tests passed in approximately four seconds; actual
+Java 21/Lua 5.4/PowerShell preflight passed. No new engine suite was launched.
+Fetched `origin/develop` at `0f35005124` was merged with both changelog histories
+preserved. This integration is not claimed as a newly tested green engine suite.

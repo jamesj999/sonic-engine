@@ -45,12 +45,10 @@ def check_repeat(target, plan, reason):
         previous = json.loads(receipt.read_text())
         if not isinstance(previous, dict) or not isinstance(previous.get('run'), str):
             raise ValueError(f'Invalid validation receipt: {receipt}')
-        if not reason:
-            raise ValueError(
-                f"Broad validation already attempted in this worktree ({previous['run']}). "
-                'Inspect its outcome; use focused checks for fixes/attribution. '
-                'A necessary new broad run requires --repeat-reason explaining changed scope '
-                'or corrected prerequisites, not merely a red result. No tests were run.')
+        raise ValueError(
+            f"Broad validation already attempted in this worktree ({previous['run']}). "
+            'Inspect its outcome; use focused checks for fixes/attribution. '
+            '--repeat-reason is documentation, not authorization. No tests were run.')
 
 
 def record_attempt(target, run, plan, reason):

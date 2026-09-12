@@ -107,9 +107,9 @@ campaigns; feature/API publication remains subject to the 0.8 roadmap.
 - **Local test categories:** select related subsystem checks from changed paths, with
   common tests and structural guards retained, broad fallback for shared changes,
   and bounded diagnostics and automatic temporary-file cleanup. Tool prerequisites
-  are checked before testing; a shared time budget stops hung runs, and repeated broad
-  attempts require a recorded reason. Agent validation stops after the required selection
-  and focused regression checks. Full CI and release validation remain unchanged.
+  are checked before testing; a delivery-wide budget and one-broad-attempt limit are
+  shared across worktrees. Commit boundaries and retry explanations cannot reset that
+  allowance; focused and baseline time contribute to cumulative accounting. Full CI and release validation remain unchanged.
 
 - **Release-line integration:** preserve hosted release builds, snapshot policy
   checks, current launcher artifact selection, Linux packaging, and automatic
