@@ -30,7 +30,7 @@ mvn -v                              # must report Java 21
 tools/testing/install-hooks.sh     # once per worktree
 python3 tools/testing/run_categories.py --list
 python3 tools/testing/run_categories.py --start-task <task-name> --base <pre-task-commit>
-python3 tools/testing/run_categories.py --base <printed-pinned-base> --run  # once per delivery
+python3 tools/testing/run_categories.py --base <printed-pinned-base> --run  # once per delivery unless proportionate-validation exception applies
 mvn -Dmse=off "-Dtest=TestCollisionLogic" test  # focused iteration
 mvn -Dmse=off package              # full ordinary suite plus packaging
 mvn -Dmse=off -Psmoke test -B         # what every branch push runs in CI
@@ -46,16 +46,33 @@ mvn -Dmse=off -Pguards test -B        # separate fresh JVM for structural guards
 - Use JUnit 5/Jupiter. `-Dmse=off` exposes full Maven logs. PowerShell quotes
   `-D...` arguments and uses `tools/testing/install-hooks.ps1`.
 - During implementation, run focused tests or `run_categories.py --category NAME --run`.
-  Before delivery, use `run_categories.py --base <integration-base> --run` against the
+  Before delivery, unless the proportionate-validation exception below applies, use
+  `run_categories.py --base <integration-base> --run` against the
   actual destination/base commit (not HEAD to hide committed work). Review the plan;
   `--category NAME` adds semantic dependencies the path rules cannot infer. Never
-  narrow its selection manually. See [test categories](tools/testing/README.md#test-categories).
+  narrow a runner invocation’s selection manually. See [test categories](tools/testing/README.md#test-categories).
 - The change-based runner selects related ordinary categories plus common tests and
   runs all structural guards in a separate JVM. This replaces the unconditional
   local full-suite requirement for changes covered by the policy. Shared or unknown
   changes automatically select the full ordinary suite; use `--category all` when
   impact is uncertain. Run affected trace fixtures and domain-mandated checks as well:
   ordinary categories do not cover the separate trace/native/diagnostic profiles.
+- **Proportionate validation:** choose local test scope from the actual behavior changed,
+  its consumers, and plausible failure modes, not file location or the runner's fallback
+  classification alone. Focused validation may replace the local broad run when impact
+  is bounded and understood, relevant production paths and edge cases can be exercised
+  directly, and there is no unresolved cross-cutting risk. This applies to small fixes,
+  configuration/registration changes, and other localized work; line count alone is not
+  evidence of low risk. Inspect the change-based plan before deciding. If its selection
+  is disproportionate, explain why and run the relevant regression, integration, and
+  domain-mandated checks instead. Prefer a regression test that reproduces the reported
+  failure. No extra user approval is needed when these conditions hold. Shared algorithm,
+  public contract, build/selection-policy, timing/physics changes, or uncertain impact
+  still require normal change-based validation. Record commands, results/skips, and
+  coverage limits; call focused validation what it is, never a full-suite pass. Do not
+  edit the runner's selection to manufacture a narrower broad run. Task accounting and
+  retry limits still apply; CI and release gates remain unchanged. Documentation-only
+  follow-ups do not require repeating engine tests.
 - Before a broad run, state the selected class count, expected cost and stopping rule.
   Broad normalization measured about 24 minutes ordinary plus 10 minutes guards; do not
   present this as a short check. Finish focused fixes and documentation first. Run
@@ -66,7 +83,8 @@ mvn -Dmse=off -Pguards test -B        # separate fresh JVM for structural guards
 - **Validation belongs to the entire user-requested delivery, not each commit or plan
   item.** One commit per item does not mean one broad run per item. Pin the pre-task
   integration commit once. Run focused checks during implementation, then one combined
-  change-based selection covering the delivered changes. Do not advance the base after
+  change-based selection covering the delivered changes unless the proportionate-validation
+  exception applies. Do not advance the base after
   each commit or treat the next planned item as new validation scope.
 - Review the **aggregate** testing cost before launching tests. Start one shared task
   receipt with `run_categories.py --start-task <unique-task-name> --base <pre-task-commit>`;

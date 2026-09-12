@@ -349,6 +349,14 @@ public final class Sonic3kPlcArtRegistry {
     private static void addZoneEntries(int zoneIndex, int actIndex,
                                        List<StandaloneArtEntry> standalone,
                                        List<LevelArtEntry> levelArt) {
+        // SSEntryFlash_GoSS / loc_618AC enters $1701. Resolve the same
+        // sanctuary profile as the level loader so its $1601 alias and ROM
+        // identity both register the art used by Obj_HPZSSEntryControl.
+        if (Sonic3kLevelResourceProfile.resolve(zoneIndex, actIndex).eventKind()
+                == Sonic3kLevelResourceProfile.EventKind.HPZ_SPECIAL_STAGE_HUB) {
+            addHpzEntries(actIndex, standalone, levelArt);
+            return;
+        }
         switch (zoneIndex) {
             case 0x00 -> addAizEntries(actIndex, standalone, levelArt);
             case 0x01 -> addHczEntries(actIndex, standalone, levelArt);

@@ -1,6 +1,7 @@
 package com.openggf.tests;
 
 import com.openggf.game.GameServices;
+import com.openggf.game.sonic3k.Sonic3kObjectArtKeys;
 import com.openggf.game.sonic3k.objects.HPZSSEntryControlObjectInstance;
 import com.openggf.game.sonic3k.objects.HPZSanctuaryFallingCrystalObjectInstance;
 import com.openggf.game.sonic3k.objects.HPZSuperEmeraldObjectInstance;
@@ -16,6 +17,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -26,6 +28,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 @RequiresRom(SonicGame.SONIC_3K)
 public class TestS3kHpzSanctuaryHeadless {
+
+    @ParameterizedTest
+    @ValueSource(ints = {0x16, 0x17})
+    void sanctuaryPublishesEverySceneSpriteRenderer(int zone) {
+        HeadlessTestFixture.builder().withZoneAndAct(zone, 1).build();
+        var art = GameServices.module().getObjectArtProvider();
+        for (String key : List.of(Sonic3kObjectArtKeys.HPZ_MASTER_EMERALD,
+                Sonic3kObjectArtKeys.HPZ_GRAY_EMERALD,
+                Sonic3kObjectArtKeys.HPZ_SMALL_EMERALDS,
+                Sonic3kObjectArtKeys.HPZ_ENTRY_TELEPORTER)) {
+            assertNotNull(art.getRenderer(key), "Missing sanctuary renderer: " + key);
+            var sheet = art.getSheet(key);
+            assertNotNull(sheet, "Missing sanctuary sheet: " + key);
+            assertTrue(sheet.getPatterns().length > 0, "Missing ROM art: " + key);
+            assertTrue(sheet.getFrameCount() > 0, "Missing ROM mappings: " + key);
+        }
+    }
 
     @ParameterizedTest
     @ValueSource(ints = {0x16, 0x17})
