@@ -102,3 +102,13 @@ optional generated audio/BizHawk references and captures, opt-in benchmarks,
 EGL/visual-environment availability, and a spin-tube capture/release assumption.
 The sanctuary and required S3K checks listed above had no skips. These broad
 suite limitations are not evidence of full visual or audio parity.
+
+## Concurrent MHZ integration
+
+Remote `develop` advanced to `cc72b6b849` before the first push. Merge
+`93c2452cc4` preserves that MHZ implementation unchanged and combines only
+conflicting changelog/skill prose. The post-merge focused run selected
+`TestS3kHpzSanctuaryHeadless,TestSonic3kNonlinearHpzProfile,SwScrlHpzTest,TestS3kAiz1SkipHeadless,TestSonic3kLevelLoading,TestSonic3kBootstrapResolver,TestSonic3kDecodingUtils`
+with `-Dmse=off`, the verified absolute S3K ROM property, and `test -B`.
+It completed **76 tests, 0 failures, 0 errors, 0 skips**. The full-suite and
+guard results above apply to the pre-MHZ implementation commit, not this merge.
