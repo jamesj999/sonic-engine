@@ -3700,9 +3700,18 @@ class TestBuildToolingGuard {
     @Test
     void shellAndPowerShellGrandfatherOnlyExactHistoricFrontierOccurrences(
             @TempDir Path temporaryDirectory) throws Exception {
-        String baseline = gitOutput(
+        String publishedBaseline = gitOutput(
                 Path.of(".").toAbsolutePath(), "show",
                 FRONTIER_GRANDFATHER_BASELINE + ":" + FRONTIER_LOG_PATH);
+        // Exercise every real grandfathered line/count without rescanning the
+        // unrelated 54,000-line narrative for each introduced historical line.
+        // The separate published-prefix test keeps full-size integration coverage.
+        String baseline = "portable header\nportable context\n"
+                + String.join("\n", publishedBaseline.lines()
+                        .filter(TestBuildToolingGuard::containsMachineLocalHome).toList()) + "\n";
+        Path policies = writeCompactGrandfatherPolicy(temporaryDirectory, publishedBaseline, baseline);
+        Path shellPolicy = policies.resolve("validate-policy.sh");
+        Path powerShellPolicy = policies.resolve("validate-policy.ps1");
         String historicLine = baseline.lines()
                 .filter(TestBuildToolingGuard::containsMachineLocalHome)
                 .findFirst()
@@ -3713,9 +3722,9 @@ class TestBuildToolingGuard {
         writeAndStage(exactRepository, FRONTIER_LOG_PATH, "portable baseline\n");
         commit(exactRepository, "neutralized frontier");
         writeAndStage(exactRepository, FRONTIER_LOG_PATH, baseline + "portable append\n");
-        assertPolicyAccepts(runPolicy(exactRepository, "pre-commit"));
+        assertPolicyAccepts(runPolicy(exactRepository, shellPolicy, "pre-commit"));
         if (powershell != null) {
-            assertPolicyAccepts(runPowerShellPolicy(exactRepository, powershell, "pre-commit"));
+            assertPolicyAccepts(runPowerShellPolicy(exactRepository, powershell, powerShellPolicy, "pre-commit"));
         }
 
         Path alteredRepository = newRepository(temporaryDirectory, "grandfather-altered");
@@ -3723,18 +3732,18 @@ class TestBuildToolingGuard {
         commit(alteredRepository, "neutralized frontier");
         writeAndStage(alteredRepository, FRONTIER_LOG_PATH,
                 baseline.replaceFirst(Pattern.quote(historicLine), historicLine + "-altered"));
-        assertPolicyRejects(runPolicy(alteredRepository, "pre-commit"), FRONTIER_LOG_PATH);
+        assertPolicyRejects(runPolicy(alteredRepository, shellPolicy, "pre-commit"), FRONTIER_LOG_PATH);
         if (powershell != null) {
-            assertPolicyRejects(runPowerShellPolicy(alteredRepository, powershell, "pre-commit"), FRONTIER_LOG_PATH);
+            assertPolicyRejects(runPowerShellPolicy(alteredRepository, powershell, powerShellPolicy, "pre-commit"), FRONTIER_LOG_PATH);
         }
 
         Path replayRepository = newRepository(temporaryDirectory, "grandfather-replay");
         writeAndStage(replayRepository, FRONTIER_LOG_PATH, "portable baseline\n");
         commit(replayRepository, "neutralized frontier");
         writeAndStage(replayRepository, FRONTIER_LOG_PATH, baseline + historicLine + "\n");
-        assertPolicyRejects(runPolicy(replayRepository, "pre-commit"), FRONTIER_LOG_PATH);
+        assertPolicyRejects(runPolicy(replayRepository, shellPolicy, "pre-commit"), FRONTIER_LOG_PATH);
         if (powershell != null) {
-            assertPolicyRejects(runPowerShellPolicy(replayRepository, powershell, "pre-commit"), FRONTIER_LOG_PATH);
+            assertPolicyRejects(runPowerShellPolicy(replayRepository, powershell, powerShellPolicy, "pre-commit"), FRONTIER_LOG_PATH);
         }
 
         Path deletedRepository = newRepository(temporaryDirectory, "grandfather-deletion");
@@ -3742,19 +3751,19 @@ class TestBuildToolingGuard {
         commit(deletedRepository, "historic frontier");
         String deleted = baseline.replaceFirst(Pattern.quote(historicLine + "\n"), "");
         writeAndStage(deletedRepository, FRONTIER_LOG_PATH, deleted);
-        assertPolicyRejects(runPolicy(deletedRepository, "pre-commit"), FRONTIER_LOG_PATH);
+        assertPolicyRejects(runPolicy(deletedRepository, shellPolicy, "pre-commit"), FRONTIER_LOG_PATH);
         if (powershell != null) {
-            assertPolicyRejects(runPowerShellPolicy(deletedRepository, powershell, "pre-commit"), FRONTIER_LOG_PATH);
+            assertPolicyRejects(runPowerShellPolicy(deletedRepository, powershell, powerShellPolicy, "pre-commit"), FRONTIER_LOG_PATH);
         }
 
         Path replayAfterDeletionRepository = newRepository(temporaryDirectory, "grandfather-replay-after-deletion");
         writeAndStage(replayAfterDeletionRepository, FRONTIER_LOG_PATH, baseline);
         commit(replayAfterDeletionRepository, "historic frontier");
         writeAndStage(replayAfterDeletionRepository, FRONTIER_LOG_PATH, deleted + historicLine + "\n");
-        assertPolicyRejects(runPolicy(replayAfterDeletionRepository, "pre-commit"), FRONTIER_LOG_PATH);
+        assertPolicyRejects(runPolicy(replayAfterDeletionRepository, shellPolicy, "pre-commit"), FRONTIER_LOG_PATH);
         if (powershell != null) {
             assertPolicyRejects(runPowerShellPolicy(
-                    replayAfterDeletionRepository, powershell, "pre-commit"), FRONTIER_LOG_PATH);
+                    replayAfterDeletionRepository, powershell, powerShellPolicy, "pre-commit"), FRONTIER_LOG_PATH);
         }
 
         int firstBreak = baseline.indexOf('\n');
@@ -3766,9 +3775,9 @@ class TestBuildToolingGuard {
         writeAndStage(reorderedRepository, FRONTIER_LOG_PATH, baseline);
         commit(reorderedRepository, "historic frontier");
         writeAndStage(reorderedRepository, FRONTIER_LOG_PATH, reordered);
-        assertPolicyRejects(runPolicy(reorderedRepository, "pre-commit"), FRONTIER_LOG_PATH);
+        assertPolicyRejects(runPolicy(reorderedRepository, shellPolicy, "pre-commit"), FRONTIER_LOG_PATH);
         if (powershell != null) {
-            assertPolicyRejects(runPowerShellPolicy(reorderedRepository, powershell, "pre-commit"), FRONTIER_LOG_PATH);
+            assertPolicyRejects(runPowerShellPolicy(reorderedRepository, powershell, powerShellPolicy, "pre-commit"), FRONTIER_LOG_PATH);
         }
 
         Path wrongPathRepository = newRepository(temporaryDirectory, "grandfather-wrong-path");
@@ -3776,17 +3785,65 @@ class TestBuildToolingGuard {
         writeAndStage(wrongPathRepository, wrongPath, "portable baseline\n");
         commit(wrongPathRepository, "portable audit");
         writeAndStage(wrongPathRepository, wrongPath, historicLine + "\n");
-        assertPolicyRejects(runPolicy(wrongPathRepository, "pre-commit"), wrongPath);
+        assertPolicyRejects(runPolicy(wrongPathRepository, shellPolicy, "pre-commit"), wrongPath);
         if (powershell != null) {
-            assertPolicyRejects(runPowerShellPolicy(wrongPathRepository, powershell, "pre-commit"), wrongPath);
+            assertPolicyRejects(runPowerShellPolicy(wrongPathRepository, powershell, powerShellPolicy, "pre-commit"), wrongPath);
         }
 
         Path newFileRepository = newRepository(temporaryDirectory, "grandfather-new-file");
         writeAndStage(newFileRepository, FRONTIER_LOG_PATH, historicLine + "\n");
-        assertPolicyRejects(runPolicy(newFileRepository, "pre-commit"), FRONTIER_LOG_PATH);
+        assertPolicyRejects(runPolicy(newFileRepository, shellPolicy, "pre-commit"), FRONTIER_LOG_PATH);
         if (powershell != null) {
-            assertPolicyRejects(runPowerShellPolicy(newFileRepository, powershell, "pre-commit"), FRONTIER_LOG_PATH);
+            assertPolicyRejects(runPowerShellPolicy(newFileRepository, powershell, powerShellPolicy, "pre-commit"), FRONTIER_LOG_PATH);
         }
+    }
+
+    @Test
+    void shellAndPowerShellPreservePublishedFrontierPrefixOnAppendAndTamper(
+            @TempDir Path temporaryDirectory) throws Exception {
+        String baseline = gitOutput(Path.of(".").toAbsolutePath(), "show",
+                FRONTIER_GRANDFATHER_BASELINE + ":" + FRONTIER_LOG_PATH);
+        String historicLine = baseline.lines()
+                .filter(TestBuildToolingGuard::containsMachineLocalHome).findFirst().orElseThrow();
+        String powershell = availablePowerShell();
+        Path repository = newRepository(temporaryDirectory, "published-frontier");
+        writeAndStage(repository, FRONTIER_LOG_PATH, baseline);
+        commit(repository, "published frontier");
+
+        // Normal full-size appends must preserve the real manifest's byte prefix.
+        // Restoring historical lines from a neutral parent is covered by the compact matrix.
+        writeAndStage(repository, FRONTIER_LOG_PATH, baseline + "portable append\n");
+        assertPolicyAccepts(runPolicy(repository, "pre-commit"));
+        if (powershell != null) {
+            assertPolicyAccepts(runPowerShellPolicy(repository, powershell, "pre-commit"));
+        }
+
+        writeAndStage(repository, FRONTIER_LOG_PATH,
+                baseline.replaceFirst(Pattern.quote(historicLine), historicLine + "-altered"));
+        assertPolicyRejects(runPolicy(repository, "pre-commit"), FRONTIER_LOG_PATH);
+        if (powershell != null) {
+            assertPolicyRejects(runPowerShellPolicy(repository, powershell, "pre-commit"), FRONTIER_LOG_PATH);
+        }
+    }
+
+    private static Path writeCompactGrandfatherPolicy(
+            Path temporaryDirectory, String publishedBaseline, String compactBaseline) throws Exception {
+        Path policies = Files.createDirectories(temporaryDirectory.resolve("compact-policy"));
+        Files.copy(POLICY_SCRIPT, policies.resolve("validate-policy.sh"));
+        Files.copy(POWERSHELL_POLICY_SCRIPT, policies.resolve("validate-policy.ps1"));
+        String manifest = Files.readString(MACHINE_LOCAL_PATH_GRANDFATHER);
+        String publishedPrefix = "# baseline-prefix\t"
+                + publishedBaseline.getBytes(StandardCharsets.UTF_8).length + "\t"
+                + sha256(publishedBaseline) + "\t" + FRONTIER_LOG_PATH;
+        String compactPrefix = "# baseline-prefix\t"
+                + compactBaseline.getBytes(StandardCharsets.UTF_8).length + "\t"
+                + sha256(compactBaseline) + "\t" + FRONTIER_LOG_PATH;
+        assertTrue(manifest.contains(publishedPrefix), "fixture must start from the verified published prefix");
+        // Only the prefix bytes change. Keep all real path/hash/count allowances,
+        // including duplicate occurrences, and execute byte-identical policy scripts.
+        Files.writeString(policies.resolve(MACHINE_LOCAL_PATH_GRANDFATHER.getFileName()),
+                manifest.replace(publishedPrefix, compactPrefix));
+        return policies;
     }
 
     @Test
@@ -4200,8 +4257,16 @@ class TestBuildToolingGuard {
         Path unrelatedRepository = newRepository(temporaryDirectory, "unreachable-cutover");
         createInitialCommit(unrelatedRepository);
         String unrelatedTip = gitOutput(unrelatedRepository, "rev-parse", "HEAD").trim();
-        git(unrelatedRepository, "fetch", "--no-tags",
-                Path.of(".").toAbsolutePath().normalize().toString(), RESOURCE_POLICY_CUTOVER);
+        // Borrow immutable objects without fetching/packing the project's history.
+        // Only this fixture gets the alternate; its independent root and refs stay local.
+        String sourceObjects = gitOutput(Path.of("."), "rev-parse",
+                "--path-format=absolute", "--git-path", "objects").trim();
+        Files.writeString(unrelatedRepository.resolve(".git/objects/info/alternates"), sourceObjects + "\n");
+        assertEquals(RESOURCE_POLICY_CUTOVER,
+                gitOutput(unrelatedRepository, "rev-parse", "--verify", RESOURCE_POLICY_CUTOVER + "^{commit}").trim());
+        assertEquals(1, run(unrelatedRepository,
+                List.of("git", "merge-base", "--is-ancestor", RESOURCE_POLICY_CUTOVER, unrelatedTip), null).exitCode(),
+                "fixture must contain the cutover object without making it an ancestor of its tip");
         ProcessResult unrelatedResult = runPolicy(
                 unrelatedRepository, "ci-push", ALL_ZERO_OID, unrelatedTip, "feature/unreachable-cutover");
         assertTrue(unrelatedResult.exitCode() != 0,
@@ -4515,6 +4580,10 @@ class TestBuildToolingGuard {
         git(repository, "commit", "-m", subject);
     }
 
+    private static ProcessResult runPolicy(Path repository, Path script, String mode) throws Exception {
+        return run(repository, List.of("sh", script.toString(), mode), null);
+    }
+
     private static ProcessResult runPolicy(Path repository, String mode, String... arguments) throws Exception {
         return runPolicy(repository, Map.of(), mode, arguments);
     }
@@ -4558,6 +4627,11 @@ class TestBuildToolingGuard {
             String powershell,
             String mode,
             String... arguments) throws Exception {
+        return runPowerShellPolicy(repository, powershell, POWERSHELL_POLICY_SCRIPT, mode, arguments);
+    }
+
+    private static ProcessResult runPowerShellPolicy(
+            Path repository, String powershell, Path script, String mode, String... arguments) throws Exception {
         List<String> command = new ArrayList<>(List.of(
                 powershell,
                 "-NoLogo",
@@ -4565,7 +4639,7 @@ class TestBuildToolingGuard {
                 "-ExecutionPolicy",
                 "Bypass",
                 "-File",
-                POWERSHELL_POLICY_SCRIPT.toString(),
+                script.toString(),
                 mode));
         command.addAll(List.of(arguments));
         return run(repository, command, null);
