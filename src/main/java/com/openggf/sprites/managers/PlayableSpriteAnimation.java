@@ -202,18 +202,20 @@ public class PlayableSpriteAnimation {
             restoreWaterTunnelPreviousAnimation(profile);
             if (sprite.isObjectMappingFrameControl()
                     && !selectedNonWalkScriptOverridesTumbleMapping()) {
-                applyDefaultFacingRenderFlips();
+                // Object-owned mappings retain their paired render flags.
+                // S3K loc_10C62/loc_138C8 skip Animate_Sonic/Animate_Tails
+                // entirely for object_control bit 1 (e.g. MGZ's spiral).
                 return;
             }
             updateScriptedAnimation(frameCounter);
             return;
         }
 
-        applyDefaultFacingRenderFlips();
-        if (profile == null) {
+        if (sprite.isObjectMappingFrameControl()) {
             return;
         }
-        if (sprite.isObjectMappingFrameControl()) {
+        applyDefaultFacingRenderFlips();
+        if (profile == null) {
             return;
         }
         int frameCount = sprite.getAnimationFrameCount();
@@ -319,8 +321,17 @@ public class PlayableSpriteAnimation {
 
     private boolean walkRunDelayLatchesRenderOrientation(SpriteAnimationScript script) {
         PlayerAnimationRules rules = playerAnimationRulesOrNull();
-        return rules != null
-                && rules.walkRunDelayLatchesRenderOrientation()
+        SpriteAnimationProfile profile = sprite.getAnimationProfile();
+        // TAnim_WalkRunZoom decrements anim_frame_duration and returns before
+        // reading angle or writing render_flags (s2.asm:41330-41355). Keep the
+        // selected slope mapping and its flips as one latched presentation on
+        // those timer-held frames. The publication-order profile distinguishes
+        // S2 Tails from S2 Sonic without a character/game-name carve-out.
+        boolean timerGatePrecedesOrientation =
+                profile instanceof ScriptedVelocityAnimationProfile velocityProfile
+                        && !velocityProfile.isWalkRunPublishesFrameBeforeTimerAdvance();
+        return (timerGatePrecedesOrientation
+                || (rules != null && rules.walkRunDelayLatchesRenderOrientation()))
                 && (script.delay() & 0xFF) == 0xFF
                 && sprite.getAnimationTick() > 0;
     }

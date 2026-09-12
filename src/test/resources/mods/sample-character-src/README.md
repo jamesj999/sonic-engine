@@ -15,13 +15,13 @@ running Maven.
 PowerShell:
 
 ```powershell
-./build.ps1 C:\path\OpenGGF-0.6.prerelease-jar-with-dependencies.jar C:\path\OpenGGF-0.6.prerelease-openggf-mod-sdk.jar C:\temp\phase3-character
+./build.ps1 C:\path\OpenGGF-0.7.prerelease-jar-with-dependencies.jar C:\path\OpenGGF-0.7.prerelease-openggf-mod-sdk.jar C:\temp\phase3-character
 ```
 
 POSIX shell:
 
 ```sh
-./build.sh /path/OpenGGF-0.6.prerelease-jar-with-dependencies.jar /path/OpenGGF-0.6.prerelease-openggf-mod-sdk.jar /tmp/phase3-character
+./build.sh /path/OpenGGF-0.7.prerelease-jar-with-dependencies.jar /path/OpenGGF-0.7.prerelease-openggf-mod-sdk.jar /tmp/phase3-character
 ```
 
 The packed output is:

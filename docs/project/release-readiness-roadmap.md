@@ -2,6 +2,10 @@
 
 Date: 2026-06-06
 
+For delivery after sign-off, follow [release publishing](release-publishing.md)
+and [release rollover](release-rollover.md). A push to `master` automatically
+publishes after validation and builds; manual dispatch is validation-only.
+
 This roadmap captures the architecture and code review findings gathered before
 the next release. The release standard is: no known hidden failures. A release
 candidate must not rely on disabled known-failing tests, CI paths that skip

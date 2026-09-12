@@ -712,8 +712,14 @@ public final class SmpsDriverSession implements AutoCloseable {
                         driver.captureOwnershipProjection()));
     }
 
+    public boolean sfxTrackStoppedDuringService() {
+        requireInstalled();
+        return driver.sfxTrackStoppedDuringService();
+    }
+
     public SmpsServiceOutcome serviceForward() {
         requireInstalled();
+        driver.clearTrackStopReceipt();
         globalStopConsumedDuringService = false;
         serviceInvocationCount++;
         if (segaPcmTransport != null) {

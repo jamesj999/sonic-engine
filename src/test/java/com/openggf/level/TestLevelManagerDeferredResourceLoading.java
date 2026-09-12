@@ -17,6 +17,8 @@ import com.openggf.game.session.EngineContext;
 import com.openggf.game.session.WorldSession;
 import com.openggf.graphics.GraphicsManager;
 import com.openggf.level.resources.CompressionType;
+import com.openggf.level.resources.PreparableLevelLoader;
+import com.openggf.level.resources.PreparedLevelBuild;
 import com.openggf.level.resources.DeferredLevelResourceDescriptor;
 import com.openggf.level.resources.DeferredLevelResourceLoader;
 import com.openggf.level.resources.DeferredLevelResourceManifest;
@@ -28,6 +30,8 @@ import org.junit.jupiter.api.Test;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.anyByte;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
@@ -85,6 +89,111 @@ class TestLevelManagerDeferredResourceLoading {
         tracker.verifyFullyConsumed();
         verify(deferredLoader).loadLevelWithDeferredResources(LEVEL_INDEX, tracker);
         verify(game, never()).loadLevel(LEVEL_INDEX);
+    }
+
+    @Test
+    void ordinaryLoadRejectsTransitionPreparedForTheSameIndex() throws Exception {
+        Game game = mock(Game.class, withSettings().extraInterfaces(PreparableLevelLoader.class));
+        PreparableLevelLoader loader = (PreparableLevelLoader) game;
+        Level ordinary = stubLevel();
+        Level transition = stubLevel();
+        PreparedLevelBuild prepared = mock(PreparedLevelBuild.class);
+        when(prepared.level()).thenReturn(transition);
+        when(loader.prepareLevelBuildTask(LEVEL_INDEX, "fire")).thenReturn(() -> prepared);
+        when(loader.installPreparedLevel(prepared)).thenReturn(transition);
+        when(game.loadLevel(LEVEL_INDEX)).thenReturn(ordinary);
+        LevelManager manager = managerFor(game);
+        manager.levels.add(java.util.List.of(LevelData.SKY_CHASE));
+
+        assertTrue(manager.prepareActTransitionLevelLoad(0, 0, "fire"));
+        assertSame(ordinary, manager.loadLevelData(LEVEL_INDEX));
+        assertEquals(0, manager.preparedLevelInstallCount());
+        verify(loader, never()).installPreparedLevel(prepared);
+    }
+
+    @Test
+    void deferredOrdinaryLoadRejectsTransitionPreparedForTheSameIndex() throws Exception {
+        Game game = mock(Game.class, withSettings().extraInterfaces(PreparableLevelLoader.class));
+        PreparableLevelLoader loader = (PreparableLevelLoader) game;
+        Level ordinary = stubLevel();
+        Level transition = stubLevel();
+        PreparedLevelBuild prepared = mock(PreparedLevelBuild.class);
+        when(prepared.level()).thenReturn(transition);
+        when(loader.prepareLevelBuildTask(LEVEL_INDEX, "fire")).thenReturn(() -> prepared);
+        when(loader.installPreparedLevel(prepared)).thenReturn(transition);
+        when(game.loadLevel(LEVEL_INDEX)).thenReturn(ordinary);
+        LevelManager manager = managerFor(game);
+        manager.levels.add(java.util.List.of(LevelData.SKY_CHASE));
+
+        assertTrue(manager.prepareActTransitionLevelLoad(0, 0, "fire"));
+        assertSame(ordinary, manager.loadLevelData(LEVEL_INDEX, DeferredLevelResourceTracker.none()));
+        assertEquals(0, manager.preparedLevelInstallCount());
+        verify(loader, never()).installPreparedLevel(prepared);
+    }
+
+    @Test
+    void matchingTransitionInstallsItsPreparedLevel() throws Exception {
+        PreparedFixture fixture = preparedFixture();
+        assertSame(fixture.transition(), fixture.manager().loadActTransitionLevelData(
+                LEVEL_INDEX, DeferredLevelResourceTracker.none(), "fire"));
+        assertEquals(1, fixture.manager().preparedLevelInstallCount());
+    }
+
+    @Test
+    void differentMutationDiscardsPreparedLevel() throws Exception {
+        PreparedFixture fixture = preparedFixture();
+        assertSame(fixture.ordinary(), fixture.manager().loadActTransitionLevelData(
+                LEVEL_INDEX, DeferredLevelResourceTracker.none(), "different"));
+        assertSame(fixture.ordinary(), fixture.manager().loadActTransitionLevelData(
+                LEVEL_INDEX, DeferredLevelResourceTracker.none(), "fire"));
+        assertEquals(0, fixture.manager().preparedLevelInstallCount());
+    }
+
+    @Test
+    void gameplayResetDiscardsPreparationEvenWhenTheSameLoaderIsReused() throws Exception {
+        PreparedFixture fixture = preparedFixture();
+        Game loader = fixture.manager().game;
+        fixture.manager().resetGameplayState();
+        fixture.manager().game = loader;
+        assertSame(fixture.ordinary(), fixture.manager().loadActTransitionLevelData(
+                LEVEL_INDEX, DeferredLevelResourceTracker.none(), "fire"));
+        assertEquals(0, fixture.manager().preparedLevelInstallCount());
+    }
+
+    @Test
+    void cancellationDiscardsPreparedLevel() throws Exception {
+        PreparedFixture fixture = preparedFixture();
+        fixture.manager().discardPreparedLevelLoad();
+        assertSame(fixture.ordinary(), fixture.manager().loadActTransitionLevelData(
+                LEVEL_INDEX, DeferredLevelResourceTracker.none(), "fire"));
+        assertEquals(0, fixture.manager().preparedLevelInstallCount());
+    }
+
+    @Test
+    void ordinaryLoadDiscardsPreparationInsteadOfLeavingItForALaterTransition() throws Exception {
+        PreparedFixture fixture = preparedFixture();
+        assertSame(fixture.ordinary(), fixture.manager().loadLevelData(LEVEL_INDEX));
+        assertSame(fixture.ordinary(), fixture.manager().loadActTransitionLevelData(
+                LEVEL_INDEX, DeferredLevelResourceTracker.none(), "fire"));
+        assertEquals(0, fixture.manager().preparedLevelInstallCount());
+    }
+
+    private record PreparedFixture(LevelManager manager, Level ordinary, Level transition) { }
+
+    private static PreparedFixture preparedFixture() throws Exception {
+        Game game = mock(Game.class, withSettings().extraInterfaces(PreparableLevelLoader.class));
+        PreparableLevelLoader loader = (PreparableLevelLoader) game;
+        Level ordinary = stubLevel();
+        Level transition = stubLevel();
+        PreparedLevelBuild prepared = mock(PreparedLevelBuild.class);
+        when(prepared.level()).thenReturn(transition);
+        when(loader.prepareLevelBuildTask(LEVEL_INDEX, "fire")).thenReturn(() -> prepared);
+        when(loader.installPreparedLevel(prepared)).thenReturn(transition);
+        when(game.loadLevel(LEVEL_INDEX)).thenReturn(ordinary);
+        LevelManager manager = managerFor(game);
+        manager.levels.add(java.util.List.of(LevelData.SKY_CHASE));
+        assertTrue(manager.prepareActTransitionLevelLoad(0, 0, "fire"));
+        return new PreparedFixture(manager, ordinary, transition);
     }
 
     private static LevelManager managerFor(Game game) {

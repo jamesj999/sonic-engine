@@ -1,8 +1,9 @@
 # Mod API compatibility surface
 
 OpenGGF Mod API 0.7 (`0.7.0`) is the unpublished, mutable compiled-mod candidate
-owned by the `next` product branch. No Mod API baseline has been published yet. The
-runtime-visible, type-only `com.openggf.game.ModApi` annotation marks its roots.
+carried by `develop` and `next` after the 0.6 release rollover. No Mod API baseline
+has been published yet. The runtime-visible, type-only `com.openggf.game.ModApi`
+annotation marks its roots.
 Every engine type reachable through those roots' public or protected
 constructors, methods, fields, generic bounds, annotations, nested types,
 supertypes, interfaces, record components, and sealed permits clauses belongs to
@@ -19,6 +20,13 @@ The root [`mod-api-release-policy.properties`](../../mod-api-release-policy.prop
 descriptor is the sole authority for branch topology, current version and status,
 and the published-baseline set. This guide explains that policy but does not define
 version state. The current descriptor has an empty published set.
+
+`targetBranch` identifies the destination branch checked by CI; the three line
+fields describe engine versions. An unpublished candidate on `develop` or `next`
+may retain an API line at or below its engine line. Thus both the 0.7 and 0.8 engine
+lines carry the same 0.7.0 candidate until an explicit API policy change. This does
+not publish a baseline or rename the candidate pin. Master and publication checks
+continue to require the selected release line.
 
 Creator manifests should declare the maintained candidate range:
 

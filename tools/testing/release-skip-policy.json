@@ -17,6 +17,13 @@
       "note": "rewind.soak property"
     },
     {
+      "match": "com.openggf.game.rewind.TestS3kRewindAllocationProbe#measure",
+      "category": "opt-in-benchmark",
+      "evidence": "src/test/java/com/openggf/game/rewind/TestS3kRewindAllocationProbe.java:27",
+      "allowed_when_absent": null,
+      "note": "openggf.rewind.alloc.measure system property"
+    },
+    {
       "match": "com.openggf.level.objects.TestObjectRewindTypeSafetyDispatchPerformance#measureMixedRouteDispatchAllocationAndTime",
       "category": "opt-in-benchmark",
       "evidence": "src/test/java/com/openggf/level/objects/TestObjectRewindTypeSafetyDispatchPerformance.java:121",

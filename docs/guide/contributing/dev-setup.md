@@ -51,7 +51,7 @@ means the wrong commit, and status 4 means an unsafe or missing path.
 The executable OpenGGF JAR with all dependencies is written to the current
 worktree's Maven output tree:
 ```
-target/OpenGGF-0.6.prerelease-jar-with-dependencies.jar
+target/OpenGGF-0.7.prerelease-jar-with-dependencies.jar
 ```
 
 Maven Silent Extension (MSE) is configured via `.mvn/extensions.xml`. By default, Maven
@@ -97,8 +97,12 @@ run.cmd
 ```
 
 The normal launchers build into the current worktree's `target/` directory and
-launch from there. Run Maven from the worktree root so its repository-local
-configuration keeps Maven-side output inside `target/`.
+launch the exact fat jar produced by that package, even when an older jar is
+still present. They resolve their own script directory, so they can be invoked
+from outside the worktree; the generated artifact manifest keeps the Maven
+`project.build.finalName` setting authoritative. Run Maven from the worktree
+root when invoking it directly so its repository-local JVM configuration also
+keeps Maven-side temporary files inside `target/`.
 
 For faster iteration, `dev.sh` (Linux) and `dev.cmd` (Windows) compile only
 changed sources and run directly from `target/classes`. The first offline
@@ -170,6 +174,8 @@ beside the app before launching it. Native image metadata is maintained in
 
 ## Next Steps
 
+- [Publishing a GitHub release](../../project/release-publishing.md) -- Pushes
+  to `master` automatically publish after validation and builds succeed.
 - [Architecture](architecture.md) -- Understand the codebase design
 - [Tutorial: Implement an Object](tutorial-implement-object.md) -- Learn by doing
 - [Testing](testing.md) -- Writing and running tests

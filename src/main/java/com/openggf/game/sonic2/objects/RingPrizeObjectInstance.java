@@ -226,8 +226,8 @@ public class RingPrizeObjectInstance extends AbstractObjectInstance
             player.addRings(1);
         }
 
-        // Play ring sound
-        services().playSfx(GameSound.RING);
+        // ROM ObjDC -> CollectRing -> PlaySound2 uses the secondary SFX mailbox.
+        services().audioManager().playSecondarySfx(GameSound.RING);
     }
 
     @Override

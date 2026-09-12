@@ -31,6 +31,35 @@ import static org.mockito.Mockito.when;
 class TestS3kSlotRewardObjects {
 
     @Test
+    void spikeSoundsConsumePayoutTicksRatherThanCountingImpacts() {
+        TrackingBonusStageServices services = new TrackingBonusStageServices();
+        S3kSlotStageController controller = new S3kSlotStageController();
+        controller.bootstrap();
+        // Four payout updates are insufficient, even after several impacts.
+        for (int i = 0; i < 4; i++) controller.advanceSpikePayout();
+        expireSpike(controller, services);
+        expireSpike(controller, services);
+        assertEquals(0, services.spikeSounds);
+        controller.advanceSpikePayout();
+        expireSpike(controller, services);
+        assertEquals(1, services.spikeSounds);
+        expireSpike(controller, services);
+        assertEquals(1, services.spikeSounds, "another same-tick impact cannot retrigger");
+        for (int i = 0; i < 5; i++) controller.advanceSpikePayout();
+        expireSpike(controller, services);
+        assertEquals(2, services.spikeSounds, "sound still plays with no rings left");
+    }
+
+    private static void expireSpike(S3kSlotStageController controller, TrackingBonusStageServices services) {
+        var reward = new S3kSlotSpikeRewardObjectInstance(
+                new ObjectSpawn(0x460, 0x430, 0, 0, 0, false, 0), controller);
+        reward.setServices(services);
+        reward.activate();
+        stepFrames(reward, 0x1E, null);
+        assertTrue(reward.isDestroyed());
+    }
+
+    @Test
     void ringRewardAddsOneBonusStageRingToPlayableOnExpiry() {
         TrackingBonusStageServices services = new TrackingBonusStageServices();
         S3kSlotStageController controller = new S3kSlotStageController();
@@ -316,6 +345,15 @@ class TestS3kSlotRewardObjects {
 
     private static final class TrackingBonusStageServices extends TestObjectServices {
         private int totalBonusStageRingDelta;
+        private int spikeSounds;
+
+        @Override
+        public void playSfx(int soundId) {
+            if (soundId == com.openggf.game.sonic3k.audio.Sonic3kSfx.SPIKE_HIT.id) {
+                spikeSounds++;
+            }
+        }
+
         private final LevelState levelState;
         private RingManager ringManager;
 

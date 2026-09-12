@@ -1,5 +1,6 @@
 package com.openggf.game.sonic2.objects;
 
+import com.openggf.game.sonic2.slotmachine.CNZPrizeSoundState;
 import com.openggf.game.PlayableEntity;
 import com.openggf.audio.GameSound;
 import com.openggf.game.rewind.RewindTransient;
@@ -26,16 +27,11 @@ import java.util.List;
  *   <li>Spawned at edge with initial angle</li>
  *   <li>Spirals inward toward cage center (1/16th distance per frame)</li>
  *   <li>When display delay expires, subtract 1 ring (Ring_Reduction)</li>
- *   <li>Plays spike sound every 5 bombs (from s2.asm line 58246)</li>
+ *   <li>Plays spike sound when the shared payout-update counter reaches 5</li>
  *   <li>Destroyed when off-screen or display delay expires</li>
  * </ol>
  */
 public class BombPrizeObjectInstance extends AbstractObjectInstance implements SpawnRewindRecreatable {
-
-    // Sound throttle counter (shared across all bomb instances)
-    // Plays spike sound every 5 bombs per disassembly
-    private static int soundThrottleCounter = 0;
-    private static final int SOUND_THROTTLE_INTERVAL = 5;
 
     // Position tracking (16.16 fixed point for precision)
     private int currentX;      // 16.16 fixed point X
@@ -118,11 +114,11 @@ public class BombPrizeObjectInstance extends AbstractObjectInstance implements S
                     player.addRings(-1);
                 }
 
-                // Play spike sound every 5 bombs (from s2.asm line 58246)
-                // Sound plays regardless of whether player has rings
-                soundThrottleCounter++;
-                if (soundThrottleCounter >= SOUND_THROTTLE_INTERVAL) {
-                    soundThrottleCounter = 0;
+                // ObjD3 consumes Bonus_Countdown_3, advanced by ObjD6's
+                // payout loop (loc_2BD48), regardless of remaining rings.
+                var soundState = services().gameModule().getGameService(
+                        CNZPrizeSoundState.class);
+                if (soundState != null && soundState.consumeSpikeSound()) {
                     playSpikeSound();
                 }
 
@@ -165,19 +161,12 @@ public class BombPrizeObjectInstance extends AbstractObjectInstance implements S
     }
 
     /**
-     * Resets all global state for BombPrize objects.
-     * Call on level load to ensure clean state across level transitions.
-     */
-    public static void resetGlobalState() {
-        soundThrottleCounter = 0;
-    }
-
-    /**
      * Play spike sound effect for bomb impact.
      */
     private void playSpikeSound() {
         try {
-            services().playSfx(GameSound.HURT_SPIKE);
+            // ObjD3 uses PlaySound2 (SFX1), not PlaySound (SFX0).
+            services().audioManager().playSecondarySfx(GameSound.HURT_SPIKE);
         } catch (Exception e) {
             // Prevent audio failure from breaking game logic
         }

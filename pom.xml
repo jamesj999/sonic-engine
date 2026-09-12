@@ -1197,6 +1197,18 @@ To bypass deliberately (not for test runs): -Dopenggf.jdk.check.skip=true
                             </target>
                         </configuration>
                     </execution>
+                    <execution>
+                        <id>write-launcher-artifact-manifest</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <echo file="${project.build.directory}/openggf-artifact.properties">finalName=${project.build.finalName}</echo>
+                            </target>
+                        </configuration>
+                    </execution>
                 </executions>
             </plugin>
 

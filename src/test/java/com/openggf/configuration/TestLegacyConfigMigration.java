@@ -49,4 +49,26 @@ class TestLegacyConfigMigration {
         assertTrue(Files.exists(secondBak), "legacy config should move to a unique backup path");
         assertFalse(Files.exists(json), "original config.json removed");
     }
+
+    @Test
+    void failedYamlPersistence_keepsLegacyConfigUsableAcrossRestart() throws Exception {
+        Path json = tempDir.resolve("config.json");
+        Path yaml = tempDir.resolve("config.yaml");
+        Files.createDirectory(yaml);
+        Files.writeString(yaml.resolve("keep"), "forces write failure");
+        Files.writeString(json, "{\"DEFAULT_ROM\":\"s1\"}");
+
+        SonicConfigurationService first = SonicConfigurationService.createStandalone(tempDir);
+
+        assertEquals("s1", first.getString(SonicConfiguration.DEFAULT_ROM));
+        assertTrue(Files.exists(json), "legacy source must remain after failed YAML persistence");
+        assertFalse(Files.exists(tempDir.resolve("config.json.bak")),
+                "migration must not claim success when config.yaml cannot be published");
+
+        SonicConfigurationService second = SonicConfigurationService.createStandalone(tempDir);
+
+        assertEquals("s1", second.getString(SonicConfiguration.DEFAULT_ROM),
+                "restart must recover the readable legacy configuration");
+        assertTrue(Files.exists(json), "legacy source remains available for another retry");
+    }
 }

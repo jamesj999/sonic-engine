@@ -37,6 +37,7 @@ the same concepts -- or you want to check the engine's accuracy.
 You want to add objects, bosses, zones, or engine improvements.
 
 - [Dev Setup](contributing/dev-setup.md) -- Environment, build, and test setup
+- [Release Publishing](../project/release-publishing.md) -- Automatic publication on pushes to master
 - [Architecture Deep Dive](contributing/architecture.md) -- Providers, services, and runtime
 - [Documentation and Branch Policy](contributing/documentation-policy.md) -- Commit trailers, changelog/discrepancy updates, and PR documentation checks
 - [Tutorial: Implement an Object](contributing/tutorial-implement-object.md) -- Worked example from disassembly to running code

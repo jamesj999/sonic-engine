@@ -34,12 +34,20 @@ it must say `n/a`. So "lying" in either direction fails the hook.
 
 ## Release and artifact destinations
 
+Release procedure changes must keep
+[release publishing](../project/release-publishing.md),
+[release rollover](../project/release-rollover.md), `AGENTS.md`/`CLAUDE.md`,
+and the mirrored `release-publishing` skill consistent. Pushes to `master`
+automatically publish after successful validation and builds. Manual dispatch
+is validation-only. Confirm the actual release before reporting it shipped;
+do not instruct maintainers to create the version tag before the workflow.
+
 ### Which version am I writing for?
 
 `pom.xml`'s `<version>` is the authority: it names the version `develop`
 carries, and therefore the `CHANGELOG.<version>.md` that receives new prose.
-Each branch declares its own version this way: **master 0.5.20260411, develop
-0.6.prerelease, next 0.7.prerelease.** Nothing on `develop` is written up under
+Each branch declares its own version this way: **master 0.6.20260911, develop
+0.7.prerelease, next 0.8.prerelease.** Nothing on `develop` is written up under
 `next`'s version; unreleased `next` prose accumulates in `CHANGELOG.md`'s
 "Unreleased" section until that release file is cut. Do not hardcode these
 numbers into new guidance — re-read `pom.xml` instead. Promoting all three at
@@ -110,14 +118,14 @@ supporting artifacts with the task. Do not create loose planning documents.
 
 ### 3. Changelog — `CHANGELOG.md`  →  trailer `Changelog`
 
-- **REQUIRED** for release-worthy engine changes: record 0.6 prose in
-  `CHANGELOG.0.6.md`. That file is thematic, shaped like `CHANGELOG.0.5.md`:
+- **REQUIRED** for release-worthy engine changes: record 0.7 prose in
+  `CHANGELOG.0.7.md`. That file is thematic, shaped like `CHANGELOG.0.5.md`:
   add a `- **Lead:** ...` bullet under the matching `###`/`####` area section
   (merge into an existing bullet when the change refines one), not a dated
   entry at the top. Keep bullets free of commit hashes, frame numbers, and
   test tallies. The root `CHANGELOG.md` is the release index; update it
   only when the index changes. Its exact path owns the hook trailer: if only
-  the 0.6 file changes, use `Changelog: n/a: release note recorded in CHANGELOG.0.6.md`.
+  the 0.7 file changes, use `Changelog: n/a: release note recorded in CHANGELOG.0.7.md`.
 - **JUSTIFIED SKIP** — special rule: on a `feat`/`fix`/`perf` commit that touches
   `src/main/`, a **bare** `Changelog: n/a` is **rejected**
   (`validate_changelog_justification`). You must either set `Changelog: updated`

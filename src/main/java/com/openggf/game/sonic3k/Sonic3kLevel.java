@@ -520,7 +520,7 @@ public class Sonic3kLevel extends AbstractLevel {
 
     private void loadPalettes(Rom rom, int characterPaletteAddr, int levelPaletteAddr) throws IOException {
         palettes = new Palette[PALETTE_COUNT];
-        GraphicsManager graphicsMan = GameServices.graphics();
+        GraphicsManager graphicsMan = publishGraphicsOnLoad ? GameServices.graphics() : null;
 
         // Palette 0: character palette (Sonic)
         palettes[0] = new Palette();
@@ -556,7 +556,7 @@ public class Sonic3kLevel extends AbstractLevel {
     }
 
     private void loadPatternsWithPlan(Rom rom, LevelResourcePlan plan) throws IOException {
-        GraphicsManager graphicsMan = GameServices.graphics();
+        GraphicsManager graphicsMan = publishGraphicsOnLoad ? GameServices.graphics() : null;
         ResourceLoader loader = new ResourceLoader(rom);
 
         byte[] result = loader.loadWithOverlays(plan.getPatternOps(), 0x10000);

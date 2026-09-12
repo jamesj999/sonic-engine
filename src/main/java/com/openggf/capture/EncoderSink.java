@@ -18,7 +18,7 @@ public final class EncoderSink implements FrameSink {
             java.util.logging.Logger.getLogger(EncoderSink.class.getName());
     private static final CapturedFrame POISON =
             new CapturedFrame(new byte[0], 0, 0, new short[0], 0, -1L);
-    private static final long DEFAULT_STOP_JOIN_TIMEOUT_MILLIS = 5_000L;
+    private static final long DEFAULT_STALL_TIMEOUT_MILLIS = 5_000L;
     /** A stalled encoder stalls every frame; warn periodically, not per frame. */
     private static final long WARNING_INTERVAL_NANOS =
             TimeUnit.SECONDS.toNanos(5);
@@ -27,7 +27,7 @@ public final class EncoderSink implements FrameSink {
     private final CaptureEncoder encoder;
     private final BackpressurePolicy policy;
     private final BlockingQueue<CapturedFrame> queue;
-    private final long stopJoinTimeoutMillis;
+    private final long stallTimeoutMillis;
     private final AtomicLong dropped = new AtomicLong();
     private final AtomicLong exhaustedFrames = new AtomicLong();
     private final AtomicLong blockedNanos = new AtomicLong();
@@ -40,22 +40,24 @@ public final class EncoderSink implements FrameSink {
     private volatile boolean terminal;
     private volatile boolean stopping;
     private volatile boolean abortRequested;
+    private volatile long completedFrames;
+    private volatile boolean finalizing;
 
     public EncoderSink(CaptureEncoder encoder, BackpressurePolicy policy, int capacity) {
-        this(encoder, policy, capacity, DEFAULT_STOP_JOIN_TIMEOUT_MILLIS);
+        this(encoder, policy, capacity, DEFAULT_STALL_TIMEOUT_MILLIS);
     }
 
-    EncoderSink(CaptureEncoder encoder, BackpressurePolicy policy, int capacity, long stopJoinTimeoutMillis) {
+    EncoderSink(CaptureEncoder encoder, BackpressurePolicy policy, int capacity, long stallTimeoutMillis) {
         if (capacity < 1) {
             throw new IllegalArgumentException("capacity must be >= 1");
         }
-        if (stopJoinTimeoutMillis < 1) {
-            throw new IllegalArgumentException("stopJoinTimeoutMillis must be >= 1");
+        if (stallTimeoutMillis < 1) {
+            throw new IllegalArgumentException("stallTimeoutMillis must be >= 1");
         }
         this.encoder = encoder;
         this.policy = policy;
         this.queue = new ArrayBlockingQueue<>(capacity);
-        this.stopJoinTimeoutMillis = stopJoinTimeoutMillis;
+        this.stallTimeoutMillis = stallTimeoutMillis;
     }
 
     public void open(Path output, int width, int height, int fps, int sampleRate) throws CaptureException {
@@ -139,23 +141,39 @@ public final class EncoderSink implements FrameSink {
             stopping = true;
             lifecycleLock.notifyAll();
         }
-        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(stopJoinTimeoutMillis);
+        long observedFrames = completedFrames;
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(stallTimeoutMillis);
+        boolean poisonQueued = false;
         try {
-            // Deliver the poison pill without hanging: if the worker has already
-            // died (e.g. encoder failure) the queue may be full and a blocking
-            // put would never return. Offer with a timeout while the worker is
-            // alive; bail out as soon as it has exited or recorded a failure.
-            while (worker.isAlive() && !queue.offer(POISON, 50, TimeUnit.MILLISECONDS)) {
-                if (workerFailure != null || System.nanoTime() >= deadline) {
+            while (worker.isAlive()) {
+                if (abortRequested) {
+                    // The worker may have published failure and started its own
+                    // cleanup. Do not publish terminal while that cleanup is
+                    // still running; retain a bounded wait for a stuck abort.
+                    TimeUnit.MILLISECONDS.timedJoin(worker, stallTimeoutMillis);
                     break;
                 }
-            }
-            long remaining = Math.max(0, deadline - System.nanoTime());
-            if (remaining > 0) TimeUnit.NANOSECONDS.timedJoin(worker, remaining);
-            if (worker.isAlive()) {
-                abort();
-                throw new CaptureException("encoder thread did not stop within "
-                        + stopJoinTimeoutMillis + " ms");
+                if (!poisonQueued) {
+                    poisonQueued = queue.offer(POISON);
+                }
+                long currentFrames = completedFrames;
+                if (currentFrames != observedFrames) {
+                    observedFrames = currentFrames;
+                    deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(stallTimeoutMillis);
+                }
+                // Queue draining is bounded by lack of frame progress, not total
+                // duration. Finalization may remux the whole recording; its own
+                // timeout belongs to the encoder. Explicit abort (including the
+                // live controller's shutdown deadline) still cancels either phase.
+                long remaining = deadline - System.nanoTime();
+                if (!finalizing && remaining <= 0) {
+                    abort();
+                    throw new CaptureException("encoder thread did not stop: no frame progress for "
+                            + stallTimeoutMillis + " ms");
+                }
+                long pollNanos = TimeUnit.MILLISECONDS.toNanos(50);
+                TimeUnit.NANOSECONDS.timedJoin(worker,
+                        finalizing ? pollNanos : Math.min(pollNanos, Math.max(1, remaining)));
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -175,7 +193,7 @@ public final class EncoderSink implements FrameSink {
     }
 
     public void abort() {
-        abort(Duration.ofMillis(stopJoinTimeoutMillis));
+        abort(Duration.ofMillis(stallTimeoutMillis));
     }
 
     void abort(Duration timeout) {
@@ -280,11 +298,16 @@ public final class EncoderSink implements FrameSink {
                 CapturedFrame frame = queue.take();
                 synchronized (lifecycleLock) { lifecycleLock.notifyAll(); }
                 if (frame == POISON) {
+                    synchronized (lifecycleLock) {
+                        if (abortRequested) return;
+                        finalizing = true;
+                    }
                     output = encoder.finish();
                     return;
                 }
                 try {
                     encoder.encode(frame);
+                    completedFrames++;
                 } finally {
                     frame.release();
                 }

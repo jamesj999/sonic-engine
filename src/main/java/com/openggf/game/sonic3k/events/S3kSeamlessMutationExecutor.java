@@ -89,17 +89,6 @@ public final class S3kSeamlessMutationExecutor {
             LayoutMutationContext context = new LayoutMutationContext(
                     LevelMutationSurface.forLevel(level), effects -> { });
             AizAct2LayoutAdjuster.apply(context, level.getMap());
-            // The same continuation applies MUTATION_AIZ1_FIRE_TERRAIN_READY to
-            // the outgoing level first; decode its tables here, off the frame,
-            // so that step only copies them in.
-            try {
-                Rom rom = rom();
-                if (rom != null) {
-                    loadAizFireTerrainData(rom);
-                }
-            } catch (IOException e) {
-                LOG.fine("AIZ fire terrain pre-decode skipped: " + e.getMessage());
-            }
         }
     }
 

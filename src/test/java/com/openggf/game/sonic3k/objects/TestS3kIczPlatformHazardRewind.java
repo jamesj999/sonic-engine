@@ -120,7 +120,7 @@ class TestS3kIczPlatformHazardRewind {
                 "ICZ path-follow platform routine must rebuild from subtype");
         assertTrue(readBooleanField(restoredSwingingPlatform, "xFlip"),
                 "ICZ swinging platform flip must rebuild from render flags");
-        assertEquals("WAITING", restoredStalagtite.getPhaseNameForTesting(),
+        assertEquals("OFFSCREEN", restoredStalagtite.getPhaseNameForTesting(),
                 "ICZ stalagtite phase must rebuild from constructor state before compact restore");
         assertTrue(restoredSnowPile.isHighPriority(),
                 "ICZ snow pile launch variant must rebuild from subtype");

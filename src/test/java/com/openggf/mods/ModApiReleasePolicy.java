@@ -153,9 +153,15 @@ final class ModApiReleasePolicy {
             case "next" -> next;
             default -> throw new AssertionError(branch);
         };
-        if (!ReleaseLine.of(current).equals(selected)) {
-            throw invalid("currentApi", current.toString(),
-                    "use the " + selected + " release line selected by targetBranch=" + branch);
+        ReleaseLine apiLine = ReleaseLine.of(current);
+        // Product rollover can carry the same unpublished API into a later engine line.
+        // Publication and master maintenance still require the selected release line.
+        boolean developmentCandidate = status == Status.CANDIDATE && !branch.equals("master");
+        if (developmentCandidate ? apiLine.compareTo(selected) > 0 : !apiLine.equals(selected)) {
+            throw invalid("currentApi", current.toString(), developmentCandidate
+                    ? "use a candidate API line no later than the " + selected
+                            + " engine line selected by targetBranch=" + branch
+                    : "use the " + selected + " release line selected by targetBranch=" + branch);
         }
         if (status == Status.CANDIDATE && !branch.equals("master") && current.patch() != 0) {
             throw invalid("currentApi", current.toString(),

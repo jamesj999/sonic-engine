@@ -79,7 +79,7 @@ import static org.mockito.Mockito.when;
  * Unit tests for the {@link RewindRegistry} integration on
  * {@link GameplayModeContext}.
  *
- * <p>Tests verify that the eleven always-available atomic adapters are
+ * <p>Tests verify that the thirteen always-available atomic adapters are
  * registered automatically when {@link GameplayModeContext#attachGameplayManagers}
  * is called, without requiring a full level load or ROM access.
  */
@@ -152,6 +152,7 @@ class TestGameplayModeContextRewindRegistry {
                 DynamicArtLifecycleService.REWIND_KEY,
                 ctx.seamlessTransitionResourceHandoffs().key(),
                 com.openggf.game.sonic2.timing.Sonic2LevelMusicScheduler.REWIND_KEY,
+                com.openggf.game.sonic2.slotmachine.CNZPrizeSoundState.REWIND_KEY,
                 "solid-execution",
                 "kosinski-module-queue");
         assertTrue(snapshot.entries().keySet().containsAll(expectedKeys),
@@ -159,12 +160,12 @@ class TestGameplayModeContextRewindRegistry {
     }
 
     @Test
-    void exactlyTwelveAtomicKeysAfterAttach() {
+    void exactlyThirteenAtomicKeysAfterAttach() {
         GameplayModeContext ctx = buildAttachedContext();
         RewindRegistry registry = ctx.getRewindRegistry();
         CompositeSnapshot snapshot = registry.capture();
-        assertEquals(12, snapshot.entries().keySet().size(),
-                "Expected exactly 12 atomic adapters, got: " + snapshot.entries().keySet());
+        assertEquals(13, snapshot.entries().keySet().size(),
+                "Expected exactly 13 atomic adapters, got: " + snapshot.entries().keySet());
     }
 
     @Test
@@ -329,8 +330,8 @@ class TestGameplayModeContextRewindRegistry {
         RewindRegistry second = ctx.getRewindRegistry();
         assertNotNull(second);
         assertNotSame(first, second, "Re-attach should produce a new RewindRegistry instance");
-        // New registry should have the same twelve keys
-        assertEquals(12, second.capture().entries().keySet().size());
+        // New registry should have the same thirteen keys
+        assertEquals(13, second.capture().entries().keySet().size());
     }
 
     @Test

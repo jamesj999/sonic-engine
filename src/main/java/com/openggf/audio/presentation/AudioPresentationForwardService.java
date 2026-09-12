@@ -24,6 +24,9 @@ public interface AudioPresentationForwardService {
 
         void applyOutcome(AppliedOutcome outcome);
 
+        /** Native SFX stop observed during this transaction's driver service. */
+        default void onSfxTrackStop() { }
+
         void prepareCommit();
 
         CommittedReceipt commit();

@@ -15,6 +15,7 @@ import com.openggf.game.sonic2.Sonic2GameModule;
 import com.openggf.game.sonic2.Sonic2SuperStateController;
 import com.openggf.game.session.GameplayModeContext;
 import com.openggf.game.session.SessionManager;
+import com.openggf.level.LevelManager;
 import com.openggf.level.objects.ObjectInstance;
 import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectSpawn;
@@ -61,6 +62,9 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(SingletonResetExtension.class)
 @FullReset
@@ -89,6 +93,25 @@ public class TestPlayableSpriteMovement {
         private PlayableSpriteMovement manager;
         private AbstractPlayableSprite mockSprite;
         private GameModule previousModule;
+
+	@Test
+	void s2DeadRoutineDoesNotRunWaterInteractionAfterCrossingSurface() throws Exception {
+		LevelManager levelManager = mock(LevelManager.class);
+		when(levelManager.objectsExecuteAfterPlayerPhysics()).thenReturn(true);
+		Sonic sonic = new Sonic("sonic", (short) 0, (short) 0);
+		setGameRulesForTest(sonic, GameRules.SONIC_2);
+		sonic.setInWater(true);
+		sonic.setYSpeed((short) -0x200);
+		sonic.setDead(true);
+
+		SpriteManager.tickPlayablePhysics(sonic,
+				false, false, false, false, false, false, false, false,
+				levelManager, 1);
+
+		verify(levelManager, never()).updatePlayableWaterStateForCurrentLevel(sonic);
+		assertEquals(-0x1C8, sonic.getYSpeed(),
+				"Obj01_Dead applies only ObjectMoveAndFall gravity; crossing the surface must not double y_vel");
+	}
 
         @BeforeEach
         public void setUp() {

@@ -55,6 +55,11 @@ public class S3kBossExplosionChild extends AbstractObjectInstance implements Spa
         updateDynamicSpawn(x & 0xFFFF, y & 0xFFFF);
     }
 
+    /** ROM sub_83E90 positions an already allocated explosion before its first dispatch. */
+    public void setSpawnPosition(int x, int y) {
+        updateDynamicSpawn(x & 0xFFFF, y & 0xFFFF);
+    }
+
     @Override
     public void update(int vIntRunCount, PlayableEntity playerEntity) {
         if (pendingDelete) {

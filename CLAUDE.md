@@ -8,7 +8,7 @@ Keep this file and `CLAUDE.md` identical. Skills are mirrored between
 OpenGGF is an alpha Java 21 reimplementation of Sonic 1, 2, and 3&K for
 research and preservation. Runtime assets come from user-supplied ROMs; this
 is an independent fan project with no Sega affiliation. The editor is
-experimental. The unpublished Mod API candidate is implemented on `next`;
+experimental. The unpublished Mod API candidate is implemented on the development branches;
 it is outside the 0.6 release scope.
 
 Accuracy means reproducing shipped-ROM behavior. Use the disassembly to
@@ -132,6 +132,15 @@ Follow its current guide and verified BizHawk 2.11 dependency. Use
 
 ## Delivery and documentation
 
+A non-deletion push to `master` automatically publishes a GitHub release
+after validation and builds succeed. Manual dispatch and pull requests do
+not publish. The workflow creates the POM-derived version tag at the pushed
+commit and rejects an existing tag, so do not tag first or reuse a released
+version for a new release. Read
+[release publishing](docs/project/release-publishing.md) and use the
+`release-publishing` skill for publication or a skipped release job. Confirm
+the release and downloads before reporting that it shipped.
+
 Follow the user's global branch/integration workflow. Never switch the main
 workspace branch. New branches use isolated `.worktrees/` checkouts and
 `feature/ai-*` or `bugfix/ai-*` names, based on the current main branch.
@@ -150,7 +159,7 @@ Use the [documentation obligation checklist](docs/agent-workflow/documentation-o
 when staging. `pom.xml`'s `<version>` names the version `develop` carries and
 so the `CHANGELOG.<version>.md` that receives release prose (`master` is the
 last released version and `next` the one after `develop`; today that is master
-0.5.20260411, develop 0.6.prerelease, next 0.7.prerelease; promoting them at
+0.6.20260911, develop 0.7.prerelease, next 0.8.prerelease; promoting them at
 release time follows [release rollover](docs/project/release-rollover.md)). Root `CHANGELOG.md` is the index (its exact
 path owns the hook trailer). The README release section is only a very
 high-level summary of the version's themes, not a change log; a fix to a
@@ -169,6 +178,8 @@ under `target/`.
 
 ## Find the owning reference
 
+- Release publication/skipped jobs: `release-publishing` and
+  [publishing guide](docs/project/release-publishing.md).
 - Architecture/services: [engine map](docs/architecture/engine-map.md).
 - Objects/bosses: matching `s1-`, `s2-`, or `s3k-implement-*` skill and
   [implementation reference](docs/architecture/object-implementation-reference.md).

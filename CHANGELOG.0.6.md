@@ -1,6 +1,6 @@
 # OpenGGF v0.6 Changelog
 
-## v0.6.prerelease (Current development snapshot)
+## v0.6.20260911
 
 Analysis range: `v0.5.20260411..develop` at `77c244548` (`11653` commits, `9762` non-merge
 commits, `8331` files changed, `1562327` insertions, `332466` deletions). Net code growth is
@@ -32,7 +32,8 @@ Maven after an experiment with managed test sessions was withdrawn.
 - **Runtime-owned zone frameworks:** typed zone state, palette ownership, animated tile channels,
   live layout mutation, scroll composition, staged render effects, and frame-level render-mode
   overrides are now supplied by shared runtime registries. Older zone-local paths remain where
-  migration has not yet paid for itself.
+  migration has not yet paid for itself. A failed replay close still clears the disposed session,
+  graphics bindings, and pending timing policy, allowing a fresh session to start safely.
 - **Level frame counter advances at the start of the frame** in all three games, matching the ROM.
   Roughly two dozen call sites that had compensated by reading one frame ahead were simplified, and
   a few that had never compensated are now correct.
@@ -54,6 +55,10 @@ Maven after an experiment with managed test sessions was withdrawn.
   fail-without-active-runtime contract.
 - **Object priority rendering reuses one palette-mask transition path,** keeping the Angel Island
   act 2 bridge layering fix out of the already-large object manager facade.
+- **Discord Rich Presence leaves the gameplay frame free of IPC:** enabled presence captures an
+  immutable status on the game thread, coalesces the latest payload on a bounded worker, and
+  bounds shutdown waiting for a stalled local client while retaining its privacy and timer
+  controls.
 
 #### ROM Pipeline
 
@@ -78,7 +83,9 @@ Maven after an experiment with managed test sessions was withdrawn.
   coordinator, its wrappers, and scratch-storage enforcement were removed after causing unbounded
   storage growth.
   Each checkout owns one reusable `target/` tree that also holds per-fork native extraction, and
-  release jobs use static target-local paths.
+  release jobs use static target-local paths. The local package launchers select the current Maven
+  artifact from a target-local manifest and fail clearly when that manifest or its expected fat jar
+  is missing instead of launching a stale version.
 - **The build fails fast off JDK 21:** Maven validates its own JVM at the validate phase, with an
   escape hatch. Test forks inherit Maven's JVM rather than the one on `PATH`, so a mismatched JDK
   can no longer turn hundreds of phantom failures into apparent regressions.
@@ -91,7 +98,9 @@ Maven after an experiment with managed test sessions was withdrawn.
   bundles derive their icon file from the packaged PNG.
 - **Release and architecture guards tightened** across branch and release policy, trace and rewind
   invariants, ROM-only runtime asset rules, and singleton lifecycle, replacing diagnostic-only or
-  tautological checks with behavioral oracles.
+  tautological checks with behavioral oracles. The opt-in S3K rewind allocation measurement is
+  explicitly classified while unknown skips continue to fail closed. Release pixel tests
+  use the runner's required native graphics display, including foreground-window rendering.
 - **Dead code removed** in an evidence-tiered sweep that checked callers, registries, reflection,
   resources, and service loading first. Casualties included unreferenced special-stage scalars,
   boss animation tables, debug primitive rendering, a superseded PSG chip class, an unreachable
@@ -176,7 +185,8 @@ disassemblies. Entries below apply to every game unless a game is named.
 - **Sonic 1 and Sonic 2 advance the dynamic water level before player physics,** matching the ROM's
   object-update order, so a player crossing a rising surface no longer reads a stale water base.
   S3K was already correct, and Sonic 2's water-exit boost now uses its own character routines
-  rather than reusing S3K's fast upward exit gate.
+  rather than reusing S3K's fast upward exit gate. Water interaction is restricted to the normal
+  control routine, so a dying Sonic crossing the surface no longer receives the exit boost.
 
 #### Checkpoints, Death, and Transitions
 
@@ -261,7 +271,9 @@ disassemblies. Entries below apply to every game unless a game is named.
   the line 2 backdrop colour included) while line 0 keeps Sonic, the HUD, and the title card at
   full colour, replacing the blended black overlay. Palette fades now apply where CRAM uploads
   happen, so palette cycles and other writes made during a fade stay faded. The card's black
-  plane still covers the release frame, whose foreground tilemap is rebuilt mid-frame.
+  plane still covers the release frame, whose foreground tilemap is rebuilt mid-frame. A complete
+  palette teardown also clears the active fade and its cached palette owners, so an interrupted
+  title-card session cannot tint the next session.
 
 ### Gameplay-Scoped Rewind
 
@@ -272,7 +284,9 @@ object family now restores through shared machinery, and the remaining coverage 
   covering bosses, badniks, mechanisms, debris and particles, cutscene controllers, and HUD and
   utility objects, moved from bespoke or missing restore paths onto shared spawn-based or
   graph-based generic recreate. Parent, child, and player references relink through the rewind
-  identity table and constructor-derived scalars restore compactly.
+  identity table and constructor-derived scalars restore compactly. Sonic 1's sixteen switch bytes
+  are captured too, and its SBZ3 door singleton rebinds from restored live slots, preserving the
+  first-loaded-slot rule across absent, reconstructed, and reused objects.
 - **Bespoke dynamic child codecs were deleted as they migrated:** lost rings, shields, boss and
   badnik children, seesaw balls, checkpoint children, Sonic 1 effects, S3K cutscene and miniboss
   children across six zones, signposts, entry flashes, and shared helper dynamics.
@@ -332,7 +346,9 @@ object family now restores through shared machinery, and the remaining coverage 
 
 - **Override-only `config.yaml`:** defaults live in code and the example file, and an older
   file with every default written in converts once to format 2, dropping values still at default
-  while keeping real changes.
+  while keeping real changes. A failed YAML replacement leaves the legacy JSON source available
+  for the next startup instead of claiming a completed migration. Developers can set
+  `config.preserveExplicitDefaults: true` to retain a full explicitly listed test configuration.
 - **`gameplay.loadTimeSimulation: FAST`:** now a real mode and the new default. A hand-tuned
   manifest carries measured ROM hardware-load costs, and games without a FAST manifest fall back
   to `NONE` with a warning. The old default is dropped on conversion, so existing installs pick the
@@ -349,7 +365,8 @@ object family now restores through shared machinery, and the remaining coverage 
 - **Capture encoding is configurable:** `capture.encoderPreset` exposes the speed preset and
   defaults to `fast`, `capture.encoderThreads` exposes the thread count, and lossless FFV1 is now
   sliced so threads apply to it too. An exhausted encoder queue logs a rate-limited warning rather
-  than silently stalling.
+  than silently stalling. Stopping allows a progressing queue to drain and gives finalization its
+  own encoder timeout; forced cancellation terminates ffmpeg before closing a blocked input pipe.
 - **Live and trace capture can target DaVinci Resolve on Linux** through DNxHR SQ video and
   lossless 24-bit PCM audio in a QuickTime container.
 - **Default ROM filenames simplified** to `s1.gen`, `s2.gen`, and `s3k.gen` across configuration,
@@ -370,14 +387,16 @@ object family now restores through shared machinery, and the remaining coverage 
   level load instead of rebuilding both full tilemaps, cutting the swap frame from about 25
   milliseconds to under one, and the fire-overlay art refreshes only the pattern atlas because it
   is pattern-only art.
-- **Angel Island act 2 hand-off:** it runs on a background preparer thread. The act 2 level decode,
-  object art sheets, and both tilemaps build across the fire event's rise and wait, and the reload
-  always joins the build so state stays identical to a synchronous load. Kosinski archive
+- **Angel Island act 2 hand-off:** the act 2 ROM decode runs on a background preparer thread across
+  the fire event's rise and wait, using captured bootstrap inputs. Art sheets and tilemaps build
+  on the frame thread during installation. Only the matching loader and transition may
+  consume a prepared build; ordinary loads, resets, and rewind discard it. Kosinski archive
   inspections are memoized per ROM.
 - **Save writes and GPU uploads moved off the gameplay frame:** progression saves encode on the
-  issuing frame but write on a dedicated writer thread flushed by slot reads, deletes, and
-  shutdown, and the act hand-off pre-decodes collision tables off the frame and keeps unchanged
-  sprite sheets across the reload instead of re-uploading them.
+  issuing frame but write on a dedicated writer thread, with reads, deletes, synchronous writes,
+  and shutdown sharing its submission boundary so independent save managers cannot reorder a slot;
+  the act hand-off pre-decodes collision tables off the frame and keeps unchanged sprite sheets
+  across the reload instead of re-uploading them.
 - **Palette-cycling zones no longer accumulate unbounded palette writes in the headless frame
   path.** The per-frame drain was owned only by the windowed game loop, which headless replay and
   benchmark paths bypass, making the cost grow quadratically. Moving the drain into the shared
@@ -562,7 +581,8 @@ against measured recordings.
   sustained spindash still flings a landing sidekick. Monitors no longer unseat a rider who changes
   state on top of them, since that exemption is acquire-time only in the ROM. Platforms and spikes
   report their own ROM size to the on-screen render test, and collapsing bridges clear their
-  standing bit on a terrain handoff instead of force-releasing a grounded rider.
+  standing bit on a terrain handoff instead of force-releasing a grounded rider. Spiral descents
+  retain the ROM's vertical and entry-side horizontal flips for Sonic and Tails throughout the ride.
 - **MGZ drilling miniboss:** the ceiling probe uses the S3K ceiling-distance contract, fixing a one-
   pixel-low rumble ladder, and the rumble step reads the correct byte of `V_int_run_count`, which
   had inverted the vertical step. Thruster timing, music cadence, composite render order, and rumble
@@ -624,6 +644,8 @@ against measured recordings.
 - **ICZ terrain and hazards:** Cork Floors and tension bridges use native height tables, edge
   bounds, and rope-bend phase, crushing columns use native edges and return rounding, and the
   segment column balances riders on its own 32-pixel width rather than the shared default.
+  Stalactites wait for their first camera appearance before enabling their proximity trigger,
+  preventing an earlier pass on another vertical route from making them fall out of sight.
 - **ICZ badniks and effects:** Penguinator off-screen gating and its floor-angle and slide-recovery
   script, Freezer placeholder lifecycle, snow emitter draw order, and ice cube rider release and
   roll-check timing all match the ROM.
@@ -666,7 +688,11 @@ against measured recordings.
   runtime signals, loads the Death Egg replacement art and terrain, applies the launch deformation
   and pad-collapse mutation, and keeps the Knuckles cameo art in its ROM tile slot. The finale
   drives the look-up, hang-ride, cameo, explosion, smoke, and foreground-scroll phases from the ROM
-  sequence, and the pipe-plug exhaust uses ROM mapping pieces and art.
+  sequence, including the external-animation terminal callback, 23-piece debris burst and
+  fall-through wait, VBlank-gated smoke rotation, and effect palette/priority ordering. The
+  standing platform uses the fixed VDP window and matching sprite-priority mask while the
+  exposed upper strip scrolls; background deformation holds during the final fall. The
+  pipe-plug exhaust uses ROM mapping pieces and art.
 - **LBZ tunnels:** automatic tunnels apply final path velocity on the correct exit frame and
   preserve fractional position words instead of overwriting them. The tube subtype puffs exit smoke
   on launch, and the exhaust cadence gate reads the frame counter's low byte correctly.
@@ -778,7 +804,8 @@ against measured recordings.
   timing, reward decrement, and release-launch axes read the ROM-derived counter and correct sine
   and cosine pairing, transient layout animations no longer advance a frame early, and the reel-wall
   flash runs at the ROM's two-frame-per-colour cadence. The reward cage no longer despawns off
-  camera, since the ROM's live routine has no unload path.
+  camera, since the ROM's live routine has no unload path. Spike impact sounds consume the ROM's
+  shared payout counter at five ticks instead of retriggering on every impact.
 - **Slot machine physics and exit:** ring and tile checks read the player's ground-projected
   position, ground-speed reversal is no longer clamped at zero, capture no longer zeroes the
   player's subpixel fraction, and the capture window is the ROM's half-open range rather than a
@@ -1338,6 +1365,8 @@ execution order, SST slot ownership, and routines that read their state once per
 - **Drowning countdown digits:** Sonic 2's Obj0A bubble sheet now loads the six ROM number blocks
   used by `Obj0A_LoadCountdownArt`, and numbers 5 through 0 select mapping frames 8 through `$D`
   from `Ani_obj0A`, so the final-air warning displays digits instead of ordinary bubble frames.
+  Each player's numbers retain their own air-state owner and freeze in screen space when they
+  form, including when the camera moves between object updates and rendering.
 - **ARZ2 badniks and effects:** Whisp (Obj8C) chase cadence, ChopChop (Obj91) patrol bubbles,
   Grounder (Obj8D, Obj8F, Obj90) floor snap and debris, the arrow shooter (Obj22), leaf render
   bounds (Obj2C), the bubble generator (Obj24), breathing bubbles (Obj0A), lost rings (Obj37), skid
@@ -1348,7 +1377,11 @@ execution order, SST slot ownership, and routines that read their state once per
 - **CNZ slot machines:** the slot machine runs after `RunObjects` on the current native V-int count,
   preserves 16-bit reel-position underflow, and decodes and rewrites `slots_targ` with the ROM shift
   values instead of reversing the displayed reel order, so stopped reels line up with the reward
-  paid out by linked Point Pokey cages.
+  paid out by linked Point Pokey cages. Reel graphics stay aligned with the cage when window
+  resizing adds horizontal or vertical viewport borders. Robotnik spike prizes advance their shared
+  sound counter on cage payout updates and use the secondary sound mailbox, preserving the ROM
+  impact-sound cadence across rewind. Ring prizes also use the secondary mailbox, requesting
+  the ring sound on every award.
 - **CNZ Point Pokey:** bumper angle math, capture and release, and linked-cage prize-counter timing
   match the ROM, and the cage bonus sound effect gates on the raw 16-frame `Vint_runcount` mask
   instead of a mis-derived offset constant.
@@ -1386,6 +1419,10 @@ execution order, SST slot ownership, and routines that read their state once per
 
 #### Oil Ocean and Metropolis
 
+- **MTZ Slicer (ObjA1):** upside-down placements retain their vertical flip while
+  walking, preparing to throw, and displaying the body after throwing their pincers.
+- **MTZ barriers (Obj2D):** all three acts render the one-way barriers with their ROM
+  level tiles and palette, matching the solid barrier's position and movement.
 - **OOZ oil surface (Obj07):** the surface executes in its reserved object-RAM band before the
   dynamic level objects, matching the ROM's aliasing of `Oil` onto `WaterSurface1`. It sequences
   submersion, hurt landings, and dead sidekick fall against the ROM routine and follows the ROM move
@@ -1545,6 +1582,9 @@ execution order, SST slot ownership, and routines that read their state once per
 
 #### Player Physics and Collision
 
+- **Tails slope-running animation:** timer-held walk/run frames retain the selected mapping frame's
+  horizontal and vertical flip bits together, matching `TAnim_WalkRunZoom`'s early return and
+  preventing intermittent upside-down frames on slopes.
 - **Super Sonic transformation:** the transformation activates just past the jump apex rather than
   on the way up, because the ROM's test reads the high byte of a big-endian word, and Super speeds
   install on the transform frame itself instead of after the animation finishes. The freeze ends
@@ -1667,6 +1707,8 @@ request scheduling. Full parity and human listening sign-off remain open.
   music starts on the shipped level-entry cadence, and ring and shield monitor sounds route through
   the ROM's music-request slot rather than the effect queue, matching the documented quirk without
   changing what is audible.
+  Native SFX track stops clear the request priority latch, so lower-priority effects such as
+  Point Pokey's Casino Bonus and the ARZ splash remain audible after other effects end.
 - **Drowning recovery and substituted music:** surfacing from the drowning countdown resumes the
   track the ROM specifies, and invincibility, Super and Hyper forms, and boss fights each keep their
   own per-game music substitution instead of being cut off by the zone theme.
@@ -1771,7 +1813,9 @@ request scheduling. Full parity and human listening sign-off remain open.
 - **Unified presentation audio:** SMPS, WAV and PCM effects, and raw SEGA PCM commands all resolve
   through one composite, allocation-free presentation voice with unified voice snapshots,
   deterministic command ordering, phase-exact non-consuming capture taps, and full rewind and
-  reverse-playback support. Live recording and offline trace capture take the same packets.
+  reverse-playback support. Live recording and offline trace capture take the same packets. The
+  standalone sound test marshals interactive commands and cleanup to its producer owner executor.
+  Shutdown waits are bounded while pending cleanup remains queued.
 - **Presentation rebuilds no longer silence the game:** the title-to-gameplay mode reset recreates
   the backend-owned presentation sink instead of letting enabled audio drop after the first reset,
   and the pre-game master title emits its own navigate, confirm and error cues independently of the
@@ -1956,7 +2000,13 @@ stays comparison-only: nothing in this release hydrates gameplay from a recorded
   failing part way, run discovery excludes synthetic fixture subtrees, catalog validation uses
   compact run-segment descriptors, and release trace validation compares fresh candidate evidence
   against a reviewed baseline with an explicit source-backed skip policy that fails closed on
-  anything unclassified.
+  anything unclassified. Release attachments are limited to the three platform distributions
+  and universal JAR; validation evidence remains a workflow artifact, and missing distribution
+  files fail publication. Native builds and their ordinary/guard validation run on GitHub-hosted
+  runners again; ROM-equipped validation is an opt-in evidence job rather than a prerequisite for
+  Windows, macOS, Linux, or universal-JAR builds. A push to `master` automatically publishes after
+  validation and builds succeed, tags the exact tested commit, and rejects an existing version
+  tag. Manual dispatch remains available for validation without publication.
 - **Trace tooling owner:** the recording, emulator, and probe tooling described under Architecture
   and Runtime now lives in the TraceChaser submodule.
 

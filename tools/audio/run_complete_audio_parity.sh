@@ -7,7 +7,7 @@ readonly repo_root="$(CDPATH= cd -- "$script_dir/../.." && /bin/pwd -P)"
 readonly tool_class='com.openggf.tools.audio.completerun.CompleteRunAudioTool'
 readonly java_bin='/usr/bin/java'
 readonly artifact_root="$repo_root/target"
-readonly jar="$artifact_root/OpenGGF-0.6.prerelease-jar-with-dependencies.jar"
+readonly artifact_manifest="$artifact_root/openggf-artifact.properties"
 
 usage() {
   /usr/bin/printf '%s\n' 'usage: run_complete_audio_parity.sh --run-root ABS --profile ID --rom ABS --bk2 ABS --run-manifest ABS --reference-home ABS'
@@ -57,6 +57,15 @@ safe_absolute "$reference_home" && [[ -d $reference_home && ! -L $reference_home
 if [[ -n $(/usr/bin/find "$reference_home" \( -type l -o -type f -links +1 -o \! -type d \! -type f \) -print -quit) ]]; then
   /usr/bin/printf '%s\n' 'reference home contains a linked or special entry' >&2; exit 2
 fi
+[[ -f $artifact_manifest && ! -L $artifact_manifest ]] || {
+  /usr/bin/printf '%s\n' 'packaged OpenGGF artifact manifest is missing' >&2; exit 4;
+}
+final_name="$(/usr/bin/sed -n 's/^finalName=//p' "$artifact_manifest")"
+[[ $final_name =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || {
+  /usr/bin/printf '%s\n' 'packaged OpenGGF artifact name is invalid' >&2; exit 4;
+}
+readonly final_name
+readonly jar="$artifact_root/${final_name}-jar-with-dependencies.jar"
 [[ -f $jar && ! -L $jar ]] || { /usr/bin/printf '%s\n' 'fixed OpenGGF tool jar is missing' >&2; exit 4; }
 
 readonly allowed_root="$repo_root/target/audio-parity/runs"

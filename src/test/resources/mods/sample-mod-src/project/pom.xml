@@ -5,8 +5,8 @@
   <properties><maven.compiler.release>21</maven.compiler.release></properties>
   <profiles>
     <profile><id>published-openggf</id><activation><activeByDefault>true</activeByDefault></activation><dependencies>
-      <dependency><groupId>com.openggf</groupId><artifactId>OpenGGF</artifactId><version>0.6.prerelease</version><scope>provided</scope></dependency>
-      <dependency><groupId>com.openggf</groupId><artifactId>OpenGGF</artifactId><version>0.6.prerelease</version><classifier>openggf-mod-sdk</classifier><scope>provided</scope></dependency>
+      <dependency><groupId>com.openggf</groupId><artifactId>OpenGGF</artifactId><version>0.7.prerelease</version><scope>provided</scope></dependency>
+      <dependency><groupId>com.openggf</groupId><artifactId>OpenGGF</artifactId><version>0.7.prerelease</version><classifier>openggf-mod-sdk</classifier><scope>provided</scope></dependency>
     </dependencies></profile>
     <!-- CI/golden seam; creators normally use the published profile above. -->
     <profile><id>local-openggf</id><activation><property><name>openggf.engine.jar</name></property></activation><dependencies>

@@ -494,7 +494,12 @@ The engine keeps `Events_fg_5` reserved for the LBZ1 -> LBZ2 transition path and
 uses semantic launch state in `LbzZoneRuntimeState` instead. The pad-collapse
 request is consumed by `Sonic3kLBZEvents`, which routes the terrain clear through
 `ZoneLayoutMutationPipeline` / `LevelMutationSurface` and combines it with the
-launch foreground-scroll offset.
+launch foreground-scroll offset. The copied 64-by-28-cell VDP window replaces
+Plane A from screen Y=40 downward, without scrolling, in both visible tile
+passes and the sprite-priority mask. Its final two VBlanks clear the remaining
+upper Plane A strip, restore the six hidden rows, and disable the window.
+Only the exposed upper strip follows the detach scroll; applying that scroll
+to the lower window lifts the platform into grounded Sonic.
 
 ### Rationale
 
@@ -505,9 +510,12 @@ launch-pad collapse behavior.
 
 ### Verification
 
-`TestSonic3kLbzLaunchSignals` covers the semantic pad-collapse signal and
-mutation routing, `TestLbzLaunchRuntimeState` covers rewind capture/restore for
-the launch state, and `TestNoDirectMapMutationsInGameplay` guards against direct
+`TestSonic3kLbzLaunchSignals` covers the copy/clear VBlanks, fixed window,
+semantic pad-collapse signal, and mutation routing.
+`TestForegroundWindowRendering` checks visible pixels, transparency, and the
+priority mask when a GL context is available; `TestSonic3kLbzRewindRoundTrip`
+covers the copied nametable and pending clear. `TestLbzLaunchRuntimeState`
+covers rewind capture/restore for the launch state, and `TestNoDirectMapMutationsInGameplay` guards against direct
 gameplay map writes.
 
 ---
@@ -551,40 +559,27 @@ smoke puffs and the rolling-smoke speed gate.
 
 ## LBZ2 Finale Player Scripts: Engine Animation IDs Instead of Raw Mapping Frames
 
-**Location:** `LbzFinalBoss1Instance.java`, `Lbz2RobotnikShipInstance.java`
+**Status:** Resolved for the post-boss player scripts. The heading remains for existing links.
 
-**ROM Reference:** `sonic3k.asm` `loc_72C68`/`byte_7386A`/`byte_73874` (look-up
-scripts), `Obj_LBZ2RobotnikShip` `loc_8D2B6` (grab)
+**Location:** `LbzFinalBoss1Instance.java`
 
-### Original Implementation
+**ROM Reference:** `sonic3k.asm` `loc_72C68`/`loc_72C9E`,
+`Animate_ExternalPlayerSprite`, `byte_7386A`/`byte_73874`.
 
-During the Death Egg launch look-up the ROM freezes both players with
-`object_control = $83` and drives raw player mapping frames through
-`Animate_ExternalPlayerSprite` (`$C4, $55, $59, $5A` for P1, a longer `$5A`
-hold for P2). The hang-ride grab is detected through the ship's touch response
-(`collision_flags = $CA` writing `collision_property`, ignoring value 2).
+The finale uses raw mapping frames `$55`, `$59`, `$5A` at six-dispatch
+intervals. The external animator advances past the table's initial `$C4` entry.
+Sonic's terminal zero on dispatch 19 changes the boss routine to `loc_72CC6`;
+P2 still receives its animation call on that dispatch, then both mapping frames
+remain held through the final fall. P2's longer table is consequently not run
+to completion. Render flipping does not change the player's status-facing bit.
+The shipped `FixBugs=0` branch preserves P2's animation byte during setup and
+clears it on the following external-animation dispatch.
 
-### Our Implementation
-
-The look-up uses the engine's forced `LOOK_UP` player animation (with held Up
-input) for both players instead of raw external mapping-frame scripts. The ship
-grab uses a centre-distance box matching the ObjDat touch dimensions and only
-ever grabs the main player.
-
-### Rationale
-
-The engine's forced-animation path renders the same player pose for the same
-duration without porting the external-animator opcode stream; the grab box is
-behaviourally equivalent because only Player 1 can trigger the ROM touch path.
-The hang pin itself (frame `$BA`/`$AD`, `(x-4, y-$12)` every frame) matches the
-ROM exactly via the object mapping-frame control used elsewhere.
-
-### Verification
-
-`TestLbzFinalBoss1Instance` covers the milestone-A freeze/look-up and finale
-phases; `TestLbz2RideCameoInstances` covers the grab, pin frames, release
-velocities, and final-boss spawn coordinates.
-
+`TestLbzFinalBoss1Instance` verifies the setup, six-dispatch cadence, terminal
+callback, retained mappings, and final-fall transition threshold. See the
+[ending audit](architecture/audits/2026-09-09-lbz2-ending-sequence.md) for the
+review scope and validation limits. These checks do not establish pixel-perfect
+parity for the complete scene.
 
 ---
 

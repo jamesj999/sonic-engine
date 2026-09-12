@@ -59,7 +59,14 @@ public class Sonic3kScrollHandlerProvider implements ScrollHandlerProvider {
             LOGGER.fine(() -> "LBZ waterline scroll data unavailable; using fallback LBZ waterline lookup: "
                     + e.getMessage());
         }
-        lbzHandler = new SwScrlLbz(lbzWaterlineData);
+        byte[] lbzDeathEggWaveData = null;
+        try {
+            lbzDeathEggWaveData = rom.readBytes(Sonic3kConstants.LBZ_DEATH_EGG_WAVE_DATA_ADDR,
+                    Sonic3kConstants.LBZ_DEATH_EGG_WAVE_DATA_SIZE);
+        } catch (IOException e) {
+            LOGGER.fine(() -> "LBZ Death Egg wave data unavailable: " + e.getMessage());
+        }
+        lbzHandler = new SwScrlLbz(lbzWaterlineData, lbzDeathEggWaveData);
         mhzHandler = new SwScrlMhz();
         mgzHandler = new SwScrlMgz();
         fbzHandler = new SwScrlFbz();

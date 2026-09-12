@@ -10,7 +10,9 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.time.Duration;
 
 /**
@@ -274,8 +276,7 @@ public final class FfmpegEncoder implements CaptureEncoder {
         }
         boolean success = false;
         try {
-            videoStdin.close();              // EOF -> ffmpeg finalizes video
-            int vexit = waitForProcess(videoProc, "video");
+            int vexit = finishVideoProcess();
             if (stderrDrain != null) stderrDrain.join(2000);
             closeAudioOut();
             if (vexit != 0) throw new CaptureException("ffmpeg video exited " + vexit);
@@ -360,10 +361,13 @@ public final class FfmpegEncoder implements CaptureEncoder {
             video = videoProc;
             mux = muxProc;
         }
-        try { if (videoStdin != null) videoStdin.close(); } catch (IOException ignored) { }
-        closeAudioOutQuietly();
+        // A frame writer can hold stdin's monitor while blocked on a full pipe.
+        // Killing the reader releases that write; closing/flushing stdin first
+        // can wait forever and never reach the process termination below.
         forceDestroy(video);
         forceDestroy(mux);
+        try { if (videoStdin != null) videoStdin.close(); } catch (IOException ignored) { }
+        closeAudioOutQuietly();
         waitUntil(video, deadlineNanos);
         waitUntil(mux, deadlineNanos);
         deleteQuietly(tempVideo);
@@ -394,6 +398,38 @@ public final class FfmpegEncoder implements CaptureEncoder {
             throw new CaptureException("ffmpeg " + phase + " process timed out");
         }
         return process.exitValue();
+    }
+
+    private int finishVideoProcess() throws IOException, InterruptedException, CaptureException {
+        Process video = videoProc;
+        AtomicBoolean timedOut = new AtomicBoolean();
+        // Closing buffered stdin can itself block while flushing to a full pipe.
+        // The phase deadline must therefore run independently of the writer and
+        // kill the reader before attempting any stream cleanup.
+        try (var watchdog = Executors.newSingleThreadScheduledExecutor(
+                Thread.ofPlatform().daemon().name("ffmpeg-video-finalization-timeout").factory())) {
+            var timeout = watchdog.schedule(() -> {
+                if (video.isAlive()) {
+                    timedOut.set(true);
+                    forceDestroy(video);
+                }
+            }, processTimeoutMillis, TimeUnit.MILLISECONDS);
+            try {
+                videoStdin.close(); // EOF -> ffmpeg finalizes video
+                int exit = waitForProcess(video, "video");
+                if (timedOut.get()) {
+                    throw new CaptureException("ffmpeg video process timed out");
+                }
+                return exit;
+            } catch (IOException failure) {
+                if (timedOut.get()) {
+                    throw new CaptureException("ffmpeg video process timed out while closing stdin", failure);
+                }
+                throw failure;
+            } finally {
+                timeout.cancel(false);
+            }
+        }
     }
 
     private void destroyAndWait(Process process) {

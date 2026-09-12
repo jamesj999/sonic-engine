@@ -1,8 +1,8 @@
 # `ggfmod` creator CLI
 
 The creator CLI is published separately from the engine APIs. Put both artifacts on
-the classpath: the `OpenGGF-0.6.prerelease-jar-with-dependencies.jar` supplies the public mod API
-and runtime dependencies; `OpenGGF-0.6.prerelease-openggf-mod-sdk.jar` supplies only
+the classpath: the `OpenGGF-0.7.prerelease-jar-with-dependencies.jar` supplies the public mod API
+and runtime dependencies; `OpenGGF-0.7.prerelease-openggf-mod-sdk.jar` supplies only
 the CLI, converters, packager, and project templates. The SDK classifier is not a
 standalone jar.
 
@@ -10,7 +10,7 @@ Run `docs/modding/ggfmod.ps1` on Windows or `docs/modding/ggfmod` on macOS/Linux
 passing the two jar paths followed by a command. For example:
 
 ```text
-ggfmod.ps1 OpenGGF-0.6.prerelease-jar-with-dependencies.jar OpenGGF-0.6.prerelease-openggf-mod-sdk.jar init my-mod --id my-mod --package example.mymod
+ggfmod.ps1 OpenGGF-0.7.prerelease-jar-with-dependencies.jar OpenGGF-0.7.prerelease-openggf-mod-sdk.jar init my-mod --id my-mod --package example.mymod
 ```
 
 The generated project targets Mod API 0.7 and contains a canonical manifest, a

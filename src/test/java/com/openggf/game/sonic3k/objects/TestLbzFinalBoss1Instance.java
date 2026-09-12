@@ -519,7 +519,7 @@ class TestLbzFinalBoss1Instance {
                 "byte_73874 emits the same first external frame for P2");
         assertEquals(Direction.RIGHT, sidekick.getDirection(),
                 "P2's external render flip must not change its status-facing bit");
-        assertEquals(LbzFinalBoss1Instance.FinalePhase.WAIT_LAUNCH_MILESTONE_B, boss.getFinalePhase());
+        assertEquals(LbzFinalBoss1Instance.FinalePhase.LOOK_UP, boss.getFinalePhase());
 
         for (int i = 0; i < 6; i++) {
             boss.update(frame++, player);
@@ -533,11 +533,19 @@ class TestLbzFinalBoss1Instance {
         assertExternalFrame(player, 0x5A, Direction.LEFT, "byte_7386A third Sonic frame");
         assertExternalFrame(sidekick, 0x5A, Direction.LEFT, "byte_73874 third P2 frame");
 
+        for (int i = 0; i < 5; i++) {
+            boss.update(frame++, player);
+            assertEquals(LbzFinalBoss1Instance.FinalePhase.LOOK_UP, boss.getFinalePhase());
+        }
+        boss.update(frame++, player); // Dispatch 19: Sonic's terminal zero callback.
+        assertEquals(LbzFinalBoss1Instance.FinalePhase.WAIT_LAUNCH_MILESTONE_B, boss.getFinalePhase());
+        assertExternalFrame(sidekick, 0x5A, Direction.LEFT,
+                "loc_72C9E still calls P2 on the dispatch where P1 changes the boss routine");
+        player.setMappingFrame(0x59);
         for (int i = 0; i < 8; i++) {
             boss.update(frame++, player);
         }
-        assertExternalFrame(sidekick, 0x5A, Direction.LEFT,
-                "byte_73874 keeps P2 on five $5A entries before the terminal zero byte");
+        assertEquals(0x59, player.getMappingFrame(), "loc_72CC6 no longer calls the external animator");
 
         boss.signalLaunchMilestoneBForTest();
         boss.update(frame, player);
@@ -561,7 +569,12 @@ class TestLbzFinalBoss1Instance {
         boss.update(30, player);
         AbstractObjectInstance flame = (AbstractObjectInstance) boss.childrenOfKindForTest(
                 LbzFinalBoss1Instance.ChildKind.ENGINE_FLAME).get(0);
+        services.rng().setSeed(0x12345678L); // Random_Number returns $1234C399.
         flame.update(31, player);
+        AbstractObjectInstance explosion = assertInstanceOf(AbstractObjectInstance.class,
+                boss.childrenOfKindForTest(LbzFinalBoss1Instance.ChildKind.BOSS_EXPLOSION).get(0));
+        assertEquals(0x4439, explosion.getX());
+        assertEquals(0x072C, explosion.getY(), "sub_83E90 uses SWAP, not a byte shift, for Y");
 
         assertTrue(services.sfxIds.contains(Sonic3kSfx.EXPLODE.id),
                 "sub_83E84 creates Obj_BossExplosion1, whose init routine plays sfx_Explode");
@@ -635,6 +648,8 @@ class TestLbzFinalBoss1Instance {
                 7);
 
         debris.update(0, null);
+        assertFalse(debris.isDestroyed(), "loc_72E54 returns after initialization");
+        debris.update(1, null);
 
         assertTrue(debris.isDestroyed(),
                 "loc_72E54 switches to MoveChkDel, which calls Sprite_CheckDeleteXY; "
@@ -663,6 +678,99 @@ class TestLbzFinalBoss1Instance {
                 "ChildObjDat_7380C is relative to the loc_72DEA sequencer at camera.y-$20");
         assertEquals(0x43D0, lowerLeft.getX());
         assertEquals(0x0670, lowerLeft.getY());
+    }
+
+    @Test
+    void debrisRandomizationBelongsToChildInitAndUsesRomWordOrder() throws Exception {
+        HarnessServices services = new HarnessServices(PlayerCharacter.SONIC_AND_TAILS);
+        LbzFinalBoss1Instance boss = newBoss(services);
+        boss.update(0, null);
+        AbstractObjectInstance sequencer = newExplosionSequencerForTest(boss);
+        services.rng().setSeed(0x12345678L);
+        sequencer.update(0, null);
+        assertEquals(0x12345678L, services.rng().getSeed(), "AllocateObject does not run loc_72E54");
+        AbstractObjectInstance debris = assertInstanceOf(AbstractObjectInstance.class,
+                boss.childrenOfKindForTest(LbzFinalBoss1Instance.ChildKind.BOSS_EXPLOSION).get(0));
+        debris.update(1, null);
+        assertEquals(8, readIntField(debris, "mappingFrame"));
+        assertEquals((services.camera.getX() & 0xFFFF) + 0x20 + 0x34, debris.getX());
+        assertEquals((services.camera.getY() & 0xFFFF) - 0x20, debris.getY());
+        assertFalse(debris.isHighPriority());
+        assertEquals(6, debris.getPriorityBucket());
+    }
+
+    @Test
+    void sequencerEmits23DebrisThenConsumesFirstWaitTickOnCount24() throws Exception {
+        HarnessServices services = new HarnessServices(PlayerCharacter.SONIC_AND_TAILS);
+        LbzFinalBoss1Instance boss = newBoss(services);
+        boss.update(0, null);
+        AbstractObjectInstance sequencer = newExplosionSequencerForTest(boss);
+        int dispatch = 0;
+        // loc_72DEA: counts 1..23 at 0, 6, 13, ...; count 24 at 391.
+        for (; dispatch <= 390; dispatch++) {
+            sequencer.update(dispatch, null);
+        }
+        long debris = boss.childrenOfKindForTest(LbzFinalBoss1Instance.ChildKind.BOSS_EXPLOSION)
+                .stream().filter(o -> o.getClass().getSimpleName().equals("DeathEggExplosionDebrisChild")).count();
+        assertEquals(23, debris);
+        assertTrue(services.lbzState.consumePadCollapseStartRequested());
+        sequencer.update(dispatch++, null);
+        assertEquals(23, boss.childrenOfKindForTest(LbzFinalBoss1Instance.ChildKind.BOSS_EXPLOSION).size(),
+                "loc_72E00 branches before allocation on count $18");
+        for (int i = 0; i < 382; i++) {
+            sequencer.update(dispatch++, null);
+            assertTrue(boss.childrenOfKindForTest(LbzFinalBoss1Instance.ChildKind.DEATH_EGG_MINIATURE).isEmpty());
+        }
+        sequencer.update(dispatch, null);
+        assertTrue(sequencer.isDestroyed());
+        assertEquals(7, boss.childrenOfKindForTest(LbzFinalBoss1Instance.ChildKind.DEATH_EGG_MINIATURE).size());
+    }
+
+    @Test
+    void miniatureInitDoesNotMoveOrSmokeAndSmokeUsesVBlankClock() throws Exception {
+        HarnessServices services = new HarnessServices(PlayerCharacter.SONIC_AND_TAILS);
+        LbzFinalBoss1Instance boss = newBoss(services);
+        boss.update(0, null);
+        AbstractObjectInstance sequencer = newExplosionSequencerForTest(boss);
+        writeIntField(sequencer, "milestoneWait", 0);
+        sequencer.update(0, null);
+        AbstractObjectInstance lead = assertInstanceOf(AbstractObjectInstance.class,
+                boss.childrenOfKindForTest(LbzFinalBoss1Instance.ChildKind.DEATH_EGG_MINIATURE).get(0));
+        int startY = lead.getY();
+        lead.update(16, null);
+        assertTrue(boss.childrenOfKindForTest(LbzFinalBoss1Instance.ChildKind.DEATH_EGG_SMOKE).isEmpty(),
+                "loc_72E9E initializes even on a VBlank divisible by 16");
+        assertEquals(startY, lead.getY());
+        assertFalse(lead.isHighPriority());
+        assertEquals(7, lead.getPriorityBucket());
+        lead.update(32, null);
+        AbstractObjectInstance smoke = assertInstanceOf(AbstractObjectInstance.class,
+                boss.childrenOfKindForTest(LbzFinalBoss1Instance.ChildKind.DEATH_EGG_SMOKE).get(0));
+        smoke.update(32, null);
+        assertTrue(readBooleanField(smoke, "hFlip"), "loc_72F7A rotates immediately at V_int_run_count & 3 == 0");
+        assertEquals(6, smoke.getPriorityBucket());
+        AbstractObjectInstance puff = assertInstanceOf(AbstractObjectInstance.class,
+                boss.childrenOfKindForTest(LbzFinalBoss1Instance.ChildKind.DEATH_EGG_SMOKE).get(1));
+        int[] expected = {4, 4, 4, 5, 5, 5, 6, 6, 6};
+        for (int i = 0; i < expected.length; i++) {
+            puff.update(32 + i, null);
+            assertEquals(expected[i], readIntField(puff, "mappingFrame"));
+            assertFalse(puff.isDestroyed());
+        }
+        puff.update(41, null);
+        assertTrue(puff.isDestroyed(), "byte_73864 reaches $F4 on dispatch 10");
+    }
+
+    private static int readIntField(Object target, String name) throws Exception {
+        Field field = target.getClass().getSuperclass().getDeclaredField(name);
+        field.setAccessible(true);
+        return field.getInt(target);
+    }
+
+    private static boolean readBooleanField(Object target, String name) throws Exception {
+        Field field = target.getClass().getSuperclass().getDeclaredField(name);
+        field.setAccessible(true);
+        return field.getBoolean(target);
     }
 
     private static LbzFinalBoss1Instance newBoss(HarnessServices services) {

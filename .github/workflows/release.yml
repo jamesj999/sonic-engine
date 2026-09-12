@@ -6,6 +6,12 @@ on:
   push:
     branches: [master]
   workflow_dispatch:
+    inputs:
+      validate_roms:
+        description: 'Also run ROM-backed validation on a configured fixture runner'
+        type: boolean
+        default: false
+
 
 jobs:
   policy:
@@ -25,7 +31,71 @@ jobs:
         if: github.event_name == 'push' && github.event.deleted == false
         run: bash .githooks/validate-policy.sh ci-push "${{ github.event.before }}" "${{ github.sha }}" "${{ github.ref_name }}"
 
+  # Cloud builds must not depend on private ROM fixtures or a personal runner.
   test:
+    runs-on: ubuntu-latest
+    env:
+      LUA_BIN: lua5.4
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Install Lua 5.4
+        run: sudo apt-get update && sudo apt-get install --yes lua5.4
+
+      - name: Verify Lua 5.4
+        run: |
+          command -v "$LUA_BIN"
+          "$LUA_BIN" -e 'assert(_VERSION == "Lua 5.4")'
+
+      - name: Run tests
+        run: mvn -Dmse=off test -B
+
+      - name: Assert cloud test coverage
+        run: |
+          python3 - <<'PYTEST'
+          from pathlib import Path
+          from xml.etree import ElementTree as ET
+          totals = dict(tests=0, failures=0, errors=0, skipped=0)
+          for report in Path("target/surefire-reports").glob("TEST-*.xml"):
+              root = ET.parse(report).getroot()
+              for key in totals:
+                  totals[key] += int(root.get(key, "0"))
+          print(totals)
+          assert totals["tests"] - totals["skipped"] >= 10000, "Insufficient cloud test coverage"
+          assert totals["failures"] == totals["errors"] == 0
+          PYTEST
+
+      - name: Preserve ordinary test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloud-test-evidence
+          path: target/surefire-reports/
+
+      - name: Run structural guards in a fresh JVM
+        run: mvn -Dmse=off -Pguards test -B -Dopenggf.surefire.reports=target/guard-reports
+
+      - name: Preserve guard evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloud-guard-evidence
+          path: target/guard-reports/
+
+  # Opt-in evidence collection retains strict ROM/skip/trace checks. It is
+  # separate from the hosted build graph; local validation uses the same tools.
+  rom-validation:
+    if: github.event_name == 'workflow_dispatch' && inputs.validate_roms
     runs-on: [self-hosted, release-fixtures]
     env:
       SONIC1_ROM_PATH: ${{ vars.SONIC1_ROM_PATH }}
@@ -103,6 +173,7 @@ jobs:
         shell: bash
         run: |
           mvn -Dmse=off test -B \
+            -Dopenggf.test.gl.native=true \
             -Dsonic1.rom.path="${SONIC1_ROM_PATH}" \
             -Dsonic2.rom.path="${SONIC2_ROM_PATH}" \
             -Ds3k.rom.path="${S3K_ROM_PATH}"
@@ -308,7 +379,9 @@ jobs:
         if: matrix.platform == 'linux'
         env:
           BUILD_ROOT: target
-          DISTRIBUTION_ROOT: target
+          # The native executable already occupies target/OpenGGF.
+          DISTRIBUTION_ROOT: target/linux-package
+          ARCHIVE_ROOT: target
         run: |
           mkdir -p "$DISTRIBUTION_ROOT/OpenGGF"
           cp "$BUILD_ROOT/OpenGGF" "$DISTRIBUTION_ROOT/OpenGGF/"
@@ -316,7 +389,7 @@ jobs:
           cp "$BUILD_ROOT"/native-libs/*.so "$DISTRIBUTION_ROOT/OpenGGF/"
           cp LICENSE NOTICE.md CREDITS.md "$DISTRIBUTION_ROOT/OpenGGF/"
           cp -R LICENSES "$DISTRIBUTION_ROOT/OpenGGF/LICENSES"
-          tar -czvf "$DISTRIBUTION_ROOT/OpenGGF-linux.tar.gz" -C "$DISTRIBUTION_ROOT" OpenGGF
+          tar -czvf "$ARCHIVE_ROOT/OpenGGF-linux.tar.gz" -C "$DISTRIBUTION_ROOT" OpenGGF
           rm -rf "$DISTRIBUTION_ROOT/OpenGGF"
 
       - name: Smoke validate packaged artifact
@@ -544,7 +617,7 @@ jobs:
 
   release:
     needs: [build, universal-jar]
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master' && github.event.deleted == false
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -567,10 +640,29 @@ jobs:
             exit 1
           fi
 
-      - name: Download all artifacts
+      - name: Download Windows distribution
         uses: actions/download-artifact@v4
         with:
-          path: artifacts
+          name: openggf-windows
+          path: artifacts/openggf-windows
+
+      - name: Download macOS distribution
+        uses: actions/download-artifact@v4
+        with:
+          name: openggf-macos
+          path: artifacts/openggf-macos
+
+      - name: Download Linux distribution
+        uses: actions/download-artifact@v4
+        with:
+          name: openggf-linux
+          path: artifacts/openggf-linux
+
+      - name: Download universal JVM jar
+        uses: actions/download-artifact@v4
+        with:
+          name: openggf-universal-jar
+          path: artifacts/openggf-universal-jar
 
       - name: Display artifacts
         run: ls -R artifacts
@@ -579,10 +671,15 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           tag_name: v${{ steps.version.outputs.version }}
+          target_commitish: ${{ github.sha }}
           name: v${{ steps.version.outputs.version }}
           draft: false
           generate_release_notes: true
+          fail_on_unmatched_files: true
           files: |
-            artifacts/**/*
+            artifacts/openggf-windows/OpenGGF-windows.zip
+            artifacts/openggf-macos/OpenGGF-macos.zip
+            artifacts/openggf-linux/OpenGGF-linux.tar.gz
+            artifacts/openggf-universal-jar/OpenGGF-universal.jar
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

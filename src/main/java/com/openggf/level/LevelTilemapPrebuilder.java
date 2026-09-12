@@ -5,13 +5,15 @@ import com.openggf.game.ZoneFeatureProvider;
 import com.openggf.graphics.GraphicsManager;
 
 /**
- * Builds foreground/background tilemap bytes for a level that is not yet
- * installed, using a throwaway {@link LevelTilemapManager} over the level's
+ * Builds foreground/background tilemap bytes for the newly installed target
+ * using a throwaway {@link LevelTilemapManager} over the level's
  * own geometry and the same block lookup rules the live manager uses.
  *
- * <p>Intended for off-thread use during a seamless transition wait: the build
- * touches only the given level, immutable zone settings, and the manager's
- * own build state. The live manager adopts the result through
+ * <p>Runs on the frame thread after the target is installed: wrapping predicates
+ * consult the live zone state and must not run on the ROM preparation worker.
+ * Callers must invalidate these bytes if subsequent mutation or feature
+ * initialization changes the layout or wrapping policy.
+ * The live manager adopts the result through
  * {@link LevelTilemapManager#adoptPrebuiltTilemaps} and swaps it in with
  * {@link LevelTilemapManager#swapToPrebuiltTilemaps()}, which is also what
  * verifies the bytes are identical to a from-scratch build (see

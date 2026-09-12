@@ -1,6 +1,7 @@
 package com.openggf.tools.modsdk;
 
 import com.openggf.io.ModInputLimits;
+import com.openggf.version.AppVersion;
 import com.openggf.mods.DefaultModRepositoryScanner;
 import com.openggf.mods.ModCatalogValidator;
 import com.openggf.mods.ModDescriptor;
@@ -129,9 +130,10 @@ class TestSampleModsPackage {
         String romArt = Files.readString(ROM_ART_GUIDE);
         assertTrue(romArt.contains("## 3. Request the bounded ROM window"));
         assertTrue(romArt.contains("Sonic 2 palette line 0 is Pal_SonicTails"));
-        assertTrue(romArt.contains("target/OpenGGF-0.6.prerelease.jar"));
+        String artifactPrefix = "target/OpenGGF-" + AppVersion.identity().baseVersion();
+        assertTrue(romArt.contains(artifactPrefix + ".jar"));
         assertTrue(romArt.contains(
-                "target/OpenGGF-0.6.prerelease-openggf-mod-sdk.jar"));
+                artifactPrefix + "-openggf-mod-sdk.jar"));
         assertTrue(romArt.contains("inserted after EHZ2"));
         assertFalse(romArt.contains("EHZ2 replacement zone"));
         String standalone = Files.readString(STANDALONE_GUIDE);

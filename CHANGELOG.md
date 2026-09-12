@@ -3,17 +3,16 @@
 OpenGGF keeps one changelog file per release so that release notes remain
 readable and historical versions can be referenced directly.
 
-## Unreleased (`next` / 0.7)
+## Unreleased (`next` / 0.8)
 
-- Feature: widescreen presentation is completed across ordinary UI/HUD surfaces,
-  titles, results, endings, diagnostics, all three special stages, width-sensitive
-  scene effects, and trace-video capture. Native 320x224 behavior remains the exact
-  gameplay/trace authority; 352x224 and 400x224 are supported presentation targets,
-  528x224 is a best-effort smoke tier, and 800x224 remains exploratory.
+No 0.8-only release entries yet. Work promoted from `next` is recorded in
+[CHANGELOG.0.7.md](CHANGELOG.0.7.md).
 
 ## Release files
 
-- [0.6 prerelease / current stable snapshot](CHANGELOG.0.6.md)
+- [0.7 prerelease / current development snapshot](CHANGELOG.0.7.md)
+
+- [0.6.20260911](CHANGELOG.0.6.md)
 - [0.5.20260411](CHANGELOG.0.5.md)
 - [0.4.20260304](CHANGELOG.0.4.md)
 - [0.3.20260206](CHANGELOG.0.3.md)
@@ -22,24 +21,22 @@ readable and historical versions can be referenced directly.
 - [0.05](CHANGELOG.0.05.md)
 - [0.01](CHANGELOG.0.01.md)
 
-## 0.6 release documentation
+## 0.7 development documentation
 
-[CHANGELOG.0.6.md](CHANGELOG.0.6.md) is the thematic 0.6 changelog, organised by
-area in the same shape as the 0.5 file. Newest changes are folded into their
-area rather than listed at the top.
+- [Release summary](docs/changelog/v0.7-release-summary.md) — current scope and limitations.
+- [Development ledger](docs/changelog/v0.7-prerelease-detailed.md) — integration and validation evidence.
+- [Trace scope](docs/status/trace-scope-release-7.md) — retained no-regression contract.
+- [0.7 roadmap](docs/project/v0.7-roadmap.md) — complete campaigns before feature/API publication.
 
-- [Release Summary](docs/changelog/v0.6-release-summary.md) — polished copy for
-  the website and GitHub release page, including the measured validation status
-  and known limitations. `RELEASE_NOTES_v0.6.prerelease.md` is a pointer to it.
-- [Archived 0.6 development ledger](docs/changelog/v0.6-development-ledger.md) —
-  the unedited entry-by-entry history the changelog was condensed from.
-- [Detailed 0.6 development ledger](docs/changelog/v0.6-prerelease-detailed.md) —
-  engineering notes and trace-frontier history.
-- [Trace frontier log](docs/status/trace-frontier-log.md) — current replay
-  evidence and remaining parity work.
+## Published 0.6 documentation
 
-The 0.6 snapshot is not yet a final release: human end-to-end gameplay and
-audio QA remain outstanding, and the release summary records the remaining
-automated limitations. Trace replay is held to the no-regression policy in
-[docs/status/trace-scope-release-6.md](docs/status/trace-scope-release-6.md)
-rather than a hard all-green gate.
+- [0.6 changelog](CHANGELOG.0.6.md) and [release summary](docs/changelog/v0.6-release-summary.md).
+- [Release notes](RELEASE_NOTES_v0.6.20260911.md).
+- [Raiscan's thoughts on 0.6](docs/changelog/raiscan-0.6-thoughts.md).
+- [Archived development ledger](docs/changelog/v0.6-development-ledger.md).
+- [Detailed engineering history](docs/changelog/v0.6-prerelease-detailed.md).
+- [Release-6 trace evidence](docs/status/trace-scope-release-6.md).
+
+The published `v0.6.20260911` tag and `release/0.6.20260911` branch retain the
+release snapshot. Its recorded limitations remain historical release evidence.
+Current replay evidence continues in the [trace frontier log](docs/status/trace-frontier-log.md).

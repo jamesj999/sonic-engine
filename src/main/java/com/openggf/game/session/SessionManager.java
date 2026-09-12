@@ -162,15 +162,16 @@ public final class SessionManager {
     }
 
     public static synchronized void clear() {
-        destroyCurrentMode();
-        currentWorldSession = null;
-        clearNextGameplayAdmissionPolicy();
+        try {
+            destroyCurrentMode();
+        } finally {
+            currentWorldSession = null;
+            clearNextGameplayAdmissionPolicy();
+        }
     }
 
     public static synchronized void closeGameplaySession() {
-        destroyCurrentMode();
-        currentWorldSession = null;
-        clearNextGameplayAdmissionPolicy();
+        clear();
     }
 
     public static synchronized GameModule requireCurrentGameModule() {
@@ -181,20 +182,53 @@ public final class SessionManager {
     }
 
     private static void destroyCurrentMode() {
-        boolean destroyedRuntimeMode = false;
-        if (currentGameplayMode != null) {
-            currentGameplayMode.destroy();
+        boolean hadRuntimeMode = currentGameplayMode != null || currentEditorMode != null;
+        Throwable failure = null;
+        try {
+            if (currentGameplayMode != null) {
+                currentGameplayMode.destroy();
+            }
+        } catch (RuntimeException | Error teardownFailure) {
+            failure = teardownFailure;
+        } finally {
             currentGameplayMode = null;
-            destroyedRuntimeMode = true;
         }
-        if (currentEditorMode != null) {
-            currentEditorMode.destroy();
+        try {
+            if (currentEditorMode != null) {
+                currentEditorMode.destroy();
+            }
+        } catch (RuntimeException | Error teardownFailure) {
+            failure = retainTeardownFailure(failure, teardownFailure);
+        } finally {
             currentEditorMode = null;
-            destroyedRuntimeMode = true;
         }
-        if (destroyedRuntimeMode) {
-            EngineServices.current().graphics().clearRuntimeManagedReferences();
+        try {
+            if (hadRuntimeMode) {
+                EngineServices.current().graphics().clearRuntimeManagedReferences();
+            }
+        } catch (RuntimeException | Error teardownFailure) {
+            failure = retainTeardownFailure(failure, teardownFailure);
         }
+        if (failure != null) {
+            // A rejected replay close still disposes the mode. Do not publish its
+            // world or let a failed mode switch carry admission into the next run.
+            currentWorldSession = null;
+            clearNextGameplayAdmissionPolicy();
+            if (failure instanceof RuntimeException runtimeFailure) {
+                throw runtimeFailure;
+            }
+            throw (Error) failure;
+        }
+    }
+
+    private static Throwable retainTeardownFailure(Throwable first, Throwable next) {
+        if (first == null) {
+            return next;
+        }
+        if (first != next) {
+            first.addSuppressed(next);
+        }
+        return first;
     }
 
     public static WorldSession getCurrentWorldSession() {

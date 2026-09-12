@@ -1,5 +1,7 @@
 package com.openggf.tools.modsdk;
 
+import com.openggf.version.AppVersion;
+
 import com.openggf.tests.TestSessionOutputPaths;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -23,6 +25,12 @@ class TestProjectScaffolder {
     @Test void createsExactCompilableUneditedProjectAndRefusesOverwrite() throws Exception {
         Path project = temp.resolve("sample");
         new ProjectScaffolder().scaffold(project, "my-sample", "example.mods.sample");
+
+        String pom = Files.readString(project.resolve("pom.xml"));
+        String dependencyVersion = "<version>" + AppVersion.identity().baseVersion() + "</version>";
+        assertEquals(2, pom.split(java.util.regex.Pattern.quote(dependencyVersion), -1).length - 1,
+                "engine and SDK dependencies must match the running build's Maven version");
+        assertFalse(pom.contains("{{ENGINE_VERSION}}"));
 
         Set<String> files;
         try (var paths = Files.walk(project)) {

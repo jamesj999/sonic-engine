@@ -2,6 +2,10 @@
 
 OpenGGF's documentation is organized by audience and purpose.
 
+Maintainers publishing a release should start with
+[Publishing a GitHub release](project/release-publishing.md): a push to
+`master` automatically publishes after validation and builds succeed.
+
 - [Agent workflow](agent-workflow/) contains agent procedures, runbooks, and
   reusable prompts.
 - [Architecture](architecture/) contains current architecture references and

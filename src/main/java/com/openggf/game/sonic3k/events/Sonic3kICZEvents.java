@@ -227,9 +227,6 @@ public class Sonic3kICZEvents extends Sonic3kZoneEvents {
         screenShakeAppliedOffsetY = 0;
         indoorPaletteCyclingActive = initialIndoorPaletteCycleState(act);
         applyInitialBackgroundPalette(act);
-        if (act == 0 && hasSonicSnowboardIntroPlayerMode()) {
-            spawnSonicSnowboardIntro();
-        }
     }
 
     @Override
@@ -403,7 +400,7 @@ public class Sonic3kICZEvents extends Sonic3kZoneEvents {
         return false;
     }
 
-    private void spawnSonicSnowboardIntro() {
+    public void spawnSonicSnowboardIntro() {
         if (introSpawned) {
             return;
         }

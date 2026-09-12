@@ -3,9 +3,18 @@ package com.openggf.game.save;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -271,5 +280,239 @@ class TestSaveManager {
                 "writes for one slot must complete in submission order");
         assertFalse(Files.list(slot.getParent()).anyMatch(p -> p.toString().endsWith(".tmp")),
                 "no temp file left behind");
+    }
+
+    @Test
+    void independentManagerRead_waitsForEarlierAsyncWrite() throws Exception {
+        SaveManager gameplay = new SaveManager(root);
+        SaveManager menu = new SaveManager(root);
+        gameplay.writeSlot("s1", 1, Map.of("lives", 3));
+
+        ThreadPoolExecutor writer = writerExecutor();
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        Future<?> blocker = writer.submit(() -> {
+            entered.countDown();
+            release.await();
+            return null;
+        });
+        assertTrue(entered.await(5, TimeUnit.SECONDS));
+
+        ExecutorService caller = Executors.newSingleThreadExecutor();
+        Thread observer = null;
+        try {
+            gameplay.writeSlotAsync("s1", 1, Map.of("lives", 9));
+            Future<SaveSlotSummary> read = caller.submit(() -> menu.readSlotSummary("s1", 1));
+            observer = releaseWhenOperationReachesWriter(read, writer, release);
+
+            SaveSlotSummary summary = read.get(5, TimeUnit.SECONDS);
+            assertEquals(SaveSlotState.VALID, summary.state());
+            assertEquals(9, summary.payload().get("lives"));
+            blocker.get(5, TimeUnit.SECONDS);
+        } finally {
+            release.countDown();
+            if (observer != null) {
+                observer.join(5_000);
+                assertFalse(observer.isAlive(), "save-ordering observer must terminate");
+            }
+            caller.shutdownNow();
+        }
+    }
+
+    @Test
+    void independentManagerDelete_remainsAfterEarlierAsyncWrite() throws Exception {
+        SaveManager gameplay = new SaveManager(root);
+        SaveManager menu = new SaveManager(root);
+        gameplay.writeSlot("s1", 1, Map.of("lives", 3));
+        Path slot = root.resolve("s1").resolve("slot1.json");
+
+        ThreadPoolExecutor writer = writerExecutor();
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        Future<?> blocker = writer.submit(() -> {
+            entered.countDown();
+            release.await();
+            return null;
+        });
+        assertTrue(entered.await(5, TimeUnit.SECONDS));
+
+        ExecutorService caller = Executors.newSingleThreadExecutor();
+        Thread observer = null;
+        try {
+            gameplay.writeSlotAsync("s1", 1, Map.of("lives", 9));
+            Future<?> delete = caller.submit(() -> menu.deleteSlot("s1", 1));
+            observer = releaseWhenOperationReachesWriter(delete, writer, release);
+
+            delete.get(5, TimeUnit.SECONDS);
+            blocker.get(5, TimeUnit.SECONDS);
+            gameplay.flushPendingWrites();
+            assertFalse(Files.exists(slot), "a delete boundary must not be crossed by a stale async write");
+        } finally {
+            release.countDown();
+            if (observer != null) {
+                observer.join(5_000);
+                assertFalse(observer.isAlive(), "save-ordering observer must terminate");
+            }
+            caller.shutdownNow();
+        }
+    }
+
+    @Test
+    void independentManagerSynchronousWrite_cannotBeOverwrittenByEarlierAsyncWrite() throws Exception {
+        SaveManager gameplay = new SaveManager(root);
+        SaveManager menu = new SaveManager(root);
+        gameplay.writeSlot("s1", 1, Map.of("lives", 3));
+
+        ThreadPoolExecutor writer = writerExecutor();
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        Future<?> blocker = writer.submit(() -> {
+            entered.countDown();
+            release.await();
+            return null;
+        });
+        assertTrue(entered.await(5, TimeUnit.SECONDS));
+
+        ExecutorService caller = Executors.newSingleThreadExecutor();
+        Thread observer = null;
+        try {
+            gameplay.writeSlotAsync("s1", 1, Map.of("lives", 9));
+            Future<?> newerWrite = caller.submit(
+                    (java.util.concurrent.Callable<Void>) () -> {
+                        menu.writeSlot("s1", 1, Map.of("lives", 11));
+                        return null;
+                    });
+            observer = releaseWhenOperationReachesWriter(newerWrite, writer, release);
+
+            newerWrite.get(5, TimeUnit.SECONDS);
+            blocker.get(5, TimeUnit.SECONDS);
+            gameplay.flushPendingWrites();
+            assertEquals(11, menu.readSlotSummary("s1", 1).payload().get("lives"));
+        } finally {
+            release.countDown();
+            if (observer != null) {
+                observer.join(5_000);
+                assertFalse(observer.isAlive(), "save-ordering observer must terminate");
+            }
+            caller.shutdownNow();
+        }
+    }
+
+    @Test
+    void interruptedIndependentManagerRead_cancelsQueuedReadAndRetainsInterrupt() throws Exception {
+        SaveManager gameplay = new SaveManager(root);
+        SaveManager menu = new SaveManager(root);
+        gameplay.writeSlot("s1", 1, Map.of("lives", 3));
+
+        ThreadPoolExecutor writer = writerExecutor();
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        Future<?> blocker = writer.submit(() -> {
+            entered.countDown();
+            release.await();
+            return null;
+        });
+        assertTrue(entered.await(5, TimeUnit.SECONDS));
+
+        gameplay.writeSlotAsync("s1", 1, Map.of("lives", 9));
+        AtomicBoolean interrupted = new AtomicBoolean();
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        Thread reader = new Thread(() -> {
+            try {
+                menu.readSlotSummary("s1", 1);
+                failure.set(new AssertionError("read should not return while its writer wait is interrupted"));
+            } catch (Throwable t) {
+                failure.set(t);
+                interrupted.set(Thread.currentThread().isInterrupted());
+            }
+        }, "save-ordering-interrupted-read");
+        reader.start();
+
+        try {
+            awaitWriterQueueSizeAtLeast(writer, 2);
+            reader.interrupt();
+            reader.join(5_000);
+            assertFalse(reader.isAlive(), "interrupted read must terminate");
+            assertTrue(interrupted.get(), "the interrupted status must survive the failed wait");
+            assertInstanceOf(java.io.IOException.class, failure.get());
+        } finally {
+            release.countDown();
+            blocker.get(5, TimeUnit.SECONDS);
+            gameplay.flushPendingWrites();
+            reader.join(5_000);
+        }
+    }
+
+    @Test
+    void interruptedIndependentManagerDelete_doesNotRunAheadOfQueuedWrite() throws Exception {
+        SaveManager gameplay = new SaveManager(root);
+        SaveManager menu = new SaveManager(root);
+        gameplay.writeSlot("s1", 1, Map.of("lives", 3));
+        Path slot = root.resolve("s1").resolve("slot1.json");
+
+        ThreadPoolExecutor writer = writerExecutor();
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        Future<?> blocker = writer.submit(() -> {
+            entered.countDown();
+            release.await();
+            return null;
+        });
+        assertTrue(entered.await(5, TimeUnit.SECONDS));
+
+        gameplay.writeSlotAsync("s1", 1, Map.of("lives", 9));
+        AtomicBoolean interrupted = new AtomicBoolean();
+        Thread deleter = new Thread(() -> {
+            menu.deleteSlot("s1", 1);
+            interrupted.set(Thread.currentThread().isInterrupted());
+        }, "save-ordering-interrupted-delete");
+        deleter.start();
+
+        try {
+            awaitWriterQueueSizeAtLeast(writer, 2);
+            deleter.interrupt();
+            deleter.join(5_000);
+            assertFalse(deleter.isAlive(), "interrupted delete must terminate");
+            assertTrue(interrupted.get(), "delete must retain its interrupt after the failed wait");
+            assertTrue(Files.exists(slot), "an interrupted delete must not run before the queued write");
+        } finally {
+            release.countDown();
+            blocker.get(5, TimeUnit.SECONDS);
+            gameplay.flushPendingWrites();
+            deleter.join(5_000);
+        }
+        assertEquals(9, menu.readSlotSummary("s1", 1).payload().get("lives"));
+    }
+
+    private static ThreadPoolExecutor writerExecutor() throws ReflectiveOperationException {
+        Field field = SaveManager.class.getDeclaredField("WRITER");
+        field.setAccessible(true);
+        return (ThreadPoolExecutor) field.get(null);
+    }
+
+    private static Thread releaseWhenOperationReachesWriter(Future<?> operation,
+                                                            ThreadPoolExecutor writer,
+                                                            CountDownLatch release) {
+        Thread observer = new Thread(() -> {
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while (!operation.isDone()
+                    && writer.getQueue().size() < 2
+                    && System.nanoTime() < deadline) {
+                Thread.onSpinWait();
+            }
+            release.countDown();
+        }, "save-ordering-test-observer");
+        observer.setDaemon(true);
+        observer.start();
+        return observer;
+    }
+
+    private static void awaitWriterQueueSizeAtLeast(ThreadPoolExecutor writer, int expected) {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (writer.getQueue().size() < expected && System.nanoTime() < deadline) {
+            Thread.onSpinWait();
+        }
+        assertTrue(writer.getQueue().size() >= expected,
+                "operation must be queued before the interruption is delivered");
     }
 }

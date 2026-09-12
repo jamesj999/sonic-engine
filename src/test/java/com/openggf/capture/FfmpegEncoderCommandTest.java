@@ -2,12 +2,14 @@ package com.openggf.capture;
 
 import com.openggf.tests.TestTempFiles;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.io.IOException;
 import java.io.OutputStream;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -92,6 +94,34 @@ class FfmpegEncoderCommandTest {
     }
 
     @Test
+    @Timeout(5)
+    void finalizationTimeoutAlsoUnblocksClosingBufferedVideoStdin() throws Exception {
+        BlockingCloseProcess video = new BlockingCloseProcess();
+        Path directory = TestTempFiles.createTempDirectory("ffmpeg-blocked-close");
+        Path output = directory.resolve("out.mkv");
+        FfmpegEncoder encoder = new FfmpegEncoder("ffmpeg", 1, command -> video, 100);
+        encoder.open(output, 1, 1, 60, 48000);
+        AsyncFinish finish = finishAsync(encoder);
+        try {
+            assertTrue(video.closeEntered.await(1, TimeUnit.SECONDS));
+            awaitFinish(finish);
+            CaptureException failure = assertInstanceOf(CaptureException.class, finish.result().get());
+            assertTrue(failure.getMessage().contains("video process timed out"));
+            assertFalse(video.isAlive());
+            assertNotNull(video.killedBy.get());
+            video.killedBy.get().join(1_000);
+            assertFalse(video.killedBy.get().isAlive(), "the finalization watchdog must terminate");
+            try (var files = Files.list(directory)) {
+                assertEquals(0, files.count(), "failed finalization must remove its temporary output");
+            }
+        } finally {
+            video.destroyForcibly();
+            finish.thread().join(1_000);
+            encoder.abort();
+        }
+    }
+
+    @Test
     void muxHangIsDestroyedAndPartialOutputDeleted() throws Exception {
         FakeProcess video = new FakeProcess(true);
         FakeProcess mux = new FakeProcess(false);
@@ -107,6 +137,56 @@ class FfmpegEncoderCommandTest {
         assertTrue(failure.getMessage().contains("mux process timed out"));
         assertTrue(mux.destroyed);
         assertFalse(Files.exists(output));
+    }
+
+    @Test
+    @Timeout(10)
+    void abortKillsAProcessWhoseStdinWriterIsBlockedBeforeClosingThePipe() throws Exception {
+        String java = Path.of(System.getProperty("java.home"), "bin", "java").toString();
+        Process process = new ProcessBuilder(java, "-cp", System.getProperty("java.class.path"),
+                NonReadingProcess.class.getName()).start();
+        Path output = TestTempFiles.createTempDirectory("ffmpeg-blocked-pipe").resolve("out.mkv");
+        FfmpegEncoder encoder = new FfmpegEncoder("unused", 1, command -> process, 500);
+        CountDownLatch writeStarted = new CountDownLatch(1);
+        AtomicReference<Throwable> writeFailure = new AtomicReference<>();
+        Thread writer = new Thread(() -> {
+            writeStarted.countDown();
+            try {
+                encoder.encode(new CapturedFrame(new byte[4 * 1024 * 1024], 1024, 1024,
+                        new short[0], 0, 0));
+            } catch (Throwable failure) {
+                writeFailure.set(failure);
+            }
+        }, "capture-blocked-pipe-test");
+        Thread aborter = new Thread(encoder::abort, "capture-abort-pipe-test");
+        try {
+            encoder.open(output, 1024, 1024, 60, 48000);
+            writer.start();
+            assertTrue(writeStarted.await(1, TimeUnit.SECONDS));
+            writer.join(100);
+            assertTrue(writer.isAlive(), "the child never consumes the frame, so its pipe must fill");
+            aborter.start();
+            aborter.join(2_000);
+            assertFalse(aborter.isAlive(), "abort must kill the child before waiting for its blocked stdin writer");
+            writer.join(1_000);
+            assertFalse(writer.isAlive());
+            assertFalse(process.isAlive());
+            assertInstanceOf(CaptureException.class, writeFailure.get());
+            assertFalse(Files.exists(output));
+        } finally {
+            // Release the real pipe even when testing the broken close-before-kill order.
+            process.destroyForcibly();
+            process.waitFor(2, TimeUnit.SECONDS);
+            writer.join(1_000);
+            aborter.join(1_000);
+            encoder.abort();
+        }
+    }
+
+    public static final class NonReadingProcess {
+        public static void main(String[] args) throws InterruptedException {
+            new CountDownLatch(1).await();
+        }
     }
 
     @Test
@@ -187,7 +267,7 @@ class FfmpegEncoderCommandTest {
         assertFalse(finish.thread().isAlive());
     }
 
-    private static final class FakeProcess extends Process {
+    private static class FakeProcess extends Process {
         private final boolean exits;
         private final ByteArrayOutputStream stdin = new ByteArrayOutputStream();
         private volatile boolean destroyed;
@@ -210,5 +290,36 @@ class FfmpegEncoderCommandTest {
         @Override public void destroy() { destroyed = true; }
         @Override public Process destroyForcibly() { destroyed = true; return this; }
         @Override public boolean isAlive() { return !exits && !destroyed; }
+    }
+
+    private static final class BlockingCloseProcess extends FakeProcess {
+        final CountDownLatch closeEntered = new CountDownLatch(1);
+        final CountDownLatch killed = new CountDownLatch(1);
+        final AtomicReference<Thread> killedBy = new AtomicReference<>();
+
+        BlockingCloseProcess() { super(false); }
+
+        @Override public OutputStream getOutputStream() {
+            return new OutputStream() {
+                @Override public void write(int value) { }
+                @Override public void close() throws IOException {
+                    closeEntered.countDown();
+                    try {
+                        killed.await();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new IOException("stdin flush interrupted", e);
+                    }
+                    throw new IOException("reader terminated during stdin flush");
+                }
+            };
+        }
+
+        @Override public Process destroyForcibly() {
+            killedBy.compareAndSet(null, Thread.currentThread());
+            super.destroyForcibly();
+            killed.countDown();
+            return this;
+        }
     }
 }

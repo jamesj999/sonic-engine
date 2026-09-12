@@ -87,6 +87,10 @@ public class Sonic1GameModule implements GameModule {
     private final Sonic1LevelEventManager levelEventManager = new Sonic1LevelEventManager();
     private final Sonic1ZoneRegistry zoneRegistry = new Sonic1ZoneRegistry();
     private final Sonic1SwitchManager switchManager = new Sonic1SwitchManager();
+    private final Sonic1SwitchStateRewindAdapter switchStateRewindAdapter =
+            new Sonic1SwitchStateRewindAdapter();
+    private final Sonic1StomperDoorSingletonRewindAdapter stomperDoorSingletonRewindAdapter =
+            new Sonic1StomperDoorSingletonRewindAdapter();
     private final Sonic1ConveyorState conveyorState = new Sonic1ConveyorState();
     private final Sonic1FloatingBlockState floatingBlockState = new Sonic1FloatingBlockState();
     private final Sonic1TitleCardManager titleCardProvider = new Sonic1TitleCardManager();
@@ -136,7 +140,10 @@ public class Sonic1GameModule implements GameModule {
 
     @Override
     public List<com.openggf.game.rewind.RewindSnapshottable<?>> rewindAdapters() {
-        return plcService == null ? List.of() : List.of(plcService);
+        if (plcService == null) {
+            return List.of(switchStateRewindAdapter, stomperDoorSingletonRewindAdapter);
+        }
+        return List.of(plcService, switchStateRewindAdapter, stomperDoorSingletonRewindAdapter);
     }
 
     @Override

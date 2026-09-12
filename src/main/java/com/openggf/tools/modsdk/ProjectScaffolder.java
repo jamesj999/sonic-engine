@@ -1,6 +1,7 @@
 package com.openggf.tools.modsdk;
 
 import com.openggf.game.ModKeySyntax;
+import com.openggf.version.AppVersion;
 
 import com.openggf.io.PixelImage;
 import com.openggf.io.PngCodec;
@@ -40,7 +41,8 @@ public final class ProjectScaffolder {
                 "{{MOD_ID}}", modId,
                 "{{PACKAGE}}", javaPackage,
                 "{{CLASS_PREFIX}}", prefix,
-                "{{DISPLAY_NAME}}", displayName(modId));
+                "{{DISPLAY_NAME}}", displayName(modId),
+                "{{ENGINE_VERSION}}", AppVersion.identity().baseVersion());
         try {
             Map<String, String> files = new LinkedHashMap<>();
             files.put("pom.xml", "pom.xml.template");

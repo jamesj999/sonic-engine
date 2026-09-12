@@ -9,6 +9,7 @@ import com.openggf.level.Palette;
 import com.openggf.level.Pattern;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Array;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -161,6 +162,37 @@ public class TestGraphicsManagerHeadless {
         assertNull(graphicsManager.getUnderwaterPaletteTextureId(), "underwater palette texture should be cleared");
         assertFalse(graphicsManager.isUseUnderwaterPaletteForBackground(),
                 "palette reset should clear the underwater palette selector");
+    }
+
+    @Test
+    public void testClearPaletteTexturesDropsFadeAndCachedPaletteOwners() throws Exception {
+        graphicsManager.initHeadless();
+        graphicsManager.cachePaletteTexture(createTestPalette(), 2);
+        graphicsManager.setPaletteFadePresentation(
+                PaletteFadePresentation.Mode.FROM_BLACK, 7,
+                PaletteFadePresentation.LINES_1_TO_3);
+
+        Field cachedLines = GraphicsManager.class.getDeclaredField(
+                "lastCachedPaletteLines");
+        cachedLines.setAccessible(true);
+        Object before = cachedLines.get(graphicsManager);
+        assertNotNull(Array.get(before, 2),
+                "precondition: palette teardown must have an owner to drop");
+        assertTrue(graphicsManager.getPaletteFadePresentation().isActive(),
+                "precondition: palette teardown must have an active fade");
+
+        graphicsManager.clearPaletteTextures();
+
+        assertFalse(graphicsManager.getPaletteFadePresentation().isActive(),
+                "palette teardown must neutralize the presentation fade");
+        Object after = cachedLines.get(graphicsManager);
+        assertEquals(0, Array.getLength(after),
+                "palette teardown must drop prior palette owners");
+
+        // Repeated session-boundary cleanup is safe and stays neutral.
+        graphicsManager.clearPaletteTextures();
+        assertFalse(graphicsManager.getPaletteFadePresentation().isActive());
+        assertEquals(0, Array.getLength(cachedLines.get(graphicsManager)));
     }
 
     @Test
@@ -367,4 +399,3 @@ public class TestGraphicsManagerHeadless {
         return (Map<?, ?>) field.get(graphicsManager);
     }
 }
-

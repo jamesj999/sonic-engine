@@ -18,6 +18,11 @@ it stays. On first run, a legacy `config.json` is migrated to `config.yaml` and 
 to `config.json.bak`. Keys are grouped into nested YAML sections rather than flat enum
 names.
 
+For development configurations where keeping the complete editable setting list is more
+useful, set `config.preserveExplicitDefaults: true` before starting the engine. The
+one-time sparse conversion will then retain every explicitly listed recognized setting.
+The flag defaults to `false`, preserving the release behavior described above.
+
 **Changing a default** (maintainers): change the `putDefault` line in
 `SonicConfigurationService`, the value in `src/main/resources/config.yaml`, and the row in
 this file. Nothing else: no migration, no version bump. `TestSparseUserConfig` fails if the
@@ -40,6 +45,7 @@ The `config.yaml` is organized into the following top-level sections:
 |---------|----------|
 | `display` | Aspect preset, window autosize, display shader library, deadzone mode, color profile, FPS |
 | `gameplay` | Normal-play hardware load-time simulation |
+| `config` | Configuration-file persistence behavior |
 | `input` | `player1` / `player2` key bindings, `pause` key |
 | `audio` | Enabled flag, region, DAC, FM6, PSG settings |
 | `characters` | Main character, sidekick, data select combos |
@@ -84,6 +90,7 @@ The `config.yaml` is organized into the following top-level sections:
 | `SCALE` | `debug.window.scale` | double | `1.0` | **DEPRECATED** additional rendering scale factor. |
 | `FPS` | `display.fps` | int | `60` | Target frames per second. Affects game speed — use `60` for NTSC, `50` for PAL. |
 | `LOAD_TIME_SIMULATION` | `gameplay.loadTimeSimulation` | enum | `FAST` | Normal-play ROM-load timing: `NONE` completes as soon as production preparation allows; `PROFILED` uses the generator-owned measured profile data; `FAST` (default) uses the hand-tuned copy of that data (`load-time-profiles/s3k-fast-v1.json`, which also carries the S3K title-screen Sonic frame decodes taken from the original hardware capture), and warns then behaves as `NONE` for a game without a FAST manifest; `REALISTIC` is a retained reserved alias that warns when the profile is resolved and returns `PROFILED`. S1/S2 resolve through their default module factory to the supplied immediate profile; their ROM-derived PLC and dynamic-art/DPLC lifecycles remain game-owned and are not retimed by this setting. Trace replay uses its recorded hardware-timing policy and does not consume this setting; queue-state trace diagnostics are comparison-only and never alter this configuration. |
+| `CONFIG_PRESERVE_EXPLICIT_DEFAULTS` | `config.preserveExplicitDefaults` | bool | `false` | Developer override: retain explicitly listed recognized settings, including values equal to defaults, when converting an older full configuration to sparse format. |
 | `DISPLAY_COLOR_PROFILE` | `display.colorProfile` | string | `"RAW_RGB"` | Palette presentation profile. `"RAW_RGB"` keeps the current direct 8-bit expansion, `"MD_ANALOG"` applies a darker Mega Drive-style analog ramp, and `"NTSC_SOFT"` applies the analog ramp plus mild desaturation. |
 | `DISPLAY_COLOR_PROFILE_TOGGLE_KEY` | `display.colorProfileToggleKey` | key | `V` | Runtime key used to cycle display color profiles. The selected profile is saved to `config.yaml` and shown briefly in the bottom-left corner. |
 | `DISPLAY_ASPECT` | `display.aspect` | string | `"NATIVE_4_3"` | Display aspect preset. Controls the logical pixel width used by the renderer. Accepted values: `"NATIVE_4_3"` (320 px, exact native behavior), `"WIDE_16_10"` (352 px, supported), `"WIDE_16_9"` (400 px, primary supported widescreen target), `"ULTRA_21_9"` (528 px, best-effort smoke tier), and `"SUPER_32_9"` (800 px, exploratory). Wider presentation does not widen ROM world boundaries or trace-comparison authority. |
@@ -442,6 +449,10 @@ also use `ffprobe`. Live recording is distinct from the Shift+F9
 Live recording treats an unavailable or failed audio tap as an audio-only
 failure: video continues and the MKV retains a phase-correct stereo-silence
 track. Encoder, output-file, and mux failures still stop the whole recording.
+Stopping waits while queued frames continue encoding, then allows the encoder
+to finalize the recording under its own timeout. The five-second queue watchdog
+measures stalled frame progress, not total recording-finalization time. Application
+shutdown can still cancel an unfinished recording after its bounded wait.
 For development validation only, launch the JVM with
 `-Dopenggf.debug.liveCaptureAudioFailAfterFrames=N` to inject a tap failure
 before drain `N + 1`, after exactly `N` successful audio-frame drains. The

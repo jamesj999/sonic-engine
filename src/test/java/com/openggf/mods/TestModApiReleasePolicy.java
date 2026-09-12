@@ -25,12 +25,12 @@ class TestModApiReleasePolicy {
             """;
 
     @Test
-    void repositoryDescriptorIsTheApprovedInitialCandidate() throws IOException {
+    void repositoryDescriptorRetainsUnpublishedCandidateAfterRollover() throws IOException {
         ModApiReleasePolicy policy = ModApiReleasePolicy.read(POLICY_PATH);
-        assertEquals("next", policy.targetBranch());
-        assertEquals(new ModApiReleasePolicy.ReleaseLine(0, 5), policy.masterLine());
-        assertEquals(new ModApiReleasePolicy.ReleaseLine(0, 6), policy.developLine());
-        assertEquals(new ModApiReleasePolicy.ReleaseLine(0, 7), policy.nextLine());
+        assertTrue(List.of("develop", "next").contains(policy.targetBranch()));
+        assertEquals(new ModApiReleasePolicy.ReleaseLine(0, 6), policy.masterLine());
+        assertEquals(new ModApiReleasePolicy.ReleaseLine(0, 7), policy.developLine());
+        assertEquals(new ModApiReleasePolicy.ReleaseLine(0, 8), policy.nextLine());
         assertEquals(SemanticVersion.parse("0.7.0"), policy.currentApi());
         assertEquals(ModApiReleasePolicy.Status.CANDIDATE, policy.currentStatus());
         assertEquals(List.of(), policy.publishedBaselines());
@@ -85,9 +85,33 @@ class TestModApiReleasePolicy {
     }
 
     @Test
-    void currentVersionMustMatchSelectedLineAndCandidatesUsePatchZero() {
-        assertInvalid(replace("currentApi", "0.6.0"), "currentApi", "0.6.0");
+    void candidatesCannotLeadSelectedEngineLineAndMustUsePatchZero() {
+        assertInvalid(replace("currentApi", "0.8.0"), "currentApi", "0.8.0");
         assertInvalid(replace("currentApi", "0.7.1"), "currentApi", "0.7.1");
+    }
+
+    @Test
+    void developmentRolloverCanRetainCandidateAcrossBothDestinationBranches() {
+        String promoted = VALID
+                .replace("masterLine=0.5", "masterLine=0.6")
+                .replace("developLine=0.6", "developLine=0.7")
+                .replace("nextLine=0.7", "nextLine=0.8");
+        for (String branch : List.of("develop", "next")) {
+            ModApiReleasePolicy policy = ModApiReleasePolicy.parse(
+                    promoted.replace("targetBranch=next", "targetBranch=" + branch));
+            assertEquals(branch, policy.targetBranch());
+            assertEquals(SemanticVersion.parse("0.7.0"), policy.currentApi());
+            assertEquals(ModApiReleasePolicy.Status.CANDIDATE, policy.currentStatus());
+            assertEquals(List.of(), policy.publishedBaselines());
+            assertEquals(Map.of("mod-api-signatures-0.7.txt", SemanticVersion.parse("0.7.0")),
+                    policy.expectedPins());
+        }
+    }
+
+    @Test
+    void masterCandidateStillRequiresItsSelectedReleaseLine() {
+        assertInvalid(VALID.replace("targetBranch=next", "targetBranch=master"),
+                "currentApi", "0.7.0");
     }
 
     @Test

@@ -1,4 +1,5 @@
 package com.openggf.game.sonic2.objects;
+import com.openggf.game.sonic2.slotmachine.CNZPrizeSoundState;
 import com.openggf.level.objects.BoxObjectInstance;
 
 import com.openggf.audio.GameSound;
@@ -465,36 +466,48 @@ public class PointPokeyObjectInstance extends BoxObjectInstance
      * - Eject when all prizes spawned AND all collected/expired (activePrizeCount == 0)
      */
     private void updateSpawningPrizes(AbstractPlayableSprite player, int vIntRunCount) {
-        // Keep player locked
-        keepPlayerLocked(player);
+        try {
+            // Keep player locked
+            keepPlayerLocked(player);
 
-        // Animate cage (Bug fix #2: toggle between frames 0 and 1)
-        updateCageAnimation();
+            // Animate cage (Bug fix #2: toggle between frames 0 and 1)
+            updateCageAnimation();
 
-        // NO SFX during prize spawning - ROM only plays sound during waiting/countdown
+            // NO SFX during prize spawning - ROM only plays sound during waiting/countdown
 
-        // loc_2BD4E (rings, s2.asm:59156-59193) and its identical twin at
-        // loc_2BC86 (bombs, s2.asm:59110-59148) gate on the *global* clock:
-        // "btst #0,(Level_frame_counter+1).w / beq.w return_2BDF6". A prize is
-        // therefore only ever created on an odd Level_frame_counter, and that
-        // same branch returns before the "tst.w objoff_2C(a0) / beq loc_2BE2E"
-        // release check, so while the reward is outstanding the release is only
-        // polled on odd frames too. Once the reward is exhausted the "beq.w +"
-        // at the head of loc_2BD4E skips the spawn block entirely and the
-        // release check runs every frame.
-        if (prizesToSpawn > 0) {
-            if ((levelFrameCounter(vIntRunCount) & 1) == 0) {
-                return; // beq.w return_2BDF6 - no spawn, and no release poll
+            // loc_2BD4E (rings, s2.asm:59156-59193) and its identical twin at
+            // loc_2BC86 (bombs, s2.asm:59110-59148) gate on the *global* clock:
+            // "btst #0,(Level_frame_counter+1).w / beq.w return_2BDF6". A prize is
+            // therefore only ever created on an odd Level_frame_counter, and that
+            // same branch returns before the "tst.w objoff_2C(a0) / beq loc_2BE2E"
+            // release check, so while the reward is outstanding the release is only
+            // polled on odd frames too. Once the reward is exhausted the "beq.w +"
+            // at the head of loc_2BD4E skips the spawn block entirely and the
+            // release check runs every frame.
+            if (prizesToSpawn > 0) {
+                if ((levelFrameCounter(vIntRunCount) & 1) == 0) {
+                    return; // beq.w return_2BDF6 - no spawn, and no release poll
+                }
+                // cmpi.w #$10,objoff_2C(a0) / bhs.w return_2BDF6
+                if (activePrizeCount[0] >= MAX_PRIZES) {
+                    return;
+                }
+                spawnPrize(player, vIntRunCount);
+                prizesToSpawn--;
             }
-            // cmpi.w #$10,objoff_2C(a0) / bhs.w return_2BDF6
-            if (activePrizeCount[0] >= MAX_PRIZES) {
-                return;
+
+            releaseIfAllPrizesSettled(player);
+        } finally {
+            // ObjD6's bomb branch reaches loc_2BD48 even on even frames,
+            // full child slots, and while waiting for the final impacts.
+            if (slotReward < 0 && playerState == STATE_SPAWNING_PRIZES) {
+                var state = services().gameModule().getGameService(
+                        CNZPrizeSoundState.class);
+                if (state != null) {
+                    state.advanceBombPayout();
+                }
             }
-            spawnPrize(player, vIntRunCount);
-            prizesToSpawn--;
         }
-
-        releaseIfAllPrizesSettled(player);
     }
 
     /**

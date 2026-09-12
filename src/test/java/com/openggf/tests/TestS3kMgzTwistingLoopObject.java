@@ -13,6 +13,12 @@ import com.openggf.level.objects.ObjectPlayerQuery;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.TestObjectServices;
 import com.openggf.sprites.playable.ObjectControlState;
+import com.openggf.game.rules.GameRules;
+import com.openggf.sprites.animation.SpriteAnimationSet;
+import com.openggf.sprites.animation.SpriteAnimationScript;
+import com.openggf.sprites.animation.SpriteAnimationEndAction;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -60,6 +66,39 @@ class TestS3kMgzTwistingLoopObject {
                 "MGZ loop bits 0-6 should not suppress touch responses");
         assertTrue(player.getCentreY() > LOOP_Y,
                 "Captured MGZ loop entry should advance downward on the first active frame");
+    }
+
+    @ParameterizedTest
+    @CsvSource({"sonic, -1, false", "sonic, 1, true", "tails, -1, false", "tails, 1, true"})
+    void spiralOrientationSurvivesPlayerAnimation(String character, int entrySide, boolean hFlip) {
+        MGZTwistingLoopObjectInstance loop = new MGZTwistingLoopObjectInstance(
+                new ObjectSpawn(LOOP_X, LOOP_Y, Sonic3kObjectIds.MGZ_TWISTING_LOOP, 0x10, 0, false, 0));
+        TestablePlayableSprite player = createDirectEntryPlayer(character, LOOP_X + entrySide);
+        player.setGameRulesForTest(GameRules.SONIC_3K);
+        SpriteAnimationSet animations = new SpriteAnimationSet();
+        animations.addScript(0, new SpriteAnimationScript(0xFF, List.of(1, 2),
+                SpriteAnimationEndAction.LOOP, 0));
+        player.setAnimationSet(animations);
+
+        loop.update(0, player);
+        // loc_33D70 sets Y flip on both sides; the preceding branch sets X flip
+        // only on right-side entry. loc_10C62/loc_138C8 skip Animate_* while held.
+        assertEquals(hFlip, player.getRenderHFlip());
+        assertTrue(player.getRenderVFlip(), "Capture must vertically flip the spiral mapping");
+        for (int frame = 1; frame <= 24; frame++) {
+            int heldMapping = player.getMappingFrame();
+            player.getAnimationManager().update(frame);
+            assertEquals(heldMapping, player.getMappingFrame());
+            assertEquals(hFlip, player.getRenderHFlip(), "Animation must retain the entry-side flip");
+            assertTrue(player.getRenderVFlip(), "Animation must retain the spiral's vertical flip");
+            loop.update(frame, player);
+            assertTrue(player.isObjectMappingFrameControl());
+        }
+        // The no-art fallback must preserve the same object-owned presentation.
+        player.setAnimationSet(null);
+        player.getAnimationManager().update(25);
+        assertEquals(hFlip, player.getRenderHFlip());
+        assertTrue(player.getRenderVFlip());
     }
 
     @Test

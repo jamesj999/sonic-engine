@@ -633,6 +633,7 @@ CF-ANNOTATION TYPE com.openggf.graphics.FadeManager visible @com.openggf.game.Mo
 CF-ANNOTATION TYPE com.openggf.graphics.FadeManager$FadeState visible @com.openggf.game.ModApi
 CF-ANNOTATION TYPE com.openggf.graphics.FadeManager$FadeType visible @com.openggf.game.ModApi
 CF-ANNOTATION TYPE com.openggf.graphics.FadeManagerSnapshot visible @com.openggf.game.ModApi
+CF-ANNOTATION TYPE com.openggf.graphics.ForegroundWindow visible @com.openggf.game.ModApi
 CF-ANNOTATION TYPE com.openggf.graphics.GLCommand visible @com.openggf.game.ModApi
 CF-ANNOTATION TYPE com.openggf.graphics.GLCommand$BlendType visible @com.openggf.game.ModApi
 CF-ANNOTATION TYPE com.openggf.graphics.GLCommand$CommandType visible @com.openggf.game.ModApi
@@ -1463,6 +1464,7 @@ CONSTRUCTOR com.openggf.game.zone.ZoneRuntimeRegistry public  <init>()
 CONSTRUCTOR com.openggf.ghost.GhostFrame public  <init>(int,int,int,boolean,boolean,boolean,int,boolean)
 CONSTRUCTOR com.openggf.graphics.FadeManager public  <init>()
 CONSTRUCTOR com.openggf.graphics.FadeManagerSnapshot public  <init>(com.openggf.graphics.FadeManager$FadeState,int,float,float,float,float,com.openggf.graphics.FadeManager$FadeType,int,int,int,float,int,boolean,boolean)
+CONSTRUCTOR com.openggf.graphics.ForegroundWindow public  <init>(int,int,int,int[])
 CONSTRUCTOR com.openggf.graphics.GLCommand public  <init>(com.openggf.graphics.GLCommand$CommandType,com.openggf.graphics.GLCommandable)
 CONSTRUCTOR com.openggf.graphics.GLCommand public  <init>(com.openggf.graphics.GLCommand$CommandType,int)
 CONSTRUCTOR com.openggf.graphics.GLCommand public  <init>(com.openggf.graphics.GLCommand$CommandType,int,com.openggf.graphics.GLCommand$BlendType,float,float,float,float,int,int,int,int)
@@ -2052,6 +2054,7 @@ FIELD com.openggf.configuration.SonicConfiguration public,static,final com.openg
 FIELD com.openggf.configuration.SonicConfiguration public,static,final com.openggf.configuration.SonicConfiguration CAPTURE_QUEUE_BUDGET_MB
 FIELD com.openggf.configuration.SonicConfiguration public,static,final com.openggf.configuration.SonicConfiguration CAPTURE_SCALE
 FIELD com.openggf.configuration.SonicConfiguration public,static,final com.openggf.configuration.SonicConfiguration CAPTURE_TOGGLE_KEY
+FIELD com.openggf.configuration.SonicConfiguration public,static,final com.openggf.configuration.SonicConfiguration CONFIG_PRESERVE_EXPLICIT_DEFAULTS
 FIELD com.openggf.configuration.SonicConfiguration public,static,final com.openggf.configuration.SonicConfiguration CONTROLLER_DEADZONE
 FIELD com.openggf.configuration.SonicConfiguration public,static,final com.openggf.configuration.SonicConfiguration CONTROLLER_ENABLED
 FIELD com.openggf.configuration.SonicConfiguration public,static,final com.openggf.configuration.SonicConfiguration CONTROLLER_PLAYER1
@@ -5981,6 +5984,7 @@ METHOD com.openggf.game.ZoneFeatureProvider public  boolean useFullWidthBackgrou
 METHOD com.openggf.game.ZoneFeatureProvider public  boolean useLinearBackgroundLayoutOverflow(int)
 METHOD com.openggf.game.ZoneFeatureProvider public  boolean useSpriteSatMasking(int)
 METHOD com.openggf.game.ZoneFeatureProvider public  com.openggf.game.ZoneFeatureRenderer getFeatureRenderer()
+METHOD com.openggf.game.ZoneFeatureProvider public  com.openggf.graphics.ForegroundWindow foregroundWindow()
 METHOD com.openggf.game.ZoneFeatureProvider public  float getVdpNametableBase(int,int,int,int)
 METHOD com.openggf.game.ZoneFeatureProvider public  float getWaterlineOffset(int,int)
 METHOD com.openggf.game.ZoneFeatureProvider public  int backgroundLoopBandBaseY(int,int)
@@ -7915,6 +7919,13 @@ METHOD com.openggf.graphics.FadeManagerSnapshot public  int holdFrameCount()
 METHOD com.openggf.graphics.FadeManagerSnapshot public,final  boolean equals(java.lang.Object)
 METHOD com.openggf.graphics.FadeManagerSnapshot public,final  int hashCode()
 METHOD com.openggf.graphics.FadeManagerSnapshot public,final  java.lang.String toString()
+METHOD com.openggf.graphics.ForegroundWindow public  int heightTiles()
+METHOD com.openggf.graphics.ForegroundWindow public  int top()
+METHOD com.openggf.graphics.ForegroundWindow public  int widthTiles()
+METHOD com.openggf.graphics.ForegroundWindow public  int[] descriptors()
+METHOD com.openggf.graphics.ForegroundWindow public,final  boolean equals(java.lang.Object)
+METHOD com.openggf.graphics.ForegroundWindow public,final  int hashCode()
+METHOD com.openggf.graphics.ForegroundWindow public,final  java.lang.String toString()
 METHOD com.openggf.graphics.GLCommand public  com.openggf.graphics.GLCommand$BlendType getBlendMode()
 METHOD com.openggf.graphics.GLCommand public  com.openggf.graphics.GLCommand$CommandType getCommandType()
 METHOD com.openggf.graphics.GLCommand public  float getAlpha()
@@ -8273,6 +8284,7 @@ METHOD com.openggf.graphics.TilemapGpuRenderer public  void setBackgroundTilemap
 METHOD com.openggf.graphics.TilemapGpuRenderer public  void setBackgroundTilemapDataIncremental(byte[],int,int,int,int)
 METHOD com.openggf.graphics.TilemapGpuRenderer public  void setBackgroundTilemapDataPhysical(byte[],int,int,int,int)
 METHOD com.openggf.graphics.TilemapGpuRenderer public  void setBgVdpWrapHeight(float)
+METHOD com.openggf.graphics.TilemapGpuRenderer public  void setForegroundWindow(com.openggf.graphics.ForegroundWindow)
 METHOD com.openggf.graphics.TilemapGpuRenderer public  void setPatternLookupData(byte[],int)
 METHOD com.openggf.graphics.TilemapGpuRenderer public  void setShimmerState(int,int)
 METHOD com.openggf.graphics.TilemapGpuRenderer public  void setTilemapData(com.openggf.graphics.TilemapGpuRenderer$Layer,byte[],int,int)
@@ -15399,6 +15411,10 @@ RECORD-COMPONENT com.openggf.graphics.FadeManagerSnapshot hadPendingCompletion b
 RECORD-COMPONENT com.openggf.graphics.FadeManagerSnapshot holdDuration int
 RECORD-COMPONENT com.openggf.graphics.FadeManagerSnapshot holdFrameCount int
 RECORD-COMPONENT com.openggf.graphics.FadeManagerSnapshot state com.openggf.graphics.FadeManager$FadeState
+RECORD-COMPONENT com.openggf.graphics.ForegroundWindow descriptors int[]
+RECORD-COMPONENT com.openggf.graphics.ForegroundWindow heightTiles int
+RECORD-COMPONENT com.openggf.graphics.ForegroundWindow top int
+RECORD-COMPONENT com.openggf.graphics.ForegroundWindow widthTiles int
 RECORD-COMPONENT com.openggf.graphics.PatternAtlas$Entry atlasIndex int
 RECORD-COMPONENT com.openggf.graphics.PatternAtlas$Entry patternId int
 RECORD-COMPONENT com.openggf.graphics.PatternAtlas$Entry slot int
@@ -17625,6 +17641,7 @@ TYPE record public,final com.openggf.game.timeattack.TimeAttackLaunchRequest SUP
 TYPE record public,final com.openggf.game.timeattack.mp.MultiplayerHudState SUPER java.lang.Record
 TYPE record public,final com.openggf.ghost.GhostFrame SUPER java.lang.Record
 TYPE record public,final com.openggf.graphics.FadeManagerSnapshot SUPER java.lang.Record
+TYPE record public,final com.openggf.graphics.ForegroundWindow SUPER java.lang.Record
 TYPE record public,final com.openggf.graphics.pipeline.RenderCommand SUPER java.lang.Record
 TYPE record public,final com.openggf.graphics.shaderlib.DisplayShaderPass SUPER java.lang.Record
 TYPE record public,final com.openggf.graphics.shaderlib.DisplayShaderPreset SUPER java.lang.Record
@@ -18482,6 +18499,7 @@ TYPE-ANNOTATION com.openggf.graphics.FadeManager @com.openggf.game.ModApi
 TYPE-ANNOTATION com.openggf.graphics.FadeManager$FadeState @com.openggf.game.ModApi
 TYPE-ANNOTATION com.openggf.graphics.FadeManager$FadeType @com.openggf.game.ModApi
 TYPE-ANNOTATION com.openggf.graphics.FadeManagerSnapshot @com.openggf.game.ModApi
+TYPE-ANNOTATION com.openggf.graphics.ForegroundWindow @com.openggf.game.ModApi
 TYPE-ANNOTATION com.openggf.graphics.GLCommand @com.openggf.game.ModApi
 TYPE-ANNOTATION com.openggf.graphics.GLCommand$BlendType @com.openggf.game.ModApi
 TYPE-ANNOTATION com.openggf.graphics.GLCommand$CommandType @com.openggf.game.ModApi

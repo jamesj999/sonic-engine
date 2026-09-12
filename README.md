@@ -14,8 +14,8 @@ disassemblies of titles in the Sonic the Hedgehog series. No copyrighted assets 
 this repository; a legally obtained ROM is required to run the engine.
 
 The engine also aims to provide modern tooling such as a level editor and an open framework for
-modding and customisation. The editor is an experimental, config-gated prototype. The `next`
-branch implements an unpublished Mod API candidate, documented in the
+modding and customisation. The editor is an experimental, config-gated prototype. The `develop`
+branch carries the unpublished Mod API candidate promoted from `next`, documented in the
 [creator handbook](docs/modding/index.md); it is outside the 0.6 release scope.
 
 > **Disclaimer:** OpenGGF is a community-made fan project. It is not affiliated with, sponsored by,
@@ -233,9 +233,24 @@ next to the launcher.
 
 ## Releases
 
-### v0.6.prerelease — Current development snapshot
+### v0.7.prerelease — Current development snapshot
 
-OpenGGF 0.6 is the current development release focused on accurate, playable
+`develop` now carries the post-0.6 work previously staged on `next`, including
+widescreen presentation, further S3K campaign coverage, and existing modding,
+racing, editor, loading, and audio foundations. The Mod API is still an
+unpublished candidate. [0.7's roadmap](docs/project/v0.7-roadmap.md) prioritizes
+complete campaigns before the feature/API publication gates in 0.8.
+
+See the [0.7 changelog](CHANGELOG.0.7.md),
+[development summary](docs/changelog/v0.7-release-summary.md), and
+[trace scope](docs/status/trace-scope-release-7.md).
+`next` is now `0.8.prerelease`; the published 0.6 snapshot is retained on
+`master`, tag `v0.6.20260911`, and branch `release/0.6.20260911`.
+
+
+### v0.6.20260911
+
+OpenGGF 0.6 is an accuracy and tooling release focused on accurate, playable
 routes through the main Sonic 3 & Knuckles slice and broad Sonic 1 and Sonic 2
 gameplay. The engine loads runtime data from user-supplied ROMs and validates
 behavior against the original games' disassemblies and recorded hardware
@@ -306,10 +321,12 @@ in [the 0.6 changelog](CHANGELOG.0.6.md).
 - **Normal local launchers:** `run.sh`, `run.cmd`, `dev.sh` and `dev.cmd` keep
   the direct package-and-launch workflow for interactive development.
 
-#### Current release status
+#### Published 0.6 release status
 
-0.6 is not a final release yet. Human end-to-end gameplay and audio QA are
-still required before release sign-off.
+A push to `master` automatically tags and publishes the 0.6 release after
+GitHub validation and native/JAR builds succeed. Recorded validation and
+remaining limitations are maintained in the
+[release summary](docs/changelog/v0.6-release-summary.md).
 
 Level loads no longer intermittently fail or detect the wrong game. The ROM is
 read from two threads during a load, and the header readers and the Sonic 3 &
@@ -414,7 +431,7 @@ audio corrections and comparison tooling have landed, not complete parity or
 release listening approval. The release summary carries commit-stamped
 validation numbers, the guard and trace policy statements match
 `docs/status/trace-scope-release-6.md`, and
-`RELEASE_NOTES_v0.6.prerelease.md` is a pointer to the summary.
+`RELEASE_NOTES_v0.6.20260911.md` is a pointer to the summary.
 Contributor and player guides were corrected on August 28 (hook installation,
 config defaults, player-2 bindings, dead links), and the skill mirrors were
 resynchronised.
@@ -446,6 +463,8 @@ outside the primary release slice or are still under active development.
 
 #### Release documentation
 
+- [Publishing a GitHub release](docs/project/release-publishing.md) — pushes to
+  `master` automatically publish after validation and builds succeed.
 - [0.6 changelog](CHANGELOG.0.6.md)
 - [Release Summary for website and GitHub](docs/changelog/v0.6-release-summary.md)
 - [Detailed development ledger](docs/changelog/v0.6-prerelease-detailed.md)
@@ -454,10 +473,10 @@ outside the primary release slice or are still under active development.
 - [Known discrepancies](docs/status/known-discrepancies.md)
 - [Release-readiness roadmap](docs/project/release-readiness-roadmap.md)
 
-### v0.7 / next and v0.8 roadmaps
+### Development roadmaps: 0.7 / develop and 0.8 / next
 
-The `next` branch stages post-0.6 work without changing the current 0.6
-release scope. The [0.7 roadmap](docs/project/v0.7-roadmap.md) completes and
+The `develop` branch carries the 0.7 cycle, while `next` stages 0.8 work.
+The published 0.6 release scope remains unchanged. The [0.7 roadmap](docs/project/v0.7-roadmap.md) completes and
 validates the stock games, with locked-on Sonic, Tails and Knuckles campaigns,
 ROM-authored finales/outros and continuous terminal replay chains as the main
 remaining S3K gates. Existing modding, racing, editor and widescreen work stays

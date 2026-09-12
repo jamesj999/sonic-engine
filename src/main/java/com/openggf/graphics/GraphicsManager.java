@@ -1302,6 +1302,12 @@ public class GraphicsManager {
 	 */
 	public void clearPaletteTextures() {
 		paletteTextureMap.clear();
+		// This is a session boundary, so discard the Java-side presentation
+		// owners together with their native textures. Calling
+		// clearPaletteFadePresentation() here would re-upload the old owners
+		// while the textures are being disposed.
+		paletteFadePresentation.clear();
+		lastCachedPaletteLines = new PaletteView[0];
 		if (!headlessMode && glInitialized) {
 			if (combinedPaletteTextureId != null) {
 				glDeleteTextures(combinedPaletteTextureId);

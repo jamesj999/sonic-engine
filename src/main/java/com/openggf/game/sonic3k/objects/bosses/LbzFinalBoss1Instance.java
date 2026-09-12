@@ -589,13 +589,13 @@ public final class LbzFinalBoss1Instance extends AbstractObjectInstance
             case WAIT_LAUNCH_MILESTONE_A -> updateWaitLaunchMilestoneA(player);
             case LOOK_UP -> {
                 updateExternalPlayerSprites(player);
-                finalePhase = FinalePhase.WAIT_LAUNCH_MILESTONE_B;
+                // loc_84504 invokes loc_72CBE only at Sonic's terminal zero.
+                if (mainExternalFrameIndex > SONIC_LAUNCH_LOOK_FRAMES.length) {
+                    finalePhase = FinalePhase.WAIT_LAUNCH_MILESTONE_B;
+                }
             }
             case WAIT_LAUNCH_MILESTONE_B -> updateWaitLaunchMilestoneB(player);
-            case FINAL_FALL -> {
-                updateExternalPlayerSprites(player);
-                updateFinalFall(player);
-            }
+            case FINAL_FALL -> updateFinalFall(player);
             case KNUCKLES_HANDOFF -> updateKnucklesFinalBoss2Handoff();
             case NONE -> {
                 // Idle.
@@ -704,6 +704,8 @@ public final class LbzFinalBoss1Instance extends AbstractObjectInstance
             sprite.setYSpeed((short) 0);
             sprite.setGSpeed((short) 0);
             sprite.setForcedInputMask(0);
+            sprite.setSpindash(false);
+            sprite.setPushing(false);
             sprite.setAnimationId(Sonic3kAnimationIds.VICTORY);
             sprite.setForcedAnimationId(Sonic3kAnimationIds.VICTORY);
             sprite.forceAnimationRestart();
@@ -765,15 +767,15 @@ public final class LbzFinalBoss1Instance extends AbstractObjectInstance
         int targetX = cameraX() + 0xA0;
         int dx = targetX - (sprite.getCentreX() & 0xFFFF);
         if (Math.abs(dx) >= 4) {
-            sprite.setForcedAnimationId(Sonic3kAnimationIds.WALK);
-            sprite.setAnimationId(Sonic3kAnimationIds.WALK);
             sprite.setForcedInputMask(dx > 0
                     ? AbstractPlayableSprite.INPUT_RIGHT
                     : AbstractPlayableSprite.INPUT_LEFT);
             return;
         }
         // ROM loc_72C3C: Stop_Object, face right, hold Up, spawn engine flames.
+        sprite.setForcedAnimationId(-1);
         sprite.setXSpeed((short) 0);
+        sprite.setYSpeed((short) 0);
         sprite.setGSpeed((short) 0);
         sprite.setDirection(Direction.RIGHT);
         sprite.setForcedInputMask(AbstractPlayableSprite.INPUT_UP);
@@ -794,13 +796,11 @@ public final class LbzFinalBoss1Instance extends AbstractObjectInstance
 
     private void updateWaitLaunchMilestoneB(PlayableEntity player) {
         if (!launchMilestoneB) {
-            updateExternalPlayerSprites(player);
             return;
         }
         if (services().zoneRuntimeState() instanceof LbzZoneRuntimeState lbz) {
             lbz.requestFinalFall();
         }
-        updateExternalPlayerSprites(player);
         finalePhase = FinalePhase.FINAL_FALL;
     }
 
@@ -910,10 +910,9 @@ public final class LbzFinalBoss1Instance extends AbstractObjectInstance
         }
         ObjectControlState.nativeBits0To6CpuAllowedMovementSuppressed().applyTo(sprite);
         sprite.setControlLocked(true);
-        sprite.setXSpeed((short) 0);
-        sprite.setYSpeed((short) 0);
-        sprite.setGSpeed((short) 0);
-        sprite.setForcedInputMask(AbstractPlayableSprite.INPUT_UP);
+        // loc_72C68/sub_72C8E only write control and animation counters.
+        // FixBugs=0 clears the boss anim byte, not P2's; P2 is cleared by
+        // loc_72C9E on the next dispatch. The fixed branch clears P2 here.
         sprite.setForcedAnimationId(-1);
         sprite.setAnimationFrameIndex(0);
         sprite.setAnimationTick(0);
@@ -984,18 +983,22 @@ public final class LbzFinalBoss1Instance extends AbstractObjectInstance
             int index) {
         sprite.setObjectMappingFrameControl(true);
         if (timer > 0) {
+            sprite.setAnimationTick(timer - 1);
             return new ExternalAnimationState(timer - 1, index);
         }
-        int scriptIndex = Math.min(index, script.length - 1);
+        sprite.setAnimationTick(5);
+        sprite.setAnimationFrameIndex((index + 1) * 2);
+        // Terminal zero runs the boss callback without replacing mapping_frame.
+        if (index >= script.length) {
+            return new ExternalAnimationState(5, index + 1);
+        }
+        int scriptIndex = index;
         ExternalPlayerFrame frame = script[scriptIndex];
         sprite.setMappingFrame(frame.mappingFrame());
         // Animate_ExternalPlayerSprite changes render_flags bit 0 only; the
         // playable status-facing bit remains untouched.
         sprite.setRenderFlips(frame.direction() == Direction.LEFT, sprite.getRenderVFlip());
-        if (scriptIndex < script.length - 1) {
-            scriptIndex++;
-        }
-        return new ExternalAnimationState(frame.delay(), scriptIndex);
+        return new ExternalAnimationState(frame.delay(), scriptIndex + 1);
     }
 
     private void spawnEngineFlamesOnce() {
@@ -1023,12 +1026,13 @@ public final class LbzFinalBoss1Instance extends AbstractObjectInstance
         launchMilestoneB = true;
     }
 
-    private void spawnDeathEggMiniatures(int baseX, int baseY) {
-        loadEndingPalette();
+    private void spawnDeathEggMiniatures(ExplosionSequencerChild sequencer) {
+        int baseX = sequencer.getX();
+        int baseY = sequencer.getY();
         for (int i = 0; i < 7; i++) {
             int index = i;
             recordChild(ChildKind.DEATH_EGG_MINIATURE,
-                    spawnFreeChild(() -> new DeathEggMiniatureChild(this, baseX, baseY, index)));
+                    sequencer.spawnCurrentChild(() -> new DeathEggMiniatureChild(this, baseX, baseY, index)));
         }
     }
 
@@ -2228,18 +2232,20 @@ public final class LbzFinalBoss1Instance extends AbstractObjectInstance
             }
             PatternSpriteRenderer renderer = getRenderer(renderArtKey());
             if (renderer != null && renderer.isReady()) {
-                renderer.drawFrameIndex(mappingFrame, getX(), getY(), hFlip, vFlip);
+                renderer.drawFrameIndex(mappingFrame, getX(), getY(), hFlip, vFlip,
+                        this instanceof DeathEggExplosionDebrisChild ? 2 : 1);
             }
         }
 
         @Override
         public boolean isHighPriority() {
-            return true;
+            return false;
         }
 
         @Override
         public int getPriorityBucket() {
-            return 3;
+            // ObjDat3_73736/73742/7374E/7375A: $300/$380/$300/$300.
+            return this instanceof DeathEggMiniatureChild ? 7 : 6;
         }
     }
 
@@ -2271,16 +2277,17 @@ public final class LbzFinalBoss1Instance extends AbstractObjectInstance
             // ROM loc_72D5A: every 4 frames spawn one explosion at ±$10.
             if (--emitTimer < 0) {
                 emitTimer = 3;
-                int random = boss.services().rng().nextRaw();
-                int ox = (random & 0x1F) - 0x10;
-                int oy = ((random >> 8) & 0x1F) - 0x10;
-                int explosionX = (x + ox) & 0xFFFF;
-                int explosionY = (y + oy) & 0xFFFF;
-                boss.services().playSfx(Sonic3kSfx.EXPLODE.id);
-                // ROM sub_83E84 calls CreateChild6_Simple from this flame
-                // object, preserving the current-slot forward allocation.
-                boss.recordChild(ChildKind.BOSS_EXPLOSION,
-                        spawnCurrentChild(() -> new S3kBossExplosionChild(explosionX, explosionY)));
+                // sub_83E84 allocates before consuming Random_Number.
+                S3kBossExplosionChild explosion = spawnCurrentChild(
+                        () -> new S3kBossExplosionChild(x, y));
+                boss.recordChild(ChildKind.BOSS_EXPLOSION, explosion);
+                if (!explosion.isDestroyed()) {
+                    int random = boss.services().rng().nextRaw();
+                    int ox = (random & 0x1F) - 0x10;
+                    int oy = ((random >>> 16) & 0x1F) - 0x10;
+                    explosion.setSpawnPosition(x + ox, y + oy);
+                    boss.services().playSfx(Sonic3kSfx.EXPLODE.id);
+                }
             }
             moveSprite2();
             if (--timer >= 0) {
@@ -2326,7 +2333,7 @@ public final class LbzFinalBoss1Instance extends AbstractObjectInstance
             if (milestoneWait >= 0) {
                 if (milestoneWait-- <= 0) {
                     boss.signalLaunchMilestoneA();
-                    boss.spawnDeathEggMiniatures(getX(), getY());
+                    boss.spawnDeathEggMiniatures(this);
                     ObjectLifetimeOps.expireDynamic(this);
                 }
                 return;
@@ -2334,37 +2341,58 @@ public final class LbzFinalBoss1Instance extends AbstractObjectInstance
             if (timer-- > 0) {
                 return;
             }
-            timer = interval++;
-            spawnRandomExplosionDebris();
             count++;
             if (count == 8) {
                 boss.signalPadCollapseStart();
             }
-            if (count == 0x18) {
-                milestoneWait = 0x17F;
+            if (count >= 0x18) {
+                // loc_72E22 falls through loc_72E2E on this dispatch.
+                // Count $18 spawns no debris and consumes no random number.
+                milestoneWait = 0x17E;
+                return;
             }
+            timer = interval++;
+            spawnRandomExplosionDebris();
         }
 
         /** ROM loc_72E54: a Map_LBZDeathEggSmall debris sprite, not a boss explosion. */
         private void spawnRandomExplosionDebris() {
-            int random = boss.services().rng().nextRaw();
-            int explosionX = boss.cameraX() + 0x20 + (random & 0xFF);
-            int explosionY = boss.cameraY() - 0x20;
-            int frame = new int[] {7, 8, 9, 0x0A, 0x0B, 7, 8, 9}[(random >> 16) & 7];
             boss.recordChild(ChildKind.BOSS_EXPLOSION,
-                    boss.spawnFreeChild(() -> new DeathEggExplosionDebrisChild(boss, explosionX, explosionY, frame)));
+                    boss.spawnFreeChild(() -> new DeathEggExplosionDebrisChild(boss)));
         }
     }
 
     /** loc_72E54 debris: static spawn that falls with MoveChkDel gravity. */
     private static final class DeathEggExplosionDebrisChild extends LaunchForegroundChild {
+        private boolean initialized;
+        private boolean randomizeOnInit;
+
+        private DeathEggExplosionDebrisChild(LbzFinalBoss1Instance boss) {
+            this(boss, 0, 0, 7);
+            randomizeOnInit = true;
+        }
+
         private DeathEggExplosionDebrisChild(LbzFinalBoss1Instance boss, int x, int y, int frame) {
             super(boss, "LBZFinalBoss1DeathEggExplosion", x, y, 0);
             this.mappingFrame = frame;
+            this.visible = false;
         }
 
         @Override
         public void update(int vIntRunCount, PlayableEntity player) {
+            // loc_72E54 returns after setup; MoveChkDel starts next dispatch.
+            if (!initialized) {
+                initialized = true;
+                if (randomizeOnInit) {
+                    // Random_Number belongs to this object's init, after allocation.
+                    int random = boss.services().rng().nextRaw();
+                    mappingFrame = new int[] {7, 8, 9, 0xA, 0xB, 7, 8, 9}[random & 7];
+                    x = (boss.cameraX() + 0x20 + ((random >>> 16) & 0xFF)) & 0xFFFF;
+                    y = (boss.cameraY() - 0x20) & 0xFFFF;
+                }
+                return;
+            }
+            visible = true;
             // MoveChkDel = MoveSprite (gravity $38) + delete out of range.
             moveSprite2();
             yVel += 0x38;
@@ -2387,6 +2415,7 @@ public final class LbzFinalBoss1Instance extends AbstractObjectInstance
         private static final int[] Y_VELS = {0x40, 0x38, 0x3C, 0x40, 0x44, 0x48, 0x4C};
         @RewindTransient(reason = "Constructor-derived miniature index.")
         private final int index;
+        private boolean initialized;
 
         private DeathEggMiniatureChild(LbzFinalBoss1Instance boss, int baseX, int baseY, int index) {
             super(boss, "LBZFinalBoss1DeathEggMiniature",
@@ -2394,6 +2423,7 @@ public final class LbzFinalBoss1Instance extends AbstractObjectInstance
                     baseY + OFFSETS[index][1],
                     index);
             this.index = index;
+            this.visible = false;
             this.mappingFrame = FRAME_FLAGS[index][0];
             this.hFlip = (FRAME_FLAGS[index][1] & 1) != 0;
             this.vFlip = (FRAME_FLAGS[index][1] & 2) != 0;
@@ -2402,6 +2432,13 @@ public final class LbzFinalBoss1Instance extends AbstractObjectInstance
 
         @Override
         public void update(int vIntRunCount, PlayableEntity player) {
+            if (!initialized) {
+                initialized = true;
+                // loc_72E9E tails into PalLoad_Line1, without moving/drawing.
+                boss.loadEndingPalette();
+                return;
+            }
+            visible = true;
             if (index == 0) {
                 // ROM loc_72EF8: every $10 frames spawn a smoke cluster.
                 if ((vIntRunCount & 0x0F) == 0) {
@@ -2419,11 +2456,11 @@ public final class LbzFinalBoss1Instance extends AbstractObjectInstance
         private void spawnSmoke() {
             int random = boss.services().rng().nextRaw();
             int smokeDx = (random & 0x1F) - 0x10;
-            int smokeDy = ((random >> 8) & 0x1F) - 0x10;
+            int smokeDy = ((random >>> 16) & 0x1F) - 0x10;
             int smokeX = (getX() + smokeDx) & 0xFFFF;
             int smokeY = (getY() + smokeDy) & 0xFFFF;
             boss.recordChild(ChildKind.DEATH_EGG_SMOKE,
-                    boss.spawnFreeChild(() -> new DeathEggSmokeChild(boss, smokeX, smokeY)));
+                    spawnCurrentChild(() -> new DeathEggSmokeChild(boss, smokeX, smokeY)));
         }
 
         private static int unsignedCompare16(int a, int b) {
@@ -2434,7 +2471,6 @@ public final class LbzFinalBoss1Instance extends AbstractObjectInstance
     /** Smoke cluster (loc_72F4C): frame 3, rises, rotates flips, spawns one sub-puff. */
     private static final class DeathEggSmokeChild extends LaunchForegroundChild {
         private int life = 0x7F;
-        private int rotateTimer;
         private int rotateState;
         private boolean puffSpawned;
 
@@ -2451,10 +2487,10 @@ public final class LbzFinalBoss1Instance extends AbstractObjectInstance
                 int puffX = getX();
                 int puffY = getY();
                 boss.recordChild(ChildKind.DEATH_EGG_SMOKE,
-                        boss.spawnFreeChild(() -> new DeathEggSmokePuffChild(boss, puffX, puffY)));
+                        spawnCurrentChild(() -> new DeathEggSmokePuffChild(boss, puffX, puffY)));
             }
             // ROM loc_72F7A: rotate the two low render-flag bits every 4 frames.
-            if ((++rotateTimer & 3) == 0) {
+            if ((vIntRunCount & 3) == 0) {
                 rotateState = (rotateState + 1) & 3;
                 hFlip = (rotateState & 1) != 0;
                 vFlip = (rotateState & 2) != 0;
@@ -2470,7 +2506,7 @@ public final class LbzFinalBoss1Instance extends AbstractObjectInstance
     private static final class DeathEggSmokePuffChild extends LaunchForegroundChild {
         private static final int[] ANIM_FRAMES = {4, 4, 5, 6};
         private int animIndex;
-        private int animTimer = 2;
+        private int animTimer;
 
         private DeathEggSmokePuffChild(LbzFinalBoss1Instance boss, int x, int y) {
             super(boss, "LBZFinalBoss1DeathEggSmokePuff", x, y, 0);

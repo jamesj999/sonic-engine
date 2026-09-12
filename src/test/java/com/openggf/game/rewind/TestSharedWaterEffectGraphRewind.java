@@ -56,12 +56,13 @@ class TestSharedWaterEffectGraphRewind {
 
     @Test
     void breathingBubbleRestoresFreshWithCapturedStateAndVisualConfig() {
-        Harness harness = Harness.create(player("sonic"));
+        TestablePlayableSprite owner = player("sonic");
+        Harness harness = Harness.create(owner);
         ObjectManager objectManager = harness.objectManager();
         BreathingBubbleInstance source = objectManager.createDynamicObject(
                 () -> new BreathingBubbleInstance(
                         0x1600, 0x0520, true, 4, ObjectArtKeys.BUBBLES,
-                        S2_COUNTDOWN_FRAMES, 3, -0x88));
+                        S2_COUNTDOWN_FRAMES, 3, -0x88, true, owner));
         seedBreathingBubble(source);
         ObjectRefId sourceId = objectId(objectManager, source);
         Map<String, Object> sourceState = breathingBubbleState(source);
@@ -81,6 +82,8 @@ class TestSharedWaterEffectGraphRewind {
         BreathingBubbleInstance restored = only(objectManager, BreathingBubbleInstance.class);
         assertNotSame(source, restored, "restore must recreate the removed breathing bubble");
         assertNotSame(divergent, restored, "restore must drop unrelated post-snapshot breathing bubbles");
+        org.junit.jupiter.api.Assertions.assertSame(owner, readObject(restored, "owner"),
+                "the countdown must retain its player binding after recreation");
         assertEquals(sourceId, objectId(objectManager, restored),
                 "breathing-bubble dynamic identity must be preserved");
         assertEquals(sourceState, breathingBubbleState(restored),

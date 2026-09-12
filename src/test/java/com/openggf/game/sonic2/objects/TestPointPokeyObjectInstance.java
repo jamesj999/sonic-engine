@@ -175,6 +175,100 @@ class TestPointPokeyObjectInstance {
         assertTrue(player.getAir());
     }
 
+    @Test
+    void bombSoundClockAdvancesEvenWhenNoPrizeCanSpawnAndWhileWaitingForImpacts() throws Exception {
+        var state = GameModuleRegistry.getCurrent().getGameService(
+                com.openggf.game.sonic2.slotmachine.CNZPrizeSoundState.class);
+        TestablePlayableSprite player = new TestablePlayableSprite("sonic", (short) 0x1DC0, (short) 0x0368);
+        player.setGameRulesForTest(GameRules.SONIC_2);
+        PointPokeyObjectInstance pokey = new PointPokeyObjectInstance(
+                new ObjectSpawn(0x1DC0, 0x0368, 0xD6, 1, 0, false, 0), "PointPokey");
+        var module = GameModuleRegistry.getCurrent();
+        ObjectManager objects = new ObjectManager(List.of(), null, 0, null, null, null,
+                GameServices.camera(), new StubObjectServices() {
+                    @Override public com.openggf.game.GameModule gameModule() { return module; }
+                });
+        objects.addDynamicObject(pokey);
+        invokeCapture(pokey, player);
+        setIntField(pokey, "playerState", 3);
+        setIntField(pokey, "slotReward", -1);
+        setIntField(pokey, "prizesToSpawn", 10);
+        Field active = PointPokeyObjectInstance.class.getDeclaredField("activePrizeCount");
+        active.setAccessible(true);
+        int[] activeCount = (int[]) active.get(pokey);
+        activeCount[0] = 16;
+        for (int frame = 0; frame < 5; frame++) pokey.update(frame, player);
+        assertEquals(5, state.capture());
+        assertTrue(state.consumeSpikeSound(), "first impact may sound immediately after five payout updates");
+        assertFalse(state.consumeSpikeSound(), "another impact without payout updates must be silent");
+        setIntField(pokey, "prizesToSpawn", 0);
+        for (int frame = 5; frame < 10; frame++) pokey.update(frame, player);
+        assertEquals(5, state.capture(), "clock continues while the final children converge");
+        activeCount[0] = 0;
+        pokey.update(10, player);
+        assertEquals(5, state.capture(), "the eject path skips loc_2BD48");
+    }
+
+    @Test
+    void bombSoundCounterIsSessionOwnedWrappedAndRewindable() {
+        var module = GameModuleRegistry.getCurrent();
+        var state = module.getGameService(com.openggf.game.sonic2.slotmachine.CNZPrizeSoundState.class);
+        assertTrue(module.rewindAdapters().contains(state));
+        state.restore(0xFFFF);
+        state.advanceBombPayout();
+        assertEquals(0, state.capture());
+        for (int i = 0; i < 7; i++) state.advanceBombPayout();
+        var saved = state.capture();
+        assertTrue(state.consumeSpikeSound());
+        state.restore(saved);
+        assertTrue(state.consumeSpikeSound());
+        module.onLevelLoad();
+        assertFalse(state.consumeSpikeSound());
+    }
+
+    @Test
+    void bombImpactsConsumeTheSharedClockAndUseTheSecondaryMailbox() {
+        var module = GameModuleRegistry.getCurrent();
+        var state = module.getGameService(com.openggf.game.sonic2.slotmachine.CNZPrizeSoundState.class);
+        var audio = org.mockito.Mockito.mock(com.openggf.audio.AudioManager.class);
+        ObjectManager objects = new ObjectManager(List.of(), null, 0, null, null, null,
+                GameServices.camera(), new StubObjectServices() {
+                    @Override public com.openggf.game.GameModule gameModule() { return module; }
+                    @Override public com.openggf.audio.AudioManager audioManager() { return audio; }
+                });
+        int[] active = {2};
+        var first = new BombPrizeObjectInstance(100, 100, 100, 100, 1, active);
+        var second = new BombPrizeObjectInstance(100, 100, 100, 100, 1, active);
+        objects.addDynamicObject(first);
+        objects.addDynamicObject(second);
+        for (int i = 0; i < 5; i++) state.advanceBombPayout();
+        first.update(10, null);
+        second.update(10, null);
+        org.mockito.Mockito.verify(audio).playSecondarySfx(com.openggf.audio.GameSound.HURT_SPIKE);
+        org.mockito.Mockito.verifyNoMoreInteractions(audio);
+        assertEquals(0, active[0]);
+    }
+
+    @Test
+    void ringPrizesRequestSecondarySoundForEveryAwardWithoutSpikeThrottle() {
+        var audio = org.mockito.Mockito.mock(com.openggf.audio.AudioManager.class);
+        ObjectManager objects = new ObjectManager(List.of(), null, 0, null, null, null,
+                GameServices.camera(), new StubObjectServices() {
+                    @Override public com.openggf.audio.AudioManager audioManager() { return audio; }
+                });
+        int[] active = {2};
+        var first = new RingPrizeObjectInstance(100, 100, 100, 100, 1, active);
+        var second = new RingPrizeObjectInstance(100, 100, 100, 100, 1, active);
+        objects.addDynamicObject(first);
+        objects.addDynamicObject(second);
+        first.update(10, null);
+        second.update(10, null);
+        org.mockito.Mockito.verify(audio, org.mockito.Mockito.times(2))
+                .playSecondarySfx(com.openggf.audio.GameSound.RING);
+        org.mockito.Mockito.verifyNoMoreInteractions(audio);
+        assertEquals(0, active[0]);
+    }
+
     private static void invokeCapture(PointPokeyObjectInstance pokey, TestablePlayableSprite player) throws Exception {
         Method capture = PointPokeyObjectInstance.class.getDeclaredMethod("capturePlayer", AbstractPlayableSprite.class);
         capture.setAccessible(true);

@@ -141,23 +141,24 @@ public class SonicConfigurationService {
 		boolean renamedKeys = applyDefaults();
 		validateEnumeratedValues();
 		if (legacyMaterialisedFile
+				&& !getBoolean(SonicConfiguration.CONFIG_PRESERVE_EXPLICIT_DEFAULTS)
 				&& migrationService.convertMaterialisedDefaults(config, defaults)) {
 			configChanged = true;
 		}
 
 		if (configChanged || renamedKeys || migratedFromLegacyJson || legacyMaterialisedFile) {
-			saveConfig();
-		}
-		if (migratedFromLegacyJson) {
-			File legacy = resolveRelativeFile("config.json");
-			if (legacy.exists()) {
-				try {
-					Path backup = moveToUniqueSibling(legacy.toPath(), ".bak");
-					LOGGER.info("Migrated legacy config.json to config.yaml (backup at "
-							+ backup.getFileName() + ")");
-				} catch (IOException e) {
-					LOGGER.log(Level.WARNING, "Migrated config.json to config.yaml but could not back up the old file",
-							e);
+			boolean persisted = saveConfigInternal();
+			if (migratedFromLegacyJson && persisted) {
+				File legacy = resolveRelativeFile("config.json");
+				if (legacy.exists()) {
+					try {
+						Path backup = moveToUniqueSibling(legacy.toPath(), ".bak");
+						LOGGER.info("Migrated legacy config.json to config.yaml (backup at "
+								+ backup.getFileName() + ")");
+					} catch (IOException e) {
+						LOGGER.log(Level.WARNING,
+								"Saved config.yaml but could not back up the old legacy config.json; leaving it in place", e);
+					}
 				}
 			}
 		}
@@ -503,12 +504,23 @@ public class SonicConfigurationService {
 	}
 
 	public void saveConfig() {
+		saveConfigInternal();
+	}
+
+	/**
+	 * Persists the current user map and reports whether the replacement was
+	 * published. Migration callers must not retire their legacy source until
+	 * this boundary succeeds.
+	 */
+	private boolean saveConfigInternal() {
 		File target = resolveConfigFile();
 		try {
 			String yaml = new ConfigYamlWriter().write(config);
 			writeStringAtomically(target.toPath(), yaml);
+			return true;
 		} catch (IOException e) {
 			LOGGER.log(Level.WARNING, "Failed to save config.yaml", e);
+			return false;
 		}
 	}
 
@@ -704,6 +716,7 @@ public class SonicConfigurationService {
 		putDefaultKey(SonicConfiguration.DEBUG_MODE_KEY, GLFW_KEY_D);
 		putDefault(SonicConfiguration.FPS, 60);
 		putDefault(SonicConfiguration.LOAD_TIME_SIMULATION, "FAST");
+		putDefault(SonicConfiguration.CONFIG_PRESERVE_EXPLICIT_DEFAULTS, false);
 		putDefaultKey(SonicConfiguration.SPECIAL_STAGE_KEY, GLFW_KEY_TAB);
 		putDefaultKey(SonicConfiguration.SPECIAL_STAGE_COMPLETE_KEY, GLFW_KEY_END);
 		putDefaultKey(SonicConfiguration.SPECIAL_STAGE_FAIL_KEY, GLFW_KEY_DELETE);

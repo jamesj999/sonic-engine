@@ -9,16 +9,25 @@ cd "$script_dir"
 # this worktree's target/ directory.
 mvn -Dmse=off -DskipTests package -q
 
-shopt -s nullglob
-jars=(target/*-jar-with-dependencies.jar)
-shopt -u nullglob
-
-if (( ${#jars[@]} == 0 )); then
-    echo "No jar file found in $script_dir/target" >&2
+manifest="$script_dir/target/openggf-artifact.properties"
+if [[ ! -f "$manifest" ]]; then
+    echo "Maven packaging did not produce $manifest" >&2
     exit 1
 fi
 
-jar="${jars[${#jars[@]} - 1]}"
+final_name="$(sed -n 's/^finalName=//p' "$manifest")"
+if [[ -z "$final_name" || "$final_name" == *$'\n'* || "$final_name" == *$'\r'* ]]; then
+    echo "Maven packaging wrote an empty or multiline finalName to $manifest" >&2
+    exit 1
+fi
+
+jar="$script_dir/target/${final_name}-jar-with-dependencies.jar"
+
+if [[ ! -f "$jar" ]]; then
+    echo "Expected packaged jar not found: $jar" >&2
+    exit 1
+fi
+
 exec java \
     --add-exports java.base/java.lang=ALL-UNNAMED \
     --add-exports java.desktop/sun.awt=ALL-UNNAMED \

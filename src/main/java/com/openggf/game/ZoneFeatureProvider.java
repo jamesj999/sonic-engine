@@ -150,6 +150,11 @@ public interface ZoneFeatureProvider {
         // Default implementation does nothing
     }
 
+    /** Screen-fixed nametable replacing the lower foreground, or null for normal Plane A. */
+    default com.openggf.graphics.ForegroundWindow foregroundWindow() {
+        return null;
+    }
+
     /**
      * Queues render commands for zone features that should appear after foreground tiles
      * but before sprites (e.g., slot machine display that covers corrupted tiles).

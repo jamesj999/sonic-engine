@@ -31,7 +31,6 @@ import com.openggf.level.Level;
 import com.openggf.level.LevelConstants;
 import com.openggf.level.Map;
 import com.openggf.level.Pattern;
-import com.openggf.level.PatternDesc;
 import com.openggf.level.SeamlessLevelTransitionRequest;
 import com.openggf.game.RuntimeArtAdmissionPolicy;
 import com.openggf.level.objects.ObjectSpawn;
@@ -116,7 +115,8 @@ public final class Sonic3kLBZEvents extends Sonic3kZoneEvents {
     private static final int LBZ2_WATER_DRAIN_LIMIT = 0x0F00;
     private static final int LBZ2_WATER_DRAIN_CLAMP = 0x0F80;
     private static final int LBZ2_PAD_DETACH_SCROLL_DONE = 0x28;
-    private static final int LBZ2_PAD_WINDOW_COPY_FRAMES = 0x1C;
+    // SpecialVInt_LBZ2WindowCopy: 28 rows, then SpecialVInt_LBZ2ScrollAClear.
+    private static final int LBZ2_PAD_WINDOW_COPY_FRAMES = 0x1D;
     private static final int LBZ2_FINAL_FALL_CAMERA_DY = -2;
     private static final int LBZ2_PAD_CLEAR_X = 0x87;
     private static final int LBZ2_PAD_CLEAR_Y = 0x0B;
@@ -166,10 +166,14 @@ public final class Sonic3kLBZEvents extends Sonic3kZoneEvents {
     private long deathEggTerrainArtOrdinal = -1;
     private long deathEggLaunchArtOrdinal = -1;
     private boolean restartInitChecked;
-    private int[] lbz2CopiedWindowDescriptors;
-    private int lbz2CopiedWindowScreenX;
-    private int lbz2CopiedWindowScreenY;
+    private final int[] lbz2CopiedWindowDescriptors = new int[64 * 28];
+    private boolean lbz2WindowCaptured;
     private boolean lbz2CopiedWindowActive;
+    private int lbz2WindowClearTimer;
+    private static final int LBZ2_WINDOW_COLUMNS = 64;
+    private static final int LBZ2_WINDOW_ROWS = 28;
+    private static final int LBZ2_WINDOW_ORIGIN_X = 0x4390;
+    private static final int LBZ2_WINDOW_ORIGIN_Y = 0x668;
     private int activeAct;
     private boolean postTitleAct2SizeChangeActive;
     private int postTitleAct2TargetMaxX;
@@ -186,7 +190,6 @@ public final class Sonic3kLBZEvents extends Sonic3kZoneEvents {
     private boolean act2MaxXWorkerCompleted;
     private boolean act2MinYWorkerCompleted;
     private boolean act2MaxYWorkerCompleted;
-    private final PatternDesc lbz2CopiedWindowPatternDesc = new PatternDesc();
     private final int[] endingCollapseFixed = new int[ENDING_COLLAPSE_COLUMN_COUNT];
     private final int[] endingCollapseScroll = new int[ENDING_COLLAPSE_COLUMN_COUNT];
 
@@ -677,7 +680,6 @@ public final class Sonic3kLBZEvents extends Sonic3kZoneEvents {
     public void requestPadCollapseStart() {
         currentLbzRuntimeState().ifPresent(state -> {
             state.requestPadCollapseStart();
-            lbz2CopiedWindowDescriptors = captureLaunchPadVisualTilemap();
         });
     }
 
@@ -1215,6 +1217,7 @@ public final class Sonic3kLBZEvents extends Sonic3kZoneEvents {
             return;
         }
         serviceDeathEggLaunchArt();
+        serviceLbz2WindowClear();
         if (state.consumeLaunchStartRequested()) {
             startLaunch(state);
         }
@@ -1225,11 +1228,9 @@ public final class Sonic3kLBZEvents extends Sonic3kZoneEvents {
             state.setDetachScroll(0);
             state.setDetachWindowCopyTimer(0);
             lbz2CopiedWindowActive = false;
-            lbz2CopiedWindowScreenX = 0;
-            lbz2CopiedWindowScreenY = 0;
-            if (lbz2CopiedWindowDescriptors == null) {
-                lbz2CopiedWindowDescriptors = captureLaunchPadVisualTilemap();
-            }
+            lbz2WindowCaptured = false;
+            Arrays.fill(lbz2CopiedWindowDescriptors, 0);
+            lbz2WindowClearTimer = 0;
         }
         consumeFinalFallIfDetachFinished(state);
         if (state.isFinalFallActive()) {
@@ -1240,6 +1241,15 @@ public final class Sonic3kLBZEvents extends Sonic3kZoneEvents {
             return;
         }
         updateDeathEggRumble(state, frameCounter);
+        // LBZ2BGE_PlatformDetach tests/increments scroll before sub_545DA.
+        // A transition into LBZ2BGE_Falling with Events_fg_5 set skips motion.
+        if (state.isPadCollapseActive() && state.isWaterDisabled()) {
+            updatePadCollapse(state, frameCounter);
+            if (consumeFinalFallIfDetachFinished(state)) {
+                applyFinalFallFrame();
+                return;
+            }
+        }
         // ROM sub_545DA: LBZ2_EndFallingAccel runs every frame from the
         // pad-collapse signal onward (through detach and beyond).
         if (state.isLaunchFallingAccelActive()) {
@@ -1250,13 +1260,9 @@ public final class Sonic3kLBZEvents extends Sonic3kZoneEvents {
                 captureLbz2CopiedWindowPlatform();
             }
         }
+        // loc_5452E enters detach via loc_545DE, without executing the
+        // newly installed detach routine (or its first VBlank) this frame.
         updateLaunchMotion(state);
-        if (state.isPadCollapseActive()) {
-            updatePadCollapse(state, frameCounter);
-        }
-        if (consumeFinalFallIfDetachFinished(state)) {
-            applyFinalFallFrame();
-        }
     }
 
     private boolean consumeFinalFallIfDetachFinished(LbzZoneRuntimeState state) {
@@ -1508,10 +1514,12 @@ public final class Sonic3kLBZEvents extends Sonic3kZoneEvents {
         }
         if (state.getDetachWindowCopyTimer() > 0) {
             state.setDetachWindowCopyTimer(state.getDetachWindowCopyTimer() - 1);
-            if (state.getDetachWindowCopyTimer() == 0) {
-                activateLbz2CopiedWindowPlatform();
+            if (state.getDetachWindowCopyTimer() > 0) {
+                return;
             }
-            return;
+            // ScrollAClear has just cleared Special_V_int_routine; the
+            // foreground-scroll gate may run in this same event dispatch.
+            activateLbz2CopiedWindowPlatform();
         }
         if ((frameCounter & 3) != 0) {
             return;
@@ -1524,7 +1532,8 @@ public final class Sonic3kLBZEvents extends Sonic3kZoneEvents {
         state.setDetachScroll(0);
         state.setPadCollapseActive(false);
         clearLaunchPadTerrain();
-        lbz2CopiedWindowActive = false;
+        // SpecialVInt_LBZ2ScrollAClear2, then SpecialVInt_LBZ2WindowClear.
+        lbz2WindowClearTimer = 2;
     }
 
     private void clearLaunchPadTerrain() {
@@ -1532,7 +1541,7 @@ public final class Sonic3kLBZEvents extends Sonic3kZoneEvents {
         if (level == null || level.getMap() == null) {
             return;
         }
-        if (lbz2CopiedWindowDescriptors == null) {
+        if (!lbz2WindowCaptured) {
             captureLbz2CopiedWindowPlatform();
         }
         LayoutMutationContext context = new LayoutMutationContext(
@@ -1556,77 +1565,61 @@ public final class Sonic3kLBZEvents extends Sonic3kZoneEvents {
                 context);
     }
 
-    public void renderLbz2CopiedWindowPlatform(Camera camera) {
-        if (camera == null || !lbz2CopiedWindowActive || lbz2CopiedWindowDescriptors == null) {
-            return;
-        }
-        int tileColumns = LBZ2_PAD_CLEAR_WIDTH * LevelConstants.BLOCK_WIDTH / Pattern.PATTERN_WIDTH;
-        int tileRows = LBZ2_PAD_CLEAR_HEIGHT * LevelConstants.BLOCK_HEIGHT / Pattern.PATTERN_HEIGHT;
-        int index = 0;
-        for (int row = 0; row < tileRows; row++) {
-            int worldY = getLbz2CopiedWindowRenderWorldYForTest(camera, row);
-            for (int col = 0; col < tileColumns; col++) {
-                int descriptor = lbz2CopiedWindowDescriptors[index++];
-                if (descriptor == 0) {
-                    continue;
-                }
-                int worldX = getLbz2CopiedWindowRenderWorldXForTest(camera, col);
-                int patternIndex = descriptor & 0x7FF;
-                lbz2CopiedWindowPatternDesc.set(descriptor);
-                graphics().renderPatternWithId(
-                        patternIndex, lbz2CopiedWindowPatternDesc, worldX, worldY);
-            }
-        }
+    public com.openggf.graphics.ForegroundWindow foregroundWindow() {
+        return lbz2CopiedWindowActive && lbz2WindowCaptured
+                ? new com.openggf.graphics.ForegroundWindow(
+                        LBZ2_WINDOW_COLUMNS, LBZ2_WINDOW_ROWS, 40, lbz2CopiedWindowDescriptors)
+                : null;
     }
 
     public int getLbz2CopiedWindowDescriptorForTest(int worldX, int worldY) {
-        if (lbz2CopiedWindowDescriptors == null) {
+        int col = (worldX - LBZ2_WINDOW_ORIGIN_X) / Pattern.PATTERN_WIDTH;
+        int row = (worldY - LBZ2_WINDOW_ORIGIN_Y) / Pattern.PATTERN_HEIGHT;
+        if (!lbz2WindowCaptured || worldX < LBZ2_WINDOW_ORIGIN_X
+                || worldY < LBZ2_WINDOW_ORIGIN_Y || col >= LBZ2_WINDOW_COLUMNS || row >= LBZ2_WINDOW_ROWS) {
             return 0;
         }
-        int originX = LBZ2_PAD_CLEAR_X * LevelConstants.BLOCK_WIDTH;
-        int originY = LBZ2_PAD_CLEAR_Y * LevelConstants.BLOCK_HEIGHT;
-        int localX = worldX - originX;
-        int localY = worldY - originY;
-        int width = LBZ2_PAD_CLEAR_WIDTH * LevelConstants.BLOCK_WIDTH;
-        int height = LBZ2_PAD_CLEAR_HEIGHT * LevelConstants.BLOCK_HEIGHT;
-        if (localX < 0 || localY < 0 || localX >= width || localY >= height) {
-            return 0;
-        }
-        int tileColumns = width / Pattern.PATTERN_WIDTH;
-        int col = localX / Pattern.PATTERN_WIDTH;
-        int row = localY / Pattern.PATTERN_HEIGHT;
-        return lbz2CopiedWindowDescriptors[row * tileColumns + col];
+        return lbz2CopiedWindowDescriptors[row * LBZ2_WINDOW_COLUMNS + col];
     }
 
     int getLbz2CopiedWindowRenderWorldXForTest(Camera camera, int tileColumn) {
-        return (camera.getX() & 0xFFFF) + lbz2CopiedWindowScreenX + tileColumn * Pattern.PATTERN_WIDTH;
+        return (camera.getX() & 0xFFFF) + tileColumn * Pattern.PATTERN_WIDTH;
     }
 
     int getLbz2CopiedWindowRenderWorldYForTest(Camera camera, int tileRow) {
-        // ROM LBZ2BGE_PlatformDetach adds Events_bg+$16 to Scroll A's V-scroll
-        // (SwScrlLbz applies the same +detachScroll to the FG plane). The copied
-        // Death Egg band must ride that scroll up off the top of the screen in
-        // lockstep with the rest of Scroll A, otherwise it stays pinned for the
-        // ~$28 detach window and then pops out when the overlay is dropped.
-        int detachScroll = currentLbzRuntimeState()
-                .map(LbzZoneRuntimeState::getDetachScroll)
-                .orElse(0);
-        return (camera.getY() & 0xFFFF) + lbz2CopiedWindowScreenY + tileRow * Pattern.PATTERN_HEIGHT
-                - detachScroll;
+        // The VDP window has no scroll input: only the exposed top 40 pixels of
+        // Plane A move with Events_bg+$16. This includes the sprite-priority mask.
+        return (camera.getY() & 0xFFFF) + tileRow * Pattern.PATTERN_HEIGHT;
     }
 
     private void captureLbz2CopiedWindowPlatform() {
-        if (lbz2CopiedWindowDescriptors == null) {
-            lbz2CopiedWindowDescriptors = captureLaunchPadVisualTilemap();
+        if (!lbz2WindowCaptured) {
+            System.arraycopy(captureLaunchPadVisualTilemap(), 0, lbz2CopiedWindowDescriptors, 0,
+                    lbz2CopiedWindowDescriptors.length);
+            lbz2WindowCaptured = true;
         }
     }
 
     private void activateLbz2CopiedWindowPlatform() {
         captureLbz2CopiedWindowPlatform();
-        lbz2CopiedWindowScreenX = LBZ2_PAD_CLEAR_X * LevelConstants.BLOCK_WIDTH - (camera().getX() & 0xFFFF);
-        lbz2CopiedWindowScreenY = LBZ2_PAD_CLEAR_Y * LevelConstants.BLOCK_HEIGHT - (camera().getY() & 0xFFFF);
-        clearLbz2ScrollAPlatformTilemap();
+        // SpecialVInt_LBZ2ScrollAClear clears VRAM rows 18..23, hidden by the window.
+        writeLbz2PlaneRows(5, false);
         lbz2CopiedWindowActive = true;
+    }
+
+    private void serviceLbz2WindowClear() {
+        if (lbz2WindowClearTimer == 0) {
+            return;
+        }
+        if (--lbz2WindowClearTimer == 1) {
+            // SpecialVInt_LBZ2ScrollAClear2: VRAM rows 12..17.
+            writeLbz2PlaneRows(-1, false);
+        } else {
+            // SpecialVInt_LBZ2WindowClear repeats window row 5 into Plane A
+            // rows 18..23, then disables the window. The lower platform remains.
+            writeLbz2PlaneRows(5, true);
+            lbz2CopiedWindowActive = false;
+        }
     }
 
     boolean isLbz2CopiedWindowActiveForTest() {
@@ -1634,21 +1627,21 @@ public final class Sonic3kLBZEvents extends Sonic3kZoneEvents {
     }
 
     private void clearLbz2CopiedWindowPlatform() {
-        lbz2CopiedWindowDescriptors = null;
-        lbz2CopiedWindowScreenX = 0;
-        lbz2CopiedWindowScreenY = 0;
+        lbz2WindowCaptured = false;
+        Arrays.fill(lbz2CopiedWindowDescriptors, 0);
         lbz2CopiedWindowActive = false;
+        lbz2WindowClearTimer = 0;
     }
 
-    private void clearLbz2ScrollAPlatformTilemap() {
-        int width = LBZ2_PAD_CLEAR_WIDTH * LevelConstants.BLOCK_WIDTH;
-        int height = LBZ2_PAD_CLEAR_HEIGHT * LevelConstants.BLOCK_HEIGHT;
-        int originX = LBZ2_PAD_CLEAR_X * LevelConstants.BLOCK_WIDTH;
-        int originY = LBZ2_PAD_CLEAR_Y * LevelConstants.BLOCK_HEIGHT;
+    private void writeLbz2PlaneRows(int firstRow, boolean restoreWindowRow) {
         boolean changed = false;
-        for (int y = 0; y < height; y += Pattern.PATTERN_HEIGHT) {
-            for (int x = 0; x < width; x += Pattern.PATTERN_WIDTH) {
-                changed |= levelManager().setForegroundTileDescriptorAtWorld(originX + x, originY + y, 0);
+        for (int row = firstRow; row < firstRow + 6; row++) {
+            for (int col = 0; col < LBZ2_WINDOW_COLUMNS; col++) {
+                int descriptor = restoreWindowRow && lbz2WindowCaptured
+                        ? lbz2CopiedWindowDescriptors[5 * LBZ2_WINDOW_COLUMNS + col] : 0;
+                changed |= levelManager().setForegroundTileDescriptorAtWorld(
+                        LBZ2_WINDOW_ORIGIN_X + col * Pattern.PATTERN_WIDTH,
+                        LBZ2_WINDOW_ORIGIN_Y + row * Pattern.PATTERN_HEIGHT, descriptor);
             }
         }
         if (changed) {
@@ -1657,17 +1650,15 @@ public final class Sonic3kLBZEvents extends Sonic3kZoneEvents {
     }
 
     private int[] captureLaunchPadVisualTilemap() {
-        int tileColumns = LBZ2_PAD_CLEAR_WIDTH * LevelConstants.BLOCK_WIDTH / Pattern.PATTERN_WIDTH;
-        int tileRows = LBZ2_PAD_CLEAR_HEIGHT * LevelConstants.BLOCK_HEIGHT / Pattern.PATTERN_HEIGHT;
-        int[] descriptors = new int[tileColumns * tileRows];
-        int originX = LBZ2_PAD_CLEAR_X * LevelConstants.BLOCK_WIDTH;
-        int originY = LBZ2_PAD_CLEAR_Y * LevelConstants.BLOCK_HEIGHT;
-        int index = 0;
-        for (int row = 0; row < tileRows; row++) {
-            int worldY = originY + row * Pattern.PATTERN_HEIGHT;
-            for (int col = 0; col < tileColumns; col++) {
-                int worldX = originX + col * Pattern.PATTERN_WIDTH;
-                descriptors[index++] = levelManager().getForegroundTileDescriptorAtWorld(worldX, worldY);
+        // SpecialVInt_LBZ2WindowCopy rotates Plane A columns 50..63,0..49
+        // into the window. The locked camera is tile-aligned at ($4390,$668).
+        int[] descriptors = new int[LBZ2_WINDOW_COLUMNS * LBZ2_WINDOW_ROWS];
+        for (int row = 0; row < LBZ2_WINDOW_ROWS; row++) {
+            for (int col = 0; col < LBZ2_WINDOW_COLUMNS; col++) {
+                descriptors[row * LBZ2_WINDOW_COLUMNS + col] =
+                        levelManager().getForegroundTileDescriptorAtWorld(
+                                LBZ2_WINDOW_ORIGIN_X + col * Pattern.PATTERN_WIDTH,
+                                LBZ2_WINDOW_ORIGIN_Y + row * Pattern.PATTERN_HEIGHT);
             }
         }
         return descriptors;

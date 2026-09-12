@@ -18,6 +18,35 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class TestS3kSlotBonusCageObjectInstance {
 
     @Test
+    void spikePayoutClockIncludesBlockedSpawnsAndFinalChildrenButExcludesEjection() throws Exception {
+        var state = com.openggf.game.sonic3k.bonusstage.slots.S3kSlotStageState.bootstrap();
+        var controller = new S3kSlotStageController(state);
+        controller.latchResolvedPrizeForCapture(-4);
+        forceOptionCycleState(controller, 0x0C);
+        var cage = new S3kSlotBonusCageObjectInstance(
+                new ObjectSpawn(0x460, 0x430, 0, 0, 0, false, 0), controller);
+        cage.setServices(new TestObjectServices());
+        Sonic player = new Sonic("sonic", (short) 0x460, (short) 0x430);
+        cage.update(0, player);
+        assertEquals(0, state.scalarIndex2(), "unresolved reels do not tick payout");
+        forceOptionCycleState(controller, 0x18);
+        for (int i = 0; i < 16; i++) controller.onRewardSpawned();
+        for (int frame = 2; frame < 7; frame++) cage.update(frame, player);
+        assertEquals(5, state.scalarIndex2());
+        assertEquals(100, cage.pendingRewardsForTest(), "full child slots prevent spawning");
+        assertTrue(controller.consumeSpikeSound());
+        Field remaining = S3kSlotBonusCageObjectInstance.class.getDeclaredField("rewardsToSpawn");
+        remaining.setAccessible(true);
+        remaining.setInt(cage, 0);
+        for (int frame = 7; frame < 12; frame++) cage.update(frame, player);
+        assertEquals(5, state.scalarIndex2(), "last travelling spikes keep the clock running");
+        for (int i = 0; i < 16; i++) controller.onRewardExpired();
+        cage.update(12, player);
+        assertEquals(2, cage.cageStateForTest());
+        assertEquals(5, state.scalarIndex2(), "ejection bypasses the increment");
+    }
+
+    @Test
     void captureCentersNearbyPlayableAndLocksControl() {
         ObjectSpawn spawn = new ObjectSpawn(0x460, 0x430, 0x00, 0x00, 0x00, false, 0);
         S3kSlotStageController controller = new S3kSlotStageController();
@@ -103,6 +132,7 @@ class TestS3kSlotBonusCageObjectInstance {
 
         assertTrue(cage.spawnsRingsForTest());
         assertEquals(6, cage.pendingRewardsForTest());
+        assertFalse(controller.consumeSpikeSound());
     }
 
     @Test

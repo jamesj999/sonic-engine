@@ -16,6 +16,7 @@ import com.openggf.game.sonic3k.audio.smps.Sonic3kSfxData;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -23,12 +24,21 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TestSoundTestPresentationHost {
@@ -79,14 +89,19 @@ class TestSoundTestPresentationHost {
         String source = Files.readString(Path.of(
                 "src/main/java/com/openggf/audio/debug/SoundTestApp.java"));
         assertTrue(source.contains(
-                "runInteractiveWindow(options, loader, dacData, catalog"));
+                "runInteractiveWindow(options, loader, dacData, host"));
         assertTrue(source.contains(
                 "runConsole(options, loader, dacData, host"));
         assertTrue(source.contains(
                 "exec.scheduleAtFixedRate(host::presentFrame"));
         assertTrue(source.contains("host.presentFrame();"));
-        assertTrue(source.contains("host = callOnAudioThread(exec,"));
-        assertTrue(source.contains("dacData, host, catalog, seqConfig, validSfx, exec"));
+        // Both entry paths receive the same production host. That host now
+        // owns its producer executor; the UI executor only serializes commands.
+        // interactiveExecutorCommandsRunOnTheHostProducerOwner exercises the
+        // cross-thread dispatch contract rather than requiring app-side creation.
+        assertTrue(source.contains(
+                "new InteractiveState(startSongId, loader, dacData, host"));
+        assertTrue(source.contains("catalog, seqConfig, validSfx, exec"));
     }
 
     @Test
@@ -149,6 +164,110 @@ class TestSoundTestPresentationHost {
         host.close();
 
         assertEquals(1, fixture.sink().closeCount.get());
+    }
+
+    @Test
+    void interactiveExecutorCommandsRunOnTheHostProducerOwner() throws Exception {
+        try (StandaloneAudioPresentationHost host =
+                     StandaloneAudioPresentationHost.open(
+                             "s1",
+                             SonicConfigurationService.createStandalone(),
+                             null, true);
+             ExecutorService executor = Executors.newSingleThreadExecutor()) {
+            assertDoesNotThrow(() -> executor.submit(() -> {
+                host.toggleMute(ChannelType.FM, 1);
+                host.presentFrame();
+            }).get(5, TimeUnit.SECONDS));
+        }
+    }
+
+    @Test
+    void productionOwnerIsDaemonWhenADeadlineLeavesLateCleanup() throws Exception {
+        try (StandaloneAudioPresentationHost host =
+                     StandaloneAudioPresentationHost.open(
+                             "s1",
+                             SonicConfigurationService.createStandalone(),
+                             null, true)) {
+            Field ownerField = StandaloneAudioPresentationHost.class
+                    .getDeclaredField("ownerThread");
+            ownerField.setAccessible(true);
+            Thread owner = (Thread) ownerField.get(host);
+
+            assertTrue(owner.isDaemon(),
+                    "late open or cleanup must not keep the JVM alive");
+        }
+    }
+
+    @Test
+    void rejectedOffOwnerCloseRemainsRetryableUntilOwnerCloses() throws Exception {
+        HostFixture fixture = fixture();
+        StandaloneAudioPresentationHost host = fixture.host();
+        try (ExecutorService executor = Executors.newSingleThreadExecutor()) {
+            ExecutionException rejection = assertThrows(ExecutionException.class,
+                    () -> executor.submit(host::close).get(5, TimeUnit.SECONDS));
+            assertInstanceOf(IllegalStateException.class, rejection.getCause());
+        }
+
+        host.close();
+
+        assertEquals(1, fixture.sink().closeCount.get(),
+                "an off-owner rejection must not hide the retryable producer");
+    }
+
+    @Test
+    void concurrentProductionCloseRequestsShareOneOwnerCleanup() throws Exception {
+        StandaloneAudioPresentationHost host =
+                StandaloneAudioPresentationHost.open(
+                        "s1",
+                        SonicConfigurationService.createStandalone(),
+                        null, true);
+        try (ExecutorService closers = Executors.newFixedThreadPool(2)) {
+            Future<?> first = closers.submit(host::close);
+            Future<?> second = closers.submit(host::close);
+            assertDoesNotThrow(() -> first.get(5, TimeUnit.SECONDS));
+            assertDoesNotThrow(() -> second.get(5, TimeUnit.SECONDS));
+        }
+        host.close();
+    }
+
+    @Test
+    void closeDeadlineLeavesOwnerCleanupAliveForASecondAttempt() throws Exception {
+        ExecutorService ownerExecutor = Executors.newSingleThreadExecutor();
+        BlockingSink sink = new BlockingSink();
+        try {
+            Future<StandaloneAudioPresentationHost> created = ownerExecutor.submit(() -> {
+                AudioManager manager = AudioManager.createStandalonePresentation(
+                        "s3k", new Sonic3kAudioProfile(),
+                        SonicConfigurationService.createStandalone(), null,
+                        sink, new SmpsCoordFlagHandlerOwner(
+                                new SmpsCoordFlagRuntimeState()));
+                return StandaloneAudioPresentationHost.fromManagerForTesting(
+                        "s3k", manager, ownerExecutor);
+            });
+            StandaloneAudioPresentationHost host = created.get(5, TimeUnit.SECONDS);
+
+            assertThrows(IllegalStateException.class, host::close,
+                    "the caller deadline must remain bounded while owner cleanup continues");
+            assertTrue(sink.closeStarted.await(1, TimeUnit.SECONDS),
+                    "owner cleanup must have reached the sink before the deadline");
+
+            sink.release.countDown();
+            assertDoesNotThrow(() -> host.close(),
+                    "a later close must observe the original cleanup completion");
+            assertEquals(1, sink.closeCount.get());
+            assertTrue(ownerExecutor.awaitTermination(1, TimeUnit.SECONDS),
+                    "successful cleanup must release its private owner executor");
+        } finally {
+            // Keep a failed assertion from stranding this deliberately
+            // blocked non-production executor in the Surefire fork.
+            sink.release.countDown();
+            ownerExecutor.shutdownNow();
+            try {
+                ownerExecutor.awaitTermination(1, TimeUnit.SECONDS);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        }
     }
 
     @Test
@@ -300,6 +419,32 @@ class TestSoundTestPresentationHost {
 
         @Override public void close() {
             closeCount.incrementAndGet();
+        }
+    }
+
+    private static final class BlockingSink implements AudioPresentationSink {
+        private final CountDownLatch closeStarted = new CountDownLatch(1);
+        private final CountDownLatch release = new CountDownLatch(1);
+        private final AtomicInteger closeCount = new AtomicInteger();
+
+        @Override public int sampleRate() {
+            return 48_000;
+        }
+
+        @Override public void accept(AudioPresentationFrameView frame) {
+        }
+
+        @Override public void onReverseBoundary() {
+        }
+
+        @Override public void close() {
+            closeCount.incrementAndGet();
+            closeStarted.countDown();
+            try {
+                release.await();
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 }

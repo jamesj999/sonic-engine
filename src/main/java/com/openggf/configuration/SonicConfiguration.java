@@ -47,6 +47,11 @@ public enum SonicConfiguration {
 	 * Normal-play simulation policy for ROM-backed load queues.
 	 */
 	LOAD_TIME_SIMULATION,
+	/**
+	 * Preserve explicitly listed default-valued settings when converting a
+	 * legacy full configuration to the sparse format.
+	 */
+	CONFIG_PRESERVE_EXPLICIT_DEFAULTS,
 	/*
 	 * ALWAYS DEFINE BUTTONS IN THE ORDER: UP, DOWN, LEFT, RIGHT. NOT FOR ANY
 	 * TECHNICAL REASON, JUST BECAUSE LEVEL SELECT.

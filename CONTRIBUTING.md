@@ -62,7 +62,7 @@ mvn test
 Run the built jar:
 
 ```bash
-java -jar target/OpenGGF-0.6.prerelease-jar-with-dependencies.jar
+java -jar target/OpenGGF-0.7.prerelease-jar-with-dependencies.jar
 ```
 
 Maven output is quiet by default through the Maven Silent Extension. Use `-Dmse=off` when you need
@@ -136,6 +136,10 @@ When a trace frontier moves, regresses, or a trace sweep is used to choose the n
 [`docs/status/trace-frontier-log.md`](docs/status/trace-frontier-log.md) in the same change.
 
 ## Branches, Commits, And Documentation
+
+Release maintainers: pushing `master` automatically publishes a GitHub release
+after validation and builds succeed. Manual dispatch is validation-only; see [Publishing a GitHub release](docs/project/release-publishing.md)
+for the command, tag ownership, and final checks.
 
 Use focused branches from `develop`:
 

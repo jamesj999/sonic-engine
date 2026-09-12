@@ -2513,6 +2513,24 @@ public class SmpsDriver implements SmpsLogicalWriteTarget, SmpsSequencerHost {
         renderer.render(buffer, frameIndex, 1);
     }
 
+    // Ephemeral service receipt, cleared before each presentation; not rewind state.
+    private boolean sfxTrackStoppedDuringService;
+
+    public void clearTrackStopReceipt() {
+        sfxTrackStoppedDuringService = false;
+    }
+
+    public boolean sfxTrackStoppedDuringService() {
+        return sfxTrackStoppedDuringService;
+    }
+
+    @Override
+    public void onSfxTrackStop(SmpsSequencer sequencer) {
+        if (isSfx(sequencer)) {
+            sfxTrackStoppedDuringService = true;
+        }
+    }
+
     /** Runs one V-blank-owned service for every sequencer in this driver. */
     public void serviceOuterFrame() {
         synchronized (sequencersLock) {

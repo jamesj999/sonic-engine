@@ -22,6 +22,10 @@ public interface SmpsSequencerHost {
 
     void reconcileInactiveSfxTracks(SmpsSequencer sequencer);
 
+    /** A native track-end command executed; teardown and replacement do not emit this. */
+    default void onSfxTrackStop(SmpsSequencer sequencer) { }
+
+
     /** See {@link CoordFlagContext#releaseChannelToMusic}. */
     default void releaseChannelToMusic(SmpsSequencer sequencer,
             SmpsSequencer.Track endingTrack) {
