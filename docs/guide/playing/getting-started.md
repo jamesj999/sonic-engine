@@ -99,7 +99,9 @@ If a ROM file is missing for the game you selected, the engine will show an erro
 
 Choose **Settings** on the master title for a controller-accessible editor with
 visible categories, onscreen text/key editing, and draft Apply/Cancel. Non-default
-settings are amber. Restart the engine after saving to apply all subsystem changes.
+settings are amber. In text editors, Down enters the keypad and Up from its top
+row returns to the text field. Enter/A chooses a key or accepts the focused field;
+you can also type normally. Restart the engine after saving to apply all subsystem changes.
 See [configuration](../../../CONFIGURATION.md#engine-settings-from-the-title) for
 navigation and current prototype limits.
 

@@ -243,8 +243,14 @@ Choose **Settings** for persisted engine preferences. The category rail stays
 visible; confirm enters the selected category, Back returns to the rail, and
 up/down moves through paginated fields. Left/right changes booleans, enums and
 numbers; confirm opens a value picker or text editor. Text editing supports
-ordinary keyboard typing and a controller keyboard with all printable ASCII,
-case/symbol pages, cursor movement, deletion, and default restoration. Key
+ordinary keyboard typing and an onscreen keyboard with all printable ASCII,
+case/symbol pages, cursor movement, deletion, and default restoration. Down moves
+from the text field onto the keypad; Up from its top row returns to the field.
+Arrows and D-pad move the same focus. Enter/A chooses the highlighted key on the
+keypad or accepts the value in the text field; the keypad also has an **OK** key.
+Typing directly returns focus to the field. Switching input devices changes
+prompts without moving focus. This editor is shared with recording target frames,
+join addresses, and lobby chat. Key
 bindings also offer physical key/chord capture. Values and categories with non-default settings remain
 amber, including after saving. **Apply** writes the draft atomically; save errors
 retain the draft for retry. **Cancel** asks before discarding unsaved edits.

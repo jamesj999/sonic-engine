@@ -18,7 +18,9 @@ campaigns; feature/API publication remains subject to the 0.8 roadmap.
   animated ROM logos, adds visible launch, time-attack, recordings, mods, settings,
   advanced, and quit entries, and follows intentional input with keyboard/controller prompts.
   Catalog-backed engine settings offer visible categories, onscreen value/path/key
-  editing, atomic Apply/Cancel, and amber non-default values. Launch options retain
+  editing, atomic Apply/Cancel, and amber non-default values. Shared text editors let
+  keyboard and controller users move focus between the field and onscreen keypad.
+  Launch options retain
   white stock, amber changed, and red experimental status at native resolution.
   Checkerboard pages retain full-size primary lettering and use an authored native
   small font with lowercase descenders for metadata instead of fractional downscaling.
