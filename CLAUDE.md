@@ -156,12 +156,14 @@ touches the README release section only when it adds or changes a version
 theme; most merges leave it alone, and no hook requires it.
 
 Use the [documentation obligation checklist](docs/agent-workflow/documentation-obligation-checklist.md)
-when staging. `pom.xml`'s `<version>` names the version `develop` carries and
-so the `CHANGELOG.<version>.md` that receives release prose (`master` is the
-last released version and `next` the one after `develop`; today that is master
+when staging. Each branch's `pom.xml` names its own release line. On
+`develop`, release prose goes in `CHANGELOG.<develop version>.md`; `next`
+prose stays in the root changelog's Unreleased section until promotion
+(`master` is the last released version and `next` the one after `develop`; today that is master
 0.6.20260911, develop 0.7.prerelease, next 0.8.prerelease; promoting them at
-release time follows [release rollover](docs/project/release-rollover.md)). Root `CHANGELOG.md` is the index (its exact
-path owns the hook trailer). The README release section is only a very
+release time follows [release rollover](docs/project/release-rollover.md)).
+Root `CHANGELOG.md` holds the release index and next's Unreleased prose
+(its exact path owns the hook trailer). The README release section is only a very
 high-level summary of the version's themes, not a change log; a fix to a
 feature introduced in that same unreleased version folds into the existing
 entry rather than earning one of its own.

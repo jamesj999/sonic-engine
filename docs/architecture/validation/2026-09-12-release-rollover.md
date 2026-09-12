@@ -56,8 +56,8 @@ The first main-workspace post-sync run (`target/rollover-sync-integrated.log`)
 was invalidated by a concurrent website-notify Maven build in the same workspace.
 It reported missing compiled classes while those classes were being recompiled.
 Do not treat its totals, report snapshot, or changed skips as code evidence.
-The isolated synchronization run remains valid; final main integration needs
-an uncontended full run.
+The isolated synchronization run remains valid. The uncontended baseline and
+final integration runs below supersede this invalid attempt.
 
 ## Completed baselines
 
@@ -147,3 +147,61 @@ The corrected package command succeeded. The ordinary JAR, dependency JAR,
 and Mod SDK JAR are present with `0.7.prerelease` filenames; both runtime JARs
 contain `app.version` and `app.baseVersion` equal to `0.7.prerelease`. The
 macOS bundle fields are `0.7.0`. The original SDK inventory failure is resolved.
+
+## Promoted develop verification
+
+After fast-forwarding next and then develop to `11873ab36`, a clean full run
+on develop completed 20,217 tests, 14 failures, no errors, and 25 skips in
+17m29s. All 19,109 distinct outcomes exactly match the corrected candidate:
+no new failure, changed diagnostic, skip, or missing test. The website merge
+changed only its workflow, guide, and Python test; all three notification tests
+and the focused master-push trigger guard passed before integration.
+
+A separate `EGL_PLATFORM=surfaceless` invocation of
+`TestForegroundWindowRendering` also skipped (one test, no executed rendering
+assertion). The host still cannot provide the required EGL context; this is
+not reported as passing rendering coverage.
+
+
+The promoted develop structural run completed 656 tests with no failures,
+errors, or skips; all outcomes exactly match the corrected candidate. Package
+validation succeeded and both runtime JARs report `0.7.prerelease`, with
+macOS bundle version `0.7.0` and the matching Mod SDK artifact present.
+
+## Next version advancement
+
+Commit `2bbb1c6ac` advances only engine/build metadata, artifact examples, and
+sample dependency coordinates to `0.8.prerelease`; the descriptor destination
+becomes `next`. The Mod API remains the unpublished `0.7.0` candidate. The
+52 focused identity, SDK, sample, and policy tests passed without skips.
+The full preintegration run completed 20,217 tests, 14 failures, no errors,
+and 25 skips. All 19,109 distinct outcomes exactly match the corrected 0.7
+tree, including every diagnostic. Package validation succeeded; ordinary and
+fat JAR runtime versions are `0.8.prerelease`, the matching SDK JAR exists,
+and both macOS bundle fields are `0.8.0`.
+
+
+After fast-forward integration at `2bbb1c6ac`, the clean full run in the
+existing external next checkout completed 20,217 tests: 15 failures, two
+errors, and 95 skips in 16m42s. Every failure/error identity and full diagnostic
+matches the original `218b8fff1` next baseline. No new or worsened failure
+remains. Its existing broken short-ROM links reproduce the three donor issues
+and 70 ROM skips that are absent in the internal worktree. The only new skip
+is the same foreground-window EGL limitation. The three replaced successful
+test names are the intentional rewind/API-policy renames described above.
+
+
+The final next structural run completed 656 tests with no failures, errors,
+or skips in 5m03s; every outcome matches the corrected candidate. Its final
+package command succeeded, and both runtime JARs, the SDK artifact, and macOS
+bundle fields were checked against `0.8.prerelease` / `0.8.0`.
+
+## Final integration boundary
+
+The common documentation update records these completed runs and clarifies
+branch-specific changelog ownership. It is integrated into develop and then
+next; next retains only its 0.8 version metadata, destination policy, and
+matching artifact examples beyond develop. No engine source changes follow
+the verified commits. Agent/skill mirrors, documentation links, branch ancestry,
+and hook policy are checked for the final documentation integration. The
+published master/tag/release branch remain at `37aeb6b84`.
