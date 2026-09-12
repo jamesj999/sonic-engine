@@ -129,4 +129,23 @@ and profile guards then passed in 17.869 s. This does not change test selection;
 it is verified narrowly rather than consuming a second broad attempt.
 
 Consumed raw logs and reports were deleted after inspection; the combined run was
-acknowledged. Integration and final upgrade-check results follow below.
+acknowledged.
+
+The implementation and targeted upgrade fix were integrated without conflicts into
+`develop` at `505fea4c55c411026039bd99f6b30c495db6f4c5`, after a fresh fast-forward
+sync reported no further upstream commits. The main workspace retained its unrelated
+untracked document and three dirty disassemblies. On that integrated commit:
+
+```bash
+mvn -Dmse=off -B -Ptest-concurrent \
+  '-Dtest=TestFastFmCoreTolerance,TestBuildToolingGuard#publicAudioResourcesMustExcludeCapturedReferenceBodies' test
+```
+
+With the same verified ROM properties, this passed 141 tests / two reports with
+no failures, errors or skips in 57.320 seconds, including compilation. The actual
+main build tree previously held 95 obsolete audio copies; all were removed, and
+its 145 synthetic FM bodies plus expected rows exactly matched current sources.
+No raw build trees were copied between workspaces. Total accounted validation was
+1,294.961 seconds (21m35s), including every focused/baseline check and the single
+combined attempt. Remaining red suite cases are the matched baseline issues above;
+this delivery is not an all-green engine-suite claim.
