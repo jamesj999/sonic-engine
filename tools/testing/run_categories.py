@@ -18,8 +18,8 @@ import math
 import uuid
 import xml.etree.ElementTree as ET
 
-from category_artifacts import compact_run, prune_runs, run_logged
-from category_control import DEFAULT_MINUTES, IDLE_SECONDS, preflight, check_repeat, record_attempt, is_broad
+from category_artifacts import compact_run, prune_runs, run_logged, acknowledge_run
+from category_control import DEFAULT_MINUTES, IDLE_SECONDS, preflight, check_repeat, record_attempt, record_outcome, is_broad
 
 ROOT = Path(__file__).resolve().parents[2]
 TEST_ROOT = Path('src/test/java')
@@ -208,7 +208,7 @@ def tree_state(root):
     return digest.hexdigest()
 
 
-def run_plan(root, plan, max_minutes=DEFAULT_MINUTES, repeat_reason=None):
+def run_plan(root, plan, max_minutes=DEFAULT_MINUTES, repeat_reason=None, keep_diagnostics=False):
     target = root / 'target'
     target.mkdir(exist_ok=True)
     lock = target / 'category-tests.lock'
@@ -218,6 +218,7 @@ def run_plan(root, plan, max_minutes=DEFAULT_MINUTES, repeat_reason=None):
         raise ValueError(f'Category runner already owns {lock}; inspect its PID before removing a stale lock')
     run = None
     status = 'incomplete'
+    results = []
     try:
         with os.fdopen(fd, 'w') as stream:
             stream.write(str(os.getpid()) + '\n')
@@ -226,6 +227,8 @@ def run_plan(root, plan, max_minutes=DEFAULT_MINUTES, repeat_reason=None):
         prune_runs(base)
         run = base / (datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '-' + uuid.uuid4().hex[:8])
         run.mkdir(parents=True)
+        if keep_diagnostics:
+            (run / 'keep-diagnostics').touch()
         print(f'Bounded diagnostics: {run}', flush=True)
         print(f"Categories: {', '.join(plan['categories'])}; "
               f"{len(plan['tests'])}/{plan['inventory_count']} candidate classes; "
@@ -290,8 +293,13 @@ def run_plan(root, plan, max_minutes=DEFAULT_MINUTES, repeat_reason=None):
         try:
             if run is not None:
                 (run / 'status.json').write_text(json.dumps({'status': status}) + '\n')
-                compact_run(run, failed=(status != 'passed'))
-                prune_runs(run.parent)
+                record_outcome(target, run, status, results)
+                compact_run(run, failed=(status != 'passed' or keep_diagnostics))
+                # Current results remain only until consumed. The next launch removes
+                # abandoned results; explicit opt-in retention is separately bounded.
+                prune_runs(run.parent, active=None if keep_diagnostics else run)
+                print(f'After inspecting results, delete diagnostics: python3 tools/testing/run_categories.py '
+                      f'--acknowledge {run.name}', flush=True)
         finally:
             lock.unlink()
 
@@ -306,6 +314,8 @@ def main(argv=None):
     parser.add_argument('--preflight', action='store_true', help='check Java and guard tools without running tests')
     parser.add_argument('--max-minutes', type=float, default=DEFAULT_MINUTES, help='total Maven budget across lanes (default: 40 minutes)')
     parser.add_argument('--repeat-reason', help='record why another broad run is necessary; does not skip checks')
+    parser.add_argument('--acknowledge', metavar='RUN_ID', help='delete inspected results without running tests')
+    parser.add_argument('--keep-diagnostics', action='store_true', help='explicitly retain bounded diagnostics across runs until acknowledged')
     parser.add_argument('--json', action='store_true', help='print the complete dry-run plan, including every class')
     args = parser.parse_args(argv)
     try:
@@ -313,6 +323,14 @@ def main(argv=None):
             parser.error('--max-minutes must be a positive finite number')
         if args.repeat_reason is not None and not 10 <= len(args.repeat_reason.strip()) <= 2000:
             parser.error('--repeat-reason must explain the reason in 10–2000 characters')
+        if args.acknowledge:
+            if args.run or args.preflight or args.base or args.category or args.guards or args.list or args.json or args.keep_diagnostics or args.repeat_reason:
+                parser.error('--acknowledge must be used alone')
+            acknowledge_run(ROOT, args.acknowledge)
+            print('Diagnostics deleted; broad-attempt receipt preserved.')
+            return 0
+        if args.keep_diagnostics and not args.run:
+            parser.error('--keep-diagnostics requires --run')
         data = policy()
         if args.list:
             tests = inventory(ROOT, data)
@@ -337,7 +355,7 @@ def main(argv=None):
             if args.preflight and not args.run:
                 print('Tool prerequisites passed; no tests executed.')
                 return 0
-            return run_plan(ROOT, plan, args.max_minutes, args.repeat_reason)
+            return run_plan(ROOT, plan, args.max_minutes, args.repeat_reason, args.keep_diagnostics)
         display = plan if args.json else {
             **{k: v for k, v in plan.items() if k not in ('tests', 'reasons')},
             'selected_classes': len(plan['tests']), 'reasons': plan['reasons'][:50],
