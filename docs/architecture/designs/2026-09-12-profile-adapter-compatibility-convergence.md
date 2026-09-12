@@ -28,10 +28,12 @@ directly and constructs no bridge adapter or per-frame object.
 
 The ordinary touch mapper is likewise canonical:
 `TouchResponseProfileMapper` maps the provider flags and an already-known
-multi-region decision to the canonical profile. The canonical public factory
-continues to determine region presence by reading `getMultiTouchRegions()` once.
-The level compatibility overload supplies its caller-owned boolean and never
-reads geometry, as its existing callers require.
+multi-region decision to the canonical profile. Its construction entry accepts
+the already-decoded mode, so public factories retain their former observable
+getter sequence and count. The canonical factory reads special-property flags,
+then `getMultiTouchRegions()` once, then the profile fields. The level
+compatibility overload reads special-property flags and its enemy override once,
+then supplies its caller-owned region boolean without reading geometry.
 
 ## Intentional compatibility exception
 

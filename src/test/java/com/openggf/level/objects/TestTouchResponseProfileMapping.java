@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.ArrayList;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class TestTouchResponseProfileMapping {
@@ -171,6 +173,28 @@ class TestTouchResponseProfileMapping {
                 () -> TouchResponseProfile.fromProvider(new ForceEnemySonic2Provider(), false));
     }
 
+    @Test
+    void canonicalFactoryReadsProviderPropertiesInOriginalOrderExactlyOnce() {
+        CallOrderProvider provider = new CallOrderProvider(false);
+
+        com.openggf.game.profiles.touchresponse.TouchResponseProfile.fromProvider(provider);
+
+        assertEquals(List.of("sonic1", "sonic2", "s3k", "regions", "shield",
+                        "continuous", "render", "postSpecial"),
+                provider.calls());
+    }
+
+    @Test
+    void compatibilityBooleanOverloadDoesNotRereadSpecialProperties() {
+        CallOrderProvider provider = new CallOrderProvider(false);
+
+        TouchResponseProfile.fromProvider(provider, false);
+
+        assertEquals(List.of("sonic1", "sonic2", "s3k", "forceEnemy", "shield",
+                        "continuous", "render", "postSpecial"),
+                provider.calls());
+    }
+
     private static class DefaultProvider implements TouchResponseProvider {
         @Override
         public int getCollisionFlags() {
@@ -329,6 +353,73 @@ class TestTouchResponseProfileMapping {
         @Override
         public boolean usesSonic2TouchSpecialPropertyResponse() {
             return true;
+        }
+    }
+
+    private static final class CallOrderProvider extends DefaultProvider {
+        private final boolean forceEnemy;
+        private final List<String> calls = new ArrayList<>();
+
+        private CallOrderProvider(boolean forceEnemy) {
+            this.forceEnemy = forceEnemy;
+        }
+
+        private List<String> calls() {
+            return calls;
+        }
+
+        @Override
+        public boolean usesSonic1TouchSpecialPropertyResponse() {
+            calls.add("sonic1");
+            return false;
+        }
+
+        @Override
+        public boolean usesSonic2TouchSpecialPropertyResponse() {
+            calls.add("sonic2");
+            return false;
+        }
+
+        @Override
+        public boolean usesS3kTouchSpecialPropertyResponse() {
+            calls.add("s3k");
+            return false;
+        }
+
+        @Override
+        public boolean usesEnemyTouchCategoryOverride() {
+            calls.add("forceEnemy");
+            return forceEnemy;
+        }
+
+        @Override
+        public TouchRegion[] getMultiTouchRegions() {
+            calls.add("regions");
+            return null;
+        }
+
+        @Override
+        public int getShieldReactionFlags() {
+            calls.add("shield");
+            return 0;
+        }
+
+        @Override
+        public boolean requiresContinuousTouchCallbacks() {
+            calls.add("continuous");
+            return false;
+        }
+
+        @Override
+        public boolean requiresRenderFlagForTouch() {
+            calls.add("render");
+            return true;
+        }
+
+        @Override
+        public boolean enablesPostSpecialTouchAirborneSideVelocityPreservation() {
+            calls.add("postSpecial");
+            return false;
         }
     }
 }

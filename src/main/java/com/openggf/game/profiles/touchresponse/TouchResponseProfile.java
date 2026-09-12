@@ -49,8 +49,12 @@ public record TouchResponseProfile(
 
     public static TouchResponseProfile fromProvider(com.openggf.level.objects.TouchResponseProvider provider) {
         Objects.requireNonNull(provider, "provider");
-        return TouchResponseProfileMapper.fromProvider(
-                provider, provider.getMultiTouchRegions() != null);
+        boolean sonic1 = provider.usesSonic1TouchSpecialPropertyResponse();
+        boolean sonic2 = provider.usesSonic2TouchSpecialPropertyResponse();
+        boolean s3k = provider.usesS3kTouchSpecialPropertyResponse();
+        TouchCategoryDecodeMode decodeMode = TouchResponseProfileMapper.decodeMode(sonic1, sonic2, s3k);
+        return TouchResponseProfileMapper.fromDecodedProvider(
+                provider, decodeMode, provider.getMultiTouchRegions() != null);
     }
 
     public static TouchResponseProfile standardEnemy() {
