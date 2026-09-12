@@ -1,6 +1,7 @@
 # Java normalisation: second review
 
-Status: implementation in progress on `develop`, one commit per candidate.
+Status: candidates 1, 2, 3, 4 and 8 implemented on `develop`, one commit each.
+Candidates 5, 6, 7, 9, 10 and 11 remain deferred after the user ended this pass.
 
 Reviewed `develop` at `5d9ef4af40d052050d37df2424e696608cff2647` on
 12 September 2026. Main workspace only; no worktrees or branch changes.
@@ -398,3 +399,29 @@ Validation on the candidate working tree:
   suite. Consumed category diagnostics were acknowledged and removed.
 - Final `mvn -Dmse=off -Dtest=TestModApiSignatureSurface test`: nine tests passed
   with no skips; the recursive candidate API pin remains unchanged.
+
+### Candidate 2 — S2 mapping and DPLC decoding
+
+Player and dust art now consume `S2SpriteDataLoader` directly. S2 word-count
+DPLC traversal lives beside S2 mapping decoding; the public player DPLC method
+remains a delegate. Bank sizing and art selection stay in the consumers.
+Independent REV01 table inspection found no signed/backward pointers, null first
+frames or priority bits in these assets, so the shared mapping decoder introduces
+no observed correction to their data. New descriptor digests cover all 214 Sonic,
+139 Tails and 22 dust frames and requests, plus bank sizes and sequential destinations.
+Validation base: `edcd836d5d` (candidate 1).
+
+Validation on the candidate working tree:
+- Focused S2 ROM descriptors, player art, DPLC, dust and renderer checks: 20 tests
+  passed, no skips, with the absolute REV01 ROM property. Tool preflight passed.
+- Full selection `run_categories.py --base edcd836d5d --run --repeat-reason
+  "New pass-2 candidate 2: shared S2 player/dust mapping and DPLC decoding with full
+  ROM descriptor checks; previous completed selection covered candidate 1."`
+  selected 2,507 ordinary classes. Run `20260912T175227Z-5633930c` was interrupted
+  at the user's request during ordinary tests. No lane summary was completed and
+  guards did not run. Coverage is incomplete; no broad pass is claimed. The runner
+  and its child processes were confirmed stopped.
+- No further normalisation candidates were applied. Draft investigations outside
+  the repository are not delivered implementations. Follow-up priorities are ROM
+  ring mappings (7), audio construction (9), slot GPU ownership (10), then the
+  smaller scroll/dead-helper/strict-field extractions (5, 6, 11).

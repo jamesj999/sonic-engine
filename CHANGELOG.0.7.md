@@ -80,6 +80,8 @@ campaigns; feature/API publication remains subject to the 0.8 roadmap.
   activation and respawn cleanup local.
   Solid objects no longer implement contact listeners solely to provide empty
   callbacks; manager-owned collision, riding and live callbacks are preserved.
+  S2 player and dust art share the S2 mapping/DPLC decoder, with the public
+  player DPLC entry point retained as a compatibility delegate.
 - **Local test categories:** select related subsystem checks from changed paths, with
   common tests and structural guards retained, broad fallback for shared changes,
   and bounded diagnostics and automatic temporary-file cleanup. Tool prerequisites

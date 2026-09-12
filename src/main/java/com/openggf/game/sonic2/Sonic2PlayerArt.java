@@ -78,7 +78,7 @@ public class Sonic2PlayerArt {
             int dplcAddr,
             int basePatternIndex) throws IOException {
         Pattern[] artTiles = loadArtTiles(artAddr, artSize);
-        List<SpriteMappingFrame> mappingFrames = loadMappingFrames(mappingAddr);
+        List<SpriteMappingFrame> mappingFrames = S2SpriteDataLoader.loadMappingFrames(reader, mappingAddr);
         List<SpriteDplcFrame> dplcFrames = parseDplcFrames(reader, dplcAddr);
 
         int bankSize = resolveBankSize(dplcFrames, mappingFrames);
@@ -165,65 +165,12 @@ public class Sonic2PlayerArt {
         return PatternDecompressor.uncompressed(reader, artAddr, artSize);
     }
 
-    private List<SpriteMappingFrame> loadMappingFrames(int mappingAddr) {
-        int offsetTableSize = reader.readU16BE(mappingAddr);
-        int frameCount = offsetTableSize / 2;
-        List<SpriteMappingFrame> frames = new ArrayList<>(frameCount);
-        for (int i = 0; i < frameCount; i++) {
-            int frameAddr = mappingAddr + reader.readU16BE(mappingAddr + i * 2);
-            int pieceCount = reader.readU16BE(frameAddr);
-            frameAddr += 2;
-            List<SpriteMappingPiece> pieces = new ArrayList<>(pieceCount);
-            for (int p = 0; p < pieceCount; p++) {
-                int yOffset = (byte) reader.readU8(frameAddr);
-                frameAddr += 1;
-                int size = reader.readU8(frameAddr);
-                frameAddr += 1;
-                int tileWord = reader.readU16BE(frameAddr);
-                frameAddr += 2;
-                frameAddr += 2; // 2P tile word, unused in 1P.
-                int xOffset = (short) reader.readU16BE(frameAddr);
-                frameAddr += 2;
-
-                int widthTiles = ((size >> 2) & 0x3) + 1;
-                int heightTiles = (size & 0x3) + 1;
-
-                int tileIndex = tileWord & 0x7FF;
-                boolean hFlip = (tileWord & 0x800) != 0;
-                boolean vFlip = (tileWord & 0x1000) != 0;
-                int paletteIndex = (tileWord >> 13) & 0x3;
-
-                pieces.add(new SpriteMappingPiece(
-                        xOffset, yOffset, widthTiles, heightTiles, tileIndex, hFlip, vFlip, paletteIndex));
-            }
-            frames.add(new SpriteMappingFrame(pieces));
-        }
-        return frames;
-    }
-
     /**
      * Parses DPLC frames from ROM at the given address.
-     * Exposed as package-private static so the ending cutscene renderer can reuse it.
+     * Retained as a public delegate for the ending cutscene renderer and other callers.
      */
     public static List<SpriteDplcFrame> parseDplcFrames(RomByteReader reader, int dplcAddr) {
-        int offsetTableSize = reader.readU16BE(dplcAddr);
-        int frameCount = offsetTableSize / 2;
-        List<SpriteDplcFrame> frames = new ArrayList<>(frameCount);
-        for (int i = 0; i < frameCount; i++) {
-            int frameAddr = dplcAddr + reader.readU16BE(dplcAddr + i * 2);
-            int requestCount = reader.readU16BE(frameAddr);
-            frameAddr += 2;
-            List<TileLoadRequest> requests = new ArrayList<>(requestCount);
-            for (int r = 0; r < requestCount; r++) {
-                int entry = reader.readU16BE(frameAddr);
-                frameAddr += 2;
-                int count = ((entry >> 12) & 0xF) + 1;
-                int startTile = entry & 0x0FFF;
-                requests.add(new TileLoadRequest(startTile, count));
-            }
-            frames.add(new SpriteDplcFrame(requests));
-        }
-        return frames;
+        return S2SpriteDataLoader.loadDplcFrames(reader, dplcAddr);
     }
 
     private SpriteAnimationSet loadSonicAnimations() {

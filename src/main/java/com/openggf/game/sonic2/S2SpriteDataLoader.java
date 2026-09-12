@@ -2,6 +2,8 @@ package com.openggf.game.sonic2;
 
 import com.openggf.data.RomByteReader;
 import com.openggf.level.render.SpriteMappingFrame;
+import com.openggf.level.render.SpriteDplcFrame;
+import com.openggf.level.render.TileLoadRequest;
 import com.openggf.level.render.SpriteMappingPiece;
 
 import java.util.ArrayList;
@@ -104,6 +106,28 @@ public final class S2SpriteDataLoader {
                         xOffset, yOffset, widthTiles, heightTiles, tileIndex, hFlip, vFlip, paletteIndex, priority));
             }
             frames.add(new SpriteMappingFrame(pieces));
+        }
+        return frames;
+    }
+
+    /** Loads S2 word-count DPLC frames, with four-bit lengths and twelve-bit tile indices. */
+    public static List<SpriteDplcFrame> loadDplcFrames(RomByteReader reader, int dplcAddr) {
+        int offsetTableSize = reader.readU16BE(dplcAddr);
+        int frameCount = offsetTableSize / 2;
+        List<SpriteDplcFrame> frames = new ArrayList<>(frameCount);
+        for (int i = 0; i < frameCount; i++) {
+            int frameAddr = dplcAddr + reader.readU16BE(dplcAddr + i * 2);
+            int requestCount = reader.readU16BE(frameAddr);
+            frameAddr += 2;
+            List<TileLoadRequest> requests = new ArrayList<>(requestCount);
+            for (int r = 0; r < requestCount; r++) {
+                int entry = reader.readU16BE(frameAddr);
+                frameAddr += 2;
+                int count = ((entry >> 12) & 0xF) + 1;
+                int startTile = entry & 0x0FFF;
+                requests.add(new TileLoadRequest(startTile, count));
+            }
+            frames.add(new SpriteDplcFrame(requests));
         }
         return frames;
     }
