@@ -109475,3 +109475,25 @@ architecture), no skips**, and **613 structural guards, no skips**. The full
 suite completes with **17,126 tests, 7 failures, 32 errors, 108 skips**, with
 identical failing names/types/full messages to the preceding full run;
 see the audit for ROM/donor limitations and exact commands.
+
+
+## 2026-09-12 - FBZ baseline after release rollover
+
+- Base: `f177bbdb7df17b0c56d545b6e2f5d5b1f84a8964`; isolated worktree
+  `.worktrees/ai-fbz-baseline`, with no runtime edits.
+- Command: `mvn -Dmse=off -Ptrace-replay-r7 -Dsurefire.forkCount=1
+  -Dsurefire.runOrder=alphabetical -Dtest=TestS3kFbzCompleteRunTraceReplay
+  "-Ds3k.rom.path=$S3K_ROM"
+  -Dopenggf.surefire.reports=target/fbz-base-trace-reports test -B`.
+- Completed result: 1 test, 1 failure, 0 errors, 0 skips; trace report has
+  **5,666 errors, 0 warnings**. First error: **frame 34**,
+  `queue.s3k_kos_direct.busy`, expected `true`, actual `false`.
+- ROM SHA-1: `cfbf98c36c776677290a872547ac47c53d2761d6`.
+- This replaces the July FBZ outstanding-actions document's stale current
+  frontier claim. It does not establish a newly introduced regression: that
+  historical run used an earlier timing contract. The queue frontier remains
+  separate from the ordinary-input compatibility controller work.
+- Evidence archived outside the repo at
+  `$FBZ_EVIDENCE_ROOT/fbz-base-trace.log` and `base-trace.json`
+  (external task directory `fbz-20260912`). `S3K_ROM` names the verified
+  existing absolute ROM path; no alias or link was created.
