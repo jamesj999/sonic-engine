@@ -508,3 +508,20 @@ conversion, strict UTF-8 decoding and diagnostics. Each loader retains its schem
 filename, ordering, identities and fingerprints. Runtime timing admission is unchanged.
 Existing rejection tests are included in the focused batch and timing authority
 and invariant guards in the final combined selection; no redundant tests were added.
+
+### Resumed delivery — final validation stopped by request
+
+All six remaining candidates were committed separately through `fb9c33b071`.
+Tool preflight passed. The one combined selection against `c4b5325d25`, run
+`20260912T183612Z-abac6d5c`, selected 2,518 ordinary classes plus guards.
+The user requested stopping during the ordinary lane. No lane summary completed,
+guards did not run, and no broad pass is claimed. The runner and its Maven/test
+children were confirmed stopped; inspected partial diagnostics were acknowledged.
+Cumulative validation time for this resumed delivery was 247 seconds (about
+4.1 minutes), including 121 seconds of focused checks and compilation.
+The focused batch passed 42 tests without skips, and all eight audio PCM
+fingerprints matched the existing baseline. No further tests were run.
+
+The eleven-item plan is implemented. Optional later normalisation includes the
+distinct SFX construction paths; missing SBZ act-1 parallax is separate parity
+work, not unfinished work from this extraction.
