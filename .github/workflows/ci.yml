@@ -54,6 +54,9 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
+      - name: Verify test category selection and retention
+        run: python3 -m unittest discover -s tools/testing -p 'test_run_categor*.py'
+
       - name: Run smoke suite (pull request)
         if: github.event_name == 'pull_request'
         shell: bash

@@ -56,6 +56,11 @@ campaigns; feature/API publication remains subject to the 0.8 roadmap.
 
 ## Build and release
 
+- **Local test categories:** select related subsystem checks from changed paths, with
+  common tests and structural guards retained, broad fallback for shared changes,
+  and bounded diagnostics and automatic temporary-file cleanup. Full CI and release
+  validation remain unchanged.
+
 - **Release-line integration:** preserve hosted release builds, snapshot policy
   checks, current launcher artifact selection, Linux packaging, and automatic
   publication on master pushes from the 0.6 release branch.

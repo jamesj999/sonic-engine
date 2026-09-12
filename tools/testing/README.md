@@ -11,6 +11,115 @@ tools/testing/install-hooks.sh
 
 PowerShell uses `tools/testing/install-hooks.ps1`.
 
+## Test categories
+
+Use Python 3.11+ and Java 21. The runner uses the existing Maven defaults and exclusions;
+it does not move tests, alter CI/release coverage, or remove slow tests from a selected category.
+
+```bash
+python3 tools/testing/run_categories.py --list
+# Compact plan: categories, candidate counts and changed-path reasons.
+python3 tools/testing/run_categories.py --base develop
+# Validate a finished change against its actual integration base, including local edits.
+python3 tools/testing/run_categories.py --base develop --run
+# Add coverage for a semantic dependency beyond the path rules.
+python3 tools/testing/run_categories.py --base develop --category audio --run
+# Focused development; not a substitute for the change-based delivery command.
+python3 tools/testing/run_categories.py --category physics --run
+# Full ordinary suite and guards, including for release preparation.
+python3 tools/testing/run_categories.py --category all --run
+```
+
+Use the actual integration branch or pinned base SHA instead of `develop` where appropriate.
+The diff includes committed, staged, unstaged, deleted, renamed and untracked files. A rename
+checks both old and new paths. Explicit categories are additive: they cannot override an
+unknown change's full-suite fallback. Without `--run`, no Maven process starts. Add `--json` only when the complete class
+inventory is needed; default plans cap changed-path detail at 50 entries to keep output bounded.
+
+| Category | Coverage |
+|---|---|
+| `common` | Shared and unclassified ordinary tests; included in every category run |
+| `physics` | Movement, collision, sensors, solid objects and playable sprites |
+| `gameplay` | Objects, bosses, zone events, stages and game flow |
+| `audio` | Audio drivers, synthesis, presentation and audio tooling, including exhaustive oracles |
+| `rendering` | Graphics, palettes, scrolling, sprite art and viewports |
+| `rewind` | Rewind, recording, playback and save state |
+| `content` | ROM decoding, compression and resource loading |
+| `mods` | Mod API, creator content and SDK tools |
+| `network` | Networking and presence integration |
+| `tooling` | Editor, configuration, diagnostics, launchers and tool tests |
+
+Ownership lives in `test-categories.json`. Package rules select a primary category; class-name
+rules add cross-cutting categories for legacy locations. Recognized game/zone names
+assign otherwise unowned legacy tests to gameplay without pulling audio-owned S2
+oracles into gameplay. Categories overlap. New ordinary
+classes without a narrower owner fall into `common`, so naming changes cannot silently drop
+them. Candidate counts include Maven-discovered helper/abstract classes, not just executed tests.
+The union covers the ordinary source inventory; Maven's existing tags and exclusions still apply.
+
+Change rules are deliberately narrower than test ownership. Physics changes also select
+related gameplay, rendering and rewind tests. Audio changes also select rewind and tooling.
+Game-specific object changes select gameplay, physics, rendering, rewind and content. Ordinary
+documentation changes select tooling, so updating a changelog does not force audio sweeps.
+Shared clocks, game-loop code, ROM pipelines, configuration, resources, build files, test
+infrastructure and unclassified changes select **all** ordinary categories. A new narrow rule
+must document its dependent categories and include a selector regression test. The selector is
+an explicit workload policy, not a proof of semantic independence: agents must add categories
+or choose `all` when a change crosses these boundaries (for example, changing an object's audio
+request contract). Do not add a rule just to avoid an inconvenient failing test.
+
+Change-based runs (`--base`) and `--category all` include the full `guards` profile in its
+own Maven invocation. Focused category runs omit guards to avoid repeating them during
+iteration; add `--guards` to request them explicitly. Trace
+replay, native graphics, diagnostics, performance profiles and TraceChaser integration retain
+their existing commands and prerequisites. Gameplay category coverage does not replace affected
+replay fixtures or the domain skill's required checks. A category run is never a full trace sweep.
+
+The runner discovers existing root `.gen` files by the documented SHA-1 identities and passes
+absolute ROM paths. It never creates ROM links or copies. Missing ROMs still require inspecting
+skips; a successful exit alone does not establish ROM-backed coverage.
+
+Each run starts in `target/category-tests/<run-id>/`. The plan retains the tested head,
+working-tree fingerprint and selected source classes; command arrays record the exact Maven
+arguments. `results.json` records totals, skipped cases and failure details, and `status.json`
+distinguishes passed, failed and incomplete runs. Diagnostic lists are capped at 1,000 records
+per kind with explicit omitted counts; messages/stacks are bounded excerpts. Inspect skips,
+omissions and domain coverage before delivery. The runner checks exit status and nonempty
+execution and rejects a changed working tree at completion. It does not cache or authenticate
+passes for Git hooks, or claim that every candidate source produced a report.
+
+### Automatic storage cleanup
+
+No permanent log archive is created:
+
+- Keep at most **two completed runs**, within a **100 MiB retained-data budget**. Pruning runs
+  under the worktree lock at startup and completion; old recognized runner directories are deleted.
+- Successful runs retain small JSON summaries/plans/commands only. Their logs and raw XML are deleted.
+- Failed or interrupted runs retain structured failure details and rolling log tails. Each Maven
+  invocation has two log chunks of at most **2 MiB each**, bounded while it runs. Read `.log.1`
+  before `.log` for chronological order. Raw XML is deleted after extracting the summary.
+- Each invocation receives its own `openggf.test.tmpdir` and `TMPDIR`/`TMP`/`TEMP`. Once Maven
+  exits, that directory is deleted, including on handled interruption. The runner stops Maven's
+  process tree before cleanup. A force-killed runner can leave a stale lock and temporary output;
+  confirm its processes have exited before removing the lock, then the next startup prunes old runs.
+
+The retention budget limits stored diagnostics, not the peak temporary space needed by an active
+fixture expansion. An oversized completed run may be removed entirely to honor the budget.
+Build caches, ROMs, unrelated `target/` directories and other worktrees are not pruned. Raw Maven
+and dedicated trace tools keep their existing artifact behavior. For durable release/partition
+XML evidence, use the dedicated direct-Maven evidence workflow below; the local category runner
+is intentionally ephemeral.
+
+`target/category-tests.lock` prevents two category runners in one worktree. Raw Maven bypasses
+this lock: never start it concurrently in that worktree. Do not retry a run while its predecessor
+is still active.
+
+The selector and retention tests run in the CI smoke job. Run them locally after changes:
+
+```bash
+python3 -m unittest discover -s tools/testing -p 'test_run_categor*.py'
+```
+
 ## Complete Surefire outcome inventories
 
 The PowerShell utilities in this directory export, validate, partition, and
