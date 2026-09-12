@@ -44,21 +44,22 @@ do not instruct maintainers to create the version tag before the workflow.
 
 ### Which version am I writing for?
 
-`pom.xml`'s `<version>` is the authority: it names the version `develop`
-carries, and therefore the `CHANGELOG.<version>.md` that receives new prose.
-Each branch declares its own version this way: **master 0.6.20260911, develop
+Read the relevant branch's `pom.xml`: each branch declares its own version.
+`develop`'s version selects the `CHANGELOG.<version>.md` that receives its
+new prose; a `next` checkout's POM identifies the next line, not develop's.
+The current mapping is: **master 0.6.20260911, develop
 0.7.prerelease, next 0.8.prerelease.** Nothing on `develop` is written up under
 `next`'s version; unreleased `next` prose accumulates in `CHANGELOG.md`'s
 "Unreleased" section until that release file is cut. Do not hardcode these
-numbers into new guidance — re-read `pom.xml` instead. Promoting all three at
-release time follows [the release rollover process](../project/release-rollover.md).
+numbers into new guidance — re-read the relevant branch's POM instead.
+Promoting all three at release time follows [the release rollover process](../project/release-rollover.md).
 
 ### Where each kind of prose goes
 
 - **`CHANGELOG.<develop version>.md`** — every change, at the detail a user or
   maintainer would want. This is the per-version record and the default
   destination. Historical changelog files change only for factual corrections.
-- **`CHANGELOG.md`** — the release index only.
+- **`CHANGELOG.md`** — the release index and `next`'s Unreleased section.
 - **`README.md` release section** — a **very high-level summary** of the
   version: a handful of themes a reader skims to learn what this version is
   about. It is not a change log, and there is no expectation that a given
