@@ -1,6 +1,8 @@
 package com.openggf.audio.smps;
 
-@com.openggf.game.ModApi
+import com.openggf.game.ModApi;
+
+@ModApi
 public abstract class AbstractSmpsData implements SmpsProgramView {
     protected final byte[] data;
     protected int voicePtr;
@@ -21,7 +23,20 @@ public abstract class AbstractSmpsData implements SmpsProgramView {
     protected int id;
     protected boolean palSpeedupDisabled;
 
+    /** Legacy extension path: invokes the subclass header hook during construction. */
     protected AbstractSmpsData(byte[] data, int z80StartAddress) {
+        this(data, z80StartAddress, false);
+    }
+
+    /**
+     * Allows a subclass to install an explicitly decoded header after base initialization.
+     * Passing true suppresses the legacy overridable construction hook.
+     *
+     * @param data SMPS program bytes, retained under the existing data contract
+     * @param z80StartAddress relocation base used by the concrete format
+     * @param deferHeaderParsing whether the subclass will explicitly initialize its header
+     */
+    protected AbstractSmpsData(byte[] data, int z80StartAddress, boolean deferHeaderParsing) {
         this.data = data;
         this.z80StartAddress = z80StartAddress;
         // Default initialization; subclasses must populate these fields.
@@ -40,7 +55,9 @@ public abstract class AbstractSmpsData implements SmpsProgramView {
         this.psgModEnvs = new int[0];
         this.psgInstruments = new int[0];
 
-        parseHeader();
+        if (!deferHeaderParsing) {
+            parseHeader();
+        }
     }
 
     protected abstract void parseHeader();

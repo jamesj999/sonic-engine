@@ -57,6 +57,24 @@ object rewind entries retain their owning compiled-mod loader through
 `DynamicObjectEntry.ownerModId` and `RewindClassResolver`. Creator callbacks stay
 transactional, owner-fault-bounded, and engine-authoritative.
 
+## SMPS construction compatibility
+
+`AbstractSmpsData(byte[], int)` retains its legacy constructor-time `parseHeader()`
+hook for existing extensions. The new protected overload with a
+`deferHeaderParsing` boolean lets extensions initialize their own fields before
+parsing. Passing `true` leaves the default header state installed and suppresses
+the hook; the subclass then owns explicit initialization.
+
+Built-in S1, S2 and S3K music data use this deferred path and a format decoder,
+so their construction never dispatches overridden `parseHeader()` or `read16()`.
+Their byte order, signed key/volume offsets, voice-bank resolution and existing
+truncated-input policies remain distinct where required. The decoder's temporary
+result is private; it adds no creator-facing header or array API. The existing
+`FrozenSmpsData` snapshot boundary remains unchanged. This is an additive change
+to the unpublished 0.7.0 candidate, with its candidate pin replaced in place.
+Distinct SFX header parsers retain their legacy initialization path in this change;
+their offset-dependent reparsing is a separate construction migration.
+
 ## Reviewing, maintaining, and publishing the recursive surface
 
 Before changing the candidate surface:

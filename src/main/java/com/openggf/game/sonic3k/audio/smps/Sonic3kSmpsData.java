@@ -1,6 +1,7 @@
 package com.openggf.game.sonic3k.audio.smps;
 
 import com.openggf.audio.smps.AbstractSmpsData;
+import com.openggf.audio.smps.SmpsHeaderDecoder;
 
 import java.util.Map;
 
@@ -52,7 +53,8 @@ public class Sonic3kSmpsData extends AbstractSmpsData {
     }
 
     public Sonic3kSmpsData(byte[] data, int z80StartAddress) {
-        super(data, z80StartAddress);
+        super(data, z80StartAddress, true);
+        SmpsHeaderDecoder.parseInto(this, SmpsHeaderDecoder.Format.Z80_LITTLE_ENDIAN);
     }
 
     public void setPsgEnvelopes(Map<Integer, byte[]> psgEnvelopes) {
@@ -89,46 +91,7 @@ public class Sonic3kSmpsData extends AbstractSmpsData {
 
     @Override
     protected void parseHeader() {
-        if (data.length < 8) {
-            return;
-        }
-
-        this.voicePtr = read16(0);
-        this.channels = data[2] & 0xFF;
-        this.psgChannels = data[3] & 0xFF;
-        this.dividingTiming = data[4] & 0xFF;
-        this.tempo = data[5] & 0xFF;
-        this.dacPointer = read16(6);
-
-        int fmStart = 0x06;
-        this.fmPointers = new int[channels];
-        this.fmKeyOffsets = new int[channels];
-        this.fmVolumeOffsets = new int[channels];
-        int offset = fmStart;
-        for (int i = 0; i < channels; i++) {
-            if (offset + 1 < data.length) {
-                this.fmPointers[i] = read16(offset);
-                this.fmKeyOffsets[i] = (byte) data[offset + 2];
-                this.fmVolumeOffsets[i] = (byte) data[offset + 3];
-            }
-            offset += 4;
-        }
-
-        this.psgPointers = new int[psgChannels];
-        this.psgKeyOffsets = new int[psgChannels];
-        this.psgVolumeOffsets = new int[psgChannels];
-        this.psgModEnvs = new int[psgChannels];
-        this.psgInstruments = new int[psgChannels];
-        for (int i = 0; i < psgChannels; i++) {
-            if (offset + 5 < data.length) {
-                this.psgPointers[i] = read16(offset);
-                this.psgKeyOffsets[i] = (byte) data[offset + 2];
-                this.psgVolumeOffsets[i] = (byte) data[offset + 3];
-                this.psgModEnvs[i] = data[offset + 4] & 0xFF;
-                this.psgInstruments[i] = data[offset + 5] & 0xFF;
-            }
-            offset += 6;
-        }
+        SmpsHeaderDecoder.parseInto(this, SmpsHeaderDecoder.Format.Z80_LITTLE_ENDIAN);
     }
 
     @Override

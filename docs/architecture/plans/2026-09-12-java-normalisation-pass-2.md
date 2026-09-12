@@ -1,8 +1,8 @@
 # Java normalisation: second review
 
-Status: candidates 1, 2, 3, 4 and 8 implemented on `develop`, one commit each.
-Candidates 5, 6, 7, 9, 10 and 11 resumed at the user’s request. Validation uses
-one combined final selection against `c4b5325d25`, within a shared 40-minute budget.
+Status: all eleven candidates implemented on `develop`, one commit each.
+The resumed six-candidate delivery uses one combined final validation selection
+against `c4b5325d25`, within a shared 40-minute budget.
 
 Reviewed `develop` at `5d9ef4af40d052050d37df2424e696608cff2647` on
 12 September 2026. Main workspace only; no worktrees or branch changes.
@@ -469,3 +469,20 @@ instruction pointers, all nine frames, tile bounds, dimensions, effective palett
 caching and timing. The ninth frame is blank; spin and sparkle counts remain four.
 The ROM sparkle flip sequence is none, H+V, H, V, correcting the former copied
 none, H, V, H+V table. This is an explicit parity correction. S3K retains 14 patterns.
+
+### Candidate 9 — construction-safe SMPS music headers
+
+Built-in S1/S2/S3K music constructors use explicit endian-aware decoding into a
+private result before installation. The legacy protected constructor still calls
+its extension hook; an additive deferred overload is the sole candidate signature
+addition. API documentation and the mutable 0.7 pin retain the descriptor’s
+existing unpublished 0.7.0 version; ordinary pin updates leave the descriptor unchanged.
+Signed fields, voice-bank lookup, short/truncated-input policies and snapshots
+retain their contracts. SFX parsers keep their separate legacy construction paths;
+those are a possible follow-up, not silently migrated here.
+
+Eight 3-second, 44.1 kHz NTSC stereo PCM renders through the production loaders
+matched all previously recorded `1cd1175e` SHA-256 fingerprints exactly: S1 GHZ/MZ,
+S2 EHZ/HTZ, S&K AIZ2/miniboss and S3 miniboss/Knuckles. This checks engine-before/
+after parity, not an independent ROM audio oracle. The one current probe took
+2.7 seconds; the earlier baseline was reused without rerunning it.

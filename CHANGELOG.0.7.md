@@ -98,6 +98,8 @@ campaigns; feature/API publication remains subject to the 0.8 roadmap.
   Removed an unused radius-transition duplicate; live hurt and death paths retain their owners.
   S1 and S3K rings decode ROM mappings, correcting sparkle flips to the ROM sequence
   while preserving animation timing and the S3K pattern cap.
+  SMPS music headers use an explicit format decoder, avoiding constructor-time
+  virtual calls while retaining the legacy Mod API extension constructor.
 
 ## Build and release
 

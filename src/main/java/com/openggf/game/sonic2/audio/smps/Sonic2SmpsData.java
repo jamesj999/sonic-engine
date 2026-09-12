@@ -1,5 +1,6 @@
 package com.openggf.game.sonic2.audio.smps;
 import com.openggf.audio.smps.AbstractSmpsData;
+import com.openggf.audio.smps.SmpsHeaderDecoder;
 
 import java.util.Map;
 
@@ -12,7 +13,8 @@ public class Sonic2SmpsData extends AbstractSmpsData {
     }
 
     public Sonic2SmpsData(byte[] data, int z80StartAddress) {
-        super(data, z80StartAddress);
+        super(data, z80StartAddress, true);
+        SmpsHeaderDecoder.parseInto(this, SmpsHeaderDecoder.Format.Z80_LITTLE_ENDIAN);
     }
 
     public void setPsgEnvelopes(Map<Integer, byte[]> psgEnvelopes) {
@@ -21,46 +23,7 @@ public class Sonic2SmpsData extends AbstractSmpsData {
 
     @Override
     protected void parseHeader() {
-        if (data.length >= 8) {
-            this.voicePtr = read16(0);
-            this.channels = data[2] & 0xFF; // DAC + FM
-            this.psgChannels = data[3] & 0xFF;
-            this.dividingTiming = data[4] & 0xFF;
-            this.tempo = data[5] & 0xFF;
-            this.dacPointer = read16(6);
-
-            // SMPS header layout (Sonic 2 final): DAC ptr @ 6, then FM entries (ptr + key + vol) starting at 0x06.
-            // Note: SMPSPlay reads tracks starting from 0x06. Track 0 is usually DAC.
-            int fmStart = 0x06;
-            this.fmPointers = new int[channels];
-            this.fmKeyOffsets = new int[channels];
-            this.fmVolumeOffsets = new int[channels];
-            int offset = fmStart;
-            for (int i = 0; i < channels; i++) {
-                if (offset + 1 < data.length) {
-                    this.fmPointers[i] = read16(offset);
-                    this.fmKeyOffsets[i] = (byte) data[offset + 2];
-                    this.fmVolumeOffsets[i] = (byte) data[offset + 3];
-                }
-                offset += 4; // skip key + volume
-            }
-
-            this.psgPointers = new int[psgChannels];
-            this.psgKeyOffsets = new int[psgChannels];
-            this.psgVolumeOffsets = new int[psgChannels];
-            this.psgModEnvs = new int[psgChannels];
-            this.psgInstruments = new int[psgChannels];
-            for (int i = 0; i < psgChannels; i++) {
-                if (offset + 5 < data.length) {
-                    this.psgPointers[i] = read16(offset);
-                    this.psgKeyOffsets[i] = (byte) data[offset + 2];
-                    this.psgVolumeOffsets[i] = (byte) data[offset + 3];
-                    this.psgModEnvs[i] = data[offset + 4] & 0xFF;
-                    this.psgInstruments[i] = data[offset + 5] & 0xFF;
-                }
-                offset += 6; // pointer(2) + key(1) + vol(1) + mod(1) + ins(1)
-            }
-        }
+        SmpsHeaderDecoder.parseInto(this, SmpsHeaderDecoder.Format.Z80_LITTLE_ENDIAN);
     }
 
     @Override
