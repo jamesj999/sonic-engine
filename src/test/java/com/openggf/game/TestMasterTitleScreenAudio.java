@@ -52,14 +52,15 @@ class TestMasterTitleScreenAudio {
     }
 
     @Test
-    void navigationAtSelectionBoundaryDoesNotEmitAFalseCue() {
+    void carouselWrapEmitsOneNavigationCue() {
         MasterTitleScreen screen = activeScreen(true);
         screen.setSelectedIndexForTest(MasterTitleScreen.GameEntry.SONIC_3K.ordinal());
         InputHandler input = new InputHandler();
 
         pressFrame(screen, input, GLFW_KEY_RIGHT);
 
-        assertEquals(List.of(), emittedSfxNames());
+        assertEquals("s1", screen.getSelectedGameId());
+        assertEquals(List.of("UI_NAVIGATE"), emittedSfxNames());
     }
 
     @Test
@@ -101,7 +102,7 @@ class TestMasterTitleScreenAudio {
         pressFrame(screen, input, GLFW_KEY_ENTER);
         pressFrame(screen, input, GLFW_KEY_ESCAPE);
         assertEquals(List.of("UI_CONFIRM", "UI_CANCEL", "UI_NAVIGATE", "UI_CONFIRM",
-                "UI_CONFIRM", "UI_CANCEL"), emittedSfxNames());
+                "UI_NAVIGATE", "UI_CONFIRM", "UI_CANCEL"), emittedSfxNames());
     }
 
     @Test
@@ -112,6 +113,20 @@ class TestMasterTitleScreenAudio {
         pressFrame(screen, input, GLFW_KEY_ENTER);
         pressFrame(screen, input, GLFW_KEY_ESCAPE);
         assertEquals(List.of("UI_NAVIGATE", "UI_ERROR", "UI_CANCEL"), emittedSfxNames());
+    }
+
+    @Test
+    void programmaticLaunchDoesNotReplayThePickersConfirmation() {
+        MasterTitleScreen screen = activeScreen(true);
+        screen.selectEntry(MasterTitleScreen.GameEntry.SONIC_2);
+        assertEquals(List.of(), emittedSfxNames());
+    }
+
+    @Test
+    void unavailableLaunchOptionsShortcutReportsOneError() {
+        MasterTitleScreen screen = activeScreen(false);
+        pressFrame(screen, new InputHandler(), GLFW_KEY_TAB);
+        assertEquals(List.of("UI_ERROR"), emittedSfxNames());
     }
 
     private MasterTitleScreen activeScreen(boolean selectedRomAvailable) {

@@ -169,8 +169,10 @@ public class MasterTitleScreen {
     private int frameCounter = 0;
     private String launchErrorTitle;
     private String launchErrorDetail;
+    private boolean traceFailureAnnounced;
 
-    private final List<MasterTitleEntry> entries;
+    private List<MasterTitleEntry> entries;
+    private java.util.function.Supplier<List<MasterTitleEntry>> entrySource;
     private final Map<GameEntry, Boolean> stockAvailability = new EnumMap<>(GameEntry.class);
 
     // GL resources
@@ -247,25 +249,24 @@ public class MasterTitleScreen {
         this(GameServices.configuration());
     }
 
+    private static List<MasterTitleEntry> defaultEntries() {
+        return java.util.Arrays.stream(GameEntry.values())
+                .map(game -> (MasterTitleEntry) new MasterTitleEntry.Stock(game)).toList();
+    }
+
     public MasterTitleScreen(SonicConfigurationService configService) {
         this(configService, new LaunchProfileStore(configService));
     }
 
     public MasterTitleScreen(SonicConfigurationService configService,
                              LaunchProfileStore launchProfileStore) {
-        this(configService, launchProfileStore, List.of(
-                new MasterTitleEntry.Stock(GameEntry.SONIC_1),
-                new MasterTitleEntry.Stock(GameEntry.SONIC_2),
-                new MasterTitleEntry.Stock(GameEntry.SONIC_3K)), AudioSink.NO_OP);
+        this(configService, launchProfileStore, defaultEntries(), AudioSink.NO_OP);
     }
 
     public MasterTitleScreen(SonicConfigurationService configService,
                              LaunchProfileStore launchProfileStore,
                              AudioSink audioSink) {
-        this(configService, launchProfileStore, List.of(
-                new MasterTitleEntry.Stock(GameEntry.SONIC_1),
-                new MasterTitleEntry.Stock(GameEntry.SONIC_2),
-                new MasterTitleEntry.Stock(GameEntry.SONIC_3K)), audioSink);
+        this(configService, launchProfileStore, defaultEntries(), audioSink);
     }
 
     public MasterTitleScreen(SonicConfigurationService configService,
@@ -282,7 +283,6 @@ public class MasterTitleScreen {
         this.launchProfileStore = Objects.requireNonNull(launchProfileStore, "launchProfileStore");
         this.entries = List.copyOf(Objects.requireNonNull(entries, "entries"));
         this.audioSink = Objects.requireNonNull(audioSink, "audioSink");
-        if (this.entries.isEmpty()) throw new IllegalArgumentException("Master title requires entries");
         this.selectedIndex = defaultSelectionIndex(this.entries);
         for (GameEntry game : GameEntry.values()) stockAvailability.put(game, false);
     }
@@ -371,6 +371,11 @@ public class MasterTitleScreen {
      * Updates the title screen state. Called once per frame from GameLoop.
      */
     public void update(InputHandler inputHandler) {
+        MenuFeedback.withSink(cue -> audioSink.play(AudioCue.valueOf(cue.name())),
+                () -> updateMenu(inputHandler));
+    }
+
+    private void updateMenu(InputHandler inputHandler) {
         menuInput = inputHandler;
         navigation.capture(inputHandler);
         frameCounter++;
@@ -414,7 +419,7 @@ public class MasterTitleScreen {
         if (settingsScreen != null) {
             settingsScreen.update(inputHandler);
             if (settingsScreen.consumeApplied()) refreshRomPreviews();
-            if (settingsScreen.consumeCloseRequested()) { settingsScreen = null; playCancelSound(); }
+            if (settingsScreen.consumeCloseRequested()) settingsScreen = null;
             return;
         }
         if (helpOpen) {
@@ -426,10 +431,11 @@ public class MasterTitleScreen {
             return;
         }
         if (modManagerScreen != null) {
-            modManagerScreen.update(inputHandler);
-            if (modManagerScreen.consumeCloseRequested()) {
+            ModManagerView menu = modManagerScreen;
+            menu.update(inputHandler);
+            if (modManagerScreen == menu && menu.consumeCloseRequested()) {
                 modManagerScreen = null;
-                playCancelSound();
+                if (entrySource != null) replaceEntries(entrySource.get());
             }
             return;
         }
@@ -445,6 +451,10 @@ public class MasterTitleScreen {
                         .normalize();
                 tracePicker = new TestModeTracePicker(
                         TraceCatalog.scan(root), ensurePickerFont());
+                if (traceFailureAnnounced) {
+                    tracePicker.markFailureFeedbackAnnounced();
+                    traceFailureAnnounced = false;
+                }
             }
             tracePicker.update(inputHandler);
             switch (tracePicker.consumeResult()) {
@@ -464,7 +474,6 @@ public class MasterTitleScreen {
                     // Disable test mode for this session so normal game-select runs
                     configService.setConfigValue(SonicConfiguration.TEST_MODE_ENABLED, false);
                     tracePicker = null;
-                    playCancelSound();
                 }
                 case NONE -> { }
             }
@@ -482,10 +491,10 @@ public class MasterTitleScreen {
         }
 
         if (userRecordingMenu != null) {
-            userRecordingMenu.update(inputHandler);
-            if (userRecordingMenu.consumeCloseRequested()) {
+            UserRecordingMenu menu = userRecordingMenu;
+            menu.update(inputHandler);
+            if (userRecordingMenu == menu && menu.consumeCloseRequested()) {
                 userRecordingMenu = null;
-                playCancelSound();
             }
             return;
         }
@@ -496,9 +505,8 @@ public class MasterTitleScreen {
             // The launch starter may synchronously tear this screen down
             // (Engine.launchTimeAttack -> cleanup()), nulling timeAttackMenu
             // mid-update; re-check the field before touching it again.
-            if (timeAttackMenu != null && menu.consumeCloseRequested()) {
+            if (timeAttackMenu == menu && menu.consumeCloseRequested()) {
                 timeAttackMenu = null;
-                playCancelSound();
             }
             return;
         }
@@ -508,7 +516,6 @@ public class MasterTitleScreen {
             LaunchConfigPanel.Result result = launchConfigPanel.consumeResult();
             if (result == LaunchConfigPanel.Result.CANCELLED) {
                 launchConfigPanel = null;
-                playCancelSound();
             } else if (result == LaunchConfigPanel.Result.CLOSED) {
                 MasterTitleEntry.Stock stock = (MasterTitleEntry.Stock) selectedEntry();
                 try {
@@ -536,16 +543,22 @@ public class MasterTitleScreen {
         if (openMods) { openModManager(); return; }
         int recordKey = configService.getInt(SonicConfiguration.RECORDING_RECORD_KEY);
         boolean recordingRequest = inputHandler.isKeyPressed(recordKey) && inputHandler.isShiftDown();
-        if (handleUserRecordingMenuRequest(recordingRequest) || recordingRequest) return;
+        if (recordingRequest) {
+            if (!handleUserRecordingMenuRequest(true)) showActionError("Recordings");
+            return;
+        }
         boolean timeRequest = inputHandler.isKeyPressed(configService.getInt(SonicConfiguration.TIME_ATTACK_MENU_KEY));
-        if (handleTimeAttackMenuRequest(timeRequest) || timeRequest) return;
+        if (timeRequest) {
+            if (!isEntryAvailable(selectedEntry()) || !handleTimeAttackMenuRequest(true)) showActionError("Time attack");
+            return;
+        }
         if (inputHandler.isKeyPressed(GLFW_KEY_TAB) || inputHandler.isGamepadBackButtonPressed()) {
-            openLaunchOptions();
+            if (!openLaunchOptions()) showActionError("Launch options");
             return;
         }
 
-        if (navigation.left() && setSelectedIndex(selectedIndex - 1)) { playNavigateSound(); return; }
-        if (navigation.right() && setSelectedIndex(selectedIndex + 1)) { playNavigateSound(); return; }
+        if (navigation.left() && cycleSelectedEntry(-1)) { playNavigateSound(); return; }
+        if (navigation.right() && cycleSelectedEntry(1)) { playNavigateSound(); return; }
         if (!navigation.actions()) {
             if (navigation.back()) { openQuitPrompt(); return; }
             if (navigation.up() || navigation.down() || navigation.accept()) {
@@ -602,6 +615,7 @@ public class MasterTitleScreen {
     }
 
     private void showActionError(String action) {
+        if (selectedEntry() == null) { showUnavailableAction("No games are available. Check Mods and Settings."); return; }
         if (selectedEntry() instanceof MasterTitleEntry.Stock stock && !isEntryAvailable(stock)) {
             launchErrorTitle = null;
             launchErrorDetail = null;
@@ -620,8 +634,10 @@ public class MasterTitleScreen {
 
     private void updateTools() {
         if (navigation.back()) { toolsOpen = false; playCancelSound(); return; }
+        int previous = toolIndex;
         if (navigation.up()) toolIndex = Math.max(0, toolIndex - 1);
         if (navigation.down()) toolIndex = Math.min(1, toolIndex + 1);
+        if (toolIndex != previous) playNavigateSound();
         if (!navigation.accept()) return;
         toolsOpen = false;
         if (toolIndex == 0) {
@@ -643,6 +659,7 @@ public class MasterTitleScreen {
 
     private void startSelectedEntry() {
         MasterTitleEntry entry = selectedEntry();
+        if (entry == null) { showActionError("Start game"); return; }
         if (!isEntryAvailable(entry)) {
             launchErrorTitle = null;
             launchErrorDetail = null;
@@ -677,8 +694,10 @@ public class MasterTitleScreen {
     private void updateStandaloneActionChooser(InputHandler input) {
         List<MasterTitleEntry.Action> actions = standaloneActionsForTest();
         if (navigation.back()) { standaloneActionOpen = false; playCancelSound(); return; }
+        int previous = standaloneActionIndex;
         if (navigation.up()) standaloneActionIndex = Math.max(0, standaloneActionIndex - 1);
         if (navigation.down()) standaloneActionIndex = Math.min(actions.size() - 1, standaloneActionIndex + 1);
+        if (standaloneActionIndex != previous) playNavigateSound();
         if (navigation.accept()) {
             confirmLaunch(new MasterTitleEntry.Launch(selectedEntry(), actions.get(standaloneActionIndex)), false);
             standaloneActionOpen = false;
@@ -688,7 +707,7 @@ public class MasterTitleScreen {
     private void confirmLaunch(MasterTitleEntry.Launch launch, boolean programmatic) {
         selectedLaunch = launch;
         state = State.CONFIRMING;
-        playConfirmSound();
+        if (!programmatic) playConfirmSound();
         programmaticSelection = programmatic;
         gameSelected = true;
     }
@@ -786,7 +805,7 @@ public class MasterTitleScreen {
         if (state == State.ERROR_DISPLAY) {
             font.beginMegaBatch();
             MasterTitleEntry entry = selectedEntry();
-            MenuStyle.page(font, viewportWidth, "UNABLE TO START", entry.displayName());
+            MenuStyle.page(font, viewportWidth, "UNABLE TO START", entry == null ? "No game selected" : entry.displayName());
             MenuStyle.panel(font, 9, 57, viewportWidth - 18, 132);
             MenuStyle.label(font, launchErrorTitle == null ? "ROM NOT FOUND" : launchErrorTitle,
                     17, 68, viewportWidth - 34, 1f, .35f, .35f);
@@ -873,14 +892,15 @@ public class MasterTitleScreen {
         textFitted(navigation.actions() ? "ACTION MENU" : "SELECT GAME", viewportWidth - 111, 10, 103,
                 1f, 0.5f, 0.91f, 1f);
         if (preview == null) {
-            textFitted(selectedEntry() instanceof MasterTitleEntry.Stock ? "ROM NOT FOUND" : "STANDALONE GAME",
+            textFitted(selectedEntry() == null ? "NO GAMES AVAILABLE"
+                    : selectedEntry() instanceof MasterTitleEntry.Stock ? "ROM NOT FOUND" : "STANDALONE GAME",
                     12, 75, leftWidth - 6, 0.8f, 0.9f, 0.9f, 1f);
             if (selectedEntry() instanceof MasterTitleEntry.Stock stock) {
                 textFitted(expectedRomFilename(stock.game()), 12, 96, leftWidth - 6, 0.75f, 1f, 0.73f, 0.3f);
                 textFitted("Configure in Settings", 12, 116, leftWidth - 6, 0.62f, 0.65f, 0.8f, 1f);
             }
         }
-        drawGameTabs();
+        drawGameCarousel();
         for (TitleHubNavigation.Action action : TitleHubNavigation.Action.values()) {
             boolean available = action == TitleHubNavigation.Action.MODS || action == TitleHubNavigation.Action.SETTINGS
                     || action == TitleHubNavigation.Action.TOOLS || action == TitleHubNavigation.Action.QUIT || action == TitleHubNavigation.Action.START
@@ -895,8 +915,8 @@ public class MasterTitleScreen {
             if (profile != null) {
                 int count = profile.enabledCount(stock.game());
                 boolean experimental = profile.isExperimental(LaunchProfile.Row.WIDESCREEN);
-                textFitted(count == 0 ? "Stock profile" : count + " changes", 12, 195, leftWidth - 6,
-                        1f, 1f, experimental ? 0.3f : count > 0 ? 0.72f : 1f,
+                textFitted(count == 0 ? "Stock profile" : count + " changes", 12, 194, Math.max(0, leftWidth - carouselPosition().length() * 6 - 8),
+                        MenuStyle.COMPACT, 1f, experimental ? 0.3f : count > 0 ? 0.72f : 1f,
                         experimental ? 0.3f : count > 0 ? 0.25f : 1f);
             }
         }
@@ -907,24 +927,51 @@ public class MasterTitleScreen {
         font.endMegaBatch();
     }
 
-    private void drawGameTabs() {
-        int count = Math.min(3, entries.size());
-        int first = Math.min(Math.max(0, selectedIndex - 1), entries.size() - count);
-        int paneWidth = viewportWidth / 2 - 16;
-        int tabWidth = paneWidth / count;
-        for (int slot = 0; slot < count; slot++) {
-            int index = first + slot;
-            MasterTitleEntry entry = entries.get(index);
-            int x = 8 + slot * tabWidth;
-            MenuStyle.panel(font, x, 158, tabWidth - 2, 21);
-            if (index == selectedIndex) MenuStyle.focus(font, x, 158, tabWidth - 2, 21);
-            float shade = isEntryAvailable(entry) ? 1f : .45f;
-            String label = entry instanceof MasterTitleEntry.Stock stock && stock.game() == GameEntry.SONIC_3K
-                    ? "Sonic3K" : entry.menuLabel();
-            MenuStyle.text(font, label, x + 2, 164, tabWidth - 6, shade, shade, shade);
+    private void drawGameCarousel() {
+        int x = 8;
+        int width = viewportWidth / 2 - 16;
+        MasterTitleEntry selected = selectedEntry();
+        MenuStyle.panel(font, x, 158, width, 20);
+        if (!navigation.actions()) MenuStyle.focus(font, x, 158, width, 20);
+        String name = selected == null ? "No games" : selected.menuLabel();
+        int nameWidth = width - 32;
+        String visible = carouselName(name, nameWidth / 9);
+        float shade = isEntryAvailable(selected) ? 1f : .5f;
+        MenuStyle.label(font, visible, x + (width - visible.length() * 9) / 2, 163,
+                nameWidth, shade, shade, shade);
+        if (entries.size() > 1) {
+            MenuStyle.label(font, "<", x + 4, 163, 9, .5f, .9f, 1);
+            MenuStyle.label(font, ">", x + width - 13, 163, 9, .5f, .9f, 1);
+            int neighborWidth = (width - 8) / 2;
+            drawCarouselNeighbor(Math.floorMod(selectedIndex - 1, entries.size()), x, 181, neighborWidth, false);
+            // With two games, the same neighbor is reached in either direction;
+            // show it once rather than inventing another catalog entry.
+            if (entries.size() > 2) drawCarouselNeighbor((selectedIndex + 1) % entries.size(),
+                    x + width - neighborWidth, 181, neighborWidth, true);
         }
-        if (entries.size() > 3) MenuStyle.text(font, (selectedIndex + 1) + " / " + entries.size()
-                + "  " + selectedEntry().menuLabel(), 12, 182, paneWidth - 8, .7f, .85f, 1);
+        String position = carouselPosition();
+        MenuStyle.text(font, position, x + width - position.length() * 6, 194,
+                width, .7f, .85f, 1);
+    }
+
+    private String carouselPosition() {
+        return entries.isEmpty() ? "0 / 0" : (selectedIndex + 1) + " / " + entries.size();
+    }
+
+    private void drawCarouselNeighbor(int index, int x, int y, int width, boolean alignRight) {
+        MasterTitleEntry entry = entries.get(index);
+        String name = MenuStyle.fit(entry.menuLabel(), width);
+        float shade = isEntryAvailable(entry) ? .72f : .4f;
+        MenuStyle.text(font, name, alignRight ? x + width - name.length() * 6 : x, y,
+                width, shade, shade, shade);
+    }
+
+    private String carouselName(String name, int columns) {
+        if (name.length() <= columns) return name;
+        int overflow = name.length() - columns;
+        int step = (previewAnimationFrame / 8) % (overflow + 30);
+        int offset = Math.clamp(step - 15, 0, overflow);
+        return name.substring(offset, offset + columns);
     }
 
     private void drawToolsAndHelp() {
@@ -1051,6 +1098,8 @@ public class MasterTitleScreen {
         }
         if (this.state != State.ERROR_DISPLAY) {
             playErrorSound();
+            traceFailureAnnounced = configService.getBoolean(SonicConfiguration.TEST_MODE_ENABLED);
+            if (tracePicker != null) tracePicker.markFailureFeedbackAnnounced();
         }
         this.state = State.ERROR_DISPLAY;
         this.gameSelected = false;
@@ -1086,7 +1135,7 @@ public class MasterTitleScreen {
     }
 
     private MasterTitleEntry selectedEntry() {
-        return entries.get(selectedIndex);
+        return entries.isEmpty() ? null : entries.get(selectedIndex);
     }
 
     private boolean isEntryAvailable(MasterTitleEntry entry) {
@@ -1114,6 +1163,33 @@ public class MasterTitleScreen {
                     && stock.game() == GameEntry.SONIC_2) return i;
         }
         return 0;
+    }
+
+    private boolean cycleSelectedEntry(int direction) {
+        return entries.size() > 1 && setSelectedIndex(Math.floorMod(selectedIndex + direction, entries.size()));
+    }
+
+    void bindEntrySource(java.util.function.Supplier<List<MasterTitleEntry>> source) {
+        entrySource = Objects.requireNonNull(source, "source");
+    }
+
+    /** Reconcile a host catalog snapshot by game identity, never by an obsolete slot. */
+    void replaceEntries(List<MasterTitleEntry> replacement) {
+        List<MasterTitleEntry> next = List.copyOf(replacement);
+        java.util.Set<String> ids = new java.util.HashSet<>();
+        for (MasterTitleEntry entry : next) {
+            if (!ids.add(entry.gameId())) throw new IllegalArgumentException("Duplicate title game: " + entry.gameId());
+        }
+        if (entries.equals(next)) return;
+        String selectedId = getSelectedGameId();
+        int previousIndex = selectedIndex;
+        entries = next;
+        selectedIndex = Math.max(0, Math.min(previousIndex, entries.size() - 1));
+        for (int i = 0; i < entries.size(); i++) {
+            if (entries.get(i).gameId().equals(selectedId)) { selectedIndex = i; break; }
+        }
+        previewAnimationFrame = 0;
+        if (renderer != null) refreshRomPreviews();
     }
 
     boolean setSelectedIndex(int newIndex) {
@@ -1287,10 +1363,10 @@ public class MasterTitleScreen {
     }
 
     /**
-     * Returns the game ID ("s1", "s2", "s3k") of the selected entry.
+     * Returns the stable selected game ID, or null when the effective catalog is empty.
      */
     public String getSelectedGameId() {
-        return selectedEntry().gameId();
+        return selectedEntry() == null ? null : selectedEntry().gameId();
     }
 
     public boolean isProgrammaticSelection() {

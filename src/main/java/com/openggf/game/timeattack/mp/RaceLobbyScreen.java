@@ -1,5 +1,7 @@
 package com.openggf.game.timeattack.mp;
 
+import com.openggf.game.MenuFeedback;
+import static com.openggf.game.MenuFeedback.Cue.*;
 import com.openggf.control.InputHandler;
 import com.openggf.control.MenuInput;
 import com.openggf.game.MenuStyle;
@@ -50,6 +52,7 @@ public final class RaceLobbyScreen {
         coordinator.pump();
         menuInput = input;
         if (coordinator.hudState().connectionLost() || coordinator.hudState().kickReason() != null) {
+            MenuFeedback.emit(ERROR);
             leaveHandler.run();
             return;
         }
@@ -64,7 +67,9 @@ public final class RaceLobbyScreen {
                 case NONE -> { }
             }
         } else {
-            if (MenuInput.back(input)) { leaveHandler.run(); return; }
+            if (MenuInput.back(input)) { MenuFeedback.emit(CANCEL); leaveHandler.run(); return; }
+            Focus beforeFocus = focus;
+            int beforePlayers = playerPage, beforeChat = chatPage;
             List<Focus> choices = host ? List.of(Focus.PLAYERS, Focus.HISTORY, Focus.START, Focus.CHAT, Focus.LEAVE)
                     : List.of(Focus.PLAYERS, Focus.HISTORY, Focus.CHAT, Focus.LEAVE);
             int delta = MenuInput.up(input) ? -1 : MenuInput.down(input) ? 1 : 0;
@@ -74,12 +79,14 @@ public final class RaceLobbyScreen {
                     Math.max(0, (coordinator.session().players().size() - 1) / 2));
             if (focus == Focus.HISTORY) chatPage = Math.clamp(chatPage + horizontal, 0,
                     Math.max(0, (coordinator.session().chatLines().size() - 1) / 2));
+            if (focus != beforeFocus || playerPage != beforePlayers || chatPage != beforeChat) MenuFeedback.emit(NAVIGATE);
             if (MenuInput.accept(input)) {
                 switch (focus) {
-                    case CHAT -> editor = new MenuTextEditor("ROOM CHAT", "", 200);
-                    case LEAVE -> { leaveHandler.run(); return; }
+                    case CHAT -> { editor = new MenuTextEditor("ROOM CHAT", "", 200); MenuFeedback.emit(CONFIRM); }
+                    case LEAVE -> { MenuFeedback.emit(CANCEL); leaveHandler.run(); return; }
                     case START -> {
-                        if (canStart()) coordinator.sendRoundConfigure(configuredRound);
+                        if (canStart()) { coordinator.sendRoundConfigure(configuredRound); MenuFeedback.emit(CONFIRM); }
+                        else MenuFeedback.emit(ERROR);
                     }
                     case PLAYERS, HISTORY -> { }
                 }
@@ -134,16 +141,16 @@ public final class RaceLobbyScreen {
         boolean verified = room != null && room.verified();
         text((verified ? "VERIFIED" : "UNVERIFIED TIMES") + " / " + coordinator.session().phase(),
                 10, 143, 300, verified ? .6f : 1, .8f, verified ? 1 : .3f);
-        if (host) action(Focus.START, canStart() ? "START ROUND" : "WAITING FOR ROUND", 154, canStart());
-        action(Focus.CHAT, "WRITE CHAT MESSAGE", 170, true);
-        action(Focus.LEAVE, "LEAVE ROOM", 186, true);
+        if (host) action(Focus.START, canStart() ? "START ROUND" : "WAITING FOR ROUND", 153, canStart());
+        action(Focus.CHAT, "WRITE CHAT MESSAGE", 169, true);
+        action(Focus.LEAVE, "LEAVE ROOM", 185, true);
         String confirm = menuInput == null ? "Enter" : MenuInput.confirmLabel(menuInput);
         String back = menuInput == null ? "Esc" : MenuInput.backLabel(menuInput);
         MenuStyle.footer(font, 320, "Up/Down Select  L/R Players/History", confirm + " Open  " + back + " Leave");
     }
 
     private void action(Focus action, String label, int y, boolean enabled) {
-        if (focus == action) MenuStyle.focus(font, 7, y - 2, 306, 16);
+        if (focus == action) MenuStyle.focusLabel(font, 7, y, 306, 16);
         float brightness = enabled ? 1 : .55f;
         MenuStyle.label(font, label, 12, y, 296, brightness, brightness, brightness);
     }

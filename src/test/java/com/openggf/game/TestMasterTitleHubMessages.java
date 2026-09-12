@@ -59,7 +59,7 @@ class TestMasterTitleHubMessages {
         assertFalse(font.has("ACTION UNAVAILABLE"));
     }
 
-    @Test void allStockTabsAreVisibleAndMissingRomsAreDimmed() throws Exception {
+    @Test void carouselShowsSelectionNeighborsAndMissingRomStatus() throws Exception {
         var screen = screen(false);
         screen.setRomAvailableForTest(MasterTitleScreen.GameEntry.SONIC_2, true);
         for (int width : new int[] {320, 400, 528}) {
@@ -67,12 +67,13 @@ class TestMasterTitleHubMessages {
             draw(screen);
             assertTrue(font.has("Sonic 1"));
             assertTrue(font.has("Sonic 2"));
-            assertTrue(font.has("Sonic3K"));
+            assertTrue(font.has("Sonic 3K"));
             assertTrue(font.red("Sonic 1") < font.red("Sonic 2"));
-            assertTrue(font.red("Sonic3K") < font.red("Sonic 2"));
+            assertTrue(font.red("Sonic 3K") < font.red("Sonic 2"));
             assertTrue(font.has("ADVANCED"));
             assertTrue(font.has("QUIT"));
-            assertTrue(font.texts.stream().filter(t -> t.y == 164)
+            assertTrue(font.has("2 / 3"));
+            assertTrue(font.texts.stream().filter(t -> t.y == 181)
                     .allMatch(t -> t.x >= 8 && t.x + t.text.length() * 6 <= width / 2));
         }
     }

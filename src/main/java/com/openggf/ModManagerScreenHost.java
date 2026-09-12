@@ -5,6 +5,7 @@ import com.openggf.control.MenuInput;
 import com.openggf.graphics.PixelFont;
 import com.openggf.game.MasterTitleScreen;
 import com.openggf.game.MenuStyle;
+import com.openggf.game.MenuFeedback;
 import com.openggf.mods.ui.ModManagerScreen;
 
 import java.util.Objects;
@@ -21,7 +22,8 @@ public final class ModManagerScreenHost implements MasterTitleScreen.ModManagerV
 
     @Override
     public void update(InputHandler input) {
-        screen.update(menuInput(Objects.requireNonNull(input, "input")));
+        screen.update(menuInput(Objects.requireNonNull(input, "input")),
+                event -> MenuFeedback.emit(MenuFeedback.Cue.valueOf(event.name())));
     }
 
     @Override public void render() { screen.render(); }
@@ -69,6 +71,7 @@ public final class ModManagerScreenHost implements MasterTitleScreen.ModManagerV
             @Override public void page(String title, String subtitle) { MenuStyle.page(font, 320, title, subtitle); }
             @Override public void panel(int x, int y, int width, int height) { MenuStyle.panel(font, x, y, width, height); }
             @Override public void focus(int x, int y, int width, int height) { MenuStyle.focus(font, x, y, width, height); }
+            @Override public int primaryTextY(int rowTop, int rowHeight) { return MenuStyle.textY(rowTop, rowHeight, 1); }
             @Override public void footer(String first, String second) {
                 MenuStyle.fill(font, 0, 198, 320, 26, .012f, .025f, .09f, 1);
                 MenuStyle.label(font, first, 9, 200, 302, .5f, .9f, 1);
