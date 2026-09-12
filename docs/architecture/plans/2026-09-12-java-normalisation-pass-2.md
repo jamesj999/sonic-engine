@@ -500,3 +500,11 @@ recreated OpenGL 4.1 contexts, checking visible pixels, repeatable context outpu
 and subsequent GL state. Earlier baseline measurement at `1cd1175e` failed CNZ's
 second-context draw with error 1282; S3K passed. No retained before/after pixel-hash
 comparison is claimed, and no second baseline run was needed.
+
+### Candidate 11 — strict timing fields
+
+A package-private helper shares integer/text/ordinal admission, boundary/kind
+conversion, strict UTF-8 decoding and diagnostics. Each loader retains its schema,
+filename, ordering, identities and fingerprints. Runtime timing admission is unchanged.
+Existing rejection tests are included in the focused batch and timing authority
+and invariant guards in the final combined selection; no redundant tests were added.
