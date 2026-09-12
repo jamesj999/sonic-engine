@@ -5,6 +5,12 @@ package com.openggf.game.sonic1.constants;
  * Addresses are for the standard REV00/REV01 ROM.
  */
 public final class Sonic1Constants {
+    /**
+     * Uncompressed REV01 Map_Ring; Ring_SpawnRing's pointer operand is at $00A252.
+     * The object supplies palette line 1; mapping pieces supply palette offset 0.
+     */
+    public static final int MAP_RING_ADDR = 0x00A610;
+
 
     private Sonic1Constants() {
     }

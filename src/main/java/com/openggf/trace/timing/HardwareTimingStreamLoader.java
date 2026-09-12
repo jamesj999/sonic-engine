@@ -1,5 +1,7 @@
 package com.openggf.trace.timing;
 
+import static com.openggf.trace.timing.StrictTimingFields.*;
+
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -10,10 +12,6 @@ import com.openggf.game.timing.HardwareWorkKind;
 import com.openggf.trace.TraceMetadata;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.charset.CharacterCodingException;
-import java.nio.charset.CodingErrorAction;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -65,7 +63,7 @@ public final class HardwareTimingStreamLoader {
         if (traceFrameCount < 0) {
             throw rejected(timingPath, "trace_frame_count must not be negative");
         }
-        String content = decodeUtf8(timingPath);
+        String content = decodeUtf8(timingPath, FILE_NAME);
         if (!content.isEmpty() && (!content.endsWith("\n") || content.indexOf('\r') >= 0)) {
             throw rejected(timingPath, "hardware_timing.jsonl must use LF-terminated UTF-8 lines");
         }
@@ -146,65 +144,6 @@ public final class HardwareTimingStreamLoader {
             throw rejected(timingPath, "line " + lineNumber + " has invalid submission_fingerprint");
         }
         return new HardwareCompletionEdge(rawFrame, boundary, kind, ordinal, fingerprint);
-    }
-
-    private static String requireText(Path path, int line, JsonNode node, String field, String exact)
-            throws IOException {
-        JsonNode value = node.get(field);
-        if (value == null || !value.isTextual() || (exact != null && !exact.equals(value.textValue()))) {
-            throw rejected(path, "line " + line + " has invalid " + field);
-        }
-        return value.textValue();
-    }
-
-    private static int requireInt(Path path, int line, JsonNode node, String field) throws IOException {
-        JsonNode value = node.get(field);
-        if (value == null || !value.isInt()) {
-            throw rejected(path, "line " + line + " has invalid " + field);
-        }
-        return value.intValue();
-    }
-
-    private static long requireOrdinal(Path path, int line, JsonNode node) throws IOException {
-        JsonNode value = node.get("ordinal");
-        if (value == null || !value.isIntegralNumber() || !value.canConvertToLong() || value.longValue() < 0) {
-            throw rejected(path, "line " + line + " has invalid ordinal");
-        }
-        return value.longValue();
-    }
-
-    private static HardwareServiceBoundary parseBoundary(Path path, int line, String wireName)
-            throws IOException {
-        try {
-            return HardwareServiceBoundary.fromWireName(wireName);
-        } catch (IllegalArgumentException e) {
-            throw rejected(path, "line " + line + " has invalid boundary");
-        }
-    }
-
-    private static HardwareWorkKind parseKind(Path path, int line, String wireName) throws IOException {
-        try {
-            return HardwareWorkKind.fromWireName(wireName);
-        } catch (IllegalArgumentException e) {
-            throw rejected(path, "line " + line + " has invalid kind");
-        }
-    }
-
-    private static String decodeUtf8(Path path) throws IOException {
-        byte[] bytes = Files.readAllBytes(path);
-        try {
-            return StandardCharsets.UTF_8.newDecoder()
-                    .onMalformedInput(CodingErrorAction.REPORT)
-                    .onUnmappableCharacter(CodingErrorAction.REPORT)
-                    .decode(ByteBuffer.wrap(bytes))
-                    .toString();
-        } catch (CharacterCodingException e) {
-            throw rejected(path, "hardware_timing.jsonl must be valid UTF-8");
-        }
-    }
-
-    private static IOException rejected(Path path, String reason) {
-        return new IOException(path.getFileName() + ": " + reason);
     }
 
     private record EdgeIdentity(HardwareWorkKind kind, long ordinal) {

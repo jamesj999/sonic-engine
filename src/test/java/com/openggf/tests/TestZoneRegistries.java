@@ -8,28 +8,11 @@ import com.openggf.game.sonic2.Sonic2ZoneRegistry;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * TODO #31 -- End-game loop prevention in LevelManager.advanceToNextLevel().
- *
- * <p>In {@code LevelManager.advanceToNextLevel()} (LevelManager.java:2527),
- * the code currently wraps zone index back to 0 when all zones are complete:
- * <pre>
- *   if (currentZone >= levels.size()) {
- *       LOGGER.info("All zones complete!");
- *       currentZone = 0; // Loop back for now - TODO: end game sequence
- *   }
- * </pre>
- *
- * <p>This is a placeholder that should be replaced with proper end-game
- * sequence handling (credits, ending screen, etc.) per game.
- *
- * <p>Expected zone progression order per game:
- * <ul>
- *   <li>Sonic 1: GHZ -> LZ -> MZ -> SLZ -> SYZ -> SBZ -> FZ -> END</li>
- *   <li>Sonic 2: EHZ -> CPZ -> ARZ -> CNZ -> HTZ -> MCZ -> OOZ -> MTZ -> SCZ -> WFZ -> DEZ -> END</li>
- *   <li>Sonic 3&K: AIZ -> HCZ -> MGZ -> CNZ -> ICZ -> LBZ -> MHZ -> FBZ -> SOZ -> LRZ -> HPZ -> SSZ -> DEZ -> DDZ -> END</li>
- * </ul>
+ * Verifies Sonic 1 and Sonic 2 zone-registry metadata and safe defaults for
+ * out-of-bounds zone indices. End-game transitions are owned by LevelManager
+ * and ZoneProgressionPlan rather than these registries.
  */
-public class TestTodo31_EndGameLoopPrevention {
+public class TestZoneRegistries {
 
     @Test
     public void testSonic2ZoneProgressionOrder() {
@@ -77,27 +60,6 @@ public class TestTodo31_EndGameLoopPrevention {
     }
 
     @Test
-    public void testSonic2TotalLevelCount() {
-        Sonic2ZoneRegistry registry = new Sonic2ZoneRegistry();
-
-        // Total levels: 7*2 + 3 + 1 + 1 + 1 = 20
-        int totalLevels = 0;
-        for (int z = 0; z < registry.getZoneCount(); z++) {
-            totalLevels += registry.getActCount(z);
-        }
-        assertEquals(20, totalLevels, "Sonic 2 has 20 total levels");
-    }
-
-    @Test
-    public void testSonic2FinalZoneIsDeathEgg() {
-        Sonic2ZoneRegistry registry = new Sonic2ZoneRegistry();
-
-        // The last zone should be Death Egg
-        int lastZone = registry.getZoneCount() - 1;
-        assertEquals("DEATH EGG", registry.getZoneName(lastZone), "Last zone is DEATH EGG");
-    }
-
-    @Test
     public void testSonic1ZoneProgressionOrder() {
         Sonic1ZoneRegistry registry = new Sonic1ZoneRegistry();
 
@@ -131,23 +93,9 @@ public class TestTodo31_EndGameLoopPrevention {
         assertEquals("ENDING", registry.getZoneName(7), "Zone 7 is Ending");
     }
 
-    @Test
-    public void testZoneIndexBoundsAfterFinalZone() {
-        Sonic2ZoneRegistry registry = new Sonic2ZoneRegistry();
-
-        // After the final zone, currentZone would exceed the zone count.
-        // The TODO at LevelManager:2527 wraps to 0 instead of triggering end-game.
-        int zoneAfterFinal = registry.getZoneCount(); // would be 11
-        assertTrue(zoneAfterFinal >= registry.getZoneCount(), "Zone index after final zone exceeds zone count");
-
-        // Out-of-bounds zone name returns "UNKNOWN" (not crash)
-        assertEquals("UNKNOWN", registry.getZoneName(zoneAfterFinal), "Out-of-bounds zone returns UNKNOWN");
-    }
-
     /**
      * Verifies that all ZoneRegistry boundary methods return safe defaults
-     * for out-of-bounds zone indices (at, beyond, and negative). This is the
-     * behavior that advanceToNextLevel() would encounter if it did not wrap.
+     * for out-of-bounds zone indices (at, beyond, and negative).
      */
     @Test
     public void testZoneIndexBeyondFinalIsHandledGracefully() {

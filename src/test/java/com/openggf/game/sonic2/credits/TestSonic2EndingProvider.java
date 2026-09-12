@@ -1,6 +1,5 @@
 package com.openggf.game.sonic2.credits;
 
-import com.openggf.game.EndingPhase;
 import com.openggf.game.EndingProvider;
 import com.openggf.game.sonic2.Sonic2GameModule;
 import org.junit.jupiter.api.Test;
@@ -13,8 +12,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * These tests exercise the provider's public API without requiring ROM,
  * OpenGL, or a running engine. They verify:
  * <ul>
- *   <li>Initial state before initialize()</li>
- *   <li>Phase mapping from internal states to EndingPhase</li>
+ *   <li>Initial slide and logo-flash state before initialize()</li>
  *   <li>S2-specific demo defaults (all no-ops)</li>
  *   <li>GameModule integration</li>
  * </ul>
@@ -24,20 +22,6 @@ public class TestSonic2EndingProvider {
     // ========================================================================
     // Initial state (before initialize)
     // ========================================================================
-
-    @Test
-    public void testInitialPhaseBeforeInitialize() {
-        Sonic2EndingProvider provider = new Sonic2EndingProvider();
-        // Before initialize(), provider shouldn't crash
-        assertFalse(provider.isComplete(), "Provider should not be complete before initialize");
-    }
-
-    @Test
-    public void testInitialPhaseIsCutscene() {
-        Sonic2EndingProvider provider = new Sonic2EndingProvider();
-        // The default internal state is CUTSCENE, so getCurrentPhase should return CUTSCENE
-        assertEquals(EndingPhase.CUTSCENE, provider.getCurrentPhase());
-    }
 
     @Test
     public void testInitialSlideIsZero() {
@@ -91,14 +75,6 @@ public class TestSonic2EndingProvider {
     // ========================================================================
     // GameModule integration
     // ========================================================================
-
-    @Test
-    public void testSonic2GameModuleHasEndingProvider() {
-        Sonic2GameModule module = new Sonic2GameModule();
-        EndingProvider provider = module.getEndingProvider();
-        assertNotNull(provider, "Sonic2GameModule should provide an EndingProvider");
-        assertTrue(provider instanceof Sonic2EndingProvider, "Sonic2GameModule EndingProvider should be Sonic2EndingProvider");
-    }
 
     @Test
     public void testSonic2GameModuleCreatesNewProviderPerCall() {

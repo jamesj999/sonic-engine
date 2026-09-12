@@ -89,8 +89,8 @@ class Sonic1BackgroundScrollOwnershipTest {
                 Arguments.of("MZ", (Supplier<ZoneScrollHandler>) SwScrlMz::new),
                 Arguments.of("SLZ", (Supplier<ZoneScrollHandler>) SwScrlSlz::new),
                 Arguments.of("SYZ", (Supplier<ZoneScrollHandler>) SwScrlSyz::new),
-                Arguments.of("SBZ", (Supplier<ZoneScrollHandler>) SwScrlSbz::new),
-                Arguments.of("FZ", (Supplier<ZoneScrollHandler>) SwScrlFz::new),
+                Arguments.of("SBZ", (Supplier<ZoneScrollHandler>) UniformQuarterSpeedScroll::new),
+                Arguments.of("FZ", (Supplier<ZoneScrollHandler>) UniformQuarterSpeedScroll::new),
                 Arguments.of("Ending", (Supplier<ZoneScrollHandler>) SwScrlEnd::new));
     }
 }

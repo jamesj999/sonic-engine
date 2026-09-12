@@ -39,7 +39,7 @@ class ControlTests(unittest.TestCase):
             control.preflight(Path('.'), dict(guards=False))
         self.assertEqual(1, process.call_count)
 
-    def test_broad_attempt_survives_focused_runs_and_requires_explanation_even_after_edits(self):
+    def test_broad_attempt_survives_focused_runs_and_reason_cannot_authorize_repeat(self):
         with tempfile.TemporaryDirectory() as tmp:
             target = Path(tmp)
             plan = self.plan()
@@ -51,14 +51,17 @@ class ControlTests(unittest.TestCase):
             plan['working_tree_fingerprint'] = 'edited'
             with self.assertRaisesRegex(ValueError, 'already attempted'):
                 control.check_repeat(target, plan, None)
-            control.check_repeat(target, plan, 'Corrected the missing tool prerequisite')
-            control.record_attempt(target, target / 'second', plan, 'New integration scope')
+            with self.assertRaisesRegex(ValueError, 'not authorization'):
+                control.check_repeat(target, plan, 'Corrected the missing tool prerequisite')
             receipt = json.loads((target / 'category-tests-last-broad.json').read_text())
-            self.assertEqual('New integration scope', receipt['reason'])
+            self.assertIsNone(receipt['reason'])
             self.assertLess((target / 'category-tests-last-broad.json').stat().st_size, 16384)
 
     def test_cli_prerequisite_failure_never_calls_runner(self):
-        with patch.object(runner, 'preflight', side_effect=ValueError('missing tool')), patch.object(runner, 'run_plan') as run, patch('sys.stdout', new_callable=io.StringIO), patch('sys.stderr', new_callable=io.StringIO):
+        with patch.object(runner, 'ValidationTask') as task_factory, patch.object(runner, 'preflight', side_effect=ValueError('missing tool')), patch.object(runner, 'run_plan') as run, patch('sys.stdout', new_callable=io.StringIO), patch('sys.stderr', new_callable=io.StringIO):
+            task = task_factory.return_value.__enter__.return_value
+            task.data = dict(task='test', elapsed_seconds=0)
+            task.remaining_minutes.return_value = 40
             self.assertEqual(2, runner.main(['--category', 'all', '--run']))
         run.assert_not_called()
 

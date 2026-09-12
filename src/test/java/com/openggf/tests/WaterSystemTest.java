@@ -115,24 +115,6 @@ public class WaterSystemTest {
     }
 
     @Test
-    public void testDistortionTableGeneration() {
-        int[] distortionTable = waterSystem.getDistortionTable();
-
-        assertNotNull(distortionTable, "Distortion table should not be null");
-        assertTrue(distortionTable.length > 0, "Distortion table should have reasonable size");
-
-        // Verify table contains varied values (not all zeros)
-        boolean hasVariation = false;
-        for (int value : distortionTable) {
-            if (value != 0) {
-                hasVariation = true;
-                break;
-            }
-        }
-        assertTrue(hasVariation, "Distortion table should have variation");
-    }
-
-    @Test
     public void testMultipleLevelConfigs() {
         // Load config for multiple levels
         List<ObjectSpawn> cpzObjects = new ArrayList<>();

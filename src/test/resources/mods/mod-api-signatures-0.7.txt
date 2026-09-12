@@ -1148,6 +1148,7 @@ CONSTRUCTOR com.openggf.audio.rewind.AudioLogicalSnapshot public  <init>(boolean
 CONSTRUCTOR com.openggf.audio.rewind.AudioLogicalSnapshot$DonorSfxBindingSnapshot public  <init>(com.openggf.audio.GameSound,java.lang.String,int)
 CONSTRUCTOR com.openggf.audio.rewind.AudioTimelineEntry public  <init>(long,int,com.openggf.audio.rewind.AudioCommand)
 CONSTRUCTOR com.openggf.audio.smps.AbstractSmpsData protected  <init>(byte[],int)
+CONSTRUCTOR com.openggf.audio.smps.AbstractSmpsData protected  <init>(byte[],int,boolean)
 CONSTRUCTOR com.openggf.audio.smps.DacData public  <init>(java.util.Map<java.lang.Integer,byte[]>,java.util.Map<java.lang.Integer,com.openggf.audio.smps.DacData$DacEntry>)
 CONSTRUCTOR com.openggf.audio.smps.DacData public  <init>(java.util.Map<java.lang.Integer,byte[]>,java.util.Map<java.lang.Integer,com.openggf.audio.smps.DacData$DacEntry>,int)
 CONSTRUCTOR com.openggf.audio.smps.DacData$DacEntry public  <init>(int,int)

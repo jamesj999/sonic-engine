@@ -3,21 +3,15 @@ package com.openggf.game.sonic3k.bonusstage.slots;
 import com.openggf.data.Rom;
 import com.openggf.game.sonic3k.constants.Sonic3kConstants;
 import com.openggf.graphics.GLCommand;
-import com.openggf.graphics.RenderContext;
+import com.openggf.graphics.SlotWindowGpuPass;
 import com.openggf.graphics.ShaderProgram;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
-import java.nio.FloatBuffer;
 import java.util.logging.Logger;
 
 import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL13.*;
-import static org.lwjgl.opengl.GL15.*;
-import static org.lwjgl.opengl.GL20.*;
-import static org.lwjgl.opengl.GL30.glBindVertexArray;
-import static org.lwjgl.opengl.GL30.glDeleteVertexArrays;
-import static org.lwjgl.opengl.GL30.glGenVertexArrays;
 
 public final class S3kSlotMachineRenderer {
     private static final Logger LOGGER = Logger.getLogger(S3kSlotMachineRenderer.class.getName());
@@ -35,29 +29,7 @@ public final class S3kSlotMachineRenderer {
     private ShaderProgram shader;
     private int textureId;
     private boolean initialized;
-    private int vaoId;
-    private int vboId;
-    private int vertexPosLocation = -1;
-
-    private int locSlotFaceTexture = -1;
-    private int locPalette = -1;
-    private int locSlotFace0 = -1;
-    private int locSlotFace1 = -1;
-    private int locSlotFace2 = -1;
-    private int locSlotNextFace0 = -1;
-    private int locSlotNextFace1 = -1;
-    private int locSlotNextFace2 = -1;
-    private int locSlotOffset0 = -1;
-    private int locSlotOffset1 = -1;
-    private int locSlotOffset2 = -1;
-    private int locScreenX = -1;
-    private int locScreenY = -1;
-    private int locScreenWidth = -1;
-    private int locScreenHeight = -1;
-    private int locPaletteLine = -1;
-    private int locTotalPaletteLines = -1;
-    private int locViewportWidth = -1;
-    private int locViewportHeight = -1;
+    private final SlotWindowGpuPass gpuPass = new SlotWindowGpuPass();
 
     public void init(Rom rom) {
         if (initialized || rom == null) {
@@ -76,8 +48,9 @@ public final class S3kSlotMachineRenderer {
             LOGGER.warning("Failed to create S3K slot options texture");
             return;
         }
-        initQuadVao();
-        cacheUniformLocations();
+        gpuPass.setShader(shader);
+        gpuPass.init();
+
         initialized = true;
     }
 
@@ -116,19 +89,11 @@ public final class S3kSlotMachineRenderer {
             glDeleteTextures(textureId);
             textureId = 0;
         }
-        if (vboId != 0) {
-            glDeleteBuffers(vboId);
-            vboId = 0;
-        }
-        if (vaoId != 0) {
-            glDeleteVertexArrays(vaoId);
-            vaoId = 0;
-        }
+        gpuPass.cleanup();
         if (shader != null) {
             shader.cleanup();
             shader = null;
         }
-        resetUniformLocations();
     }
 
     private int createSlotTexture(Rom rom) {
@@ -185,138 +150,11 @@ public final class S3kSlotMachineRenderer {
         }
     }
 
-    private void initQuadVao() {
-        if (vaoId != 0) {
-            return;
-        }
-        vaoId = glGenVertexArrays();
-        glBindVertexArray(vaoId);
-        FloatBuffer quadBuffer = MemoryUtil.memAllocFloat(8);
-        quadBuffer.put(-1f).put(-1f);
-        quadBuffer.put(1f).put(-1f);
-        quadBuffer.put(-1f).put(1f);
-        quadBuffer.put(1f).put(1f);
-        quadBuffer.flip();
-
-        vboId = glGenBuffers();
-        glBindBuffer(GL_ARRAY_BUFFER, vboId);
-        glBufferData(GL_ARRAY_BUFFER, quadBuffer, GL_STATIC_DRAW);
-        MemoryUtil.memFree(quadBuffer);
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-        glBindVertexArray(0);
-    }
-
     private void executeRender(int screenX, int screenY, int paletteTextureId,
                                int[] faces, int[] nextFaces, float[] offsets) {
-        int[] viewport = new int[4];
-        glGetIntegerv(GL_VIEWPORT, viewport);
-        int viewportWidth = viewport[2];
-        int viewportHeight = viewport[3];
-
-        boolean blendWasEnabled = glIsEnabled(GL_BLEND);
-        boolean depthWasEnabled = glIsEnabled(GL_DEPTH_TEST);
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        glDisable(GL_DEPTH_TEST);
-
-        shader.use();
-        if (locSlotFaceTexture < 0) {
-            cacheUniformLocations();
-        }
-
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, textureId);
-        glUniform1i(locSlotFaceTexture, 0);
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, paletteTextureId);
-        glUniform1i(locPalette, 1);
-
-        glUniform1i(locSlotFace0, faces[0]);
-        glUniform1i(locSlotFace1, faces[1]);
-        glUniform1i(locSlotFace2, faces[2]);
-        glUniform1i(locSlotNextFace0, nextFaces[0]);
-        glUniform1i(locSlotNextFace1, nextFaces[1]);
-        glUniform1i(locSlotNextFace2, nextFaces[2]);
-        glUniform1f(locSlotOffset0, offsets[0]);
-        glUniform1f(locSlotOffset1, offsets[1]);
-        glUniform1f(locSlotOffset2, offsets[2]);
-
-        glUniform1f(locScreenX, screenX);
-        glUniform1f(locScreenY, screenY);
-        glUniform1f(locScreenWidth, 320f);
-        glUniform1f(locScreenHeight, 224f);
-        glUniform1f(locPaletteLine, SLOT_PALETTE_LINE);
-        glUniform1f(locTotalPaletteLines, (float) RenderContext.getTotalPaletteLines());
-        glUniform1f(locViewportWidth, viewportWidth);
-        glUniform1f(locViewportHeight, viewportHeight);
-
-        glBindVertexArray(vaoId);
-        glBindBuffer(GL_ARRAY_BUFFER, vboId);
-        if (vertexPosLocation >= 0) {
-            glEnableVertexAttribArray(vertexPosLocation);
-            glVertexAttribPointer(vertexPosLocation, 2, GL_FLOAT, false, 0, 0L);
-        }
-        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-        if (vertexPosLocation >= 0) {
-            glDisableVertexAttribArray(vertexPosLocation);
-        }
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-        glBindVertexArray(0);
-        shader.stop();
-        glActiveTexture(GL_TEXTURE0);
-
-        if (!blendWasEnabled) {
-            glDisable(GL_BLEND);
-        }
-        if (depthWasEnabled) {
-            glEnable(GL_DEPTH_TEST);
-        }
+        gpuPass.draw(textureId, paletteTextureId, screenX, screenY, SLOT_PALETTE_LINE,
+                faces[0], faces[1], faces[2], nextFaces[0], nextFaces[1], nextFaces[2],
+                offsets[0], offsets[1], offsets[2]);
     }
 
-    private void cacheUniformLocations() {
-        int programId = shader.getProgramId();
-        locSlotFaceTexture = glGetUniformLocation(programId, "SlotFaceTexture");
-        locPalette = glGetUniformLocation(programId, "Palette");
-        locSlotFace0 = glGetUniformLocation(programId, "SlotFace0");
-        locSlotFace1 = glGetUniformLocation(programId, "SlotFace1");
-        locSlotFace2 = glGetUniformLocation(programId, "SlotFace2");
-        locSlotNextFace0 = glGetUniformLocation(programId, "SlotNextFace0");
-        locSlotNextFace1 = glGetUniformLocation(programId, "SlotNextFace1");
-        locSlotNextFace2 = glGetUniformLocation(programId, "SlotNextFace2");
-        locSlotOffset0 = glGetUniformLocation(programId, "SlotOffset0");
-        locSlotOffset1 = glGetUniformLocation(programId, "SlotOffset1");
-        locSlotOffset2 = glGetUniformLocation(programId, "SlotOffset2");
-        locScreenX = glGetUniformLocation(programId, "ScreenX");
-        locScreenY = glGetUniformLocation(programId, "ScreenY");
-        locScreenWidth = glGetUniformLocation(programId, "ScreenWidth");
-        locScreenHeight = glGetUniformLocation(programId, "ScreenHeight");
-        locPaletteLine = glGetUniformLocation(programId, "PaletteLine");
-        locTotalPaletteLines = glGetUniformLocation(programId, "TotalPaletteLines");
-        locViewportWidth = glGetUniformLocation(programId, "ViewportWidth");
-        locViewportHeight = glGetUniformLocation(programId, "ViewportHeight");
-        vertexPosLocation = glGetAttribLocation(programId, "position");
-    }
-
-    private void resetUniformLocations() {
-        locSlotFaceTexture = -1;
-        locPalette = -1;
-        locSlotFace0 = -1;
-        locSlotFace1 = -1;
-        locSlotFace2 = -1;
-        locSlotNextFace0 = -1;
-        locSlotNextFace1 = -1;
-        locSlotNextFace2 = -1;
-        locSlotOffset0 = -1;
-        locSlotOffset1 = -1;
-        locSlotOffset2 = -1;
-        locScreenX = -1;
-        locScreenY = -1;
-        locScreenWidth = -1;
-        locScreenHeight = -1;
-        locPaletteLine = -1;
-        locTotalPaletteLines = -1;
-        locViewportWidth = -1;
-        locViewportHeight = -1;
-        vertexPosLocation = -1;
-    }
 }

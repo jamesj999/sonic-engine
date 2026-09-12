@@ -21,6 +21,12 @@ import com.openggf.level.Pattern;
  * </ul>
  */
 public class Sonic3kConstants {
+    /**
+     * Uncompressed Map_Ring in the S&K half; Obj_RingInit's pointer is at $01A538.
+     * make_art_tile(ArtTile_Ring,1,1) supplies palette line 1; pieces have offset 0.
+     */
+    public static final int MAP_RING_ADDR = 0x01A99A;
+
     /** Obj_FBZCloud stores exactly ten stable addresses at FBZ_cloud_addr. */
     public static final int FBZ_CLOUD_REWIND_SLOT_COUNT = 10;
 

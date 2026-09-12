@@ -94,6 +94,16 @@ campaigns; feature/API publication remains subject to the 0.8 roadmap.
   callbacks; manager-owned collision, riding and live callbacks are preserved.
   S2 player and dust art share the S2 mapping/DPLC decoder, with the public
   player DPLC entry point retained as a compatibility delegate.
+  SBZ and Final Zone share uniform scroll mechanics with independent camera state.
+  Removed an unused radius-transition duplicate; live hurt and death paths retain their owners.
+  S1 and S3K rings decode ROM mappings, correcting sparkle flips to the ROM sequence
+  while preserving animation timing and the S3K pattern cap.
+  SMPS music headers use an explicit format decoder, avoiding constructor-time
+  virtual calls while retaining the legacy Mod API extension constructor.
+  CNZ and S3K slots share GPU drawing and quad ownership; CNZ releases its actual
+  draw resources so the renderer can be reused after graphics-context recreation.
+  Timing-file loaders share strict field decoding while keeping schemas and
+  timing authority in their existing owners.
 
 ## Build and release
 
@@ -109,9 +119,9 @@ campaigns; feature/API publication remains subject to the 0.8 roadmap.
 - **Local test categories:** select related subsystem checks from changed paths, with
   common tests and structural guards retained, broad fallback for shared changes,
   and bounded diagnostics and automatic temporary-file cleanup. Tool prerequisites
-  are checked before testing; a shared time budget stops hung runs, and repeated broad
-  attempts require a recorded reason. Agent validation stops after the required selection
-  and focused regression checks. Full CI and release validation remain unchanged.
+  are checked before testing; a delivery-wide budget and one-broad-attempt limit are
+  shared across worktrees. Commit boundaries and retry explanations cannot reset that
+  allowance; focused and baseline time contribute to cumulative accounting. Full CI and release validation remain unchanged.
 
 - **Release-line integration:** preserve hosted release builds, snapshot policy
   checks, current launcher artifact selection, Linux packaging, and automatic

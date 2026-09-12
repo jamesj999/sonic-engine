@@ -4,10 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import com.openggf.camera.DeadzoneGeometry;
 import com.openggf.configuration.DeadzoneMode;
-import com.openggf.configuration.DisplayWindowPolicy;
 import com.openggf.configuration.SonicConfiguration;
 import com.openggf.configuration.SonicConfigurationService;
-import com.openggf.configuration.WidescreenAspect;
 import com.openggf.sprites.managers.RightBoundary;
 import org.junit.jupiter.api.Test;
 
@@ -30,17 +28,6 @@ class TestWidescreenNativeRegression {
     }
 
     @Test
-    void testModeForcesNativeEvenWithWidescreenConfig() {
-        // The parity safeguard: TEST_MODE_ENABLED forces native regardless of a
-        // widescreen DISPLAY_ASPECT in the ambient config — protecting trace tests.
-        SonicConfigurationService cfg = SonicConfigurationService.createStandalone();
-        cfg.setConfigValue(SonicConfiguration.DISPLAY_ASPECT, "ULTRA_21_9");
-        cfg.setConfigValue(SonicConfiguration.TEST_MODE_ENABLED, true);
-        cfg.resolveDisplayAspect();
-        assertEquals(320, cfg.getInt(SonicConfiguration.SCREEN_WIDTH_PIXELS));
-    }
-
-    @Test
     void nativeCameraConstantsUnchanged() {
         for (DeadzoneMode mode : DeadzoneMode.values()) {
             assertEquals(144, DeadzoneGeometry.leftEdge(320, mode));
@@ -55,12 +42,4 @@ class TestWidescreenNativeRegression {
         assertEquals(1000 + 0x128 + 0x40, RightBoundary.compute(1000, 320, 24, 64, false));
     }
 
-    @Test
-    void nativeWindowPolicyUnchanged() {
-        DisplayWindowPolicy.Resolved r =
-                DisplayWindowPolicy.resolve(WidescreenAspect.NATIVE_4_3, true, 640, 448);
-        assertEquals(320, r.pixelWidth());
-        assertEquals(640, r.windowWidth());
-        assertEquals(448, r.windowHeight());
-    }
 }

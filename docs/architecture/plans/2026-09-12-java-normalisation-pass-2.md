@@ -1,7 +1,8 @@
 # Java normalisation: second review
 
-Status: candidates 1, 2, 3, 4 and 8 implemented on `develop`, one commit each.
-Candidates 5, 6, 7, 9, 10 and 11 remain deferred after the user ended this pass.
+Status: all eleven candidates implemented on `develop`, one commit each.
+The resumed six-candidate delivery uses one combined final validation selection
+against `c4b5325d25`, within a shared 40-minute budget.
 
 Reviewed `develop` at `5d9ef4af40d052050d37df2424e696608cff2647` on
 12 September 2026. Main workspace only; no worktrees or branch changes.
@@ -258,16 +259,13 @@ and follow the documentation checklist and commit hooks. Work directly on
 `develop` unless the user changes that instruction. This plan alone makes no
 runtime changes and requires no engine-suite run.
 
-For implementation validation, pin the actual pre-change integration commit,
-finish focused fixes and documentation, and run category-runner `--preflight` in
-the real launch environment. Before a broad run, report the selected class count,
-cost and stop rule. Budget one completed required selection per candidate; the
-previous broad normalisation measured approximately 24 minutes ordinary plus
-10 minutes guards. Preserve the runner's timeout/repeat controls and known
-working native macOS access. Use focused matched attribution for disputed
-failures, not repeated full suites. Report remaining failures and skips honestly.
-Affected traces and the mandatory S3K loading/bootstrap checks remain required
-where applicable; do not rerun previous unchanged evidence just for this review.
+For future implementation, pin the pre-task integration commit once. Commit each
+item separately, use focused checks while implementing, and run at most one combined
+change-based selection for the requested delivery. Review aggregate cost against the
+shared task budget before launching. A new numbered candidate or commit does not
+justify a new broad selection or base. Follow the current task-wide controls in
+`AGENTS.md` and `tools/testing/README.md`; the per-item runs recorded below are historical
+evidence of the workflow that prompted these stronger controls, not a procedure to repeat.
 
 ## Implementation record
 
@@ -425,3 +423,105 @@ Validation on the candidate working tree:
   the repository are not delivered implementations. Follow-up priorities are ROM
   ring mappings (7), audio construction (9), slot GPU ownership (10), then the
   smaller scroll/dead-helper/strict-field extractions (5, 6, 11).
+
+### Validation-policy follow-up
+
+The user requested task-wide cost controls after stopping the per-item validation
+workflow. `AGENTS.md`/`CLAUDE.md` and the runner now separate commit granularity
+from combined delivery validation. One shared Git task receipt pins the original
+base, limits cumulative time and permits only one broad attempt; retry prose cannot
+authorize another. External focused/baseline time must be recorded explicitly.
+Python safety verification: 53 tests passed in approximately four seconds; actual
+Java 21/Lua 5.4/PowerShell preflight passed. No new engine suite was launched.
+Fetched `origin/develop` at `0f35005124` was merged with both changelog histories
+preserved. This integration is not claimed as a newly tested green engine suite.
+
+### Candidate 5 — shared uniform S1 scroll
+
+SBZ and FZ now use separate `UniformQuarterSpeedScroll` instances, preserving
+initial rounding, fractional deltas and all packed scanlines. REV01 `Deform_SBZ`
+has separate act-1 building bands missing from the existing Java behavior;
+that pre-existing parity gap is recorded in `docs/status/known-bugs.md` and is
+outside this extraction. Focused scroll ownership and packed-buffer checks run
+with the resumed delivery batch; combined validation is recorded below.
+
+Resumed focused batch on the six-candidate working tree at base `c4b5325d25`:
+`mvn -Dmse=off -Dtest=TestUniformQuarterSpeedScroll,Sonic1BackgroundScrollOwnershipTest,TestRomRingMappings,TestSmpsHeaderConstruction,TestSlotWindowGpuPassNative,TestHardwareTimingStreamLoader,TestHardwareTimingInterstitialStream -Dopenggf.slotNative=true test`,
+with absolute S1/S2/S3K ROM properties and native macOS access: 42 tests passed,
+no failures/errors/skips. The first attempt stopped at test compilation because
+an unchanged S1 class was absent from incremental build output; rebuilding local
+class output completed the batch. Both attempts totalled 119 seconds and were
+charged to the shared task budget. Inspected focused diagnostics were removed.
+
+### Candidate 6 — remove dead radius support
+
+Deleted `PlayableResetOnFloorRadiusTransition` after confirming no production or
+test callers. `PlayableHurtRadiusTransition` remains the live hurt owner and death
+still calls `setRolling(false)` directly. No gameplay path was rewired. Compilation
+and the final combined movement/rewind coverage validate this deletion; no new
+implementation-mirroring test or separate hurt suite was added.
+
+### Candidate 7 — ROM-owned ring mappings
+
+S1 REV01 `$00A610` and the S&K half `$01A99A` feed the existing format decoders;
+`RingMappingFrames` adapts their pieces. Tests verify the owning placed/lost-ring
+instruction pointers, all nine frames, tile bounds, dimensions, effective palette,
+caching and timing. The ninth frame is blank; spin and sparkle counts remain four.
+The ROM sparkle flip sequence is none, H+V, H, V, correcting the former copied
+none, H, V, H+V table. This is an explicit parity correction. S3K retains 14 patterns.
+
+### Candidate 9 — construction-safe SMPS music headers
+
+Built-in S1/S2/S3K music constructors use explicit endian-aware decoding into a
+private result before installation. The legacy protected constructor still calls
+its extension hook; an additive deferred overload is the sole candidate signature
+addition. API documentation and the mutable 0.7 pin retain the descriptor’s
+existing unpublished 0.7.0 version; ordinary pin updates leave the descriptor unchanged.
+Signed fields, voice-bank lookup, short/truncated-input policies and snapshots
+retain their contracts. SFX parsers keep their separate legacy construction paths;
+those are a possible follow-up, not silently migrated here.
+
+Eight 3-second, 44.1 kHz NTSC stereo PCM renders through the production loaders
+matched all previously recorded `1cd1175e` SHA-256 fingerprints exactly: S1 GHZ/MZ,
+S2 EHZ/HTZ, S&K AIZ2/miniboss and S3 miniboss/Knuckles. This checks engine-before/
+after parity, not an independent ROM audio oracle. The one current probe took
+2.7 seconds; the earlier baseline was reused without rerunning it.
+
+### Candidate 10 — slot GPU ownership
+
+`SlotWindowGpuPass` owns quad resources, uniform bindings and draw-state handling;
+games retain texture, palette and shader ownership. Inspection corrected the plan's
+vertex assumption: both production shaders use the fullscreen `gl_VertexID` contract,
+so the existing `QuadRenderer` is appropriate. CNZ viewport-origin uniforms and the
+S3K shader's existing behavior remain distinct. CNZ previously cleaned up an unused
+quad instead of its actual VAO/VBO; the shared owner fixes that lifecycle bug.
+The focused native test draws both ROM-backed renderers in two viewports and
+recreated OpenGL 4.1 contexts, checking visible pixels, repeatable context output
+and subsequent GL state. Earlier baseline measurement at `1cd1175e` failed CNZ's
+second-context draw with error 1282; S3K passed. No retained before/after pixel-hash
+comparison is claimed, and no second baseline run was needed.
+
+### Candidate 11 — strict timing fields
+
+A package-private helper shares integer/text/ordinal admission, boundary/kind
+conversion, strict UTF-8 decoding and diagnostics. Each loader retains its schema,
+filename, ordering, identities and fingerprints. Runtime timing admission is unchanged.
+Existing rejection tests are included in the focused batch and timing authority
+and invariant guards in the final combined selection; no redundant tests were added.
+
+### Resumed delivery — final validation stopped by request
+
+All six remaining candidates were committed separately through `fb9c33b071`.
+Tool preflight passed. The one combined selection against `c4b5325d25`, run
+`20260912T183612Z-abac6d5c`, selected 2,518 ordinary classes plus guards.
+The user requested stopping during the ordinary lane. No lane summary completed,
+guards did not run, and no broad pass is claimed. The runner and its Maven/test
+children were confirmed stopped; inspected partial diagnostics were acknowledged.
+Cumulative validation time for this resumed delivery was 247 seconds (about
+4.1 minutes), including 121 seconds of focused checks and compilation.
+The focused batch passed 42 tests without skips, and all eight audio PCM
+fingerprints matched the existing baseline. No further tests were run.
+
+The eleven-item plan is implemented. Optional later normalisation includes the
+distinct SFX construction paths; missing SBZ act-1 parallax is separate parity
+work, not unfinished work from this extraction.
