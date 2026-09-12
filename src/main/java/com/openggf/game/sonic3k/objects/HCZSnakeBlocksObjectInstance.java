@@ -7,8 +7,6 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
-import com.openggf.level.objects.SolidContact;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.RomObjectCodePointerProvider;
 import com.openggf.level.objects.SolidObjectProvider;
@@ -37,7 +35,7 @@ import java.util.List;
  * {@code ArtTile_HCZ2BlockPlat} (tile 0x0028, palette 0).
  */
 public class HCZSnakeBlocksObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, SpawnRewindRecreatable, RomObjectCodePointerProvider {
+        implements SolidObjectProvider, SpawnRewindRecreatable, RomObjectCodePointerProvider {
 
     /**
      * Word 0 of this object's S3K SST holds its live ROM code pointer.
@@ -53,7 +51,6 @@ public class HCZSnakeBlocksObjectInstance extends AbstractObjectInstance
     public int romObjectCodePointerHighWord() {
         return 0x0002;
     }
-
 
     // ROM: make_art_tile(ArtTile_HCZ2BlockPlat, 0, 0) — palette 0, not the floating platform art
     private static final String ART_KEY = Sonic3kObjectArtKeys.HCZ_SNAKE_BLOCK;
@@ -227,11 +224,6 @@ public class HCZSnakeBlocksObjectInstance extends AbstractObjectInstance
         // horizontal carry delta is zero (sonic3k.asm:50893-50910,
         // 41016-41042,41642-41679).
         return false;
-    }
-
-    @Override
-    public void onSolidContact(PlayableEntity player, SolidContact contact, int frameCounter) {
-        // No additional contact side effects in the ROM routine.
     }
 
     @Override

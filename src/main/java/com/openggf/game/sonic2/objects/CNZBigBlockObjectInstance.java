@@ -31,7 +31,7 @@ import java.util.List;
  * <b>Disassembly Reference:</b> s2.asm lines 58279-58366 (ObjD4)
  */
 public class CNZBigBlockObjectInstance extends BoxObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
+        implements SolidObjectProvider, RewindRecreatable {
 
     // Constants from disassembly
     private static final int INITIAL_OFFSET = 0x60;      // 96 pixels initial offset from spawn
@@ -166,15 +166,7 @@ public class CNZBigBlockObjectInstance extends BoxObjectInstance
     }
 
     @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        // Platform carrying is handled by the solid object system
-        // This callback is for any special behavior when player contacts the platform
-    }
-
-    @Override
     public boolean isSolidFor(PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         return true;
     }
 

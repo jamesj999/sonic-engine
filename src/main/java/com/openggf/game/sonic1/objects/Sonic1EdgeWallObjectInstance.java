@@ -4,13 +4,10 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectSpawn;
-import com.openggf.level.objects.SolidContact;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
-import com.openggf.sprites.playable.AbstractPlayableSprite;
 import com.openggf.game.PlayableEntity;
 
 import java.util.List;
@@ -38,7 +35,7 @@ import java.util.List;
  * Reference: docs/s1disasm/_incObj/44 GHZ Edge Walls.asm
  */
 public class Sonic1EdgeWallObjectInstance extends AbstractObjectInstance
-        implements SpawnRewindRecreatable, SolidObjectProvider, SolidObjectListener {
+        implements SpawnRewindRecreatable, SolidObjectProvider {
 
     // From disassembly: move.w #$13,d1
     private static final int HALF_WIDTH = 0x13;
@@ -73,15 +70,7 @@ public class Sonic1EdgeWallObjectInstance extends AbstractObjectInstance
 
     @Override
     public boolean isSolidFor(PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         return solid;
     }
 
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        // No special behavior beyond standard solid collision.
-        // The engine's SolidContacts system handles side pushing (zeroing inertia/velX)
-        // and ceiling blocking (zeroing velY), matching Obj44_SolidWall behavior.
-    }
 }

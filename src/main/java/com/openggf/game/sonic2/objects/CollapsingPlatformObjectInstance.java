@@ -35,7 +35,7 @@ import java.util.logging.Logger;
  * - ARZ: 8 fragments, uses level art tiles (0x55, 0x59, 0xA3, 0xA7)
  */
 public class CollapsingPlatformObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
+        implements SolidObjectProvider, RewindRecreatable {
 
     private static final Logger LOGGER = Logger.getLogger(CollapsingPlatformObjectInstance.class.getName());
 
@@ -313,18 +313,12 @@ public class CollapsingPlatformObjectInstance extends AbstractObjectInstance
     }
 
     @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        // Manual checkpoints drive collapsing-platform standing state from update().
-    }
-
-    @Override
     public SolidExecutionMode solidExecutionMode() {
         return SolidExecutionMode.MANUAL_CHECKPOINT;
     }
 
     @Override
     public boolean isSolidFor(PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         return !collapsed && !isDestroyed();
     }
 

@@ -9,8 +9,6 @@ import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.RomObjectCodePointerProvider;
-import com.openggf.level.objects.SolidContact;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
@@ -28,7 +26,7 @@ import java.util.List;
  * ROM references: Obj_HCZBlock (sonic3k.asm:43233), byte_1F38A, Map_HCZBlock.
  */
 public class HCZBlockObjectInstance extends AbstractObjectInstance
-        implements RewindRecreatable, SolidObjectProvider, SolidObjectListener,
+        implements RewindRecreatable, SolidObjectProvider,
         RomObjectCodePointerProvider {
 
     private static final String ART_KEY = Sonic3kObjectArtKeys.HCZ_BLOCK;
@@ -88,11 +86,6 @@ public class HCZBlockObjectInstance extends AbstractObjectInstance
     public int getTopLandingHalfWidth(PlayableEntity playerEntity, int collisionHalfWidth) {
         // ROM: Solid_Landed uses width_pixels for ridden top-surface retention, not d1.
         return halfWidth;
-    }
-
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        // ROM has no per-contact behavior beyond SolidObjectFull2.
     }
 
     @Override

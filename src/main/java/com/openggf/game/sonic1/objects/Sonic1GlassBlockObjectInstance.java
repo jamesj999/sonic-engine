@@ -11,14 +11,11 @@ import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectLifetimeOps;
 import com.openggf.level.objects.ObjectSpawn;
-import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidExecutionMode;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
-import com.openggf.sprites.playable.AbstractPlayableSprite;
 
 import com.openggf.debug.DebugColor;
 import java.util.List;
@@ -53,7 +50,7 @@ import java.util.List;
  * Reference: docs/s1disasm/_incObj/30 MZ Large Green Glass Blocks.asm
  */
 public class Sonic1GlassBlockObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, SpawnRewindRecreatable {
+        implements SolidObjectProvider, SpawnRewindRecreatable {
 
     // --- Collision parameters ---
 
@@ -135,7 +132,6 @@ public class Sonic1GlassBlockObjectInstance extends AbstractObjectInstance
 
     // The spawned reflection child (for cleanup)
     private Sonic1GlassReflectionInstance reflectionChild;
-
 
     public Sonic1GlassBlockObjectInstance(ObjectSpawn spawn) {
         super(spawn, "MzGlassBlock");
@@ -255,13 +251,7 @@ public class Sonic1GlassBlockObjectInstance extends AbstractObjectInstance
     }
 
     @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        // Standing state is driven via manual checkpoints in update().
-    }
-
-    @Override
     public boolean isSolidFor(PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         return !isDestroyed();
     }
 

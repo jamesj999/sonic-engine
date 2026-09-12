@@ -12,8 +12,6 @@ import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.RomObjectCodePointerProvider;
-import com.openggf.level.objects.SolidContact;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
@@ -39,7 +37,7 @@ import java.util.List;
  * ROM reference: Obj_Door (sonic3k.asm:66036), loc_30FD2 (horizontal variant).
  */
 public class DoorObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable,
+        implements SolidObjectProvider, RewindRecreatable,
         RomObjectCodePointerProvider {
 
     private static final int ROM_CODE_POINTER_HIGH_WORD = 0x0003;
@@ -219,10 +217,6 @@ public class DoorObjectInstance extends AbstractObjectInstance
         // 66239-66258). MvSonicOnPtfm subtracts current x_pos from d4, so the
         // horizontal carry delta is zero even when the horizontal CNZ door moves.
         return false;
-    }
-
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
     }
 
     @Override

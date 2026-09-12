@@ -10,9 +10,7 @@ import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.RewindRecreatable;
-import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidExecutionMode;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.objects.SpawnRewindRecreatable;
@@ -158,7 +156,7 @@ public class SmallMetalPformObjectInstance extends AbstractObjectInstance implem
      * This is the actual visible, rideable platform that unfolds, moves, folds, and deletes.
      */
     public static class SmallMetalPformChildInstance extends AbstractObjectInstance
-            implements SolidObjectProvider, SolidObjectListener, SpawnRewindRecreatable {
+            implements SolidObjectProvider, SpawnRewindRecreatable {
 
         // ====================================================================
         // ROM Constants (Child)
@@ -459,16 +457,9 @@ public class SmallMetalPformObjectInstance extends AbstractObjectInstance implem
             return SolidExecutionMode.MANUAL_CHECKPOINT;
         }
 
-        @Override
-        public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-            AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-            // Solid collision handled by ObjectManager
-        }
-
         // Only provide solid collision during the MOVE state
         @Override
         public boolean isSolidFor(PlayableEntity playerEntity) {
-            AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
             return state == ChildState.MOVE;
         }
 

@@ -24,9 +24,7 @@ import com.openggf.level.objects.ObjectSpriteSheet;
 import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.RomObjectCodePointerProvider;
-import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidExecutionMode;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.objects.SpawnRewindRecreatable;
@@ -43,7 +41,7 @@ import java.util.logging.Logger;
  * Object 0x0D - Breakable Wall (Sonic 3 & Knuckles).
  */
 public class BreakableWallObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, SpawnRewindRecreatable, RomObjectCodePointerProvider {
+        implements SolidObjectProvider, SpawnRewindRecreatable, RomObjectCodePointerProvider {
 
     /**
      * Word 0 of this object's S3K SST holds its live ROM code pointer.
@@ -59,7 +57,6 @@ public class BreakableWallObjectInstance extends AbstractObjectInstance
     public int romObjectCodePointerHighWord() {
         return 0x0002;
     }
-
 
     private static final Logger LOG = Logger.getLogger(BreakableWallObjectInstance.class.getName());
 
@@ -187,11 +184,6 @@ public class BreakableWallObjectInstance extends AbstractObjectInstance
     @Override
     public boolean isSolidFor(PlayableEntity playerEntity) {
         return !broken;
-    }
-
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        // Manual checkpoints drive the current-frame contact state from update().
     }
 
     @Override

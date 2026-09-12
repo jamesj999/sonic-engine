@@ -5,12 +5,9 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectSpawn;
-import com.openggf.level.objects.SolidContact;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
-import com.openggf.sprites.playable.AbstractPlayableSprite;
 import com.openggf.game.PlayableEntity;
 
 import java.util.List;
@@ -27,7 +24,7 @@ import java.util.List;
  * Reference: docs/s1disasm/_incObj/3B Purple Rock.asm
  */
 public class Sonic1RockObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, SpawnRewindRecreatable {
+        implements SolidObjectProvider, SpawnRewindRecreatable {
 
     // From disassembly: move.w #$10+sonic_solid_width,d1 = $10 + $B = $1B
     private static final int HALF_WIDTH = 0x1B;
@@ -112,9 +109,4 @@ public class Sonic1RockObjectInstance extends AbstractObjectInstance
         return ACT_WIDTH;
     }
 
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        // No special behavior - standard solid collision handled by ObjectManager
-    }
 }

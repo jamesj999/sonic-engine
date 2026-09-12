@@ -12,8 +12,6 @@ import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectLifetimeOps;
 import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectSpawn;
-import com.openggf.level.objects.SolidContact;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.objects.SpawnRewindRecreatable;
@@ -49,7 +47,7 @@ import java.util.List;
  * (part 2).asm
  */
 public class Sonic1SwingingPlatformObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, TouchResponseProvider, SpawnRewindRecreatable {
+        implements SolidObjectProvider, TouchResponseProvider, SpawnRewindRecreatable {
 
     // Oscillation data offset: v_oscillate+$1A → data offset 0x18
     private static final int OSC_OFFSET = 0x18;
@@ -494,15 +492,8 @@ public class Sonic1SwingingPlatformObjectInstance extends AbstractObjectInstance
 
     @Override
     public boolean isSolidFor(PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // SBZ spiked ball and GHZ giant ball are NOT solid (they hurt on touch)
         return isSolid && !isDestroyed();
-    }
-
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        // Standing state managed by ObjectManager
     }
 
     // ---- TouchResponseProvider (SBZ spiked ball and GHZ giant ball hurt the player) ----

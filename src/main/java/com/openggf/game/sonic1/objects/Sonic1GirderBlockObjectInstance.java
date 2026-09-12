@@ -7,7 +7,6 @@ import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectSpawn;
-import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.objects.SubpixelMotion;
@@ -40,7 +39,7 @@ import java.util.List;
  * Reference: docs/s1disasm/_incObj/70 Girder Block.asm
  */
 public class Sonic1GirderBlockObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, SpawnRewindRecreatable {
+        implements SolidObjectProvider, SpawnRewindRecreatable {
 
     // From disassembly: move.b #$60,obActWid(a0)
     private static final int ACTIVE_WIDTH = 0x60;
@@ -211,14 +210,7 @@ public class Sonic1GirderBlockObjectInstance extends AbstractObjectInstance
     // ---- SolidObjectListener ----
 
     @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        // No special contact behavior; solidity is handled by the engine's SolidContacts system
-    }
-
-    @Override
     public boolean isSolidFor(PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         return !isDestroyed();
     }
 

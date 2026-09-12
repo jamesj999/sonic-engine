@@ -13,8 +13,6 @@ import com.openggf.level.objects.ObjectLifetimeOps;
 import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectPlayerParticipationPolicy;
 import com.openggf.level.objects.ObjectSpawn;
-import com.openggf.level.objects.SolidContact;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.objects.SpawnRewindRecreatable;
@@ -52,7 +50,7 @@ import java.util.logging.Logger;
  * ROM reference: docs/s1disasm/_incObj/6F SBZ Spin Platform Conveyor.asm
  */
 public class Sonic1SpinConveyorObjectInstance extends AbstractObjectInstance
-        implements SpawnRewindRecreatable, SolidObjectProvider, SolidObjectListener {
+        implements SpawnRewindRecreatable, SolidObjectProvider {
 
     private static final Logger LOGGER = Logger.getLogger(Sonic1SpinConveyorObjectInstance.class.getName());
 
@@ -725,16 +723,7 @@ public class Sonic1SpinConveyorObjectInstance extends AbstractObjectInstance
 
     @Override
     public boolean isSolidFor(PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         return mode == Mode.PLATFORM && solidActive;
-    }
-
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        // Standard SolidObject handling via the engine's SolidContacts system.
-        // The disassembly uses SolidObject (not PlatformObject), which provides
-        // top, left, right, and bottom collision. The engine handles this automatically.
     }
 
     // ========================================

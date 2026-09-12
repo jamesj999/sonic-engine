@@ -10,8 +10,6 @@ import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectPlayerParticipationPolicy;
 import com.openggf.level.objects.ObjectSpawn;
-import com.openggf.level.objects.SolidContact;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.objects.RewindRecreateContext;
@@ -44,7 +42,7 @@ import java.util.Set;
  * </table>
  */
 public class OOZPoppingPlatformObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
+        implements SolidObjectProvider, RewindRecreatable {
 
     // ========================================================================
     // ROM Constants
@@ -546,12 +544,6 @@ public class OOZPoppingPlatformObjectInstance extends AbstractObjectInstance
         // off-screen/flying obj_control=$81 branch to SolidObject_TestClearPush
         // before side/top classification (s2.asm:35344-35489).
         return player instanceof AbstractPlayableSprite;
-    }
-
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        // Solid collision handled by ObjectManager
     }
 
     // ========================================================================

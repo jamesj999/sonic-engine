@@ -21,9 +21,7 @@ import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.RomObjectCodePointerProvider;
 import com.openggf.level.objects.SlopedSolidProvider;
-import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidExecutionMode;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.objects.SubpixelMotion;
@@ -40,7 +38,7 @@ import java.util.logging.Logger;
  * Object 0x2A - Cork Floor (Sonic 3 & Knuckles).
  */
 public class CorkFloorObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SlopedSolidProvider, SolidObjectListener,
+        implements SolidObjectProvider, SlopedSolidProvider,
         RomObjectCodePointerProvider, RewindRecreatable {
 
     private static final Logger LOG = Logger.getLogger(CorkFloorObjectInstance.class.getName());
@@ -229,11 +227,6 @@ public class CorkFloorObjectInstance extends AbstractObjectInstance
     @Override
     public boolean isSolidFor(PlayableEntity playerEntity) {
         return !broken;
-    }
-
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        // Manual checkpoints drive the current-frame contact state from update().
     }
 
     @Override

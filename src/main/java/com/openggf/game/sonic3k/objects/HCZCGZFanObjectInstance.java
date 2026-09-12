@@ -19,9 +19,7 @@ import com.openggf.level.objects.RewindRecreateObjectLinks;
 import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.RomObjectCodePointerProvider;
 import com.openggf.level.objects.ObjectSpawn;
-import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidExecutionMode;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
@@ -535,7 +533,7 @@ public class HCZCGZFanObjectInstance extends AbstractObjectInstance implements R
      * Uses Map_HCZWaterRushBlock mappings, ArtTile_HCZMisc+$A.
      */
     static class FanPlatformChild extends AbstractObjectInstance
-            implements SolidObjectProvider, SolidObjectListener, RewindRecreatable, RomObjectCodePointerProvider {
+            implements SolidObjectProvider, RewindRecreatable, RomObjectCodePointerProvider {
 
         /**
          * Word 0 of this object's S3K SST holds its live ROM code pointer.
@@ -551,7 +549,6 @@ public class HCZCGZFanObjectInstance extends AbstractObjectInstance implements R
         public int romObjectCodePointerHighWord() {
             return 0x0003;
         }
-
 
         // ROM: move.b #$10,width_pixels(a0) / move.b #$10,height_pixels(a0)
         private static final int HALF_WIDTH = 0x10;
@@ -601,11 +598,6 @@ public class HCZCGZFanObjectInstance extends AbstractObjectInstance implements R
             int d2 = HALF_HEIGHT;
             int d3 = HALF_HEIGHT + 1;
             return SolidObjectParams.of(d1, d2, d3);
-        }
-
-        @Override
-        public void onSolidContact(PlayableEntity player, SolidContact contact, int fc) {
-            // No special behavior on contact
         }
 
         @Override

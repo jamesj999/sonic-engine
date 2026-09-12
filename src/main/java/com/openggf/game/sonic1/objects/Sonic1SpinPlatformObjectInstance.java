@@ -11,8 +11,6 @@ import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
-import com.openggf.level.objects.SolidContact;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.objects.SpawnRewindRecreatable;
@@ -45,7 +43,7 @@ import java.util.List;
  * ROM reference: docs/s1disasm/_incObj/69 SBZ Spinning Platforms.asm
  */
 public class Sonic1SpinPlatformObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, SpawnRewindRecreatable {
+        implements SolidObjectProvider, SpawnRewindRecreatable {
 
     // ---- Trapdoor solid params (Spin_Trapdoor) ----
     // move.w #$4B,d1 / move.w #$C,d2 / move.w d2,d3 / addq.w #1,d3
@@ -463,16 +461,7 @@ public class Sonic1SpinPlatformObjectInstance extends AbstractObjectInstance
 
     @Override
     public boolean isSolidFor(PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         return solidActive;
-    }
-
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        // No extra per-contact behavior needed.
-        // The SolidObject call in the disassembly handles standard push/stand/ceiling;
-        // the engine's SolidContacts system replicates this automatically.
     }
 
     // ========================================

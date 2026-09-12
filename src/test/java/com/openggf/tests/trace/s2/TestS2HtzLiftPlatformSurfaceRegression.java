@@ -5,12 +5,10 @@ import com.openggf.game.sonic2.objects.RisingLavaObjectInstance;
 import com.openggf.game.sonic2.objects.SeesawObjectInstance;
 import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectSpawn;
-import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidRoutineKind;
 import com.openggf.level.objects.SolidRoutineProfile;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.TestObjectServices;
-import com.openggf.sprites.playable.AbstractPlayableSprite;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -95,8 +93,7 @@ class TestS2HtzLiftPlatformSurfaceRegression {
         });
         when(objectManager.isAnyPlayerRiding(lift)).thenReturn(true);
 
-        AbstractPlayableSprite player = mock(AbstractPlayableSprite.class);
-        lift.onSolidContact(player, new SolidContact(true, false, false, true, false), 147);
+        // Riding state is supplied by ObjectManager above; the old callback was a no-op.
 
         lift.update(148, null);
         assertEquals(0x01A0, lift.getX());

@@ -14,9 +14,7 @@ import com.openggf.level.objects.ObjectSpriteSheet;
 import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SlopedSolidProvider;
-import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidExecutionMode;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.TrigLookupTable;
@@ -37,7 +35,7 @@ import java.util.Map;
  * one log at a time toward the sidekick index while Tails is standing.
  */
 public class BridgeObjectInstance extends BoxObjectInstance
-        implements SlopedSolidProvider, SolidObjectListener, RewindRecreatable {
+        implements SlopedSolidProvider, RewindRecreatable {
 
     private static final int LOG_WIDTH = 16;
     private static final int LOG_HALF_HEIGHT = 8;
@@ -213,12 +211,6 @@ public class BridgeObjectInstance extends BoxObjectInstance
         // y_pos(a0)-d3 (35692-35712), not the child log Y table. The depressed
         // child Y is used only after the standing bit is already set (22120-22155).
         return false;
-    }
-
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        // Standing state is latched from the explicit checkpoint batch, matching
-        // the bridge's in-object PlatformObject11_cont flow.
     }
 
     @Override

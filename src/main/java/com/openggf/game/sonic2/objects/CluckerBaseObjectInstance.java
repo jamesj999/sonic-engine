@@ -9,8 +9,6 @@ import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.RewindRecreatable;
-import com.openggf.level.objects.SolidContact;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
@@ -34,7 +32,7 @@ import java.util.List;
  * No collision_flags (not a touchable enemy).
  */
 public class CluckerBaseObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
+        implements SolidObjectProvider, RewindRecreatable {
 
     // From disassembly ObjAD_Main: move.w #$1B,d1 / move.w #8,d2 / move.w #8,d3
     private static final int SOLID_HALF_WIDTH = 0x1B;
@@ -59,12 +57,6 @@ public class CluckerBaseObjectInstance extends AbstractObjectInstance
     @Override
     public SolidObjectParams getSolidParams() {
         return SolidObjectParams.of(SOLID_HALF_WIDTH, SOLID_TOP_HEIGHT, SOLID_BOTTOM_HEIGHT);
-    }
-
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity,
-                               SolidContact contact, int frameCounter) {
-        // No special behavior - standard solid collision handled by ObjectManager
     }
 
     @Override

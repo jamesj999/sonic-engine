@@ -13,8 +13,6 @@ import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.RewindRecreateObjectLinks;
 import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.RomObjectCodePointerProvider;
-import com.openggf.level.objects.SolidContact;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
@@ -199,7 +197,7 @@ public class AizDisappearingFloorObjectInstance extends AbstractObjectInstance
      * ROM references: loc_2A36C (sonic3k.asm:58395-58414).
      */
     static class BorderChild extends AbstractObjectInstance
-            implements SolidObjectProvider, SolidObjectListener, RewindRecreatable, RomObjectCodePointerProvider {
+            implements SolidObjectProvider, RewindRecreatable, RomObjectCodePointerProvider {
 
         /**
          * Word 0 of this object's S3K SST holds its live ROM code pointer.
@@ -215,7 +213,6 @@ public class AizDisappearingFloorObjectInstance extends AbstractObjectInstance
         public int romObjectCodePointerHighWord() {
             return 0x0002;
         }
-
 
         // ROM: move.w #$2B,d1 / move.w #$18,d2 / move.w #$19,d3
         private static final int HALF_WIDTH = 0x2B;
@@ -260,10 +257,6 @@ public class AizDisappearingFloorObjectInstance extends AbstractObjectInstance
             // solid call passes d1 = $2B (sonic3k.asm:58413-58418), so the
             // default d1 - $B = $20 heuristic is 8px too narrow.
             return 0x28;
-        }
-
-        @Override
-        public void onSolidContact(PlayableEntity player, SolidContact contact, int fc) {
         }
 
         @Override

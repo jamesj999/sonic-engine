@@ -16,9 +16,7 @@ import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SpawnRewindRecreatable;
-import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidExecutionMode;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
@@ -48,7 +46,7 @@ import java.util.logging.Logger;
  * </pre>
  */
 public class Sonic1FalseFloorInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener,
+        implements SolidObjectProvider,
         Sonic1ScrapEggmanInstance.Disintegratable, SpawnRewindRecreatable {
 
     private static final Logger LOGGER = Logger.getLogger(Sonic1FalseFloorInstance.class.getName());
@@ -330,14 +328,7 @@ public class Sonic1FalseFloorInstance extends AbstractObjectInstance
 
     @Override
     public boolean isSolidFor(PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         return !isDestroyed() && (routine == ROUTINE_SOLID_WAITING || routine == ROUTINE_DISINTEGRATING);
-    }
-
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        // Handled by ObjectManager
     }
 
     @Override

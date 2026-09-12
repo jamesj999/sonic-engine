@@ -11,8 +11,6 @@ import com.openggf.level.objects.ObjectManager;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.RewindRecreatable;
-import com.openggf.level.objects.SolidContact;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.objects.SolidRoutineProfile;
@@ -49,7 +47,7 @@ import java.util.logging.Logger;
  * </ul>
  */
 public class HTZLiftObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
+        implements SolidObjectProvider, RewindRecreatable {
 
     private static final Logger LOGGER = Logger.getLogger(HTZLiftObjectInstance.class.getName());
 
@@ -277,12 +275,6 @@ public class HTZLiftObjectInstance extends AbstractObjectInstance
     }
 
     @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        // Obj16_Wait reads the persisted standing bit during the object's next
-        // update. Starting slide from the contact callback moves one frame early.
-    }
-
-    @Override
     public SolidObjectParams getSolidParams() {
         return SolidObjectParams.of(
                 COLLISION_WIDTH,
@@ -304,7 +296,6 @@ public class HTZLiftObjectInstance extends AbstractObjectInstance
 
     @Override
     public boolean isSolidFor(PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // ROM parity: Obj16_Main (docs/s2disasm/s2.asm:47381-47389) calls
         // Obj16_RunSecondaryRoutine (WAIT/SLIDE/FALL) THEN unconditionally calls
         // PlatformObject. Obj16_Fall (s2.asm:47444-47466) only clears the

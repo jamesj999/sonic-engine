@@ -13,8 +13,6 @@ import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectSpawn;
-import com.openggf.level.objects.SolidContact;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.objects.SolidRoutineProfile;
@@ -69,7 +67,7 @@ import java.util.List;
  * Reference: docs/s1disasm/_incObj/56 Floating Blocks and Doors.asm
  */
 public class Sonic1FloatingBlockObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, SpawnRomZoneRewindRecreatable {
+        implements SolidObjectProvider, SpawnRomZoneRewindRecreatable {
 
     // ---- FBlock_Var table: {halfWidth, halfHeight} indexed by (subtype >> 4) & 7 ----
     // From disassembly: dc.b $10,$10 / $20,$20 / $10,$20 / $20,$1A / $10,$27 / $10,$10 / 8,$20 / $40,$10
@@ -325,14 +323,7 @@ public class Sonic1FloatingBlockObjectInstance extends AbstractObjectInstance
     }
 
     @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        // Solid contact handled by engine's SolidContacts system
-    }
-
-    @Override
     public boolean isSolidFor(PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         return !isDestroyed();
     }
 

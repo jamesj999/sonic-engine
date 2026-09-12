@@ -13,9 +13,7 @@ import com.openggf.level.objects.ObjectPlayerParticipationPolicy;
 import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SlopedSolidProvider;
-import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidExecutionMode;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
@@ -39,7 +37,7 @@ import java.util.Set;
  * Subtype 0xFF: Seesaw without ball (ball not spawned).
  */
 public class SeesawObjectInstance extends BoxObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, SlopedSolidProvider, RewindRecreatable {
+        implements SolidObjectProvider, SlopedSolidProvider, RewindRecreatable {
 
     /**
      * Slope data for tilted state (frame 0 or 2).
@@ -167,10 +165,6 @@ public class SeesawObjectInstance extends BoxObjectInstance
     /**
      * Called when player has solid contact with the seesaw.
      */
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        // Manual checkpoints drive seesaw standing state from update().
-    }
 
     @Override
     public SolidExecutionMode solidExecutionMode() {

@@ -18,9 +18,7 @@ import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.RomObjectCodePointerProvider;
-import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidExecutionMode;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.objects.SubpixelMotion;
@@ -36,7 +34,7 @@ import java.util.Set;
  * Object 0x2C - AIZ Collapsing Log Bridge (Sonic 3 & Knuckles).
  */
 public class AizCollapsingLogBridgeObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable, RomObjectCodePointerProvider {
+        implements SolidObjectProvider, RewindRecreatable, RomObjectCodePointerProvider {
 
     /**
      * Word 0 of this object's S3K SST holds its live ROM code pointer.
@@ -52,7 +50,6 @@ public class AizCollapsingLogBridgeObjectInstance extends AbstractObjectInstance
     public int romObjectCodePointerHighWord() {
         return 0x0002;
     }
-
 
     private static final int STATE_IDLE = 0;
     private static final int STATE_COLLAPSING = 1;
@@ -198,11 +195,6 @@ public class AizCollapsingLogBridgeObjectInstance extends AbstractObjectInstance
             return false;
         }
         return !ejectedPlayers.contains(player);
-    }
-
-    @Override
-    public void onSolidContact(PlayableEntity player, SolidContact contact, int frameCounter) {
-        // Manual checkpoints drive the current-frame standing state from update().
     }
 
     @Override

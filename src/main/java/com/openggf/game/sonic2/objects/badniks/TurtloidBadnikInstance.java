@@ -17,8 +17,6 @@ import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SubpixelMotion;
-import com.openggf.level.objects.SolidContact;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
@@ -36,12 +34,7 @@ import java.util.List;
  * Based on disassembly Obj9A (s2.asm:74332-74418).
  */
 public class TurtloidBadnikInstance extends AbstractBadnikInstance
-        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
-
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        // Platform-only object - no special solid contact behavior needed
-    }
+        implements SolidObjectProvider, RewindRecreatable {
 
     // Movement: move.w #-$80,x_vel(a0)
     private static final int X_VELOCITY = -0x80;

@@ -13,8 +13,6 @@ import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.RewindRecreateObjectLinks;
 import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.RomObjectCodePointerProvider;
-import com.openggf.level.objects.SolidContact;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
@@ -182,7 +180,7 @@ public class HCZWaterRushObjectInstance extends AbstractObjectInstance implement
      * ROM references: loc_2FEB2 / loc_2FEBE (sonic3k.asm:64811-64832).
      */
     static class WaterRushBlockChild extends AbstractObjectInstance
-            implements SolidObjectProvider, SolidObjectListener, RewindRecreatable, RomObjectCodePointerProvider {
+            implements SolidObjectProvider, RewindRecreatable, RomObjectCodePointerProvider {
 
         /**
          * Word 0 of this object's S3K SST holds its live ROM code pointer.
@@ -198,7 +196,6 @@ public class HCZWaterRushObjectInstance extends AbstractObjectInstance implement
         public int romObjectCodePointerHighWord() {
             return 0x0002;
         }
-
 
         private static final int PHASE_WAITING = 0;
         private static final int PHASE_RISING = 1;
@@ -238,11 +235,6 @@ public class HCZWaterRushObjectInstance extends AbstractObjectInstance implement
             int d2 = HALF_HEIGHT;
             int d3 = HALF_HEIGHT + 1;
             return SolidObjectParams.of(d1, d2, d3);
-        }
-
-        @Override
-        public void onSolidContact(PlayableEntity player, SolidContact contact, int fc) {
-            // No special behavior
         }
 
         @Override

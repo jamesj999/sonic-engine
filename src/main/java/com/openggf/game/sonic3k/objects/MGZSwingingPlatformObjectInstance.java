@@ -8,7 +8,6 @@ import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.ObjectServices;
-import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.RomObjectCodePointerProvider;
@@ -32,7 +31,7 @@ import java.util.List;
  * Status bit 1 (y-flip) selects chain link visual (frame 0 vs frame 1).
  */
 public class MGZSwingingPlatformObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, SpawnRewindRecreatable, RomObjectCodePointerProvider {
+        implements SolidObjectProvider, SpawnRewindRecreatable, RomObjectCodePointerProvider {
 
     /**
      * Word 0 of this object's S3K SST holds its live ROM code pointer.
@@ -48,7 +47,6 @@ public class MGZSwingingPlatformObjectInstance extends AbstractObjectInstance
     public int romObjectCodePointerHighWord() {
         return 0x0003;
     }
-
 
     private static final String ART_KEY = Sonic3kObjectArtKeys.MGZ_SWINGING_PLATFORM;
 
@@ -254,11 +252,6 @@ public class MGZSwingingPlatformObjectInstance extends AbstractObjectInstance
     }
 
     // ===== SolidObjectListener =====
-
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        // Platform movement is tracked via position delta by the SolidContacts system.
-    }
 
     // ===== Rendering =====
 

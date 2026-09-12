@@ -12,8 +12,6 @@ import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.RewindRecreatable;
-import com.openggf.level.objects.SolidContact;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.objects.TouchResponseProvider;
@@ -53,7 +51,7 @@ import java.util.logging.Logger;
  * </ul>
  */
 public class MCZBrickObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, TouchResponseProvider, RewindRecreatable {
+        implements SolidObjectProvider, TouchResponseProvider, RewindRecreatable {
 
     private static final Logger LOGGER = Logger.getLogger(MCZBrickObjectInstance.class.getName());
 
@@ -333,14 +331,7 @@ public class MCZBrickObjectInstance extends AbstractObjectInstance
 
     @Override
     public boolean isSolidFor(PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         return mode == Mode.BRICK && !isDestroyed();
-    }
-
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        // No special handling needed for brick contact
     }
 
     // TouchResponseProvider implementation (spike ball mode only)

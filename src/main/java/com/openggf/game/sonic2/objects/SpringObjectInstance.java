@@ -21,7 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class SpringObjectInstance extends BoxObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, SlopedSolidProvider, RewindRecreatable {
+        implements SolidObjectProvider, SlopedSolidProvider, RewindRecreatable {
     // Subtype constants (shifted >> 3 & 0xE) - matches ROM Obj41_Index
     private static final int TYPE_UP = 0;
     private static final int TYPE_HORIZONTAL = 2;
@@ -96,11 +96,6 @@ public class SpringObjectInstance extends BoxObjectInstance
                 renderManager != null ? renderManager.getSpringAnimations() : null,
                 idleAnimId,
                 mappingFrame);
-    }
-
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        // Manual checkpoints drive spring activation from update().
     }
 
     @Override
@@ -549,7 +544,6 @@ public class SpringObjectInstance extends BoxObjectInstance
      */
     @Override
     public boolean isSolidFor(PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         return true;
     }
 

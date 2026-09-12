@@ -15,7 +15,6 @@ import com.openggf.level.objects.PlatformBobHelper;
 import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.RomObjectCodePointerProvider;
-import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
@@ -60,7 +59,7 @@ import java.util.logging.Logger;
  * sub_24FDE (line 50229), Platform_Rising (line 50462), loc_252B8 (line 50556).
  */
 public class FloatingPlatformObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, RomObjectCodePointerProvider,
+        implements SolidObjectProvider, RomObjectCodePointerProvider,
         RewindRecreatable {
 
     private static final Logger LOG = Logger.getLogger(FloatingPlatformObjectInstance.class.getName());
@@ -260,12 +259,6 @@ public class FloatingPlatformObjectInstance extends AbstractObjectInstance
     }
 
     // ===== SolidObjectListener =====
-
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        // Platform state is driven via ObjectManager standing checks.
-    }
 
     // ===== ObjectInstance =====
 

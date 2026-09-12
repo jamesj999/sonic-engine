@@ -17,7 +17,6 @@ import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectPlayerParticipationPolicy;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
-import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidExecutionMode;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
@@ -60,7 +59,7 @@ import java.util.List;
  * Reference: docs/s1disasm/_incObj/66 Rotating Junction.asm
  */
 public class Sonic1JunctionObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, SpawnRewindRecreatable {
+        implements SolidObjectProvider, SpawnRewindRecreatable {
 
     // ========================================================================
     // ROM Constants
@@ -487,18 +486,12 @@ public class Sonic1JunctionObjectInstance extends AbstractObjectInstance
      */
     @Override
     public boolean isSolidFor(PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         return routine != Routine.RELEASE;
     }
 
     // ========================================================================
     // SolidObjectListener
     // ========================================================================
-
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        // Manual checkpoints drive current-frame push/grab handling from update().
-    }
 
     @Override
     public SolidExecutionMode solidExecutionMode() {

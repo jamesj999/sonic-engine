@@ -11,13 +11,10 @@ import com.openggf.level.objects.ObjectLifetimeOps;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.SlopedSolidProvider;
 import com.openggf.level.objects.SpawnRewindRecreatable;
-import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidExecutionMode;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
-import com.openggf.sprites.playable.AbstractPlayableSprite;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -56,7 +53,7 @@ import java.util.List;
  * Reference: docs/s1disasm/_incObj/2F MZ Large Grassy Platforms.asm
  */
 public class Sonic1LargeGrassyPlatformObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, SlopedSolidProvider, SpawnRewindRecreatable {
+        implements SolidObjectProvider, SlopedSolidProvider, SpawnRewindRecreatable {
 
     // From disassembly: move.b #5,obPriority(a0)
     private static final int PRIORITY = 5;
@@ -331,11 +328,6 @@ public class Sonic1LargeGrassyPlatformObjectInstance extends AbstractObjectInsta
     }
 
     @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        // Standing state is driven via manual checkpoints in update().
-    }
-
-    @Override
     public int getTopLandingHalfWidth(PlayableEntity playerEntity, int collisionHalfWidth) {
         // ROM: Solid_Landed re-reads obActWid (= platformWidth) for the narrower
         // landing check, NOT the collision halfWidth (= platformWidth + $B).
@@ -345,7 +337,6 @@ public class Sonic1LargeGrassyPlatformObjectInstance extends AbstractObjectInsta
 
     @Override
     public boolean isSolidFor(PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         return !isDestroyed();
     }
 

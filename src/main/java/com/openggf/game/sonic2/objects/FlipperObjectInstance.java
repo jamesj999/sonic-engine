@@ -34,7 +34,7 @@ import java.util.List;
  * <b>Disassembly Reference:</b> s2.asm lines 57800-58058
  */
 public class FlipperObjectInstance extends BoxObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, SlopedSolidProvider, RewindRecreatable {
+        implements SolidObjectProvider, SlopedSolidProvider, RewindRecreatable {
 
     private static final int TYPE_VERTICAL = 0;
     private static final int TYPE_HORIZONTAL = 1;
@@ -134,12 +134,6 @@ public class FlipperObjectInstance extends BoxObjectInstance
     @Override
     public FlipperObjectInstance recreateForRewind(RewindRecreateContext ctx) {
         return new FlipperObjectInstance(ctx.spawn(), "Flipper");
-    }
-
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        // Manual checkpoints drive Obj86 state; callbacks are intentionally
-        // passive so the inline and normal object paths share one state machine.
     }
 
     @Override
@@ -432,7 +426,6 @@ public class FlipperObjectInstance extends BoxObjectInstance
 
     @Override
     public boolean isSolidFor(PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         return true;
     }
 

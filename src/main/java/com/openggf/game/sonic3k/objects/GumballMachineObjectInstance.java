@@ -16,9 +16,9 @@ import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.RewindRecreateObjectLinks;
 import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SolidContact;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
+import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
@@ -227,7 +227,6 @@ public class GumballMachineObjectInstance extends AbstractObjectInstance impleme
     // The dispenser is at the BOTTOM of the stage, far below the machine body.
     private static final int DISPENSER_ABSOLUTE_X = 0x100;
     private static final int DISPENSER_ABSOLUTE_Y = 0x310;
-
 
     // Ball container display: (0, +0x24)
     private static final int CONTAINER_OFFSET_X = 0;
@@ -792,7 +791,7 @@ public class GumballMachineObjectInstance extends AbstractObjectInstance impleme
      * from byte_61342 + sub_61320, and self-destroys.
      */
     static class DispenserChild extends AbstractObjectInstance
-            implements SolidObjectProvider, SolidObjectListener, SpawnRewindRecreatable {
+            implements SolidObjectProvider, SpawnRewindRecreatable {
 
         // ROM sub_61314: d1=$4B (halfWidth=75), d2=$10 (airHalfHeight=16), d3=$11 (groundHalfHeight=17)
         private static final SolidObjectParams SOLID_PARAMS = new SolidObjectParams(75, 16, 17);
@@ -846,11 +845,6 @@ public class GumballMachineObjectInstance extends AbstractObjectInstance impleme
         public boolean isTopSolidOnly() {
             // ROM sub_61314 calls SolidObjectFull — 4-sided collision.
             return false;
-        }
-
-        @Override
-        public void onSolidContact(PlayableEntity player, SolidContact contact, int frameCounter) {
-            // No action — pure platform
         }
 
         @Override

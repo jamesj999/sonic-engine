@@ -11,8 +11,6 @@ import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.RewindRecreatable;
-import com.openggf.level.objects.SolidContact;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
@@ -37,7 +35,7 @@ import java.util.List;
  * is applied here.
  */
 public final class CnzTrapDoorInstance extends AbstractObjectInstance
-        implements RewindRecreatable, SolidObjectProvider, SolidObjectListener {
+        implements RewindRecreatable, SolidObjectProvider {
 
     private static final int PRIORITY = 0x80;
 
@@ -169,12 +167,6 @@ public final class CnzTrapDoorInstance extends AbstractObjectInstance
         // one frame early; sample the previous completed player position for
         // new top-solid geometry to match the ROM object phase.
         return 1;
-    }
-
-    @Override
-    public void onSolidContact(PlayableEntity player, SolidContact contact, int frameCounter) {
-        // ROM parity is handled in update() by checking Player_1 and Player_2 each frame.
-        // Solid contact only needs the regular top-solid collision response.
     }
 
     @Override

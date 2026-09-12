@@ -10,8 +10,6 @@ import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SubpixelMotion;
-import com.openggf.level.objects.SolidContact;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
@@ -34,7 +32,7 @@ import java.util.List;
  * - Body stays stationary as anchor after spawning heads
  */
 public class RexonBadnikInstance extends AbstractBadnikInstance
-        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
+        implements SolidObjectProvider, RewindRecreatable {
     // Collision size from Obj94_SubObjData (s2.asm:74061)
     // Body has collision 0, not 0x0B - heads have their own collision
     private static final int COLLISION_SIZE_INDEX = 0x00;
@@ -305,12 +303,6 @@ public class RexonBadnikInstance extends AbstractBadnikInstance
     @Override
     public SolidObjectParams getSolidParams() {
         return SolidObjectParams.of(SOLID_HALF_WIDTH, SOLID_AIR_HALF_HEIGHT, SOLID_GROUND_HALF_HEIGHT);
-    }
-
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        // Standard solid collision - no special behavior needed
     }
 
     @Override

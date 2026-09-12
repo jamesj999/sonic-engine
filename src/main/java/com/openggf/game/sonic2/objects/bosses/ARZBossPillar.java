@@ -10,8 +10,6 @@ import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.RewindRecreatable;
-import com.openggf.level.objects.SolidContact;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
@@ -30,7 +28,7 @@ import java.util.List;
  * - LOWERING: Pillar sinks when boss defeated
  */
 public class ARZBossPillar extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
+        implements SolidObjectProvider, RewindRecreatable {
 
     private static final int PILLAR_SUB_RAISING = 0;
     private static final int PILLAR_SUB_IDLE = 2;
@@ -256,7 +254,6 @@ public class ARZBossPillar extends AbstractObjectInstance
 
     @Override
     public boolean isSolidFor(PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         return routineSecondary != PILLAR_SUB_LOWERING;
     }
 
@@ -368,12 +365,6 @@ public class ARZBossPillar extends AbstractObjectInstance
         }
         SidekickCpuController.NormalStepDiagnostics diagnostics = controller.getLatestNormalStepDiagnostics();
         return diagnostics != null && diagnostics.appliedFollowNudge() < 0;
-    }
-
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        // Pillar doesn't need special contact handling
     }
 
     @Override

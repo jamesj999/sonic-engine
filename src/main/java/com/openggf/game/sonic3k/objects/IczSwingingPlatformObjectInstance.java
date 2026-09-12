@@ -12,7 +12,6 @@ import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SolidContact;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SubpixelMotion;
 import com.openggf.level.render.PatternSpriteRenderer;
@@ -32,7 +31,7 @@ import java.util.List;
  * from the chain and slide after the early-swing release threshold.
  */
 public class IczSwingingPlatformObjectInstance extends AbstractObjectInstance
-        implements MultiPieceSolidProvider, SolidObjectListener, RewindRecreatable {
+        implements MultiPieceSolidProvider, RewindRecreatable {
 
     private enum Phase { IDLE, SWING_PENDING, SWINGING, FALLING, SLIDING, STOPPED }
 
@@ -369,11 +368,6 @@ public class IczSwingingPlatformObjectInstance extends AbstractObjectInstance
         int adjustedPlayerSpeed = sign16(swing << 1);
         player.setXSpeed((short) adjustedPlayerSpeed);
         player.setGSpeed((short) adjustedPlayerSpeed);
-    }
-
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        // Multi-piece callbacks carry the ROM child-solid distinction.
     }
 
     @Override

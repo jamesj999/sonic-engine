@@ -16,7 +16,6 @@ import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.RomObjectCodePointerProvider;
 import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidExecutionMode;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.objects.SlopedSolidProvider;
@@ -50,7 +49,7 @@ import java.util.Map;
  * pixels (player launched right), set = target {@code +16} (launched left).
  */
 public class MGZDashTriggerObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, SlopedSolidProvider,
+        implements SolidObjectProvider, SlopedSolidProvider,
         RomObjectCodePointerProvider, SpawnRewindRecreatable {
 
     private static final String ART_KEY = Sonic3kObjectArtKeys.MGZ_DASH_TRIGGER;
@@ -373,12 +372,6 @@ public class MGZDashTriggerObjectInstance extends AbstractObjectInstance
         // Status_InAir without clearing Status_OnObj. The stale-standing
         // cleanup cannot run until this object's next execution.
         return true;
-    }
-
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        // Activation logic lives in update() via isAdjacent(), which fires every
-        // frame regardless of whether the player is moving.
     }
 
     // ===== Rendering =====

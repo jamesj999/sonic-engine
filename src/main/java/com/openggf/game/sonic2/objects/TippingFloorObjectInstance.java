@@ -29,7 +29,7 @@ import java.util.List;
  * <b>Disassembly Reference:</b> s2.asm lines 45379-45485 (Obj0B code)
  */
 public class TippingFloorObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
+        implements SolidObjectProvider, RewindRecreatable {
 
     // Animation IDs
     private static final int ANIM_FORWARD = 0;  // Frames 0->1->2->3->4
@@ -130,19 +130,12 @@ public class TippingFloorObjectInstance extends AbstractObjectInstance
         mappingFrame = animationState.getMappingFrame();
     }
 
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        // No special handling - solid check already filters by mappingFrame
-    }
-
     /**
      * Platform is only solid when flat (frame 0).
      * ROM: loc_2B036 - checks mappingFrame == 0 before calling SolidObject
      */
     @Override
     public boolean isSolidFor(PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         return mappingFrame == 0;
     }
 

@@ -3,6 +3,7 @@ package com.openggf.game.sonic3k.objects;
 import com.openggf.game.PlayableEntity;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.SolidContact;
+import com.openggf.level.objects.SolidObjectListener;
 
 /**
  * Object 0x6B - InvisibleHurtBlockV (Sonic 3 &amp; Knuckles).
@@ -15,7 +16,7 @@ import com.openggf.level.objects.SolidContact;
  * <p>
  * ROM: Obj_InvisibleHurtBlockVertical / sub_1F734 (sonic3k.asm)
  */
-public class Sonic3kInvisibleHurtBlockVObjectInstance extends Sonic3kInvisibleBlockObjectInstance {
+public class Sonic3kInvisibleHurtBlockVObjectInstance extends Sonic3kInvisibleBlockObjectInstance implements SolidObjectListener {
 
     public Sonic3kInvisibleHurtBlockVObjectInstance(ObjectSpawn spawn) {
         super(spawn, "InvisibleHurtBlockV");

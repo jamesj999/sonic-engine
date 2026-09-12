@@ -13,7 +13,6 @@ import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.ObjectServices;
 import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.RewindRecreatable;
-import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
@@ -54,7 +53,7 @@ import java.util.List;
  * Reference: docs/s1disasm/_incObj/4E MZ Wall of Lava.asm
  */
 public class Sonic1LavaWallObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, TouchResponseProvider, RewindRecreatable {
+        implements SolidObjectProvider, TouchResponseProvider, RewindRecreatable {
 
     // ========================================================================
     // Role enum
@@ -502,17 +501,8 @@ public class Sonic1LavaWallObjectInstance extends AbstractObjectInstance
 
     @Override
     public boolean isSolidFor(PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // Solid in routines 2 (active) and 4 (proximity check)
         return role == Role.MAIN && (routine == 2 || routine == 4);
-    }
-
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        // The ROM saves/restores obRoutine around SolidObject to prevent routine changes.
-        // Our SolidContacts system doesn't modify routine, so no special handling needed.
-        // The solid collision itself (pushing player, blocking) is handled by the engine.
     }
 
     // ========================================================================

@@ -6,13 +6,10 @@ import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.SpawnRewindRecreatable;
-import com.openggf.level.objects.SolidContact;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.RomObjectCodePointerProvider;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.objects.RomWorldPositionedObject;
-import com.openggf.sprites.playable.AbstractPlayableSprite;
 import com.openggf.game.PlayableEntity;
 
 import java.util.List;
@@ -36,7 +33,7 @@ import java.util.List;
  * Calls SolidObjectFull2 for full solid object collision.
  */
 public class Sonic3kInvisibleBlockObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, SpawnRewindRecreatable,
+        implements SolidObjectProvider, SpawnRewindRecreatable,
         RomWorldPositionedObject, RomObjectCodePointerProvider {
 
     /**
@@ -130,12 +127,6 @@ public class Sonic3kInvisibleBlockObjectInstance extends AbstractObjectInstance
         if (!isInRangeAt(getX())) {
             setDestroyedByOffscreen();
         }
-    }
-
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity,
-                               SolidContact contact, int frameCounter) {
-        // No special behavior - standard collision handled by ObjectManager.
     }
 
     @Override

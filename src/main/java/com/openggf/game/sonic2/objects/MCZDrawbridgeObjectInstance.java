@@ -11,8 +11,6 @@ import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.RewindRecreatable;
-import com.openggf.level.objects.SolidContact;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
@@ -58,7 +56,7 @@ import java.util.logging.Logger;
  * </ul>
  */
 public class MCZDrawbridgeObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
+        implements SolidObjectProvider, RewindRecreatable {
 
     private static final Logger LOGGER = Logger.getLogger(MCZDrawbridgeObjectInstance.class.getName());
 
@@ -381,7 +379,6 @@ public class MCZDrawbridgeObjectInstance extends AbstractObjectInstance
 
     @Override
     public boolean isSolidFor(PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         return !isDestroyed();
     }
 
@@ -416,14 +413,6 @@ public class MCZDrawbridgeObjectInstance extends AbstractObjectInstance
         // reaches Sonic_ResetOnFloor, whose entry writes Walk before testing
         // Status_Roll (docs/s2disasm/s2.asm:35488-35509,38123-38129).
         return true;
-    }
-
-    // SolidObjectListener implementation
-
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        // No special handling needed
     }
 
     @Override

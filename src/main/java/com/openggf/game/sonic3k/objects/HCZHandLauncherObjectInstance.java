@@ -20,9 +20,7 @@ import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.RewindRecreateObjectLinks;
 import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.RomObjectCodePointerProvider;
-import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidExecutionMode;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.objects.SpawnRewindRecreatable;
@@ -43,7 +41,7 @@ import java.util.logging.Logger;
  * Object 0x3A - HCZ Hand Launcher (Hydrocity Zone).
  */
 public class HCZHandLauncherObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, SpawnRewindRecreatable, RomObjectCodePointerProvider {
+        implements SolidObjectProvider, SpawnRewindRecreatable, RomObjectCodePointerProvider {
 
     /**
      * Word 0 of this object's S3K SST holds its live ROM code pointer.
@@ -59,7 +57,6 @@ public class HCZHandLauncherObjectInstance extends AbstractObjectInstance
     public int romObjectCodePointerHighWord() {
         return 0x0003;
     }
-
 
     private static final Logger LOG = Logger.getLogger(HCZHandLauncherObjectInstance.class.getName());
 
@@ -558,11 +555,6 @@ public class HCZHandLauncherObjectInstance extends AbstractObjectInstance
         // MvSonicOnPtfm rejects only signed bit 7; the launcher's native
         // object_control=1 capture remains on the ordinary continued-ride path.
         return true;
-    }
-
-    @Override
-    public void onSolidContact(PlayableEntity player, SolidContact contact, int frameCounter) {
-        // Manual checkpoints drive standing reads directly.
     }
 
     @Override

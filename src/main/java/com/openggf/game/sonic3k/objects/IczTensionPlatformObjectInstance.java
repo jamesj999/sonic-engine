@@ -18,9 +18,7 @@ import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.RewindRecreateObjectLinks;
 import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.RomObjectCodePointerProvider;
-import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidExecutionMode;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.objects.SpawnRewindRecreatable;
@@ -39,7 +37,7 @@ import java.util.List;
  * vertical response before its inline {@code SolidObjectTop} call.
  */
 public class IczTensionPlatformObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, SpawnRewindRecreatable, RomObjectCodePointerProvider {
+        implements SolidObjectProvider, SpawnRewindRecreatable, RomObjectCodePointerProvider {
 
     /**
      * Word 0 of this object's S3K SST holds its live ROM code pointer.
@@ -55,7 +53,6 @@ public class IczTensionPlatformObjectInstance extends AbstractObjectInstance
     public int romObjectCodePointerHighWord() {
         return 0x0008;
     }
-
 
     private static final String PLATFORM_ART_KEY = Sonic3kObjectArtKeys.ICZ_PLATFORMS_MISC2;
     private static final String SUPPORT_ART_KEY = Sonic3kObjectArtKeys.ICZ_PLATFORMS;
@@ -294,11 +291,6 @@ public class IczTensionPlatformObjectInstance extends AbstractObjectInstance
     @Override
     public boolean isSolidFor(PlayableEntity player) {
         return !isDestroyed();
-    }
-
-    @Override
-    public void onSolidContact(PlayableEntity player, SolidContact contact, int frameCounter) {
-        // Manual checkpoints drive the ROM inline SolidObjectTop timing from update().
     }
 
     @Override

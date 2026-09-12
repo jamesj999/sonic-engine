@@ -9,7 +9,6 @@ import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
-import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
@@ -64,7 +63,7 @@ import java.util.List;
  * Reference: docs/s1disasm/_incObj/6B SBZ Stomper and Door.asm
  */
 public class Sonic1StomperDoorObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, SpawnRomZoneRewindRecreatable {
+        implements SolidObjectProvider, SpawnRomZoneRewindRecreatable {
 
     // ---- v_obj6B: singleton slot for SBZ3 instances (lines 38-65 in disasm) ----
     // Only one SBZ3 StomperDoor may exist at a time. The first instance to run
@@ -678,18 +677,11 @@ public class Sonic1StomperDoorObjectInstance extends AbstractObjectInstance
 
     @Override
     public boolean isSolidFor(PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // The object is always solid when visible/active
         return true;
     }
 
     // ---- SolidObjectListener ----
-
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        // SolidObject handles the collision response; no extra per-contact behavior needed.
-    }
 
     // ---- Persistence ----
 

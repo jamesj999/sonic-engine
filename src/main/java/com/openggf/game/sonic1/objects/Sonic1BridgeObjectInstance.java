@@ -15,9 +15,7 @@ import com.openggf.level.objects.ObjectServices;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.SpawnRewindRecreatable;
 import com.openggf.level.objects.SlopedSolidProvider;
-import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidExecutionMode;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.physics.TrigLookupTable;
@@ -40,7 +38,7 @@ import java.util.List;
  * Each log is 16 pixels wide. The bridge is centered on the spawn X position.
  */
 public class Sonic1BridgeObjectInstance extends AbstractObjectInstance
-        implements SlopedSolidProvider, SolidObjectListener, SpawnRewindRecreatable {
+        implements SlopedSolidProvider, SpawnRewindRecreatable {
 
     private static final int LOG_WIDTH = 16;  // pixels per log segment
     private static final int LOG_HALF_HEIGHT = 8; // platform surface is 8px above segment center
@@ -238,11 +236,6 @@ public class Sonic1BridgeObjectInstance extends AbstractObjectInstance
     public int getSlopeBaseline() {
         // Bridge slope offsets are absolute (0 = flat), not relative to first sample
         return 0;
-    }
-
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        // Standing detection is handled via manual checkpoints in update().
     }
 
     @Override

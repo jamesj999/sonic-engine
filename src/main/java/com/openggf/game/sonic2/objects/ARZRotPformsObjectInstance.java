@@ -18,7 +18,6 @@ import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectProvider;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.render.SpriteMappingFrame;
 import com.openggf.level.render.SpriteMappingPiece;
@@ -64,7 +63,7 @@ import java.util.logging.Logger;
  * </ul>
  */
 public class ARZRotPformsObjectInstance extends AbstractObjectInstance
-        implements MultiPieceSolidProvider, SolidObjectListener, RewindRecreatable {
+        implements MultiPieceSolidProvider, RewindRecreatable {
 
     private static final Logger LOGGER = Logger.getLogger(ARZRotPformsObjectInstance.class.getName());
 
@@ -383,7 +382,6 @@ public class ARZRotPformsObjectInstance extends AbstractObjectInstance
 
     @Override
     public boolean isSolidFor(PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         return !isDestroyed();
     }
 
@@ -397,12 +395,6 @@ public class ARZRotPformsObjectInstance extends AbstractObjectInstance
     public void onPieceContact(int pieceIndex, PlayableEntity playerEntity,
                                SolidContact contact, int frameCounter) {
         // No special handling needed for piece contact
-    }
-
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        // No special handling needed for solid contact
     }
 
     @Override
@@ -504,7 +496,7 @@ public class ARZRotPformsObjectInstance extends AbstractObjectInstance
     }
 
     private static final class Obj83SlotChild extends AbstractObjectInstance
-            implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
+            implements SolidObjectProvider, RewindRecreatable {
         @RewindTransient(reason = "structural Obj83 parent link is restored by parent lookup")
         private final ARZRotPformsObjectInstance parent;
         @RewindTransient(reason = "Obj83 child role is constructor metadata preserved by recreateForRewind")
@@ -572,11 +564,6 @@ public class ARZRotPformsObjectInstance extends AbstractObjectInstance
             // Routine-4 platform children pass d3=9 to PlatformObject
             // (docs/s2disasm/s2.asm:57613-57619).
             return true;
-        }
-
-        @Override
-        public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-            // ROM routine-4 Obj83 children only run PlatformObject and update last_x_pos.
         }
 
         @Override

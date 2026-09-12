@@ -43,7 +43,7 @@ import java.util.List;
  * standing bit) rather than relying on onSolidContact() receiving STANDING every frame.
  */
 public class SpringboardObjectInstance extends BoxObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, SlopedSolidProvider, RewindRecreatable {
+        implements SolidObjectProvider, SlopedSolidProvider, RewindRecreatable {
 
     // Animation IDs (from Ani_obj40)
     private static final int ANIM_IDLE = 0;       // byte_265EC: delay=0xF, frames=[0], LOOP
@@ -156,10 +156,6 @@ public class SpringboardObjectInstance extends BoxObjectInstance
      * <p>
      * ROM: loc_2641E is called when p1_standing_bit is set in object's status.
      */
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        // Manual checkpoints drive springboard standing state from update().
-    }
 
     @Override
     public SolidExecutionMode solidExecutionMode() {

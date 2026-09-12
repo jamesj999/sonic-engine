@@ -14,8 +14,6 @@ import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.RewindRecreatable;
-import com.openggf.level.objects.SolidContact;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.render.SpriteMappingFrame;
@@ -52,7 +50,7 @@ import java.util.List;
  * The extension modifies y_pos relative to base position.
  */
 public class MTZTwinStompersObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
+        implements SolidObjectProvider, RewindRecreatable {
 
     private static final boolean DEBUG_VIEW_ENABLED = staticDebugViewEnabled();
     private static final DebugOverlayManager OVERLAY_MANAGER = staticDebugOverlay();
@@ -215,21 +213,6 @@ public class MTZTwinStompersObjectInstance extends AbstractObjectInstance
         // Keep this to downward/retracting motion so MTZ3 side-push cleanup still
         // observes the live post-update body position.
         return moveMode == 1 && !extending && currentY < getPreUpdateY();
-    }
-
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        // Crush detection is handled automatically by the engine's SolidContacts collision
-        // resolution, matching the ROM's SolidObject routine (s2.asm:35336-35361).
-        // When the player is standing on the ground (ySpeed==0, not airborne) and overlaps
-        // the bottom of this object with sufficient horizontal depth (absDistX >= 16),
-        // SolidObject_Squash triggers KillCharacter. Objects that call SolidObject (like
-        // Obj64) do not need explicit crush logic - it is a built-in feature of the
-        // SolidObject routine itself.
-        //
-        // No additional contact handling is needed for this object beyond the engine's
-        // automatic solid object behavior (landing, side push, ceiling hit, crush).
     }
 
     @Override

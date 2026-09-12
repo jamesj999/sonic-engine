@@ -11,7 +11,6 @@ import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.RewindRecreatable;
-import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidExecutionMode;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
@@ -45,7 +44,7 @@ import java.util.List;
  * </ul>
  */
 public class ButtonObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
+        implements SolidObjectProvider, RewindRecreatable {
 
     // ROM: move.w #$1B,d1 - solid object half-width
     private static final int HALF_WIDTH = 0x1B;
@@ -188,11 +187,6 @@ public class ButtonObjectInstance extends AbstractObjectInstance
     // ========================================================================================
     // SolidObjectListener
     // ========================================================================================
-
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        // Manual checkpoints drive current-frame press state from update().
-    }
 
     // ========================================================================================
     // Rendering

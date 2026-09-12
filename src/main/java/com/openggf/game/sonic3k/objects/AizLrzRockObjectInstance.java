@@ -20,9 +20,7 @@ import com.openggf.level.objects.ObjectLifetimeOps;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.RomObjectCodePointerProvider;
-import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidExecutionMode;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.objects.SpawnRewindRecreatable;
@@ -39,7 +37,7 @@ import java.util.logging.Logger;
  * Object 0x05 - AIZ/LRZ/EMZ Rock (Sonic 3 & Knuckles).
  */
 public class AizLrzRockObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, RomObjectCodePointerProvider,
+        implements SolidObjectProvider, RomObjectCodePointerProvider,
         SpawnRewindRecreatable {
 
     private static final Logger LOG = Logger.getLogger(AizLrzRockObjectInstance.class.getName());
@@ -145,11 +143,6 @@ public class AizLrzRockObjectInstance extends AbstractObjectInstance
 
         this.variant = resolveVariant();
         this.displayFrame = sizeIndex + variant.frameOffset;
-    }
-
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        // Manual checkpoints drive the current-frame contact state from update().
     }
 
     @Override

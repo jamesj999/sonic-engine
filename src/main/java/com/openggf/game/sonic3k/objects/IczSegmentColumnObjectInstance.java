@@ -16,9 +16,7 @@ import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.RewindRecreateObjectLinks;
 import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.RomObjectCodePointerProvider;
-import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidExecutionMode;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.objects.SpawnRewindRecreatable;
@@ -143,7 +141,7 @@ public class IczSegmentColumnObjectInstance extends AbstractObjectInstance
     }
 
     public static final class Segment extends AbstractObjectInstance
-            implements SolidObjectProvider, SolidObjectListener, RomObjectCodePointerProvider, RewindRecreatable {
+            implements SolidObjectProvider, RomObjectCodePointerProvider, RewindRecreatable {
 
         private static final String ART_KEY = Sonic3kObjectArtKeys.ICZ_WALL_AND_COLUMN;
         private static final int PRIORITY = 5; // ROM: priority $280
@@ -385,11 +383,6 @@ public class IczSegmentColumnObjectInstance extends AbstractObjectInstance
         @Override
         public SolidExecutionMode solidExecutionMode() {
             return SolidExecutionMode.MANUAL_CHECKPOINT;
-        }
-
-        @Override
-        public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-            // Manual checkpoints drive contact state from update(), matching the inline SolidObjectFull call.
         }
 
         @Override

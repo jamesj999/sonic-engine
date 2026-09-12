@@ -16,9 +16,7 @@ import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.RewindRecreatable;
-import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidExecutionMode;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.objects.SpringBounceHelper;
@@ -48,7 +46,7 @@ import java.util.List;
  * </ul>
  */
 public class SteamSpringObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, RewindRecreatable {
+        implements SolidObjectProvider, RewindRecreatable {
 
     // ROM: move.w #-$A00,y_vel(a1) at loc_26798
     private static final int SPRING_VELOCITY = SpringBounceHelper.STRENGTH_YELLOW;
@@ -235,13 +233,6 @@ public class SteamSpringObjectInstance extends AbstractObjectInstance
         // cmp.w d3,d0 / bhi (s2.asm:35149-35152). relX == d1*2 is therefore
         // still contact, which preserves Status_Push at the exact right edge.
         return true;
-    }
-
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        // Spring fire is handled by the manual checkpoint pass in update() — see ROM
-        // loc_26688 / loc_2678E (s2.asm:52030-52049, 52121-52124). Manual checkpoint
-        // mode does not invoke this callback, so it is intentionally a no-op.
     }
 
     /**

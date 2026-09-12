@@ -360,3 +360,41 @@ Validation on the candidate working tree:
 - Skips were inspected: legacy ROM paths, optional captures/measurements/soaks,
   unavailable EGL/reference data and the spin-tube assumption. Consumed diagnostics
   were acknowledged and removed. No trace frontier changed.
+
+### Candidate 1 — optional solid-contact participation
+
+Removed 84 empty contact callbacks across 83 production files, retaining the
+meaningful nested gumball spring callback. The two invisible hurt-block subclasses
+now declare listener participation explicitly; their parent no longer needs it. No affected object owns contact-cleared
+behavior, and their base classes do not supply an inherited callback. All listener
+dispatch sites gate callbacks only; provider/manager collision and riding remain
+independent. Removed 44 additional unused casts in related provider methods.
+This also removes incidental cast exceptions for other `PlayableEntity`
+implementations; normal engine players retain the same behavior.
+These concrete objects are outside the recursive candidate Mod API surface. The HTZ lift test now
+relies on the same manager-provided riding state without directly invoking a no-op.
+Validation base: `7408c8310c` (candidate 8).
+
+Validation on the candidate working tree:
+- First compilation identified the two hurt-block subclasses that had inherited
+  listener participation. Their explicit listener declarations preserve those live
+  callbacks. The corrected focused solid/traversal/carry/hurt/rewind suite passed
+  454 tests with no skips, including the HTZ trace regression and mandatory S3K
+  checks, with absolute S1/S2/S3K ROM properties.
+- A compiled-class audit found 88 declared game contact callbacks; all still
+  implement `SolidObjectListener`. No callback was left without dispatch.
+- Java 21/Lua 5.4.8/PowerShell preflight passed. Native macOS
+  `run_categories.py --base 7408c8310c --run --repeat-reason
+  "New pass-2 candidate 1: remove empty solid callbacks, preserve hurt-block and
+  nested spring listeners, and verify traversal and rewind; previous completed
+  selection covered candidate 8."`: run `20260912T173141Z-ebfcbcf2`, 2,168
+  selected classes; ordinary 16,606 tests, 17 failures, 5 errors, 71 skips
+  (479 seconds); guards 656 passed, no skips (565 seconds).
+- All 14 full FBZ failure-message fingerprints still match the pinned baseline
+  measured in candidate 8. Other failures/errors and inspected skip reasons match
+  the prior selection: display/placement/lives HUD, donor setup, GL capture
+  contexts, legacy ROM names, opt-in measurements and unavailable reference/EGL
+  data. This is partial category validation with remaining failures, not a green
+  suite. Consumed category diagnostics were acknowledged and removed.
+- Final `mvn -Dmse=off -Dtest=TestModApiSignatureSurface test`: nine tests passed
+  with no skips; the recursive candidate API pin remains unchanged.

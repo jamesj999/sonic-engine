@@ -27,9 +27,7 @@ import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.RewindRecreatable;
-import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidExecutionMode;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.objects.TouchResponseListener;
@@ -56,7 +54,7 @@ import java.util.Map;
  * - ObjC3 smoke child behavior: docs/s2disasm/s2.asm (ObjC3)
  */
 public class TornadoObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, TouchResponseProvider, TouchResponseListener,
+        implements SolidObjectProvider, TouchResponseProvider, TouchResponseListener,
         RewindRecreatable {
 
     // ------------------------------------------------------------------------
@@ -1215,15 +1213,7 @@ public class TornadoObjectInstance extends AbstractObjectInstance
 
     @Override
     public boolean isSolidFor(PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         return solidActive;
-    }
-
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        // ROM uses direct SolidObject calls from ObjB2 routines. The unified pipeline
-        // handles contact resolution; this callback is intentionally no-op.
     }
 
     // ------------------------------------------------------------------------

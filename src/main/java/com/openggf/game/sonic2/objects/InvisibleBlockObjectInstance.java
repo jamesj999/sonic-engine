@@ -8,8 +8,6 @@ import com.openggf.debug.DebugOverlayToggle;
 import com.openggf.game.PlayableEntity;
 import com.openggf.graphics.GLCommand;
 import com.openggf.level.objects.ObjectSpawn;
-import com.openggf.level.objects.SolidContact;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.objects.SpawnRewindRecreatable;
@@ -24,7 +22,7 @@ import java.util.List;
  *   Lower 4 bits: height = ((n & 0xF) + 1) * 16 pixels
  */
 public class InvisibleBlockObjectInstance extends BoxObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, SpawnRewindRecreatable {
+        implements SolidObjectProvider, SpawnRewindRecreatable {
 
     private static final boolean DEBUG_VIEW_ENABLED = staticDebugViewEnabled();
     private static final DebugOverlayManager OVERLAY_MANAGER = staticDebugOverlay();
@@ -79,12 +77,6 @@ public class InvisibleBlockObjectInstance extends BoxObjectInstance
         // That helper adds the live y_radius(a1) to d2, then doubles d2 for
         // the lower reject bound (docs/s2disasm/s2.asm:35156-35169).
         return true;
-    }
-
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity,
-                               SolidContact contact, int frameCounter) {
-        // No special behavior - standard collision handled by ObjectManager
     }
 
     @Override

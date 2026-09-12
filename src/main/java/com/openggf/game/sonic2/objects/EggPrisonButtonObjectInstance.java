@@ -5,14 +5,12 @@ import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectSpawn;
-import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidExecutionMode;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.objects.SpawnNullableReferenceRewindRecreatable;
 import com.openggf.level.render.PatternSpriteRenderer;
-import com.openggf.sprites.playable.AbstractPlayableSprite;
 import com.openggf.game.PlayableEntity;
 
 import java.util.List;
@@ -30,7 +28,7 @@ import java.util.List;
  * Behavior: Depresses 8 pixels when player lands on it, triggers parent
  */
 public class EggPrisonButtonObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener,
+        implements SolidObjectProvider,
         SpawnNullableReferenceRewindRecreatable {
 
     // ROM constants from s2.asm
@@ -198,12 +196,6 @@ public class EggPrisonButtonObjectInstance extends AbstractObjectInstance
     // ========================================================================================
     // SolidObjectListener Implementation
     // ========================================================================================
-
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        // The manual checkpoint in update() drives the current-frame press
-        // state, matching ROM loc_3F354's SolidObject-then-read-status order.
-    }
 
     // ========================================================================================
     // Rendering

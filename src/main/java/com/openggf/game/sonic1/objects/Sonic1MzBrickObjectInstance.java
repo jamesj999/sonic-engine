@@ -8,8 +8,6 @@ import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
 import com.openggf.level.objects.ObjectArtKeys;
 import com.openggf.level.objects.ObjectSpawn;
-import com.openggf.level.objects.SolidContact;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.objects.SolidRoutineProfile;
@@ -43,7 +41,7 @@ import java.util.List;
  * Reference: docs/s1disasm/_incObj/46 MZ Bricks.asm
  */
 public class Sonic1MzBrickObjectInstance extends AbstractObjectInstance
-        implements SolidObjectProvider, SolidObjectListener, SpawnRewindRecreatable {
+        implements SolidObjectProvider, SpawnRewindRecreatable {
 
     // From disassembly: move.w #$1B,d1
     private static final int HALF_WIDTH = 0x1B;
@@ -306,7 +304,6 @@ public class Sonic1MzBrickObjectInstance extends AbstractObjectInstance
 
     @Override
     public int getTopLandingHalfWidth(PlayableEntity playerEntity, int collisionHalfWidth) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         // ROM uses obActWid ($10) for Solid_Landed / SolidObject_InsideTop,
         // not the collision halfWidth ($1B).
         return ACTIVE_WIDTH;
@@ -317,12 +314,6 @@ public class Sonic1MzBrickObjectInstance extends AbstractObjectInstance
         // Solid_ChkCollision rejects the right edge with BHI, so a player at
         // exactly x_pos + 2*d1 remains a side contact and retains Status_Push.
         return SolidRoutineProfile.fullSolid(false, true, false);
-    }
-
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        // Standard solid collision handled by ObjectManager
     }
 
     @Override

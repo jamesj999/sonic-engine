@@ -4,6 +4,7 @@ import com.openggf.game.DamageCause;
 import com.openggf.game.PlayableEntity;
 import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.SolidContact;
+import com.openggf.level.objects.SolidObjectListener;
 
 /**
  * Object 0x6A - InvisibleHurtBlockH (Sonic 3 & Knuckles).
@@ -18,7 +19,7 @@ import com.openggf.level.objects.SolidContact;
  * <p>
  * ROM: Obj_InvisibleHurtBlockHorizontal / sub_1F58C (sonic3k.asm)
  */
-public class Sonic3kInvisibleHurtBlockHObjectInstance extends Sonic3kInvisibleBlockObjectInstance {
+public class Sonic3kInvisibleHurtBlockHObjectInstance extends Sonic3kInvisibleBlockObjectInstance implements SolidObjectListener {
 
     public Sonic3kInvisibleHurtBlockHObjectInstance(ObjectSpawn spawn) {
         super(spawn, "InvisibleHurtBlockH");

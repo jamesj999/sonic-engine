@@ -14,8 +14,6 @@ import com.openggf.level.objects.PerObjectRewindSnapshot;
 import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.RewindRecreateObjectLinks;
 import com.openggf.level.objects.RewindRecreatable;
-import com.openggf.level.objects.SolidContact;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.render.PatternSpriteRenderer;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
@@ -49,7 +47,7 @@ import java.util.List;
  * (the tooth appears thinner when rotated to top/bottom position).
  */
 public class CogObjectInstance extends AbstractObjectInstance
-        implements MultiPieceSolidProvider, SolidObjectListener, RewindRecreatable {
+        implements MultiPieceSolidProvider, RewindRecreatable {
 
     // Number of teeth on the cog
     private static final int NUM_TEETH = 8;
@@ -237,7 +235,6 @@ public class CogObjectInstance extends AbstractObjectInstance
         }
     }
 
-
     private ObjectSpawn buildCogChildSpawn(int x, int y) {
         return new ObjectSpawn(
                 x,
@@ -415,7 +412,6 @@ public class CogObjectInstance extends AbstractObjectInstance
 
     @Override
     public boolean isSolidFor(PlayableEntity playerEntity) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
         return !isDestroyed();
     }
 
@@ -450,12 +446,6 @@ public class CogObjectInstance extends AbstractObjectInstance
         // ordinary grounded side contacts still reach SolidObject_StopCharacter
         // (s2.asm:35413-35429).
         return player.isCpuControlled();
-    }
-
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        // No special handling needed
     }
 
     @Override

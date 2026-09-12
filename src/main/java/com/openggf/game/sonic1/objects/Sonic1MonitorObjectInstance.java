@@ -17,8 +17,6 @@ import com.openggf.level.objects.ObjectLifetimeOps;
 import com.openggf.level.objects.ObjectRenderManager;
 import com.openggf.level.objects.ObjectServices;
 import com.openggf.level.objects.ObjectSpawn;
-import com.openggf.level.objects.SolidContact;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.objects.SolidRoutineProfile;
@@ -46,7 +44,7 @@ import java.util.logging.Logger;
  */
 public class Sonic1MonitorObjectInstance extends AbstractMonitorObjectInstance
         implements SpawnRewindRecreatable, TouchResponseProvider, TouchResponseListener,
-        SolidObjectProvider, SolidObjectListener {
+        SolidObjectProvider {
     private static final Logger LOGGER = Logger.getLogger(Sonic1MonitorObjectInstance.class.getName());
 
     // From disassembly: obHeight/obWidth = $0E
@@ -446,12 +444,6 @@ public class Sonic1MonitorObjectInstance extends AbstractMonitorObjectInstance
         // moving platforms to compensate for execution-order jitter. Using it
         // here would extend riding bounds 16px beyond the ROM's ExitPlatform width.
         return false;
-    }
-
-    @Override
-    public void onSolidContact(PlayableEntity playerEntity, SolidContact contact, int frameCounter) {
-        AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
-        // Solid contact used for standing/edge checks; no additional behavior needed.
     }
 
     @Override

@@ -23,9 +23,7 @@ import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.RomObjectCodePointerProvider;
-import com.openggf.level.objects.SolidContact;
 import com.openggf.level.objects.SolidExecutionMode;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.objects.SpawnTrailingZeroIntsRewindRecreatable;
@@ -44,7 +42,7 @@ import java.util.List;
  * trigger box from {@code word_8A2FC}.
  */
 public class IczBreakableWallObjectInstance extends AbstractObjectInstance
-        implements RewindRecreatable, SolidObjectProvider, SolidObjectListener, RomObjectCodePointerProvider {
+        implements RewindRecreatable, SolidObjectProvider, RomObjectCodePointerProvider {
 
     /**
      * Word 0 of this object's S3K SST holds its live ROM code pointer.
@@ -60,7 +58,6 @@ public class IczBreakableWallObjectInstance extends AbstractObjectInstance
     public int romObjectCodePointerHighWord() {
         return 0x0008;
     }
-
 
     private static final String ART_KEY = Sonic3kObjectArtKeys.ICZ_WALL_AND_COLUMN;
     private static final int PRIORITY_BUCKET = 5; // ObjDat priority $280.
@@ -204,11 +201,6 @@ public class IczBreakableWallObjectInstance extends AbstractObjectInstance
     @Override
     public boolean isSolidFor(PlayableEntity player) {
         return !broken && !isDestroyed();
-    }
-
-    @Override
-    public void onSolidContact(PlayableEntity player, SolidContact contact, int frameCounter) {
-        // Manual checkpoints drive the current-frame contact state from update().
     }
 
     @Override

@@ -12,8 +12,6 @@ import com.openggf.level.objects.ObjectSpawn;
 import com.openggf.level.objects.RewindRecreateContext;
 import com.openggf.level.objects.RewindRecreatable;
 import com.openggf.level.objects.RomObjectCodePointerProvider;
-import com.openggf.level.objects.SolidContact;
-import com.openggf.level.objects.SolidObjectListener;
 import com.openggf.level.objects.SolidObjectParams;
 import com.openggf.level.objects.SolidObjectProvider;
 import com.openggf.level.render.PatternSpriteRenderer;
@@ -199,7 +197,7 @@ public class AizFallingLogObjectInstance extends AbstractObjectInstance implemen
      * ROM references: loc_2B6A0 (falling), loc_2B6BC (at water), loc_2B6D8 (solid+draw).
      */
     static class FallingLogChild extends AbstractObjectInstance
-            implements SolidObjectProvider, SolidObjectListener, RewindRecreatable, RomObjectCodePointerProvider {
+            implements SolidObjectProvider, RewindRecreatable, RomObjectCodePointerProvider {
 
         /**
          * Word 0 of this object's S3K SST holds its live ROM code pointer.
@@ -215,7 +213,6 @@ public class AizFallingLogObjectInstance extends AbstractObjectInstance implemen
         public int romObjectCodePointerHighWord() {
             return 0x0002;
         }
-
 
         // ROM: move.b #$18,width_pixels(a1)
         private static final int HALF_WIDTH = 0x18;
@@ -287,13 +284,7 @@ public class AizFallingLogObjectInstance extends AbstractObjectInstance implemen
 
         @Override
         public boolean isSolidFor(PlayableEntity playerEntity) {
-            AbstractPlayableSprite player = (AbstractPlayableSprite) playerEntity;
             return !isDestroyed();
-        }
-
-        @Override
-        public void onSolidContact(PlayableEntity playerEntity, SolidContact contact,
-                int frameCounter) {
         }
 
         @Override
