@@ -12,6 +12,7 @@ import com.openggf.game.sonic3k.resources.S3kRuntimeArtCoordinator;
 import com.openggf.game.timing.HardwareWorkHandle;
 import com.openggf.game.timing.HardwareWorkKind;
 import com.openggf.game.sonic3k.runtime.S3kRuntimeStates;
+import com.openggf.game.sonic3k.runtime.MhzZoneRuntimeState;
 import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.RenderPriority;
 import com.openggf.level.objects.AbstractObjectInstance;
@@ -194,7 +195,7 @@ public final class Mhz1CutsceneButtonInstance extends AbstractObjectInstance
             services().playSfx(Sonic3kSfx.SWITCH.id);
             if (!doorMoving) {
                 doorSwitchActive = true;
-                doorLowered = !doorLowered;
+                setDoorLowered(!isDoorLowered());
                 services().playSfx(Sonic3kSfx.SWITCH.id);
             }
             return;
@@ -274,7 +275,7 @@ public final class Mhz1CutsceneButtonInstance extends AbstractObjectInstance
         pressed = true;
         cutscenePressedFrames = 2;
         doorSwitchActive = true;
-        doorLowered = true;
+        setDoorLowered(true);
         cutsceneDoorLatched = true;
         // ROM loc_62ED0 installs Wait_Draw with $2E=$5F, and Obj_Wait
         // branches to loc_62EFC on the same tick that the counter underflows
@@ -312,6 +313,12 @@ public final class Mhz1CutsceneButtonInstance extends AbstractObjectInstance
     }
 
     boolean isDoorLowered() {
+        var objectServices = tryServices();
+        if (objectServices != null) {
+            return S3kRuntimeStates.currentMhz(objectServices.zoneRuntimeRegistry())
+                    .map(MhzZoneRuntimeState::isCutsceneDoorLowered)
+                    .orElse(doorLowered);
+        }
         return doorLowered;
     }
 
@@ -321,6 +328,12 @@ public final class Mhz1CutsceneButtonInstance extends AbstractObjectInstance
 
     void setDoorLowered(boolean doorLowered) {
         this.doorLowered = doorLowered;
+        var objectServices = tryServices();
+        if (objectServices != null) {
+            // loc_62F0A / loc_63074 mutate global _unkFAA9, not button RAM.
+            S3kRuntimeStates.currentMhz(objectServices.zoneRuntimeRegistry())
+                    .ifPresent(state -> state.setCutsceneDoorLowered(doorLowered));
+        }
     }
 
     void setDoorMoving(boolean doorMoving) {

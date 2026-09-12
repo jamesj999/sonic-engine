@@ -62,6 +62,8 @@ import com.openggf.tests.TestablePlayableSprite;
 import com.openggf.tests.HeadlessTestFixture;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.MockedStatic;
 
 import java.lang.reflect.Field;
@@ -71,11 +73,13 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.verify;
@@ -2200,8 +2204,9 @@ class TestMhzBossObjects {
         verify(artProvider).ensureBossExplosionArtLoaded();
     }
 
-    @Test
-    void mhzEndBossFadeWaitUnderflowSpawnsRomDefeatFragments() {
+    @ParameterizedTest
+    @ValueSource(ints = {0, 1})
+    void mhzEndBossFadeWaitUnderflowSpawnsRomDefeatFragments(int parentFlip) {
         ObjectManager objectManager = mock(ObjectManager.class);
         GameStateManager gameState = mock(GameStateManager.class);
         LevelState levelState = mock(LevelState.class);
@@ -2251,6 +2256,7 @@ class TestMhzBossObjects {
         MhzEndBossInstance endBoss = new MhzEndBossInstance(new ObjectSpawn(
                 0x440C, 0x02E0, Sonic3kObjectIds.MHZ_END_BOSS, 0, 0, false, 0));
         endBoss.setServices(services);
+        endBoss.getState().renderFlags = parentFlip;
         endBoss.getState().defeated = true;
         endBoss.getState().xVel = 0x400;
         endBoss.getState().yVel = 0xC0;
@@ -2286,12 +2292,35 @@ class TestMhzBossObjects {
                     "word_766FC supplies the per-subtype loc_766CA priority word");
 
             fragment.update(3, null);
+            assertEquals(0x44D0, fragment.getX(), "loc_766CA only initializes and draws");
+            assertEquals(0x02E0, fragment.getY());
+            fragment.appendRenderCommands(new ArrayList<>());
+            verify(renderer).drawFrameIndex(0x12 + i, 0x44D0, 0x02E0, false, false);
+            clearInvocations(renderer);
+
+            fragment.update(4, null);
             assertEquals(expectedXAfterMove[i], fragment.getX(),
                     "Set_IndexedVelocity with d0=8 supplies the loc_766CA x velocity");
             assertEquals(expectedYAfterMove[i], fragment.getY(),
                     "Obj_FlickerMove applies MoveSprite with the ROM y velocity before gravity");
             fragment.appendRenderCommands(new ArrayList<>());
+            verifyNoMoreInteractions(renderer);
+
+            fragment.update(5, null);
+            assertEquals(expectedXAfterMove[i] * 2 - 0x44D0, fragment.getX());
+            assertEquals(0x02DC, fragment.getY());
+            fragment.appendRenderCommands(new ArrayList<>());
             verify(renderer).drawFrameIndex(0x12 + i, fragment.getX(), fragment.getY(), false, false);
+            clearInvocations(renderer);
+
+            camera.setX((short) 0x5000);
+            fragment.update(6, null);
+            assertFalse(fragment.isDestroyed(), "Go_Delete_Sprite_3 retains the slot for one pass");
+            fragment.appendRenderCommands(new ArrayList<>());
+            verifyNoInteractions(renderer);
+            fragment.update(7, null);
+            assertTrue(fragment.isDestroyed(), "Delete_Current_Sprite clears the slot next pass");
+            camera.setX((short) 0x4400);
         }
     }
 

@@ -29,6 +29,9 @@ public final class MhzZoneRuntimeState implements S3kZoneRuntimeState {
     private int publishedBgCameraX;
     private int middleBgCameraX;
     private int nearBgCameraX;
+    // _unkFAA9 in MHZ1: survives button/door unloading, but loc_60DE clears
+    // this work RAM on a full level reload (including checkpoint respawn).
+    private boolean cutsceneDoorLowered;
     private int pollenParticleCount;
     private int pollenLeafPatternCounter;
     private int mushroomCapPositionCounter = INITIAL_MUSHROOM_CAP_POSITION_COUNTER;
@@ -237,6 +240,14 @@ public final class MhzZoneRuntimeState implements S3kZoneRuntimeState {
         }
     }
 
+    public boolean isCutsceneDoorLowered() {
+        return cutsceneDoorLowered;
+    }
+
+    public void setCutsceneDoorLowered(boolean lowered) {
+        cutsceneDoorLowered = lowered;
+    }
+
     public int pollenParticleCount() {
         return pollenParticleCount;
     }
@@ -267,7 +278,7 @@ public final class MhzZoneRuntimeState implements S3kZoneRuntimeState {
 
     @Override
     public byte[] captureBytes() {
-        ByteBuffer buffer = ByteBuffer.allocate(Integer.BYTES * 13);
+        ByteBuffer buffer = ByteBuffer.allocate(Integer.BYTES * 14);
         buffer.putInt(publishedBgCameraX);
         buffer.putInt(middleBgCameraX);
         buffer.putInt(nearBgCameraX);
@@ -278,6 +289,7 @@ public final class MhzZoneRuntimeState implements S3kZoneRuntimeState {
         for (int spikeX : endBossArenaSpikeX) {
             buffer.putInt(spikeX);
         }
+        buffer.putInt(cutsceneDoorLowered ? 1 : 0);
         return buffer.array();
     }
 
@@ -305,5 +317,6 @@ public final class MhzZoneRuntimeState implements S3kZoneRuntimeState {
                 endBossArenaSpikeX[i] = buffer.getInt();
             }
         }
+        cutsceneDoorLowered = bytes.length >= Integer.BYTES * 14 && buffer.getInt() != 0;
     }
 }

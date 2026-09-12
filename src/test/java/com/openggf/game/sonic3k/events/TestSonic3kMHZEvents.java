@@ -123,7 +123,7 @@ class TestSonic3kMHZEvents {
     }
 
     @Test
-    void act1ScreenEventUsesRomKnucklesAloneMinX() {
+    void act1LockedOnKnucklesUsesHeightBasedMinX() {
         HeadlessTestFixture fixture = HeadlessTestFixture.builder()
                 .withZoneAndAct(Sonic3kZoneIds.ZONE_MHZ, 0)
                 .startPosition((short) 0x0800, (short) 0x0700)
@@ -138,8 +138,14 @@ class TestSonic3kMHZEvents {
 
         events.update(0, 0);
 
-        assertEquals(0x0680, camera.getMinX() & 0xFFFF,
-                "MHZ1 sub_54B80 should force Camera_min_X_pos to $0680 while SK_alone_flag is set");
+        assertEquals(0, camera.getMinX() & 0xFFFF,
+                "sub_54B80 uses the locked-on branch for Knuckles too; SK_alone_flag is not player mode");
+        fixture.sprite().setCentreY((short) 0x057F);
+        events.update(0, 1);
+        assertEquals(0xC0, camera.getMinX() & 0xFFFF);
+        fixture.sprite().setCentreY((short) 0x0580);
+        events.update(0, 2);
+        assertEquals(0, camera.getMinX() & 0xFFFF);
     }
 
     @Test
