@@ -112,6 +112,49 @@ public class TestGameLoop {
         GameModuleRegistry.setCurrent(new Sonic2GameModule());
     }
 
+    @Test
+    void liveDebugCompletionKeepsProviderRewardOwnershipAndDefersResultsUntilFade() throws Exception {
+        AtomicBoolean enteredResults = new AtomicBoolean();
+        GameLoop loop = new GameLoop(mockInputHandler) {
+            @Override
+            void doEnterResultsScreen() {
+                enteredResults.set(true);
+            }
+        };
+        var provider = mock(com.openggf.game.SpecialStageProvider.class);
+        when(provider.getCurrentStage()).thenReturn(2);
+        when(provider.getDebugCompletionRingCount(2)).thenReturn(120);
+        when(provider.ownsEmeraldReward()).thenReturn(true);
+        FadeManager fade = mock(FadeManager.class);
+        AtomicReference<Runnable> completion = new AtomicReference<>();
+        doAnswer(invocation -> {
+            completion.set(invocation.getArgument(0));
+            return null;
+        }).when(fade).startFadeToWhite(any());
+        setPrivateField(loop, "activeSpecialStageProvider", provider);
+        setPrivateField(loop, "currentGameMode", GameMode.SPECIAL_STAGE);
+        setPrivateField(loop, "fadeManager", fade);
+        var shortcuts = (GameLoopDebugShortcuts) getPrivateField(loop, "debugShortcuts");
+
+        shortcuts.debugCompleteSpecialStageWithEmerald();
+
+        verify(provider).setEmeraldCollected(true);
+        verify(provider, never()).publishEmeraldReward(any(), anyInt(), any());
+        assertEquals(120, getPrivateField(loop, "ssRingsCollected"));
+        assertEquals(true, getPrivateField(loop, "ssEmeraldCollected"));
+        assertFalse(enteredResults.get());
+        verify(fade).deferFirstStepToNextVint();
+        assertNotNull(completion.get());
+        completion.get().run();
+        assertTrue(enteredResults.get());
+
+        when(fade.isActive()).thenReturn(true);
+        shortcuts.debugFailSpecialStage();
+        verify(fade, times(1)).startFadeToWhite(any());
+        assertEquals(120, getPrivateField(loop, "ssRingsCollected"),
+                "an active fade must not be overwritten by another debug result request");
+    }
+
     private static GameModule neutralGameModule() {
         GameModule module = mock(GameModule.class);
         when(module.createRuntimeArtCoordinator(any())).thenReturn(RuntimeArtCoordinator.NONE);
@@ -2370,13 +2413,15 @@ public class TestGameLoop {
     }
 
     private static void setPrivateField(Object target, String fieldName, Object value) throws Exception {
-        Field field = target.getClass().getDeclaredField(fieldName);
+        Field field = (target instanceof GameLoop ? GameLoop.class : target.getClass())
+                .getDeclaredField(fieldName);
         field.setAccessible(true);
         field.set(target, value);
     }
 
     private static Object getPrivateField(Object target, String fieldName) throws Exception {
-        Field field = target.getClass().getDeclaredField(fieldName);
+        Field field = (target instanceof GameLoop ? GameLoop.class : target.getClass())
+                .getDeclaredField(fieldName);
         field.setAccessible(true);
         return field.get(target);
     }
