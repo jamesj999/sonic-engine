@@ -116,4 +116,40 @@ bootstrap/loading checks remain in that ordinary selection. The stopping rule is
 The preceding comparable full pass took about 15.5 minutes; allow tens of minutes.
 The source candidate is frozen before this one required broad run.
 
-Broad results and integration are pending.
+Candidate `4ffc035dd` completed the required command:
+
+```sh
+LUA_BIN=lua5.4 python3 tools/testing/run_categories.py --base 65b5553413cb7f9bc134f8d171cd398cc882f812 --run
+```
+
+Run `20260912T183708Z-0ebce3b3`: ordinary 20,421 tests, 20,384 passes, 12 failures,
+zero errors, 25 skips, 685.33 seconds; guards 661 passes across 82 reports, no
+failures/errors/skips, 175.28 seconds. Total lane time: 860.61 seconds (14m21s).
+The inventory count is candidate source classes; nested/dynamic report shapes
+produce 2,534 ordinary XML reports. These are different units, not missing coverage.
+
+All 11 FBZ failure messages in the completed ordinary lane exactly matched the
+focused candidate and pinned baseline. The remaining failure is
+`TestObjectPlacementEncoding.commonParserPreservesDescendingFullXOrderInsideOnePlacementColumn`:
+expected `[448, 384]`, actual `[384, 448]`. A bounded one-test check on unchanged
+main-workspace `65b555341` reproduced the exact message; its temporary diagnostics
+were consumed and deleted. None of these baseline failures was changed to pass.
+
+The 25 ordinary skips comprise seven missing generated audio WAV references,
+five explicit S2 ROM/BK2 measurement requirements, one missing local independent
+S1 audio reference, ten opt-in measurements/captures/soak cases, unavailable
+surfaceless EGL, and the existing CPZ spin-tube capture/release assumption.
+Present root ROMs were identity-verified; skips are not passing coverage.
+
+Largest completed ordinary classes: FBZ matrix 95.476s, complete-run audio
+comparator 83.413s, rewind torture 60.610s, FM bit-exact scripts 43.635s,
+FBZ Act-1 routes 25.846s. Guard leaders observed before diagnostic compaction:
+clock terminology 40.487s, build tooling 30.920s, active-payload authority 20.995s.
+The timing-only monitor captured all ordinary reports and 81 of 82 guard reports;
+this is not a complete guard timing inventory. Target times in the complete run:
+S3K sidecar 6.045s, constructor guard 6.586s, trace/movie guard 8.199s, native
+standalone slice 0.209s, master relay 1.201s, verified room 0.137s. Whole-suite
+FBZ timing differs substantially from the focused pair; the focused 53.265-second
+saving is not a claim of an equivalent measured whole-suite improvement.
+
+Integration and upstream reconciliation are pending.
