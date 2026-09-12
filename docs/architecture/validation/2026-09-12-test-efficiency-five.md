@@ -172,10 +172,19 @@ selection, not a claim that all upstream changes received full validation here.
 
 The newly introduced shared task receipt adopted this same delivery's completed
 broad attempt and historical time, preserving rather than resetting its allowance.
-Accounting totals 1,399.112 seconds (23m19s) against the 40-minute ceiling: one
+Accounting before the final test-only reconciliation totaled 1,399.112 seconds (23m19s) against the 40-minute ceiling: one
 completed broad attempt, prior focused Maven totals, 177-second original baseline,
 a conservative 30-second allowance for the consumed placement baseline, and the
 129.074-second integrated check. Broad diagnostics were acknowledged and removed;
 focused diagnostics were consumed after exact-message comparison. Only the
 concise evidence and timing ledger is durable. Main-workspace dirty disassemblies
 and `raiscan-0.6-thoughts.md` were preserved.
+
+The first push was held by the policy hook because origin had advanced again.
+After fetching, upstream `a69ad61a2` and `af95ddd5a` changed only ten test classes
+(removing copied arithmetic and simulated checks). They merged without conflicts
+at `7f774aff1`; none of this pass's target or production files changed. A focused
+`mvn -Dmse=off -Dtest=TestLookScrollDelay,TestSonic3kInvincibilityStars,BossStateContextTest,SwScrlMczTest,SwScrlOozTest,TestPlayableSpriteMovement,TestDEZDeathEggRobot,TestDEZMechaSonic,TestHCZWaterSkimExitOnCurve,TestWFZBoss test -B`
+with verified ROM properties passed all 302 tests in 19.067 seconds including
+compilation, with no skips. Final accounted validation cost is 1,418.179 seconds
+(23m38s), still one broad attempt. Unchanged targets were not rerun again.
