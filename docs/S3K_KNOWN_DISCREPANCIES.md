@@ -956,6 +956,15 @@ note and Task V1 (Step 5) reconciliation so they are tracked rather than silentl
   the target-level reload with `TITLE_OWNER` art admission, preserved results
   globals, the in-level title card and its event-state reset. Existing
   `TestSonic3kMHZEvents` transition tests cover this contract.
+- **MHZ1 miniboss offscreen lifetime (corrected, 2026-09-12).**
+  The boss and its attached flames were subject to ordinary object-manager
+  distance unloading. `Obj_MHZMiniboss` / `loc_751E2` ends in
+  `Draw_And_Touch_Sprite`, and `loc_757D6` follows the parent's lifetime
+  through `Child_DrawTouch_Sprite`; neither uses a distance-delete helper.
+  Both now remain registered offscreen until explicit encounter cleanup.
+  The first dash still intentionally leaves the screen and waits for the
+  camera in `loc_75392`. A real-manager regression test checks offscreen
+  retention, resumed movement, attached flames and explicit deletion.
 - **Mushmeanie shell-direction pointer (verified, 2026-09-12).**
   The earlier stale-pointer diagnosis was incorrect: `Check_PlayerCollision`
   explicitly stores the selected player pointer into the parent's `$44`.

@@ -119,3 +119,12 @@ missing reference artifacts, EGL availability, ROM consumers that still look
 for `s1.gen`/`s2.gen` instead of supplied properties, and a CNZ spin-tube setup
 assumption. No ROM files were copied, renamed or linked to disguise those
 coverage gaps. No MHZ case was skipped in the final focused run.
+
+## Follow-up: MHZ1 boss lifetime
+
+A subsequent user report exposed a gap in this review: direct boss-update tests
+had not exercised ordinary object-manager unloading. The MHZ1 boss and its
+attached flames could be removed by camera distance despite native draw-only
+lifetime tails. The correction and real-manager regression coverage are recorded
+in [the lifetime validation](../../validation/2026-09-12-mhz1-boss-lifetime.md).
+The boss's intentional offscreen dash/wait remains native behavior.

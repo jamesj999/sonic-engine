@@ -249,6 +249,14 @@ public final class MhzMinibossInstance extends AbstractBossInstance implements S
     }
 
     @Override
+    public boolean isPersistent() {
+        // Obj_MHZMiniboss -> loc_751E2 ends in Draw_And_Touch_Sprite.
+        // It has no distance-based deletion; its dash/return phases leave
+        // the screen while the encounter and execution slot remain live.
+        return true;
+    }
+
+    @Override
     protected int getInitialHitCount() {
         return HIT_COUNT;
     }

@@ -95,6 +95,13 @@ final class MhzMinibossFlameInstance extends AbstractObjectInstance
     }
 
     @Override
+    public boolean isPersistent() {
+        // loc_757D6 / Child_DrawTouch_Sprite follow the parent's lifetime,
+        // including offscreen waits; only parent deletion retires the flame.
+        return true;
+    }
+
+    @Override
     public int getCollisionFlags() {
         return visibleAndTouchable() ? COLLISION_FLAGS : 0;
     }

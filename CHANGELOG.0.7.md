@@ -32,7 +32,8 @@ campaigns; feature/API publication remains subject to the 0.8 roadmap.
   body keeps its final collision position until the ROM’s deferred deletion.
   Cutscene doors retain their lowered state when streamed out and back in, and
   boss debris follows the native initialization and flicker sequence. Act 1
-  camera limits use the locked-on ROM’s height rule for all characters.
+  camera limits use the locked-on ROM’s height rule for all characters, and
+  the Act 1 boss and its thrusters stay alive during offscreen attack phases.
   Complete routes, finales, and continuous replay chains remain gates.
 
 ## Development features carried forward
