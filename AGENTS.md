@@ -55,6 +55,31 @@ mvn -Dmse=off -Pguards test -B        # separate fresh JVM for structural guards
   changes automatically select the full ordinary suite; use `--category all` when
   impact is uncertain. Run affected trace fixtures and domain-mandated checks as well:
   ordinary categories do not cover the separate trace/native/diagnostic profiles.
+- Before a broad run, state the selected class count, expected cost and stopping rule.
+  Broad normalization measured about 24 minutes ordinary plus 10 minutes guards; do not
+  present this as a short check. Finish focused fixes and documentation first. Run
+  `run_categories.py --base <integration-base> --preflight` to check Java 21, Lua 5.4 and
+  PowerShell in the actual launch environment. On macOS, use the known working native
+  display/service permissions from the first graphics run; tool preflight does not prove
+  GLFW access. Do not rediscover a documented sandbox failure with another full run.
+- Budget **one completed required selection per candidate**, then focused checks for
+  relevant failures. The runner defaults to 40 minutes total across Maven lanes and a
+  10-minute no-output timeout; expiration stops its process tree and means incomplete,
+  never green. A second broad attempt requires `--repeat-reason` describing new scope or
+  a corrected prerequisite; red results alone are not a reason. Increasing the budget
+  must be justified by measured cost. Do not bypass these controls with raw Maven,
+  another worktree, deleting the receipt, or changing the base.
+- After a red broad run, fix regressions caused by the change and verify those fixes
+  narrowly. Attribute disputed failures with a bounded, matched baseline/current check
+  of the failing tests, not two full suites. Unattributed failures remain explicitly
+  unattributed. Do not fix unrelated donor paths, graphics helpers or platform tooling
+  merely to turn the run green. Report remaining failures and incomplete coverage;
+  never describe a partially validated candidate as fully green. CI/release gates remain
+  mandatory and unchanged. A later material engine change can justify another broad run.
+- For changes confined to the Python category-runner implementation/tests and its prose
+  guidance (no POM, selection-policy, Java, workflow or hook changes), verify the Python
+  safety suite and actual tool preflight. Do not run the engine suite to test its wrapper.
+  Selection-policy/build/Java changes still follow change-based validation above.
 - Do not repeat completed checks on unchanged code without a concrete reason. The
   runner retains at most two runs / 100 MiB under `target/category-tests/`: small summaries
   on success, bounded failure logs on failure. It deletes raw XML and its per-invocation

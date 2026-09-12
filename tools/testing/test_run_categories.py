@@ -186,7 +186,7 @@ class RunnerTests(unittest.TestCase):
             (root / 'target/test-tmp').mkdir(parents=True)
             (root / 'target/test-tmp/keep').write_text('other Maven output')
             plan = {'tests': ['com/openggf/TestExample.java'], 'full': False, 'guards': False, 'categories': ['common'], 'inventory_count': 1}
-            def interrupted(command, cwd, log_path, temporary):
+            def interrupted(command, cwd, log_path, temporary, **kwargs):
                 temporary = Path(next(arg.split('=', 1)[1] for arg in command
                                       if arg.startswith('-Dopenggf.test.tmpdir=')))
                 (temporary / 'large-fixture').write_text('temporary')
