@@ -59,6 +59,7 @@ import com.openggf.trace.timing.HardwareTimingReplayPort;
 import com.openggf.trace.timing.HardwareTimingSchedule;
 import com.openggf.tests.trace.TraceV5RunFixture;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -107,15 +108,41 @@ class TestTraceSessionLauncherRunBranch {
     private List<TraceRunReplayWalker.SegmentPlan> segments;
     private Path runDir;
     private Path specialStageRunDir;
-    private Path canonicalEmeraldRunDir;
+    private static InstalledReference installedReference;
+    private Path fixtureRoot;
+
+    private record InstalledReference(Path directory,
+            List<TraceRunReplayWalker.SegmentPlan> plans) { }
+
+    private static InstalledReference installedReference() throws Exception {
+        if (installedReference == null) {
+            // Read-only rows are shared only when a test needs them. Sessions,
+            // payload leases, playback cursors and comparison sinks stay fresh.
+            Path directory = canonicalizeInstalledRun(S1_EMERALD_RUN_DIR,
+                    TestTempFiles.createTempDirectory("launcher-emerald-reference"));
+            TraceRunManifest run = TraceRunManifest.load(directory.resolve("run_manifest.json"));
+            installedReference = new InstalledReference(directory,
+                    TraceRunReferencePlanLoader.load(run, directory));
+        }
+        return installedReference;
+    }
+
+    @AfterAll
+    static void releaseInstalledReference() {
+        installedReference = null;
+    }
+
+    private Path specialStageRunDir() throws Exception {
+        if (specialStageRunDir == null) {
+            specialStageRunDir = TraceV5RunFixture.writeS2SpecialStageRun(fixtureRoot.resolve("s2"));
+        }
+        return specialStageRunDir;
+    }
 
     @BeforeEach
     void loadFixture() throws Exception {
-        Path root = TestTempFiles.createTempDirectory("trace-run-launcher-v5");
-        runDir = TraceV5RunFixture.writeS3kBonusRun(root.resolve("s3k"));
-        specialStageRunDir = TraceV5RunFixture.writeS2SpecialStageRun(root.resolve("s2"));
-        canonicalEmeraldRunDir = canonicalizeInstalledRun(
-                S1_EMERALD_RUN_DIR, root.resolve("s1"));
+        fixtureRoot = TestTempFiles.createTempDirectory("trace-run-launcher-v5");
+        runDir = TraceV5RunFixture.writeS3kBonusRun(fixtureRoot.resolve("s3k"));
         TraceRunManifest run = TraceRunManifest.load(runDir.resolve("run_manifest.json"));
         segments = TraceRunReferencePlanLoader.load(run, runDir);
     }
@@ -1454,9 +1481,9 @@ class TestTraceSessionLauncherRunBranch {
         List<TraceRunReplayWalker.SegmentPlan> plans;
         try {
             TraceRunManifest run = TraceRunManifest.load(
-                    specialStageRunDir.resolve("run_manifest.json"));
+                    specialStageRunDir().resolve("run_manifest.json"));
             plans = List.of(TraceRunReferencePlanLoader.load(
-                    run, specialStageRunDir).get(1));
+                    run, specialStageRunDir()).get(1));
         } catch (Exception e) {
             throw new AssertionError(e);
         }
@@ -1505,7 +1532,7 @@ class TestTraceSessionLauncherRunBranch {
         TestEnvironment.configureGameModuleFixture(new Sonic2GameModule());
         GameplayModeContext context = SessionManager.getCurrentGameplayMode();
         TraceRunManifest run = TraceRunManifest.load(
-                specialStageRunDir.resolve("run_manifest.json"));
+                specialStageRunDir().resolve("run_manifest.json"));
         List<TraceRunReplayWalker.SegmentPlan> plans =
                 withAdvertisedSpecialStageTrace();
         List<Bk2FrameInput> movieFrames = new ArrayList<>();
@@ -1655,7 +1682,7 @@ class TestTraceSessionLauncherRunBranch {
         EngineServices.configure(EngineContext.fromLegacySingletonsForBootstrap());
         TestEnvironment.configureGameModuleFixture(new Sonic2GameModule());
         TraceRunManifest run = TraceRunManifest.load(
-                specialStageRunDir.resolve("run_manifest.json"));
+                specialStageRunDir().resolve("run_manifest.json"));
         List<TraceRunReplayWalker.SegmentPlan> plans =
                 withAdvertisedSpecialStageTrace();
         List<Bk2FrameInput> movieFrames = new ArrayList<>();
@@ -1760,10 +1787,8 @@ class TestTraceSessionLauncherRunBranch {
         EngineServices.configure(EngineContext.fromLegacySingletonsForBootstrap());
         TestEnvironment.configureGameModuleFixture(new Sonic1GameModule());
         new Engine(EngineServices.current());
-        TraceRunManifest run = TraceRunManifest.load(
-                canonicalEmeraldRunDir.resolve("run_manifest.json"));
         List<TraceRunReplayWalker.SegmentPlan> plans =
-                TraceRunReferencePlanLoader.load(run, canonicalEmeraldRunDir);
+                installedReference().plans();
         List<FrameComparison> observed = new ArrayList<>();
         LiveTraceComparator destination = new LiveTraceComparator(
                 plans.get(2).trace(), ToleranceConfig.DEFAULT, 0,
@@ -1804,11 +1829,11 @@ class TestTraceSessionLauncherRunBranch {
                 GameServices.module().getSpecialStageProvider());
 
         TraceRunManifest run = TraceRunManifest.load(
-                canonicalEmeraldRunDir.resolve("run_manifest.json"));
+                installedReference().directory().resolve("run_manifest.json"));
         List<TraceRunReplayWalker.SegmentPlan> plans =
-                TraceRunReferencePlanLoader.load(run, canonicalEmeraldRunDir);
+                installedReference().plans();
         Bk2Movie movie = new Bk2MovieLoader().load(
-                canonicalEmeraldRunDir.resolve(run.sourceBk2()));
+                installedReference().directory().resolve(run.sourceBk2()));
         TraceSessionLauncher session = TestRunPayloads.session(
                 null, movie, plans, null);
         RecordingTimingFixture fixture = new RecordingTimingFixture(context);
@@ -1935,10 +1960,7 @@ class TestTraceSessionLauncherRunBranch {
                 List.of(
                         TraceFrame.executionTestFrame(0, 10, 20, 0),
                         TraceFrame.executionTestFrame(1, 11, 20, 0)));
-        TraceRunManifest canonical = TraceRunManifest.load(
-                canonicalEmeraldRunDir.resolve("run_manifest.json"));
-        var specialRows = TraceRunReferencePlanLoader.load(
-                canonical, canonicalEmeraldRunDir).get(1).specialStageRows();
+        var specialRows = installedReference().plans().get(1).specialStageRows();
         List<TraceRunReplayWalker.SegmentPlan> plans = List.of(
                 new TraceRunReplayWalker.SegmentPlan(
                         source, oneRow, null, entry),
@@ -2030,10 +2052,7 @@ class TestTraceSessionLauncherRunBranch {
         TraceData oneRow = TraceFixtures.trace(
                 TraceFixtures.metadata("s1", 0, 1),
                 List.of(TraceFrame.executionTestFrame(0, 1, 1, 0)));
-        TraceRunManifest canonical = TraceRunManifest.load(
-                canonicalEmeraldRunDir.resolve("run_manifest.json"));
-        var specialRows = TraceRunReferencePlanLoader.load(
-                canonical, canonicalEmeraldRunDir).get(1).specialStageRows();
+        var specialRows = installedReference().plans().get(1).specialStageRows();
         List<TraceRunReplayWalker.SegmentPlan> plans = List.of(
                 new TraceRunReplayWalker.SegmentPlan(
                         source, oneRow, null, entry),
@@ -2120,11 +2139,11 @@ class TestTraceSessionLauncherRunBranch {
     void specialStageEntryRetainsDestinationPhysicalRowForAdmission()
             throws Exception {
         TraceRunManifest run = TraceRunManifest.load(
-                canonicalEmeraldRunDir.resolve("run_manifest.json"));
+                installedReference().directory().resolve("run_manifest.json"));
         List<TraceRunReplayWalker.SegmentPlan> plans =
-                TraceRunReferencePlanLoader.load(run, canonicalEmeraldRunDir);
+                installedReference().plans();
         Bk2Movie movie = new Bk2MovieLoader().load(
-                canonicalEmeraldRunDir.resolve(run.sourceBk2()));
+                installedReference().directory().resolve(run.sourceBk2()));
         TraceRunPlaybackCoordinator coordinator =
                 TraceRunPlaybackCoordinator.fromDescriptors(
                         run, TracePlaybackProfile.SONIC_1,
@@ -2198,9 +2217,9 @@ class TestTraceSessionLauncherRunBranch {
         List<TraceRunReplayWalker.SegmentPlan> specialSegments;
         try {
             TraceRunManifest run = TraceRunManifest.load(
-                    specialStageRunDir.resolve("run_manifest.json"));
+                    specialStageRunDir().resolve("run_manifest.json"));
             specialSegments = TraceRunReferencePlanLoader.load(
-                    run, specialStageRunDir);
+                    run, specialStageRunDir());
         } catch (Exception e) {
             throw new AssertionError(e);
         }

@@ -12,6 +12,7 @@ import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -25,7 +26,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class TestSmpsSessionArchitectureGuard {
+    private JavaClasses importedClasses;
     private static final Set<String> PHYSICAL_FIELD_OWNERS = Set.of(
             SmpsDriverSession.class.getName(),
             SmpsDriverSessionSnapshot.class.getName(),
@@ -169,10 +172,15 @@ class TestSmpsSessionArchitectureGuard {
                 SmpsDriverSession.class.getName() + "Impostor"));
     }
 
-    private static JavaClasses production() {
-        return new ClassFileImporter()
-                .withImportOption(new ImportOption.DoNotIncludeTests())
-                .importPackages("com.openggf");
+    private JavaClasses production() {
+        // Same compiled inputs and import scope for each rule in this class.
+        // Adversarial fixture imports remain independent.
+        if (importedClasses == null) {
+            importedClasses = new ClassFileImporter()
+                    .withImportOption(new ImportOption.DoNotIncludeTests())
+                    .importPackages("com.openggf");
+        }
+        return importedClasses;
     }
 
     private static boolean isAllowedPhysicalOwner(String ownerName) {
