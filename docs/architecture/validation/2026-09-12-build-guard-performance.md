@@ -48,9 +48,9 @@ and full/compact historical counts matched every real allowance. Then:
   scenario incorrectly pass in both interpreters (two assertions detect it).
 
 Mutations affected generated copies under `target/` only and were restored.
-No instrumentation or mutation is part of the committed tests. Bounded timing,
-mutation, and suite comparisons are retained outside the repository in the
-task evidence directory, named here by `$TASK_EVIDENCE_ROOT`.
+No instrumentation or mutation is part of the committed tests. Timing and mutation measurements remain outside the repository in the
+task evidence directory, named here by `$TASK_EVIDENCE_ROOT`. Consumed suite
+diagnostics are deleted under the current cleanup policy.
 
 ## Serial timing
 
@@ -145,5 +145,31 @@ LUA_BIN=lua5.4 python3 tools/testing/run_categories.py --base 5d9ef4af4 \
   --repeat-reason 'Origin added material Java refactoring and validation controls after the prior integrated run' --run
 ```
 
-Completed final results and any focused attribution are retained in
-`$TASK_EVIDENCE_ROOT`; the earlier timing pair remains attributed to `aaa45a0dd`.
+The completed run at `75e2df844`, `20260912T154836Z-bdeb443c`, took
+1,018.56 seconds ordinary and 246.04 seconds guards. It completed 20,352
+ordinary tests in 2,522 reports: 20,313 passes, the same 14 failures, zero
+errors, and 25 skips. Every nonpassing identity and complete diagnostic
+matched the earlier Linux baseline. All 657 guards passed without skips.
+The runner confirmed the working tree stayed fixed. This is expected red
+ordinary-suite evidence, not a claim of an entirely green suite.
+
+Before push, origin added diagnostic cleanup `06dbe0c4a` and ring visibility
+fix `1cd1175ec`; both merged cleanly at `d3b8531c0`. The completed broad result
+remains attributed to `75e2df844`. The subsequent merge was checked with the
+seven ring/rewind classes below (75 tests, all passing, zero skips), the
+updated Python safety suite (43 passing), and actual tool preflight. No further
+broad run was started under the one-selection stopping rule.
+
+```bash
+mvn -Dmse=off \
+  '-Dtest=TestRingViewportWindow,TestRingManagerRewindSnapshot,TestLostRingObjectInstance,TestFbzRingBackgroundCollision,TestRingManagerActiveIndices,TestLostRingRewindGenericRestore,Sonic2RingPlacementTest' \
+  -Dopenggf.surefire.reports=target/build-guard-ring-integration/reports \
+  test -B # with the three verified absolute ROM path properties
+python3 -m unittest discover -s tools/testing -p 'test_run_categor*.py'
+LUA_BIN=lua5.4 python3 tools/testing/run_categories.py --base 1cd1175ec --preflight
+```
+
+All consumed category run directories were acknowledged and removed, including
+interrupted runs. External copies of their failure payloads/logs were deleted;
+only the benchmark timing and mutation measurements remain. The original
+serial timing pair remains attributed to `aaa45a0dd` and its candidate.
