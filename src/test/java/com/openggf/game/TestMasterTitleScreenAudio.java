@@ -38,7 +38,7 @@ class TestMasterTitleScreenAudio {
         MasterTitleScreen screen = activeScreen(true);
         InputHandler input = new InputHandler();
 
-        pressFrame(screen, input, GLFW_KEY_RIGHT);
+        pressFrame(screen, input, GLFW_KEY_DOWN);
         pressFrame(screen, input, GLFW_KEY_ENTER);
         // CONFIRMING consumes another press without replaying the cue.
         pressFrame(screen, input, GLFW_KEY_ENTER);
@@ -57,7 +57,7 @@ class TestMasterTitleScreenAudio {
         screen.setSelectedIndexForTest(MasterTitleScreen.GameEntry.SONIC_3K.ordinal());
         InputHandler input = new InputHandler();
 
-        pressFrame(screen, input, GLFW_KEY_DOWN);
+        pressFrame(screen, input, GLFW_KEY_RIGHT);
 
         assertEquals(List.of(), emittedSfxNames());
     }
@@ -76,7 +76,7 @@ class TestMasterTitleScreenAudio {
     void openingAndCancellingLaunchOptionsUseConfirmAndErrorOnce() {
         MasterTitleScreen screen = activeScreen(true);
         InputHandler input = new InputHandler();
-        pressFrame(screen, input, GLFW_KEY_RIGHT);
+        pressFrame(screen, input, GLFW_KEY_DOWN);
         pressFrame(screen, input, GLFW_KEY_DOWN);
         pressFrame(screen, input, GLFW_KEY_ENTER);
         pressFrame(screen, input, GLFW_KEY_ESCAPE);
@@ -89,7 +89,7 @@ class TestMasterTitleScreenAudio {
     void settingsAndToolsEnterWithConfirmationAndBackWithError() {
         MasterTitleScreen screen = activeScreen(true);
         InputHandler input = new InputHandler();
-        pressFrame(screen, input, GLFW_KEY_RIGHT);
+        pressFrame(screen, input, GLFW_KEY_DOWN);
         for (int i = 0; i < 5; i++) pressFrame(screen, input, GLFW_KEY_DOWN);
         audio.resetState();
         pressFrame(screen, input, GLFW_KEY_ENTER);

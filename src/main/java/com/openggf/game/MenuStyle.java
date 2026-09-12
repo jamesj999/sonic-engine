@@ -19,8 +19,12 @@ public final class MenuStyle {
 
     /** Low-contrast Sonic-style checks, aligned to the logical pixel grid. */
     public static void checkerboard(PixelFont font, int width) {
+        checkerboard(font, 0, width);
+    }
+
+    public static void checkerboard(PixelFont font, int startX, int width) {
         for (int y = 29, row = 0; y < 198; y += 16, row++) {
-            for (int x = (row & 1) * 16; x < width; x += 32) {
+            for (int x = startX + (row & 1) * 16; x < width; x += 32) {
                 fill(font, x, y, Math.min(15, width - x), Math.min(15, 198 - y),
                         .05f, .115f, .28f, 1);
             }

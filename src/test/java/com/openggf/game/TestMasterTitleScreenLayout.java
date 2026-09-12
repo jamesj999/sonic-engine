@@ -10,7 +10,6 @@ import com.openggf.control.LogicalInputSnapshot;
 import com.openggf.control.PlayerInputState;
 import com.openggf.game.launch.LaunchProfile;
 import com.openggf.game.launch.LaunchProfileStore;
-import com.openggf.graphics.PixelFont;
 import com.openggf.sprites.playable.AbstractPlayableSprite;
 import com.openggf.testmode.TestModeTracePicker;
 import org.junit.jupiter.api.Test;
@@ -42,75 +41,6 @@ class TestMasterTitleScreenLayout {
     @TempDir
     Path tempDir;
 
-    // -------------------------------------------------------------------------
-    // centerX — native parity
-    // -------------------------------------------------------------------------
-
-    /**
-     * At native width 320, centerX(w, 320) must equal (320-w)/2 exactly.
-     * This ensures byte-identical behavior to the original literals.
-     */
-    @Test
-    void centerX_atNativeWidth_collapsesToOriginalLiteral() {
-        // Various element widths that MasterTitleScreen might encounter
-        int[] widths = {0, 10, 64, 100, 128, 160, 200, 320};
-        for (int w : widths) {
-            float expected = (320 - w) / 2f;
-            float actual = MasterTitleScreen.centerX(w, 320);
-            assertEquals(expected, actual, 0f,
-                "centerX(" + w + ", 320) should equal (320-" + w + ")/2 = " + expected);
-        }
-    }
-
-    /**
-     * At viewport width 400 (WIDE_16_9), centerX places the element so it is
-     * horizontally centered: left edge at (400-w)/2.
-     */
-    @Test
-    void centerX_atWide16_9_centresElement() {
-        int vpWidth = 400;
-        int elementWidth = 100;
-        float result = MasterTitleScreen.centerX(elementWidth, vpWidth);
-        assertEquals((vpWidth - elementWidth) / 2f, result, 0f);
-        // Verify: left edge + element width = right edge mirror of left edge
-        assertEquals(vpWidth - result - elementWidth, result, 0f,
-            "Element should be symmetrically centered");
-    }
-
-    /**
-     * At viewport width 528 (ULTRA_21_9), centerX correctly places the element.
-     */
-    @Test
-    void centerX_atUltra21_9_centresElement() {
-        int vpWidth = 528;
-        int elementWidth = 80;
-        float result = MasterTitleScreen.centerX(elementWidth, vpWidth);
-        assertEquals((vpWidth - elementWidth) / 2f, result, 0f);
-    }
-
-    /**
-     * Zero-width element centers at the midpoint (no-op offset).
-     */
-    @Test
-    void centerX_zeroWidthElement_returnsMidpoint() {
-        assertEquals(160f, MasterTitleScreen.centerX(0, 320), 0f);
-        assertEquals(200f, MasterTitleScreen.centerX(0, 400), 0f);
-        assertEquals(264f, MasterTitleScreen.centerX(0, 528), 0f);
-    }
-
-    /**
-     * Element equal to viewport width results in x=0.
-     */
-    @Test
-    void centerX_elementFillsViewport_returnsZero() {
-        assertEquals(0f, MasterTitleScreen.centerX(320, 320), 0f);
-        assertEquals(0f, MasterTitleScreen.centerX(400, 400), 0f);
-    }
-
-    // -------------------------------------------------------------------------
-    // SCREEN_W constant — must remain 320 for native parity
-    // -------------------------------------------------------------------------
-
     @Test
     void screenW_isNativeWidth() {
         assertEquals(320, MasterTitleScreen.SCREEN_W,
@@ -120,15 +50,6 @@ class TestMasterTitleScreenLayout {
     // -------------------------------------------------------------------------
     // setViewportWidth — clamped at SCREEN_W
     // -------------------------------------------------------------------------
-
-    @Test
-    void setViewportWidth_belowNative_clampsToScreenW() {
-        // We can't easily query viewportWidth directly (it's private), but we can
-        // check that setting a value below SCREEN_W doesn't cause an exception
-        // and that SCREEN_W itself is used as the floor.
-        // This is a smoke-test; the behavioral proof is in centerX tests above.
-        assertEquals(320, MasterTitleScreen.SCREEN_W);
-    }
 
     @Test
     void expectedRomFilename_usesProjectRootDefaultsForEachGame() {
@@ -141,21 +62,6 @@ class TestMasterTitleScreenLayout {
     }
 
     @Test
-    void missingRomPrompt_showsRequiredRomLineAndSelectedFilename() {
-        assertEquals("Requires the following ROM:",
-                MasterTitleScreen.missingRomPromptLine());
-        assertEquals("s2.gen",
-                MasterTitleScreen.missingRomFilenameLine(MasterTitleScreen.GameEntry.SONIC_2));
-    }
-
-    @Test
-    void launchHoverLineUsesAtlasSafeHyphenAndPluralization() {
-        assertEquals("Stock launch - Tab to configure", MasterTitleScreen.launchHoverLine(0));
-        assertEquals("1 option enabled - Tab to configure", MasterTitleScreen.launchHoverLine(1));
-        assertEquals("3 options enabled - Tab to configure", MasterTitleScreen.launchHoverLine(3));
-    }
-
-    @Test
     void gameEntryFromGameIdMatchesCaseInsensitivelyAndRejectsUnknownIds() {
         assertEquals(MasterTitleScreen.GameEntry.SONIC_1, MasterTitleScreen.GameEntry.fromGameId("S1"));
         assertEquals(MasterTitleScreen.GameEntry.SONIC_2, MasterTitleScreen.GameEntry.fromGameId("s2"));
@@ -164,135 +70,8 @@ class TestMasterTitleScreenLayout {
     }
 
     @Test
-    void menuTextColor_keepsUnavailableUnselectedGamesGreyedOut() {
-        float[] color = MasterTitleScreen.menuTextColor(false, false, 0);
-
-        assertEquals(0.4f, color[0], 0f);
-        assertEquals(0.4f, color[1], 0f);
-        assertEquals(0.4f, color[2], 0f);
-        assertEquals(0.7f, color[3], 0f);
-    }
-
-    @Test
-    void menuTextColor_highlightsUnavailableSelectedGamesWhileDisabled() {
-        float[] color = MasterTitleScreen.menuTextColor(false, true, 0);
-
-        assertEquals(0.72f, color[0], 0f);
-        assertEquals(0.72f, color[1], 0f);
-        assertEquals(0.72f, color[2], 0f);
-        assertEquals(0.85f, color[3], 0f);
-    }
-
-    @Test
-    void romPreviewLayoutRendersNativeTitleScreensAtNativeSize() {
-        MasterTitleScreen.PreviewLayout layout = MasterTitleScreen.romPreviewLayout(320, 224, 320);
-
-        assertEquals(320, layout.width());
-        assertEquals(224, layout.height());
-        assertEquals(0f, layout.x(), 0f);
-        assertEquals(0f, layout.y(), 0f);
-    }
-
-    @Test
-    void romPreviewLayoutStaysCenteredInWideViewports() {
-        MasterTitleScreen.PreviewLayout layout = MasterTitleScreen.romPreviewLayout(320, 224, 400);
-
-        assertEquals(320, layout.width());
-        assertEquals(224, layout.height());
-        assertEquals(40f, layout.x(), 0f);
-    }
-
-    @Test
-    void romPreviewTopMatteIsDisabledForOpenGgfLogoArea() {
-        MasterTitleScreen.PreviewLayout layout = MasterTitleScreen.topUiMatteLayout(400);
-
-        assertEquals(400, layout.width());
-        assertEquals(0, layout.height());
-        assertEquals(0f, layout.x(), 0f);
-        assertEquals(224f, layout.y(), 0f);
-    }
-
-    @Test
-    void romPreviewBottomMatteCoversMenuArea() {
-        MasterTitleScreen.PreviewLayout layout = MasterTitleScreen.bottomUiMatteLayout(400);
-
-        assertEquals(400, layout.width());
-        assertEquals(56, layout.height());
-        assertEquals(0f, layout.x(), 0f);
-        assertEquals(0f, layout.y(), 0f);
-    }
-
-    @Test
-    void launchHoverLineFitsInsideNativeViewportAndBottomMatte() {
-        String line = MasterTitleScreen.launchHoverLine(5);
-        int width = Math.round(line.length() * PixelFont.glyphWidth() * MasterTitleScreen.LAUNCH_HOVER_SCALE);
-        int x = MasterTitleScreen.scaledCenteredTextX(line, 320, MasterTitleScreen.LAUNCH_HOVER_SCALE);
-
-        assertTrue(x >= 4, "hover line should not bleed left");
-        assertTrue(x + width <= 316, "hover line should not bleed right");
-
-        MasterTitleScreen.PreviewLayout matte = MasterTitleScreen.bottomUiMatteLayout(320);
-        assertTrue(MasterTitleScreen.LAUNCH_HOVER_Y >= 224 - matte.height() + 2,
-                "hover line should sit inside the bottom matte");
-    }
-
-    @Test
-    void launchConfigOverlayIsDarkEnoughForTextReadability() {
-        assertTrue(MasterTitleScreen.LAUNCH_PANEL_OVERLAY_ALPHA >= 0.7f);
-    }
-
-    @Test
-    void titleLogoYPlacesOpenGgfLogoOneTileHigher() {
-        assertEquals(180f, MasterTitleScreen.titleLogoY(42), 0f);
-    }
-
-    @Test
     void titleLogoScaleReducesOpenGgfLogoToNineTenths() {
         assertEquals(63, MasterTitleScreen.titleLogoScaledWidth(200));
-        assertEquals(31, MasterTitleScreen.titleLogoScaledHeight(100));
-    }
-
-    @Test
-    void stockMenuKeepsAllEntriesWhenTheyFitNativeWidth() {
-        List<MasterTitleScreen.MenuItemLayout> layout = MasterTitleScreen.menuItemLayouts(
-                List.of("Sonic 1", "Sonic 2", "Sonic 3K"), 1, 320);
-
-        assertEquals(List.of(0, 1, 2), layout.stream()
-                .map(MasterTitleScreen.MenuItemLayout::entryIndex).toList());
-        assertTrue(layout.stream().allMatch(item -> item.x() >= 0
-                && item.x() + item.width() <= 320));
-    }
-
-    @Test
-    void overflowingSampleMenuBecomesSelectedVisibleCarouselAtNativeWidth() {
-        List<MasterTitleScreen.MenuItemLayout> layout = MasterTitleScreen.menuItemLayouts(
-                List.of("Sonic 1", "Sonic 2", "Sonic 3K", "Phase 3 Standalone Sample"), 3, 320);
-
-        assertEquals(1, layout.size());
-        assertEquals(3, layout.getFirst().entryIndex());
-        assertEquals("Phase 3 Standalone Sample", layout.getFirst().text());
-        assertTrue(layout.getFirst().x() >= 0);
-        assertTrue(layout.getFirst().x() + layout.getFirst().width() <= 320);
-    }
-
-    @Test
-    void carouselElidesSeveralMaximumLengthNamesWithinNativeAndWidescreenBounds() {
-        String longName = "Standalone ".repeat(300);
-        List<String> labels = List.of("Sonic 1", "Sonic 2", "Sonic 3K",
-                longName + "A", longName + "B", longName + "C");
-
-        for (int width : List.of(320, 400, 528)) {
-            for (int selected = 3; selected < labels.size(); selected++) {
-                List<MasterTitleScreen.MenuItemLayout> layout =
-                        MasterTitleScreen.menuItemLayouts(labels, selected, width);
-                assertEquals(1, layout.size());
-                MasterTitleScreen.MenuItemLayout item = layout.getFirst();
-                assertEquals(selected, item.entryIndex());
-                assertTrue(item.text().endsWith("..."));
-                assertTrue(item.x() >= 0);
-                assertTrue(item.x() + item.width() <= width);
-            }
-        }
     }
 
     @Test
@@ -414,21 +193,21 @@ class TestMasterTitleScreenLayout {
     }
 
     @Test
-    void logicalUpDownNavigateActiveGameSelection() {
+    void logicalLeftRightNavigateActiveGameSelection() {
         MasterTitleScreen screen = activeScreen();
         InputHandler input = new InputHandler();
 
-        input.setLogicalOverride(logicalPress(AbstractPlayableSprite.INPUT_DOWN, 0, false));
+        input.setLogicalOverride(logicalPress(AbstractPlayableSprite.INPUT_RIGHT, 0, false));
         screen.update(input);
         assertEquals("s3k", screen.getSelectedGameId());
 
-        input.setLogicalOverride(logicalPress(AbstractPlayableSprite.INPUT_UP, 0, false));
+        input.setLogicalOverride(logicalPress(AbstractPlayableSprite.INPUT_LEFT, 0, false));
         screen.update(input);
         assertEquals("s2", screen.getSelectedGameId());
     }
 
     @Test
-    void logicalBackDoesNotConfirmAndAcceptRequiresEnteringActions() {
+    void logicalBackOpensCancellableQuitBeforeAcceptCanEnterActions() {
         MasterTitleScreen screen = activeScreen();
         InputHandler input = new InputHandler();
         input.setLogicalOverride(logicalPress(0, InputActionMasks.ACTION_C, false));
@@ -437,6 +216,11 @@ class TestMasterTitleScreenLayout {
         input.setLogicalOverride(logicalPress(0, InputActionMasks.ACTION_A, false));
         screen.update(input);
         assertFalse(screen.isGameSelected());
+        input.setLogicalOverride(LogicalInputSnapshot.neutral());
+        screen.update(input);
+        input.setLogicalOverride(logicalPress(0, InputActionMasks.ACTION_A, false));
+        screen.update(input);
+        assertFalse(screen.isGameSelected(), "accept enters actions after returning from Quit");
         input.setLogicalOverride(LogicalInputSnapshot.neutral());
         screen.update(input);
         input.setLogicalOverride(logicalPress(0, InputActionMasks.ACTION_A, false));

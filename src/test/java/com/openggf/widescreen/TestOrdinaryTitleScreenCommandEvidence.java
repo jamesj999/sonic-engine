@@ -26,6 +26,7 @@ import com.openggf.graphics.GLCommand;
 import com.openggf.graphics.GLCommandable;
 import com.openggf.graphics.GraphicsManager;
 import com.openggf.graphics.PixelFont;
+import com.openggf.graphics.MenuPixelFont;
 import com.openggf.graphics.PatternAtlasRange;
 import com.openggf.graphics.TexturedQuadRenderer;
 import com.openggf.level.PatternDesc;
@@ -45,6 +46,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 
 /**
  * Real ordinary-title render-command characterization at the supported widths.
@@ -103,7 +105,7 @@ class TestOrdinaryTitleScreenCommandEvidence {
             assertEquals(new Quad(1, 0, 0, width, 224), renderer.quads().get(0));
             assertTrue(renderer.quads().contains(new Quad(3, 10, 212, 31, 6)),
                     "OpenGGF logo stays in the title header");
-            assertTrue(font.texts().stream().anyMatch(text -> text.text().equals("Up/Down Game  Right Menu")
+            assertTrue(font.texts().stream().anyMatch(text -> text.text().equals("Left/Right Game  Up/Down Actions")
                             && text.x() == 9), "game-selection keyboard prompts at " + width);
             assertTrue(font.texts().stream().anyMatch(text -> text.text().equals("LAUNCH OPTIONS")
                             && text.x() == width / 2 + 5), "visible launch entry at " + width);
@@ -308,11 +310,11 @@ class TestOrdinaryTitleScreenCommandEvidence {
                     "Master fade path must preserve full-width background at " + width);
 
             renderer.clear();
+            MenuPixelFont errorFont = mock(MenuPixelFont.class);
+            setField(title, "font", errorFont);
             setField(title, "state", MasterTitleScreen.State.ERROR_DISPLAY);
             invokeDrawForRecording(title);
-            assertTrue(renderer.quads().stream().anyMatch(quad -> quad.texture() == 2
-                            && quad.x() == 0 && quad.y() == 0 && quad.width() == width && quad.height() == 224),
-                    "Master error path must preserve full-width overlay at " + width);
+            verify(errorFont).fillRect(0, 0, width, 224, .025f, .065f, .19f, 1f);
         }
     }
 

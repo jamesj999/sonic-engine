@@ -7,7 +7,7 @@ import com.openggf.control.MenuInput;
 final class TitleHubNavigation {
     enum Action {
         START("START GAME"), LAUNCH("LAUNCH OPTIONS"), TIME_ATTACK("TIME ATTACK"),
-        RECORDINGS("RECORDINGS"), MODS("MODS"), SETTINGS("SETTINGS"), TOOLS("TOOLS");
+        RECORDINGS("RECORDINGS"), MODS("MODS"), SETTINGS("SETTINGS"), TOOLS("ADVANCED"), QUIT("QUIT");
         final String label;
         Action(String label) { this.label = label; }
     }

@@ -76,10 +76,11 @@ Linux terminal example:
 
 When the engine starts, you will see:
 
-1. **Master title screen** -- Choose a game with up/down, then press Right to
-   focus its action menu. Left returns to game selection. Up/down selects Start Game, Launch Options, Time Attack,
-   Recordings, Mods, Settings, or Tools. Enter/A opens the selected action; Esc/B returns
-   one level. Prompts follow the last keyboard/controller input. The original animated
+1. **Master title screen** -- Choose a game with left/right from either pane.
+   Up/down enters its action list, then selects Start Game, Launch Options, Time Attack,
+   Recordings, Mods, Settings, Advanced, or Quit. Enter/A opens the selected action; Esc/B returns
+   one level. Quit (or Esc/B from game selection) opens an exit confirmation.
+   The three stock game tabs stay visible, with missing ROMs dimmed. Prompts follow the last keyboard/controller input. The original animated
    game logos remain, scaled proportionally into the game pane.
    When audio is enabled, navigation, confirmation, and missing-ROM errors use short
    host-owned cues that do not depend on the selected game's ROM. Opening menu screens

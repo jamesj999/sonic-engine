@@ -4,6 +4,8 @@ package com.openggf.graphics;
  * Original, hand-authored five-column menu lettering. Each hexadecimal pair is
  * one top-to-bottom row of five pixels, most-significant bit at the left.
  * These masks are native glyph artwork, not samples of the nine-pixel font.
+ * Capitals end on row six; lowercase descenders may use row seven within the
+ * same eight-pixel cell. The sixth column remains transparent spacing.
  */
 final class MenuGlyphs {
     static final int ADVANCE = 6;
@@ -85,17 +87,17 @@ final class MenuGlyphs {
         glyph('d', "01010D1311110F");
         glyph('e', "00000E111F100E");
         glyph('f', "0609091C080808");
-        glyph('g', "000F11110F010E");
+        glyph('g', "00000F11110F010E");
         glyph('h', "10101619111111");
         glyph('i', "04000C0404040E");
-        glyph('j', "0200060202120C");
+        glyph('j', "020006020202120C");
         glyph('k', "10101214181412");
         glyph('l', "0C04040404040E");
         glyph('m', "00001A15151515");
         glyph('n', "00001619111111");
         glyph('o', "00000E1111110E");
-        glyph('p', "001E11111E1010");
-        glyph('q', "000F11110F0101");
+        glyph('p', "00001E11111E1010");
+        glyph('q', "00000F11110F0101");
         glyph('r', "00001619101010");
         glyph('s', "00000F100E011E");
         glyph('t', "08081E08080906");
@@ -103,7 +105,7 @@ final class MenuGlyphs {
         glyph('v', "00001111110A04");
         glyph('w', "0000111115150A");
         glyph('x', "0000110A040A11");
-        glyph('y', "001111110F010E");
+        glyph('y', "00001111110F010E");
         glyph('z', "00001F0204081F");
         glyph('{', "03040408040403");
         glyph('|', "04040404040404");
@@ -114,9 +116,11 @@ final class MenuGlyphs {
     private MenuGlyphs() { }
 
     private static void glyph(char character, String hexadecimalRows) {
-        if (hexadecimalRows.length() != 14) throw new IllegalArgumentException("Seven glyph rows required");
-        byte[] rows = new byte[7];
-        for (int i = 0; i < rows.length; i++) {
+        if (hexadecimalRows.length() != 14 && hexadecimalRows.length() != 16) {
+            throw new IllegalArgumentException("Seven or eight glyph rows required");
+        }
+        byte[] rows = new byte[HEIGHT];
+        for (int i = 0; i < hexadecimalRows.length() / 2; i++) {
             rows[i] = (byte) Integer.parseInt(hexadecimalRows.substring(i * 2, i * 2 + 2), 16);
             if ((rows[i] & ~31) != 0) throw new IllegalArgumentException("Five glyph columns required");
         }
@@ -146,7 +150,7 @@ final class MenuGlyphs {
         for (int index = 0; index < ROWS.length; index++) {
             int originX = (index % COLUMNS) * ADVANCE;
             int originY = (index / COLUMNS) * HEIGHT;
-            for (int y = 0; y < 7; y++) {
+            for (int y = 0; y < HEIGHT; y++) {
                 for (int x = 0; x < 5; x++) {
                     if ((ROWS[index][y] & (1 << (4 - x))) == 0) continue;
                     int offset = ((ATLAS_HEIGHT - 1 - originY - y) * ATLAS_WIDTH + originX + x) * 4;

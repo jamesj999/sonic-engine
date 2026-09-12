@@ -38,7 +38,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Random;
-import java.util.function.ToIntFunction;
 import java.util.logging.Logger;
 
 import static org.lwjgl.opengl.GL11.*;
@@ -59,23 +58,12 @@ public class MasterTitleScreen {
     private static final Logger LOGGER = Logger.getLogger(MasterTitleScreen.class.getName());
     static final int SCREEN_W = 320;
     private static final int SCREEN_H = 224;
-    private static final String MISSING_ROM_PROMPT = "Requires the following ROM:";
     private static final int TITLE_LOGO_BASE_SCALE_NUMERATOR = 35;
     private static final int TITLE_LOGO_BASE_SCALE_DENOMINATOR = 100;
     private static final int TITLE_LOGO_SCALE_NUMERATOR = 9;
     private static final int TITLE_LOGO_SCALE_DENOMINATOR = 10;
-    private static final int TOP_UI_MATTE_HEIGHT = 0;
-    private static final int BOTTOM_UI_MATTE_HEIGHT = 56;
-    private static final float BOTTOM_UI_MATTE_ALPHA = 0.68f;
-    static final int LAUNCH_HOVER_Y = 178;
-    static final float LAUNCH_HOVER_SCALE = 0.55f;
-    static final float LAUNCH_PANEL_OVERLAY_ALPHA = 0.72f;
-    private static final int FITTED_TEXT_SIDE_PADDING = 4;
 
     record PreviewLayout(int width, int height, float x, float y) {
-    }
-
-    record MenuItemLayout(int entryIndex, String text, int x, int width) {
     }
 
     @com.openggf.game.ModApi
@@ -178,10 +166,8 @@ public class MasterTitleScreen {
     private State state = State.INACTIVE;
     private int selectedIndex = 1; // Default to Sonic 2
     private int frameCounter = 0;
-    private int errorFrameCounter = 0;
     private String launchErrorTitle;
     private String launchErrorDetail;
-    private static final int ERROR_DISPLAY_FRAMES = 180; // 3 seconds at 60fps
 
     private final List<MasterTitleEntry> entries;
     private final Map<GameEntry, Boolean> stockAvailability = new EnumMap<>(GameEntry.class);
@@ -403,10 +389,9 @@ public class MasterTitleScreen {
         }
 
         if (state == State.ERROR_DISPLAY) {
-            errorFrameCounter++;
-            if (errorFrameCounter >= ERROR_DISPLAY_FRAMES || navigation.back() || navigation.accept()) {
+            if (navigation.back() || navigation.accept()) {
                 state = State.ACTIVE;
-                errorFrameCounter = 0;
+                playErrorSound();
             }
             return;
         }
@@ -424,6 +409,7 @@ public class MasterTitleScreen {
                     || MenuInput.down(inputHandler) || MenuInput.left(inputHandler) || MenuInput.right(inputHandler)) return;
             childInputPending = false;
         }
+        if (quitPrompt) { updateQuitPrompt(); return; }
         if (settingsScreen != null) {
             settingsScreen.update(inputHandler);
             if (settingsScreen.consumeApplied()) refreshRomPreviews();
@@ -557,33 +543,76 @@ public class MasterTitleScreen {
             return;
         }
 
+        if (navigation.left() && setSelectedIndex(selectedIndex - 1)) { playNavigateSound(); return; }
+        if (navigation.right() && setSelectedIndex(selectedIndex + 1)) { playNavigateSound(); return; }
         if (!navigation.actions()) {
-            if (navigation.up() && setSelectedIndex(selectedIndex - 1)) playNavigateSound();
-            if (navigation.down() && setSelectedIndex(selectedIndex + 1)) playNavigateSound();
-            if (navigation.right() || navigation.accept()) {
+            if (navigation.back()) { openQuitPrompt(); return; }
+            if (navigation.up() || navigation.down() || navigation.accept()) {
                 navigation.enter();
                 playNavigateSound();
             }
             return;
         }
         if (navigation.back()) { navigation.leave(); playErrorSound(); return; }
-        if (navigation.left()) { navigation.leave(); playNavigateSound(); return; }
         if (navigation.up() && navigation.move(-1)) { playNavigateSound(); return; }
         if (navigation.down() && navigation.move(1)) { playNavigateSound(); return; }
         if (!navigation.accept()) return;
         switch (navigation.action()) {
             case START -> startSelectedEntry();
-            case LAUNCH -> { if (!openLaunchOptions()) showUnavailableAction("Launch options require a stock game ROM"); }
-            case TIME_ATTACK -> { if (!tryOpenTimeAttackMenu()) showUnavailableAction("Time attack requires a stock game ROM"); }
-            case RECORDINGS -> { if (!tryOpenUserRecordingMenuForSelectedGame()) showUnavailableAction("No recording menu for this selection"); }
+            case LAUNCH -> { if (!openLaunchOptions()) showActionError("Launch options"); }
+            case TIME_ATTACK -> { if (!isEntryAvailable(selectedEntry()) || !tryOpenTimeAttackMenu()) showActionError("Time attack"); }
+            case RECORDINGS -> { if (!tryOpenUserRecordingMenuForSelectedGame()) showActionError("Recordings"); }
             case MODS -> openModManager();
             case SETTINGS -> openSettings();
             case TOOLS -> { toolsOpen = true; toolIndex = 0; playConfirmSound(); }
+            case QUIT -> openQuitPrompt();
         }
     }
 
+    private boolean quitPrompt;
+    private boolean quitSelected;
+    private boolean quitRequested;
+
+    private void openQuitPrompt() {
+        quitPrompt = true;
+        quitSelected = false;
+        playConfirmSound();
+    }
+
+    private void updateQuitPrompt() {
+        if (navigation.back()) { quitPrompt = false; playErrorSound(); return; }
+        if (navigation.left() || navigation.right() || navigation.up() || navigation.down()) {
+            quitSelected = !quitSelected;
+            playNavigateSound();
+        } else if (navigation.accept()) {
+            quitPrompt = false;
+            if (quitSelected) {
+                quitRequested = true;
+                state = State.EXITING;
+                playConfirmSound();
+            } else playErrorSound();
+        }
+    }
+
+    boolean consumeQuitRequest() {
+        boolean requested = quitRequested;
+        quitRequested = false;
+        return requested;
+    }
+
+    private void showActionError(String action) {
+        if (selectedEntry() instanceof MasterTitleEntry.Stock stock && !isEntryAvailable(stock)) {
+            launchErrorTitle = null;
+            launchErrorDetail = null;
+            state = State.ERROR_DISPLAY;
+            playErrorSound();
+        } else showUnavailableAction(selectedEntry() instanceof MasterTitleEntry.Standalone
+                ? action + " is not available for standalone games"
+                : "Could not open " + action.toLowerCase(java.util.Locale.ROOT));
+    }
+
     private void openSettings() {
-        settingsScreen = new EngineSettingsScreen(configService, font, renderer, solidWhiteTextureId);
+        settingsScreen = new EngineSettingsScreen(configService, font);
         playConfirmSound();
         childInputPending = true;
     }
@@ -591,7 +620,7 @@ public class MasterTitleScreen {
     private void updateTools() {
         if (navigation.back()) { toolsOpen = false; playErrorSound(); return; }
         if (navigation.up()) toolIndex = Math.max(0, toolIndex - 1);
-        if (navigation.down()) toolIndex = Math.min(2, toolIndex + 1);
+        if (navigation.down()) toolIndex = Math.min(1, toolIndex + 1);
         if (!navigation.accept()) return;
         toolsOpen = false;
         if (toolIndex == 0) {
@@ -600,8 +629,7 @@ public class MasterTitleScreen {
             tracePicker = new TestModeTracePicker(TraceCatalog.scan(root), ensurePickerFont());
             childInputPending = true;
             playConfirmSound();
-        } else if (toolIndex == 1) openSettings();
-        else { helpOpen = true; playConfirmSound(); }
+        } else { helpOpen = true; playConfirmSound(); }
     }
 
     private boolean openLaunchOptions() {
@@ -616,8 +644,8 @@ public class MasterTitleScreen {
         MasterTitleEntry entry = selectedEntry();
         if (!isEntryAvailable(entry)) {
             launchErrorTitle = null;
+            launchErrorDetail = null;
             state = State.ERROR_DISPLAY;
-            errorFrameCounter = 0;
             playErrorSound();
         } else if (entry instanceof MasterTitleEntry.Standalone) {
             standaloneActionOpen = true;
@@ -630,7 +658,6 @@ public class MasterTitleScreen {
         launchErrorTitle = "ACTION UNAVAILABLE";
         launchErrorDetail = detail;
         state = State.ERROR_DISPLAY;
-        errorFrameCounter = 0;
         playErrorSound();
     }
 
@@ -737,6 +764,16 @@ public class MasterTitleScreen {
             return;
         }
         drawHub();
+        if (quitPrompt) {
+            font.beginMegaBatch();
+            MenuStyle.page(font, viewportWidth, "QUIT OPENGGF?", "Return to your desktop");
+            MenuStyle.focus(font, 14, quitSelected ? 112 : 82, viewportWidth - 28, 23);
+            MenuStyle.label(font, "Return to menu", 23, 88, viewportWidth - 46, 1, 1, 1);
+            MenuStyle.label(font, "Quit", 23, 118, viewportWidth - 46, 1, 1, 1);
+            MenuStyle.footer(font, viewportWidth, directionHint() + " Choose", confirmHint() + " Select  " + backHint() + " Back");
+            font.endMegaBatch();
+            return;
+        }
 
         if (launchConfigPanel != null) {
             renderer.drawTexture(solidWhiteTextureId, 0, 0, viewportWidth, SCREEN_H,
@@ -760,7 +797,8 @@ public class MasterTitleScreen {
             for (int offset = 0, row = 0; offset < detail.length() && row < 5; offset += columns, row++)
                 MenuStyle.text(font, detail.substring(offset, Math.min(detail.length(), offset + columns)),
                         17, 96 + row * 12, viewportWidth - 34, .85f, .9f, 1);
-            MenuStyle.text(font, "Check Files in Engine Settings", 17, 172, viewportWidth - 34, 1, .78f, .3f);
+            if (launchErrorTitle == null && entry instanceof MasterTitleEntry.Stock)
+                MenuStyle.text(font, "Check Files in Engine Settings", 17, 172, viewportWidth - 34, 1, .78f, .3f);
             MenuStyle.footer(font, viewportWidth, "Your selection is preserved",
                     confirmHint() + "/" + backHint() + " Back");
             font.endMegaBatch();
@@ -785,10 +823,11 @@ public class MasterTitleScreen {
         renderer.drawTexture(bgTextureId, 0, 0, viewportWidth, SCREEN_H);
         for (CloudSprite cloud : clouds) {
             renderer.drawTexture(cloud.textureId, cloud.x, SCREEN_H - cloud.y - cloud.height,
-                    cloud.width, cloud.height, 1f, 1f, 1f, 0.38f);
+                    cloud.width, cloud.height, 1f, 1f, 1f, 0.65f);
         }
-        box(0, 0, viewportWidth, SCREEN_H, 0.02f, 0.07f, 0.23f, 0.86f);
-        MenuStyle.checkerboard(font, viewportWidth);
+        box(0, 0, viewportWidth / 2, SCREEN_H, 0.02f, 0.07f, 0.23f, 0.24f);
+        box(viewportWidth / 2, 0, viewportWidth - viewportWidth / 2, SCREEN_H, 0.02f, 0.07f, 0.23f, 0.86f);
+        MenuStyle.checkerboard(font, viewportWidth / 2, viewportWidth);
         box(0, 0, viewportWidth, 30, 0.04f, 0.14f, 0.36f, 1f);
         box(0, 29, viewportWidth, 1, 1f, 0.84f, 0.3f, 1f);
         box(0, 205, viewportWidth, 19, 0.01f, 0.03f, 0.12f, 1f);
@@ -822,11 +861,10 @@ public class MasterTitleScreen {
         int actionX = viewportWidth / 2;
         int actionWidth = viewportWidth - actionX - 9;
         for (int i = 0; i < TitleHubNavigation.Action.values().length; i++) {
-            int y = 43 + i * 21;
+            int y = 39 + i * 20;
             box(actionX, y, actionWidth, 18, 0.05f, 0.16f, 0.38f, 1f);
             if (navigation.actions() && navigation.selected() == i) focusBox(actionX, y, actionWidth, 18);
         }
-        if (!navigation.actions()) focusBox(8, 158, leftWidth + 2, 19);
         font.beginMegaBatch();
         textFitted(navigation.actions() ? "ACTION MENU" : "SELECT GAME", viewportWidth - 111, 10, 103,
                 1f, 0.5f, 0.91f, 1f);
@@ -838,16 +876,14 @@ public class MasterTitleScreen {
                 textFitted("Configure in Settings", 12, 116, leftWidth - 6, 0.62f, 0.65f, 0.8f, 1f);
             }
         }
-        textFitted(selectedEntry().menuLabel(), 12, 163, leftWidth - 6, 1f, 1f, 1f, 1f);
-        textFitted(navigation.actions() ? "Left: Games" : "Right: Menu",
-                12, 182, leftWidth - 6, 1f, 0.5f, 0.91f, 1f);
+        drawGameTabs();
         for (TitleHubNavigation.Action action : TitleHubNavigation.Action.values()) {
             boolean available = action == TitleHubNavigation.Action.MODS || action == TitleHubNavigation.Action.SETTINGS
-                    || action == TitleHubNavigation.Action.TOOLS || action == TitleHubNavigation.Action.START
+                    || action == TitleHubNavigation.Action.TOOLS || action == TitleHubNavigation.Action.QUIT || action == TitleHubNavigation.Action.START
                     && isEntryAvailable(selectedEntry()) || selectedEntry() instanceof MasterTitleEntry.Stock
                     && isEntryAvailable(selectedEntry());
             float brightness = available && navigation.actions() ? 1f : 0.68f;
-            textFitted(action.label, actionX + 5, 47 + action.ordinal() * 21, actionWidth - 10,
+            textFitted(action.label, actionX + 5, 43 + action.ordinal() * 20, actionWidth - 10,
                     1f, brightness, brightness, brightness);
         }
         if (selectedEntry() instanceof MasterTitleEntry.Stock stock) {
@@ -861,19 +897,38 @@ public class MasterTitleScreen {
             }
         }
         String footer = navigation.actions()
-                ? "Up/Down Menu  " + confirmHint() + " Open  Left Games"
-                : "Up/Down Game  Right Menu";
+                ? "L/R Game  U/D Actions  " + confirmHint() + " Open  " + backHint() + " Back"
+                : "Left/Right Game  Up/Down Actions";
         textFitted(footer, 9, 211, viewportWidth - 18, 1f, 0.5f, 0.91f, 1f);
-        if (standaloneActionOpen) drawStandaloneActions();
         font.endMegaBatch();
+    }
+
+    private void drawGameTabs() {
+        int count = Math.min(3, entries.size());
+        int first = Math.min(Math.max(0, selectedIndex - 1), entries.size() - count);
+        int paneWidth = viewportWidth / 2 - 16;
+        int tabWidth = paneWidth / count;
+        for (int slot = 0; slot < count; slot++) {
+            int index = first + slot;
+            MasterTitleEntry entry = entries.get(index);
+            int x = 8 + slot * tabWidth;
+            MenuStyle.panel(font, x, 158, tabWidth - 2, 21);
+            if (index == selectedIndex) MenuStyle.focus(font, x, 158, tabWidth - 2, 21);
+            float shade = isEntryAvailable(entry) ? 1f : .45f;
+            String label = entry instanceof MasterTitleEntry.Stock stock && stock.game() == GameEntry.SONIC_3K
+                    ? "S3 & K" : entry.menuLabel();
+            MenuStyle.text(font, label, x + 2, 164, tabWidth - 6, shade, shade, shade);
+        }
+        if (entries.size() > 3) MenuStyle.text(font, (selectedIndex + 1) + " / " + entries.size()
+                + "  " + selectedEntry().menuLabel(), 12, 182, paneWidth - 8, .7f, .85f, 1);
     }
 
     private void drawToolsAndHelp() {
         if (toolsOpen) focusBox(10, 49 + toolIndex * 27, viewportWidth - 20, 22);
         font.beginMegaBatch();
-        font.drawText(toolsOpen ? "ENGINE TOOLS" : "CONTROLS / HELP", 10, 10, 1f, 1f, 1f, 1f);
-        String[] lines = toolsOpen ? new String[] { "Trace replays", "Engine settings", "Controls / help" }
-                : new String[] { "Up/Down: game or action", "Left/Right: switch pane", confirmHint() + ": open action",
+        font.drawText(toolsOpen ? "ADVANCED" : "CONTROLS / HELP", 10, 10, 1f, 1f, 1f, 1f);
+        String[] lines = toolsOpen ? new String[] { "Trace replays", "Controls / help" }
+                : new String[] { "Left/Right: choose game", "Up/Down: select action", confirmHint() + ": open action",
                     backHint() + ": return one screen", "Settings: draft, then Apply" };
         for (int i = 0; i < lines.length; i++) textFitted(lines[i], 17, 55 + i * 27,
                 viewportWidth - 34, 1f, 1f, 1f, 1f);
@@ -902,20 +957,6 @@ public class MasterTitleScreen {
         box(x + width - 1, y, 1, height, 0.5f, 0.91f, 1f, 1f);
     }
 
-    private void drawGameMenu() {
-        int menuY = 190;
-        List<String> labels = entries.stream().map(MasterTitleEntry::menuLabel).toList();
-        for (MenuItemLayout item : menuItemLayouts(
-                labels, selectedIndex, viewportWidth, font::measureWidth)) {
-            MasterTitleEntry entry = entries.get(item.entryIndex());
-            float[] color = menuTextColor(isEntryAvailable(entry),
-                    item.entryIndex() == selectedIndex, frameCounter);
-            font.drawText(item.text(), item.x(), menuY,
-                    color[0], color[1], color[2], color[3]);
-        }
-    }
-
-
     private void loadRomPreviews() {
         for (MasterTitleEntry entry : entries) {
             if (!(entry instanceof MasterTitleEntry.Stock stock) || !isEntryAvailable(entry)) continue;
@@ -933,28 +974,6 @@ public class MasterTitleScreen {
         }
     }
 
-    private void drawSelectedRomPreview() {
-        RomPreviewState preview = selectedPreview();
-        if (preview == null) return;
-        updateSelectedRomPreviewTexture();
-        PreviewLayout layout = romPreviewLayout(preview.width, preview.height, viewportWidth);
-        renderer.drawTexture(preview.textureId, layout.x(), layout.y(), layout.width(), layout.height());
-    }
-
-    private void drawRomPreviewUiMattes() {
-        if (selectedPreview() == null) return;
-        PreviewLayout bottom = bottomUiMatteLayout(viewportWidth);
-        drawMatte(bottom, BOTTOM_UI_MATTE_ALPHA);
-    }
-
-    private void drawMatte(PreviewLayout layout, float alpha) {
-        if (layout.height() <= 0 || layout.width() <= 0) {
-            return;
-        }
-        renderer.drawTexture(solidWhiteTextureId, layout.x(), layout.y(), layout.width(), layout.height(),
-                0f, 0f, 0f, alpha);
-    }
-
     private void updateSelectedRomPreviewTexture() {
         RomPreviewState preview = selectedPreview();
         if (preview == null) return;
@@ -963,27 +982,6 @@ public class MasterTitleScreen {
         MasterTitleRomPreview.Image frame = preview.sequence.imageAt(previewAnimationFrame);
         MasterTitleRomPreview.updateTexture(preview.textureId, frame);
         preview.frameToken = token;
-    }
-
-    private void drawSelectedMissingRomPrompt() {
-        MasterTitleEntry selected = selectedEntry();
-        if (selected instanceof MasterTitleEntry.Standalone standalone) {
-            drawScaledCenteredText(standalone.displayName(), 98, 1f,
-                    1f, 0.9f, 0.9f, 1f);
-            if (standaloneActionOpen) drawStandaloneActions();
-            return;
-        }
-        if (isEntryAvailable(selected)) {
-            return;
-        }
-        GameEntry entry = ((MasterTitleEntry.Stock) selected).game();
-        font.drawTextCentered(MISSING_ROM_PROMPT, viewportWidth, 82, 1f, 0.25f, 0.25f, 1f);
-
-        String filename = missingRomFilenameLine(entry);
-        float filenameScale = Math.min(0.72f, (viewportWidth - 36f) / Math.max(1, font.measureWidth(filename)));
-        int filenameWidth = font.measureWidth(filename, filenameScale);
-        float filenameX = centerX(filenameWidth, viewportWidth);
-        font.drawText(filename, filenameX, 98, filenameScale, 1f, 0.55f, 0.55f, 1f);
     }
 
     private void drawStandaloneActions() {
@@ -1050,7 +1048,6 @@ public class MasterTitleScreen {
             playErrorSound();
         }
         this.state = State.ERROR_DISPLAY;
-        this.errorFrameCounter = 0;
         this.gameSelected = false;
     }
 
@@ -1066,43 +1063,8 @@ public class MasterTitleScreen {
         this.viewportWidth = Math.max(SCREEN_W, width);
     }
 
-    /**
-     * Returns the horizontal center of an element of {@code elementWidth} pixels
-     * within a viewport of {@code vpWidth} pixels.
-     *
-     * <p>At native width (vpWidth == 320) this collapses to the existing literals:
-     * {@code (320 - w) / 2}.
-     */
-    static float centerX(int elementWidth, int vpWidth) {
-        return (vpWidth - elementWidth) / 2f;
-    }
-
-    static PreviewLayout romPreviewLayout(int previewW, int previewH, int vpWidth) {
-        int width = Math.max(1, previewW);
-        int height = Math.max(1, previewH);
-        return new PreviewLayout(width, height, centerX(width, vpWidth), 0);
-    }
-
-    static PreviewLayout topUiMatteLayout(int vpWidth) {
-        int width = Math.max(SCREEN_W, vpWidth);
-        return new PreviewLayout(width, TOP_UI_MATTE_HEIGHT, 0, SCREEN_H - TOP_UI_MATTE_HEIGHT);
-    }
-
-    static PreviewLayout bottomUiMatteLayout(int vpWidth) {
-        int width = Math.max(SCREEN_W, vpWidth);
-        return new PreviewLayout(width, BOTTOM_UI_MATTE_HEIGHT, 0, 0);
-    }
-
-    static float titleLogoY(int titleHeight) {
-        return SCREEN_H - 2 - titleHeight;
-    }
-
     static int titleLogoScaledWidth(int sourceWidth) {
         return scaledTitleLogoDimension(sourceWidth);
-    }
-
-    static int titleLogoScaledHeight(int sourceHeight) {
-        return scaledTitleLogoDimension(sourceHeight);
     }
 
     private static int scaledTitleLogoDimension(int sourceDimension) {
@@ -1116,100 +1078,6 @@ public class MasterTitleScreen {
 
     static String expectedRomFilename(GameEntry entry) {
         return entry.expectedRomFilename;
-    }
-
-    static String missingRomPromptLine() {
-        return MISSING_ROM_PROMPT;
-    }
-
-    static String missingRomFilenameLine(GameEntry entry) {
-        return expectedRomFilename(entry);
-    }
-
-    static String launchHoverLine(int enabledCount) {
-        if (enabledCount <= 0) {
-            return "Stock launch - Tab to configure";
-        }
-        String noun = enabledCount == 1 ? " option enabled" : " options enabled";
-        return enabledCount + noun + " - Tab to configure";
-    }
-
-    static int scaledCenteredTextX(String text, int screenWidth, float scale) {
-        int textWidth = Math.round(text.length() * PixelFont.glyphWidth() * scale);
-        return Math.round((screenWidth - textWidth) / 2f);
-    }
-
-    static List<MenuItemLayout> menuItemLayouts(
-            List<String> labels, int selectedIndex, int viewportWidth) {
-        return menuItemLayouts(labels, selectedIndex, viewportWidth,
-                text -> text.length() * PixelFont.glyphWidth());
-    }
-
-    private static List<MenuItemLayout> menuItemLayouts(
-            List<String> labels, int selectedIndex, int viewportWidth,
-            ToIntFunction<String> measure) {
-        Objects.requireNonNull(labels, "labels");
-        Objects.requireNonNull(measure, "measure");
-        if (labels.isEmpty()) return List.of();
-        int selected = Math.max(0, Math.min(labels.size() - 1, selectedIndex));
-        int width = Math.max(1, viewportWidth);
-        int spacing = 20;
-        int totalWidth = spacing * (labels.size() - 1);
-        for (String label : labels) totalWidth += measure.applyAsInt(label);
-        if (totalWidth <= width) {
-            List<MenuItemLayout> result = new ArrayList<>(labels.size());
-            int cursor = (width - totalWidth) / 2;
-            for (int i = 0; i < labels.size(); i++) {
-                String label = labels.get(i);
-                int labelWidth = measure.applyAsInt(label);
-                result.add(new MenuItemLayout(i, label, cursor, labelWidth));
-                cursor += labelWidth + spacing;
-            }
-            return List.copyOf(result);
-        }
-
-        int available = Math.max(1, width - FITTED_TEXT_SIDE_PADDING * 2);
-        String visible = elideToWidth(labels.get(selected), available, measure);
-        int visibleWidth = Math.min(available, measure.applyAsInt(visible));
-        return List.of(new MenuItemLayout(
-                selected, visible, Math.max(0, (width - visibleWidth) / 2), visibleWidth));
-    }
-
-    private static String elideToWidth(String text, int maxWidth, ToIntFunction<String> measure) {
-        if (measure.applyAsInt(text) <= maxWidth) return text;
-        String suffix = "...";
-        if (measure.applyAsInt(suffix) > maxWidth) return "";
-        int low = 0;
-        int high = text.length();
-        while (low < high) {
-            int mid = (low + high + 1) >>> 1;
-            if (measure.applyAsInt(text.substring(0, mid) + suffix) <= maxWidth) low = mid;
-            else high = mid - 1;
-        }
-        return text.substring(0, low) + suffix;
-    }
-
-    static float[] menuTextColor(boolean available, boolean selected, int frameCounter) {
-        if (!available) {
-            if (selected) {
-                return new float[] { 0.72f, 0.72f, 0.72f, 0.85f };
-            }
-            return new float[] { 0.4f, 0.4f, 0.4f, 0.7f };
-        }
-        if (selected) {
-            float pulse = 0.5f + 0.5f * (float) Math.sin(frameCounter * 0.05);
-            float brightness = 1.0f + 0.3f * pulse;
-            return new float[] { brightness, brightness, brightness, 1.0f };
-        }
-        return new float[] { 0.8f, 0.8f, 0.8f, 1.0f };
-    }
-
-    static float[] secondaryActionTextColor(boolean focused, int frameCounter) {
-        if (!focused) {
-            return new float[] { 0.55f, 0.55f, 0.65f, 0.9f };
-        }
-        float pulse = 0.85f + 0.15f * (float) Math.sin(frameCounter * 0.08f);
-        return new float[] { pulse, 0.75f * pulse, 0.25f * pulse, 1.0f };
     }
 
     private MasterTitleEntry selectedEntry() {
@@ -1513,37 +1381,6 @@ public class MasterTitleScreen {
         return menu;
     }
 
-    private void drawLaunchHoverLine() {
-        if (!(selectedEntry() instanceof MasterTitleEntry.Stock stock)
-                || !isEntryAvailable(stock)) return;
-        GameEntry entry = stock.game();
-        int enabledCount = launchProfileStore.load(entry).enabledCount(entry);
-        if (enabledCount == 0) {
-            drawScaledCenteredText(launchHoverLine(enabledCount), LAUNCH_HOVER_Y, LAUNCH_HOVER_SCALE,
-                    0.55f, 0.55f, 0.55f, 0.88f);
-        } else {
-            drawScaledCenteredText(launchHoverLine(enabledCount), LAUNCH_HOVER_Y, LAUNCH_HOVER_SCALE,
-                    1f, 0.82f, 0.28f, 1f);
-        }
-    }
-
-    private void drawScaledCenteredText(String text, int y, float preferredScale,
-                                        float r, float g, float b, float a) {
-        float scale = fittedScale(text, preferredScale, viewportWidth);
-        int width = font.measureWidth(text, scale);
-        int x = Math.round((viewportWidth - width) / 2f);
-        font.drawText(text, x, y, scale, r, g, b, a);
-    }
-
-    private static float fittedScale(String text, float preferredScale, int viewportWidth) {
-        int preferredWidth = Math.round(text.length() * PixelFont.glyphWidth() * preferredScale);
-        int maxWidth = Math.max(1, viewportWidth - FITTED_TEXT_SIDE_PADDING * 2);
-        if (preferredWidth <= maxWidth) {
-            return preferredScale;
-        }
-        return preferredScale * maxWidth / preferredWidth;
-    }
-
     /**
      * Cleans up all GL resources.
      */
@@ -1607,7 +1444,7 @@ public class MasterTitleScreen {
 
     /** Menu ownership is intentionally separate from the exported title-screen API. */
     boolean blocksGlobalShortcuts() {
-        return state != State.ACTIVE || navigation.actions() || childInputPending
+        return state != State.ACTIVE || navigation.actions() || quitPrompt || childInputPending
                 || settingsScreen != null || launchConfigPanel != null || modManagerScreen != null
                 || timeAttackMenu != null || userRecordingMenu != null || raceLobbyScreen != null
                 || serverBrowserScreen != null || tracePicker != null || standaloneActionOpen
