@@ -771,70 +771,17 @@ public class SidekickCpuController {
     }
 
     public String formatLatestNormalStepDiagnostics() {
-        if (latestNormalStepDiagnostics == null) {
-            return "eng-tails-cpu none";
-        }
-        NormalStepDiagnostics d = latestNormalStepDiagnostics;
-        return String.format(
-                "eng-tails-cpu f=%d state=%s branch=%s hist=%d/%02d in=%04X stat=%02X push=%02X "
-                        + "pre=obj%02X st%02X x=%04X.%04X xv%04X yv%04X gv%04X a=%02X "
-                        + "gen=%04X jp=%s postCpu=obj%02X st%02X xv%04X yv%04X gv%04X "
-                        + "x=%04X.%04X a=%02X nudge=%d postPhys=%s obj%02X st%02X "
-                        + "xv%04X yv%04X gv%04X x=%04X.%04X a=%02X dx=%04X dy=%04X skip=%s grace=%d",
-                d.frameCounter(),
-                d.state(),
-                d.followBranch(),
-                d.followDelayFrames(),
-                d.followHistorySlot(),
-                d.recordedInput() & 0xFFFF,
-                d.recordedStatus() & 0xFF,
-                d.pushBypassStatus() & 0xFF,
-                d.preObjectControl() & 0xFF,
-                d.preStatus() & 0xFF,
-                d.preCpuX() & 0xFFFF,
-                d.preCpuXSubpixel() & 0xFFFF,
-                d.preXVel() & 0xFFFF,
-                d.preYVel() & 0xFFFF,
-                d.preGroundVel() & 0xFFFF,
-                d.preAngle() & 0xFF,
-                d.generatedInput() & 0xFFFF,
-                d.inputJumpPress(),
-                d.postCpuObjectControl() & 0xFF,
-                d.postCpuStatus() & 0xFF,
-                d.postCpuXVel() & 0xFFFF,
-                d.postCpuYVel() & 0xFFFF,
-                d.postCpuGroundVel() & 0xFFFF,
-                d.postCpuX() & 0xFFFF,
-                d.postCpuXSubpixel() & 0xFFFF,
-                d.postCpuAngle() & 0xFF,
-                d.appliedFollowNudge(),
-                d.postPhysicsRecorded() ? "seen" : "missing",
-                d.postPhysicsObjectControl() & 0xFF,
-                d.postPhysicsStatus() & 0xFF,
-                d.postPhysicsXVel() & 0xFFFF,
-                d.postPhysicsYVel() & 0xFFFF,
-                d.postPhysicsGroundVel() & 0xFFFF,
-                d.postPhysicsX() & 0xFFFF,
-                d.postPhysicsXSubpixel() & 0xFFFF,
-                d.postPhysicsAngle() & 0xFF,
-                d.dx() & 0xFFFF,
-                d.dy() & 0xFFFF,
-                d.skipFollowSteering(),
-                normalPushingGraceFrames);
+        return SidekickNormalStepDiagnosticRecorder.format(
+                latestNormalStepDiagnostics, normalPushingGraceFrames);
     }
 
     public void recordDiagnosticPostPhysics() {
         if (latestNormalStepDiagnostics != null
                 && latestNormalStepDiagnostics.frameCounter() == frameCounter) {
-            latestNormalStepDiagnostics = latestNormalStepDiagnostics.withPostPhysics(
-                    diagnosticStatusByte(),
-                    diagnosticObjectControlByte(),
-                    sidekick.getXSpeed(),
-                    sidekick.getYSpeed(),
-                    sidekick.getGSpeed(),
-                    sidekick.getCentreX(),
-                    (short) sidekick.getXSubpixelRaw(),
-                    sidekick.getAngle());
+            latestNormalStepDiagnostics = SidekickNormalStepDiagnosticRecorder.recordPostPhysics(
+                    latestNormalStepDiagnostics, frameCounter, diagnosticStatusByte(), diagnosticObjectControlByte(),
+                    sidekick.getXSpeed(), sidekick.getYSpeed(), sidekick.getGSpeed(), sidekick.getCentreX(),
+                    (short) sidekick.getXSubpixelRaw(), sidekick.getAngle());
         }
         applyPendingNativeEndingPoseAfterPhysics();
     }
@@ -871,47 +818,10 @@ public class SidekickCpuController {
     }
 
     private NormalStepDiagnostics beginNormalStepDiagnostics(String branch) {
-        latestNormalStepDiagnostics = new NormalStepDiagnostics(
-                frameCounter,
-                state,
-                branch,
-                diagnosticStatusByte(),
-                diagnosticObjectControlByte(),
-                sidekick.getXSpeed(),
-                sidekick.getYSpeed(),
-                sidekick.getGSpeed(),
-                sidekick.getCentreX(),
-                (short) sidekick.getXSubpixelRaw(),
-                sidekick.getAngle(),
-                -1,
-                -1,
-                0,
-                0,
-                0,
-                -1,
-                -1,
-                0,
-                0,
-                diagnosticStatusByte(),
-                diagnosticObjectControlByte(),
-                sidekick.getXSpeed(),
-                sidekick.getYSpeed(),
-                sidekick.getGSpeed(),
-                sidekick.getCentreX(),
-                (short) sidekick.getXSubpixelRaw(),
-                sidekick.getAngle(),
-                0,
-                false,
-                0,
-                0,
-                (short) 0,
-                (short) 0,
-                (short) 0,
-                (short) 0,
-                (short) 0,
-                (byte) 0,
-                false,
-                false);
+        latestNormalStepDiagnostics = SidekickNormalStepDiagnosticRecorder.begin(
+                frameCounter, state, branch, diagnosticStatusByte(), diagnosticObjectControlByte(),
+                sidekick.getXSpeed(), sidekick.getYSpeed(), sidekick.getGSpeed(), sidekick.getCentreX(),
+                (short) sidekick.getXSubpixelRaw(), sidekick.getAngle());
         return latestNormalStepDiagnostics;
     }
 
@@ -964,7 +874,8 @@ public class SidekickCpuController {
                                                       int appliedFollowNudge) {
         diagnosticCtrl2HeldLatch = generatedInput & 0xFF;
         diagnosticCtrl2PressedLatch = generatedPressedInput & 0xFF;
-        latestNormalStepDiagnostics = base.withCpuResult(
+        latestNormalStepDiagnostics = SidekickNormalStepDiagnosticRecorder.recordCpuResult(
+                base,
                 branch,
                 followDelayFrames,
                 followHistorySlot,
