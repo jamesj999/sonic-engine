@@ -26,6 +26,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * They are aligned by ordinal, never by the frame field, and every compared
  * value comes from the engine. Nothing here fixes an engine divergence.
  */
+@org.junit.jupiter.api.Tag("audio-reference")
 class TestS2DriverStateOracle {
 
     @Test
@@ -52,6 +53,7 @@ class TestS2DriverStateOracle {
 
     @Test
     @ExtendWith(SessionInvocationExtension.class)
+    @org.junit.jupiter.api.Tag("performance-measurement")
     void driverStateComparesAcrossTheWidenedSpan() throws Exception {
         String romProperty = System.getProperty("sonic2.rom.path");
         String bk2Property = System.getProperty("s2.request.bk2.path");

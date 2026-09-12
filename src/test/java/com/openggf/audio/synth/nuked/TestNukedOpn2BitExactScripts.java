@@ -1,5 +1,6 @@
 package com.openggf.audio.synth.nuked;
 
+import com.openggf.tests.AudioReferenceFixtures;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.TestFactory;
@@ -20,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Pins the {@link NukedOpn2} port cycle-for-cycle against the pinned C build
  * ({@code tools/audio/nuked-opn2/PIN.md}) at the pin level.
  *
- * <p>Every script body under {@code src/test/resources/audio/nuked-opn2/port/}
+ * <p>Every synthetic script body under {@code src/test/resources/audio/nuked-opn2/port/}
  * is run under all four chip-type flag sets by {@link NukedOpn2ScriptRunner};
  * {@code expected.txt} holds, per body and chip type, the cycle count, the
  * FNV-1a checksum of every MOL/MOR pin value the C {@code ym3438.c} produced
@@ -29,15 +30,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * sweep over EG rates, SSG-EG modes, LFO settings, detune/multiple, channel 3
  * special mode and CSM, timers, DAC writes, the LSI test registers, bus edge
  * cases and a seeded fuzz; the {@code s1-}, {@code s2-} and {@code s3k-}
- * bodies are real SMPS write logs captured with
+ * bodies are external SMPS write logs selected by the audio-reference tag, captured with
  * {@code com.openggf.tools.audio.FmSfxRenderTool} at the chip's internal
  * rate. The expectations were produced by
  * {@code tools/audio/nuked-opn2/harness/regenerate-bitexact-expectations.sh};
  * the validation record is
  * {@code docs/architecture/validation/2026-08-29-nuked-opn2-port-bit-exactness.md}.
  */
-// Minutes-long oracle sweep: excluded from the -Psmoke fast lane, still run by
-// the default suite on pull requests, the nightly schedule and release validation.
+// The public synthetic sweep is excluded from smoke; captured game logs require
+// the explicit audio-reference profile and an external fixture root.
 @Tag("slow-suite")
 class TestNukedOpn2BitExactScripts {
     private static final long FNV_OFFSET = 0xcbf29ce484222325L;
@@ -48,7 +49,18 @@ class TestNukedOpn2BitExactScripts {
     Stream<DynamicTest> scriptsMatchTheCBuildCycleForCycle() throws IOException, URISyntaxException {
         Path directory = Path.of(TestNukedOpn2BitExactScripts.class
                 .getResource("/audio/nuked-opn2/port/expected.txt").toURI()).getParent();
+        return scripts(directory, false);
+    }
+
+    @TestFactory
+    @Tag("audio-reference")
+    Stream<DynamicTest> capturedScriptsMatchTheCBuildCycleForCycle() throws IOException {
+        return scripts(AudioReferenceFixtures.require("audio/nuked-opn2/port/expected.txt").getParent(), true);
+    }
+
+    private static Stream<DynamicTest> scripts(Path directory, boolean captured) throws IOException {
         List<String> expectations = Files.readAllLines(directory.resolve("expected.txt"));
+        assertTrue(!expectations.isEmpty(), "expected.txt must not be empty");
         long bodies;
         try (Stream<Path> listing = Files.list(directory)) {
             bodies = listing.filter(p -> p.toString().endsWith(".txt.gz")).count();
@@ -57,8 +69,15 @@ class TestNukedOpn2BitExactScripts {
                 "expected.txt must list every script body under every chip type");
         return expectations.stream().map(line -> {
             String[] fields = line.trim().split("\\s+");
+            assertEquals(captured, isCaptured(fields[0]), "script belongs to the wrong fixture partition: " + fields[0]);
+            assertTrue(Files.isRegularFile(directory.resolve(fields[0] + ".txt.gz")),
+                    "missing script: " + fields[0]);
             return DynamicTest.dynamicTest(fields[0] + "-t" + fields[1], () -> runScript(directory, fields));
         });
+    }
+
+    private static boolean isCaptured(String name) {
+        return name.startsWith("s1-") || name.startsWith("s2-") || name.startsWith("s3k-");
     }
 
     private static void runScript(Path directory, String[] expectation) throws IOException {

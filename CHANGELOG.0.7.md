@@ -115,7 +115,10 @@ campaigns; feature/API publication remains subject to the 0.8 roadmap.
   column, consolidate equivalent FBZ traversals, and advance integration-test room
   deadlines through a controlled clock with observed membership and publication barriers.
   Strict byte validation, digest pins, ROM configurations, stress sizes, and real
-  socket exchanges remain covered.
+  socket exchanges remain covered. An opt-in two-JVM test profile retains serial
+  execution inside each worker. Public audio tests retain synthetic chip vectors;
+  game-derived audio captures move to explicitly supplied, digest-checked external
+  fixtures, and the full-size streaming memory check has an explicit stress lane.
 
 - **Local test categories:** select related subsystem checks from changed paths, with
   common tests and structural guards retained, broad fallback for shared changes,

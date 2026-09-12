@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
  * audio oracle sourced from a real playthrough (the pinned complete-run movie
  * {@code sonic1-complete-withemeralds.bk2}, power-on through early GHZ1 play)
  * rather than a scripted sound-test movie. See
- * {@code src/test/resources/audio/parity/s1/fixture-manifest.json} for the
+ * {@code audio/parity/s1/fixture-manifest.json} under the external fixture root for the
  * fixture's capture provenance.
  *
  * <p>v3 supersedes v2, which superseded v1. v2 added a second dispatch hook
@@ -48,9 +48,9 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
  * ticks match. See docs/status/audio-frontier-log.md for the dated
  * measurement this pins.
  */
+@org.junit.jupiter.api.Tag("audio-reference")
 class TestS1GameplayAudioDriverOracle {
-    private static final Path REFERENCE = Path.of(
-            "src/test/resources/audio/parity/s1/s1-gameplay-ghz1-reference.v3.jsonl.gz");
+    private static final Path REFERENCE = com.openggf.tests.AudioReferenceFixtures.require("audio/parity/s1/s1-gameplay-ghz1-reference.v3.jsonl.gz");
 
     @TempDir
     Path temp;

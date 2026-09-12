@@ -47,10 +47,6 @@ public final class S3kRequestObservationSidecar {
         this.observations = Collections.unmodifiableMap(new LinkedHashMap<>(observations));
     }
 
-    /** The committed observations for the S3K oracle's power-on window. */
-    public static final Path COMMITTED = Path.of(
-            "src/test/resources/audio/parity/s3k/s3k-aiz1-intro-requests-v1.json");
-
     /** An empty sidecar: every row is unobserved, which is the pre-existing behaviour. */
     public static S3kRequestObservationSidecar absent() {
         return new S3kRequestObservationSidecar(null, null, 0, 0, null, Map.of());

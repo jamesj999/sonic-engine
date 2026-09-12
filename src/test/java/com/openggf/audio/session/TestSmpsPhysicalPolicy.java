@@ -73,6 +73,7 @@ class TestSmpsPhysicalPolicy {
             "audio/parity/s3k/s3k-stop-all-write-program.v1.json";
 
     @Test
+    @org.junit.jupiter.api.Tag("audio-reference")
     void s3kBootAndStopProgramsMatchShippedOrder() {
         List<SmpsChipWrite> expectedStop84 =
                 ExactWriteProgramFixture.load(FIXTURE);
@@ -98,6 +99,7 @@ class TestSmpsPhysicalPolicy {
     }
 
     @Test
+    @org.junit.jupiter.api.Tag("audio-reference")
     void s3kStopKeepsSourceChannelAndTailOrder() {
         List<SmpsChipWrite> writes =
                 ExactWriteProgramFixture.load(FIXTURE);

@@ -23,8 +23,9 @@ import org.junit.jupiter.api.Test;
  * the gzip fixture's checksum, its metadata sidecar, the source BK2 identity,
  * and the stream's own terminal digest must all agree.
  */
+@org.junit.jupiter.api.Tag("audio-reference")
 class TestS3kAudioOracleFixtureContract {
-    private static final Path FIXTURE_DIR = Path.of("src/test/resources/audio/parity/s3k");
+    private static final Path FIXTURE_DIR = com.openggf.tests.AudioReferenceFixtures.require("audio/parity/s3k");
     private static final Path REFERENCE = FIXTURE_DIR.resolve("s3k-aiz1-intro-reference-v1.jsonl.gz");
     private static final Path METADATA = FIXTURE_DIR.resolve("s3k-aiz1-intro-metadata-v1.json");
 

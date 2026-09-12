@@ -8,8 +8,9 @@ package com.openggf.tools.audio.parity.s2;
  */
 public final class S2OracleSchema {
     public static final String PAYLOAD_SCHEMA = "openggf.s2-oracle-audio-raw.v1";
+    /** Comparison-fixture member relative to an explicitly supplied external root. */
     public static final String FIXTURE_RESOURCE =
-            "/audio/parity/s2/s2-ehz-reload-w10150-10900.raw.jsonl.gz";
+            "audio/parity/s2/s2-ehz-reload-w10150-10900.raw.jsonl.gz";
     public static final String S2_REV01_SHA1 = "8bca5dcef1af3e00098666fd892dc1c2a76333f9";
     public static final String BK2_SHA256 =
             "e850798f882b8c580aad148bc97cb50f260cae1d336dd649fe2f4dfae6796aa5";

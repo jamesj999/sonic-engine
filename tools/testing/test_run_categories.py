@@ -98,6 +98,27 @@ class CategoryPolicyTests(unittest.TestCase):
             self.assertEqual(0, runner.main(['--category', 'physics', '--json']))
         self.assertEqual(compact['selected_classes'], len(json.loads(output.getvalue())['tests']))
 
+    def test_workers_are_opt_in_and_do_not_change_selection(self):
+        with patch('sys.stdout', new_callable=io.StringIO) as output:
+            self.assertEqual(0, runner.main(['--category', 'physics', '--json']))
+        serial = json.loads(output.getvalue())
+        with patch('sys.stdout', new_callable=io.StringIO) as output:
+            self.assertEqual(0, runner.main(['--category', 'physics', '--workers', '2', '--json']))
+        concurrent = json.loads(output.getvalue())
+        self.assertEqual(1, serial.pop('workers'))
+        self.assertEqual(2, concurrent.pop('workers'))
+        self.assertEqual(serial, concurrent)
+
+    def test_invalid_workers_are_rejected_before_execution(self):
+        for workers in ('0', '3', '1.5', 'auto'):
+            with self.subTest(workers=workers), patch('sys.stderr', new_callable=io.StringIO), patch.object(runner, 'run_plan') as run:
+                with self.assertRaises(SystemExit) as error:
+                    runner.main(['--category', 'physics', '--workers', workers, '--run'])
+                self.assertEqual(2, error.exception.code)
+                run.assert_not_called()
+        with self.assertRaisesRegex(ValueError, 'workers must be 1 or 2'):
+            runner.make_plan(runner.ROOT, self.policy, None, ['physics'], workers=3)
+
     def test_diff_includes_committed_staged_unstaged_deleted_and_untracked(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -159,6 +180,29 @@ class RunnerTests(unittest.TestCase):
             self.assertIn('-Pguards', guards)
             self.assertFalse(any('includesFile' in arg for arg in guards))
             self.assertNotEqual([arg for arg in ordinary if 'surefire.reports' in arg], [arg for arg in guards if 'surefire.reports' in arg])
+
+    def test_worker_profile_and_results_keep_guards_serial_for_full_and_partial_runs(self):
+        for workers in (1, 2):
+            for full in (False, True):
+                with self.subTest(workers=workers, full=full), tempfile.TemporaryDirectory() as tmp:
+                    root = Path(tmp)
+                    plan = {'tests': ['com/openggf/TestExample.java'], 'full': full,
+                            'guards': True, 'categories': ['common'], 'inventory_count': 1,
+                            'workers': workers}
+                    summary = {'reports': 1, 'tests': 2, 'skipped': 0, 'errors': 0, 'failures': 0}
+                    with patch.object(runner, 'tree_state', return_value='state'), patch.object(runner, 'rom_args', return_value=['-Dsonic1.rom.path=/roms/s1.gen']), patch.object(runner, 'summarize', side_effect=lambda _: dict(summary)), patch.object(runner, 'run_logged', return_value=0) as process:
+                        self.assertEqual(0, runner.run_plan(root, plan))
+                    ordinary, guards = [call.args[0] for call in process.call_args_list]
+                    self.assertEqual(workers == 2, '-Ptest-concurrent' in ordinary)
+                    self.assertEqual(not full, any('includesFile=' in arg for arg in ordinary))
+                    self.assertNotIn('-Ptest-concurrent', guards)
+                    self.assertIn('-Pguards', guards)
+                    self.assertFalse(any('includesFile=' in arg for arg in guards))
+                    for command in (ordinary, guards):
+                        self.assertIn('-Dsonic1.rom.path=/roms/s1.gen', command)
+                    run = next((root / 'target/category-tests').iterdir())
+                    self.assertEqual(workers, json.loads((run / 'plan.json').read_text())['workers'])
+                    self.assertEqual([workers, 1], [result['workers'] for result in json.loads((run / 'results.json').read_text())])
 
     def test_all_skips_are_retained_with_reasons(self):
         with tempfile.TemporaryDirectory() as tmp:

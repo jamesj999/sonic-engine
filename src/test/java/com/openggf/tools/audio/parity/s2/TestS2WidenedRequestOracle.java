@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * committed payloads are comparison-only; nothing here hydrates engine state,
  * and nothing here fixes an engine divergence.
  */
+@org.junit.jupiter.api.Tag("audio-reference")
 class TestS2WidenedRequestOracle {
 
     /** The widest movie row the committed run chain replays in one capture. */
@@ -100,6 +101,7 @@ class TestS2WidenedRequestOracle {
 
     @Test
     @ExtendWith(SessionInvocationExtension.class)
+    @org.junit.jupiter.api.Tag("performance-measurement")
     void everyReplayableWindowComparesAgainstTheEnginesOwnRequests()
             throws Exception {
         String romProperty = System.getProperty("sonic2.rom.path");

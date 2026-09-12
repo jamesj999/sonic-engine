@@ -29,8 +29,7 @@ public final class ExactWriteProgramFixture {
     }
 
     public static List<SmpsChipWrite> load(String resource) {
-        try (InputStream input = ExactWriteProgramFixture.class
-                .getClassLoader().getResourceAsStream(resource)) {
+        try (InputStream input = com.openggf.tests.AudioReferenceFixtures.open(resource)) {
             if (input == null) {
                 throw new IllegalArgumentException(
                         "missing exact-write fixture " + resource);

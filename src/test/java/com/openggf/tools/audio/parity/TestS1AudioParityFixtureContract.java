@@ -18,14 +18,14 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import org.junit.jupiter.api.Test;
 
+@org.junit.jupiter.api.Tag("audio-reference")
 class TestS1AudioParityFixtureContract {
     private static final String EXPECTED_SHA256 =
             "622ff642d0b0835a4f77bee568f2413f288ead3306a8bc2a93e8d8f77f24ca9c";
     private static final Set<String> EXPECTED_ENTRIES = Set.of(
             "BizState 1.0", "BizVersion.txt", "Header.txt", "Comments.txt",
             "Subtitles.txt", "SyncSettings.json", "Input Log.txt");
-    private static final Path FIXTURE = Path.of(
-            "src/test/resources/audio/parity/s1/s1-soundtest-ghz.bk2");
+    private static final Path FIXTURE = com.openggf.tests.AudioReferenceFixtures.require("audio/parity/s1/s1-soundtest-ghz.bk2");
 
     @Test
     void controllerOnlySoundTestMovieHasPinnedContract() throws Exception {

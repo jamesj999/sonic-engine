@@ -17,16 +17,16 @@ import javax.sound.sampled.AudioSystem;
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 
 /**
  * Utility to generate reference audio WAV files for regression testing.
- * These reference files capture the audio output of the engine at a known-good state.
+ * These local files capture engine output at a known-good state; they are not independent parity evidence.
+ * Supply -Dopenggf.audio.fixtures=&lt;external-root&gt;; output stays beneath audio-reference/.
  * After optimizations, the AudioRegressionTest compares new output against these references.
  */
 public class AudioReferenceGenerator {
 
-    private static final String REFERENCE_DIR = "src/test/resources/audio-reference";
+    private static final String REFERENCE_DIR = "audio-reference";
     private static final double SAMPLE_RATE = Ym2612Chip.getDefaultOutputRate();
     private static final int BUFFER_SIZE = 1024;
 
@@ -52,11 +52,29 @@ public class AudioReferenceGenerator {
         this.dacData = loader.loadDacData();
     }
 
+    /** Local engine-generated baselines are separate from independent parity references. */
+    private static Path referenceDirectory() throws IOException {
+        Path root = com.openggf.tests.AudioReferenceFixtures.require(".").toRealPath();
+        // A worktree's .git is a file; the main checkout's .git is a directory.
+        // Reject either owning tree, including a symlink resolving into it.
+        for (Path ancestor = Path.of("").toAbsolutePath().toRealPath();
+                ancestor != null; ancestor = ancestor.getParent()) {
+            if (Files.exists(ancestor.resolve(".git")) && root.startsWith(ancestor)) {
+                throw new IllegalArgumentException("Generated audio references must be outside the repository");
+            }
+        }
+        Path directory = root.resolve(REFERENCE_DIR);
+        if (Files.exists(directory) && !directory.toRealPath().startsWith(root)) {
+            throw new IllegalArgumentException("Audio reference directory must remain inside the external root");
+        }
+        return directory;
+    }
+
     /**
      * Generate all reference audio files.
      */
     public void generateAll() throws IOException {
-        Path refDir = Paths.get(REFERENCE_DIR);
+        Path refDir = referenceDirectory();
         Files.createDirectories(refDir);
 
         System.out.println("Generating audio reference files to: " + refDir.toAbsolutePath());
@@ -245,7 +263,12 @@ public class AudioReferenceGenerator {
     }
 
     private void writeWav(String filename, short[] audio) throws IOException {
-        Path filePath = Paths.get(REFERENCE_DIR, filename);
+        Path directory = referenceDirectory();
+        Path filePath = directory.resolve(filename).normalize();
+        if (!filePath.getParent().equals(directory) || Files.isSymbolicLink(filePath)) {
+            throw new IllegalArgumentException("WAV filename must be a direct member of the external reference directory");
+        }
+        Files.createDirectories(directory);
 
         AudioFormat format = new AudioFormat(
                 AudioFormat.Encoding.PCM_SIGNED,

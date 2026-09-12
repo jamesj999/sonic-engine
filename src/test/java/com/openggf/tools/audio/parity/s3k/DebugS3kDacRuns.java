@@ -14,9 +14,8 @@ class DebugS3kDacRuns {
     @Test
     void annotateRuns() {
         List<S3kAudioTick> reference = new ArrayList<>();
-        S3kAudioReferenceReader.readDriverServices(Path.of(
-                "src/test/resources/audio/parity/s3k/s3k-aiz1-intro-reference-v2.jsonl.gz"),
-                S3kRequestObservationSidecar.read(S3kRequestObservationSidecar.COMMITTED),
+        S3kAudioReferenceReader.readDriverServices(com.openggf.tests.AudioReferenceFixtures.require("audio/parity/s3k/s3k-aiz1-intro-reference-v2.jsonl.gz"),
+                S3kRequestObservationSidecar.read(com.openggf.tests.AudioReferenceFixtures.require("audio/parity/s3k/s3k-aiz1-intro-requests-v1.json")),
                 reference::add);
         List<S3kAudioTick> engine = S3kOpenGgfAudioCapture.capture(
                 Path.of(System.getProperty("s3k.rom.path")), reference, null).ticks();

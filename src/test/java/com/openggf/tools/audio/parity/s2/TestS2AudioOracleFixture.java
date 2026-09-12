@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * comparator anchors on. A fixture that drifts in any byte fails here before
  * any comparison can silently change meaning.
  */
+@org.junit.jupiter.api.Tag("audio-reference")
 class TestS2AudioOracleFixture {
 
     @Test
@@ -112,15 +113,11 @@ class TestS2AudioOracleFixture {
     }
 
     static Path fixturePath() throws URISyntaxException {
-        URL resource = TestS2AudioOracleFixture.class
-                .getResource(S2OracleSchema.FIXTURE_RESOURCE);
-        assertNotNull(resource, "committed S2 oracle fixture is absent");
-        return Path.of(resource.toURI());
+        return com.openggf.tests.AudioReferenceFixtures.require(S2OracleSchema.FIXTURE_RESOURCE);
     }
 
     private static InputStream fixtureStream() {
-        InputStream stream = TestS2AudioOracleFixture.class
-                .getResourceAsStream(S2OracleSchema.FIXTURE_RESOURCE);
+        InputStream stream = com.openggf.tests.AudioReferenceFixtures.open(S2OracleSchema.FIXTURE_RESOURCE);
         assertNotNull(stream, "committed S2 oracle fixture is absent");
         return stream;
     }

@@ -26,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 // Minutes-long oracle sweep: excluded from the -Psmoke fast lane, still run by
 // the default suite on pull requests, the nightly schedule and release validation.
 @Tag("slow-suite")
+@org.junit.jupiter.api.Tag("audio-reference")
 class TestS2RequestWindowFixture {
     static final String FIXTURE_RESOURCE =
             "/audio/parity/s2/s2-request-window-w10150-10900.raw-v2.jsonl.gz";
@@ -91,8 +92,7 @@ class TestS2RequestWindowFixture {
     }
 
     private static InputStream fixtureStream() {
-        InputStream stream = TestS2RequestWindowFixture.class
-                .getResourceAsStream(FIXTURE_RESOURCE);
+        InputStream stream = com.openggf.tests.AudioReferenceFixtures.open(FIXTURE_RESOURCE);
         assertNotNull(stream, "committed S2 request-window fixture is absent");
         return stream;
     }

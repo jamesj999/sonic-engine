@@ -149,7 +149,7 @@ final class S2DriverStateReference {
 
     /** The same, for another committed driver-state reference of this shape. */
     static InputStream open(String resource) throws IOException {
-        InputStream stream = S2DriverStateReference.class.getResourceAsStream(resource);
+        InputStream stream = com.openggf.tests.AudioReferenceFixtures.open(resource);
         if (stream == null) {
             throw new IOException("committed S2 driver-state reference is absent");
         }
@@ -164,7 +164,7 @@ final class S2DriverStateReference {
             throws IOException, NoSuchAlgorithmException {
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
         try (InputStream stream =
-                     S2DriverStateReference.class.getResourceAsStream(resource)) {
+                     com.openggf.tests.AudioReferenceFixtures.open(resource)) {
             if (stream == null) {
                 throw new IOException("committed S2 driver-state reference is absent");
             }

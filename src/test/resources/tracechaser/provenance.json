@@ -18,7 +18,7 @@
     },
     {
       "source": "contracts/audio/normalization-contract-v1.json",
-      "destination": "src/test/resources/audio/parity/s1/normalization-contract-v1.json",
+      "destination": "src/test/resources/audio/contracts/normalization-contract-v1.json",
       "sha256": "7b06a1e5160e865f9716ce89b85f5874c429ad79b3030763d5d0496fb1a70c40",
       "consumer": "OpenGGF S1 audio normalization tests"
     }

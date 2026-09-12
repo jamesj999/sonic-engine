@@ -31,6 +31,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * none: EHZ is driver {@code 82h} against engine {@code 81h}, CPZ is driver
  * {@code 8Eh} against engine {@code 8Ch}.
  */
+@org.junit.jupiter.api.Tag("audio-reference")
 class TestS2CpzDriverStateOracle {
 
     static final String RESOURCE =
@@ -276,8 +277,7 @@ class TestS2CpzDriverStateOracle {
         List<S2OracleEngineCapture.DriverRequest> stimuli = new ArrayList<>();
         com.fasterxml.jackson.databind.ObjectMapper json =
                 new com.fasterxml.jackson.databind.ObjectMapper();
-        try (java.io.InputStream raw = TestS2CpzDriverStateOracle.class
-                .getResourceAsStream(REQUEST_STIMULI_RESOURCE)) {
+        try (java.io.InputStream raw = com.openggf.tests.AudioReferenceFixtures.open(REQUEST_STIMULI_RESOURCE)) {
             com.fasterxml.jackson.databind.JsonNode root = json.readTree(
                     java.util.Objects.requireNonNull(raw,
                             "committed CPZ request stimuli are absent"));
@@ -317,8 +317,7 @@ class TestS2CpzDriverStateOracle {
     private static int ringRequestsBefore(int anchorRow) throws IOException {
         com.fasterxml.jackson.databind.ObjectMapper json =
                 new com.fasterxml.jackson.databind.ObjectMapper();
-        try (java.io.InputStream raw = TestS2CpzDriverStateOracle.class
-                .getResourceAsStream(REQUEST_STIMULI_RESOURCE)) {
+        try (java.io.InputStream raw = com.openggf.tests.AudioReferenceFixtures.open(REQUEST_STIMULI_RESOURCE)) {
             com.fasterxml.jackson.databind.JsonNode root = json.readTree(
                     java.util.Objects.requireNonNull(raw,
                             "committed CPZ request stimuli are absent"));

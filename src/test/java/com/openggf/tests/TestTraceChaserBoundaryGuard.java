@@ -13,6 +13,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.xpath.XPathFactory;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -35,10 +37,15 @@ class TestTraceChaserBoundaryGuard {
     }
 
     @Test
-    void ordinaryMavenExcludesOptInIntegrationTag() throws IOException {
+    void ordinaryMavenExcludesOptInIntegrationTag() throws Exception {
         String pom = Files.readString(Path.of("pom.xml"));
         assertTrue(pom.contains("tracechaser-integration"));
-        assertTrue(pom.contains("<surefire.excludedGroups>tracechaser-integration</surefire.excludedGroups>"));
+        var document = DocumentBuilderFactory.newInstance().newDocumentBuilder()
+                .parse(Path.of("pom.xml").toFile());
+        String excluded = XPathFactory.newInstance().newXPath()
+                .evaluate("/project/properties/surefire.excludedGroups", document);
+        assertTrue(List.of(excluded.strip().split("\\s*,\\s*")).contains("tracechaser-integration"),
+                "ordinary defaults must exclude the opt-in TraceChaser integration tag");
         assertTrue(pom.contains("<excludedGroups>${surefire.excludedGroups}</excludedGroups>"));
         assertTrue(pom.contains("<id>tracechaser-integration</id>"));
     }

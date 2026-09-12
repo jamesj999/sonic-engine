@@ -37,7 +37,7 @@
         <surefire.forkCount>1</surefire.forkCount>
         <surefire.reuseForks>true</surefire.reuseForks>
         <surefire.runOrder>alphabetical</surefire.runOrder>
-        <surefire.excludedGroups>tracechaser-integration</surefire.excludedGroups>
+        <surefire.excludedGroups>tracechaser-integration,audio-reference,audio-stress,audio-local-wave</surefire.excludedGroups>
         <!-- Escape hatch for the validate-phase build-JDK check; see the antrun
              verify-build-jdk execution. -->
         <openggf.jdk.check.skip>false</openggf.jdk.check.skip>
@@ -176,7 +176,7 @@
         <profile>
             <id>smoke</id>
             <properties>
-                <surefire.excludedGroups>tracechaser-integration,performance-measurement,slow-suite</surefire.excludedGroups>
+                <surefire.excludedGroups>tracechaser-integration,performance-measurement,slow-suite,audio-reference,audio-stress,audio-local-wave</surefire.excludedGroups>
             </properties>
         </profile>
 
@@ -192,6 +192,65 @@
                 <surefire.argLine>${test.cds.argLine} ${mockito.agent.argLine} -Xmx3g</surefire.argLine>
                 <surefire.forkCount>1</surefire.forkCount>
             </properties>
+        </profile>
+
+        <!-- Opt-in process concurrency. Engine globals require serial Jupiter
+             execution within each reused 3 GiB JVM. Guards below retain one fork. -->
+        <profile>
+            <id>test-concurrent</id>
+            <properties>
+                <surefire.forkCount>2</surefire.forkCount>
+            </properties>
+            <build><plugins><plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <runOrder>${surefire.runOrder}</runOrder>
+                    <argLine>${surefire.argLine} -Djava.io.tmpdir="${openggf.test.tmpdir}/fork-${surefire.forkNumber}" -Dorg.lwjgl.system.SharedLibraryExtractPath="${openggf.test.tmpdir}/lwjgl-${surefire.forkNumber}"</argLine>
+                    <systemPropertyVariables>
+                        <junit.jupiter.execution.parallel.enabled>false</junit.jupiter.execution.parallel.enabled>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin></plugins></build>
+        </profile>
+        <!-- Explicit deeper audio lanes. Neither raw game references nor the
+             large streaming stress case participates in ordinary/smoke runs. -->
+        <profile>
+            <id>audio-reference</id>
+            <build><plugins><plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <runOrder>${surefire.runOrder}</runOrder>
+                    <groups>audio-reference</groups>
+                    <excludedGroups>tracechaser-integration,audio-stress,performance-measurement</excludedGroups>
+                </configuration>
+            </plugin></plugins></build>
+        </profile>
+        <profile>
+            <id>audio-stress</id>
+            <build><plugins><plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <runOrder>${surefire.runOrder}</runOrder>
+                    <groups>audio-stress</groups>
+                    <excludedGroups>tracechaser-integration,audio-reference</excludedGroups>
+                </configuration>
+            </plugin></plugins></build>
+        </profile>
+
+        <profile>
+            <id>audio-local-wave</id>
+            <build><plugins><plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <runOrder>${surefire.runOrder}</runOrder>
+                    <groups>audio-local-wave</groups>
+                    <excludedGroups>tracechaser-integration,audio-reference,audio-stress</excludedGroups>
+                </configuration>
+            </plugin></plugins></build>
         </profile>
 
         <!-- Trace replay parity tests are intentionally separated from the
@@ -1120,6 +1179,8 @@
                             <target>
                                 <mkdir dir="${project.build.directory}/maven-tmp"/>
                                 <mkdir dir="${openggf.test.tmpdir}"/>
+                                <mkdir dir="${openggf.test.tmpdir}/fork-1"/>
+                                <mkdir dir="${openggf.test.tmpdir}/fork-2"/>
                                 <mkdir dir="${openggf.surefire.reports}"/>
                                 <mkdir dir="${openggf.trace.reports}"/>
                                 <mkdir dir="${openggf.test.diagnostics}"/>

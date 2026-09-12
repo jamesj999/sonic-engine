@@ -33,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
  * <p>The window rule is the same as the first fixture's: power-on through the
  * first post-epoch music request, which for this movie lands at emulator frame
  * 5,841 after 5,257 captured invocations. See
- * {@code src/test/resources/audio/parity/s1/fixture-manifest.json} for capture
+ * {@code audio/parity/s1/fixture-manifest.json} under the external fixture root for capture
  * provenance and docs/status/audio-frontier-log.md for the dated measurement.
  *
  * <p>This test never hydrates engine or gameplay state from the fixture; it
@@ -42,9 +42,9 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
  * green: it pins the current frontier so a regression is visible and any
  * further movement has to be recorded rather than absorbed.
  */
+@org.junit.jupiter.api.Tag("audio-reference")
 class TestS1GameplayRun2AudioDriverOracle {
-    private static final Path REFERENCE = Path.of(
-            "src/test/resources/audio/parity/s1/s1-gameplay-ghz1-run2-reference.v1.jsonl.gz");
+    private static final Path REFERENCE = com.openggf.tests.AudioReferenceFixtures.require("audio/parity/s1/s1-gameplay-ghz1-run2-reference.v1.jsonl.gz");
 
     @TempDir
     Path temp;

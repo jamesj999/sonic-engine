@@ -86,3 +86,50 @@ accepted conditional skips, not disabled tests.
 
 Set `startup.legalDisclaimer=false` in tests that boot the full `Engine`, or the boot path
 will sit on `GameMode.LEGAL_DISCLAIMER`.
+
+
+## Audio references and test concurrency
+
+Ordinary and smoke runs exclude `audio-reference`, `audio-stress`, and `audio-local-wave` tests.
+Synthetic chip scripts, minimal driver programs, mixer behavior, malformed input
+and bounded comparator cases remain ordinary correctness checks. The expensive
+streaming test retains its original size and 32 MiB child-JVM limit in the stress
+lane:
+
+```bash
+mvn -Dmse=off -Paudio-stress test -B
+```
+
+Run game-reference comparisons with an external fixture root and verified local
+ROM paths. The root uses `audio/parity/...` and `audio/nuked-opn2/port/...`; raw
+captures are never Maven resources or public build inputs. The reference lane
+must fail when its prerequisites are missing. Independent reference expectations
+must not be regenerated from the engine under test to make a comparison pass.
+
+```bash
+mvn -Dmse=off -Paudio-reference -Dopenggf.audio.fixtures=/absolute/reference-root \
+  -Dsonic1.rom.path=/absolute/s1.gen -Dsonic2.rom.path=/absolute/s2.gen \
+  -Ds3k.rom.path=/absolute/s3k.gen test -B
+```
+
+The previous optional WAV comparisons use `-Paudio-local-wave` with WAV files
+under `<external fixture root>/audio-reference`. They are local regression
+snapshots, not independent chip/ROM oracles; none is bundled publicly. The WAV
+generator also requires that external root. Missing files fail the explicitly
+selected lane instead of silently skipping comparisons.
+
+Run these profiles separately: Maven combines scalar profile settings by
+precedence, so activating several audio profiles together does not run their union.
+
+These are separate deeper validation commands; an ordinary-suite pass does not
+claim audio-reference or memory-stress coverage. Run both for audio release
+evidence. Existing Git history still contains earlier fixture versions; removing
+files from the current tree does not erase that history or certify unrelated
+trace fixtures as free of game assets.
+
+For machines with room for two 3 GiB heaps plus Maven and native memory, use
+`mvn -Dmse=off -Ptest-concurrent test -B`, or the category runner's `--workers 2`.
+The default remains one worker. Tests stay serial inside each JVM because the
+engine's global teardown is unsafe alongside another class. Multiple forks divide
+classes, so one large test class remains a lower bound on elapsed time. Guards
+continue with one JVM. Do not run two Maven processes in the same worktree.

@@ -18,7 +18,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 class TestAudioParityComparator {
     private static final ObjectMapper JSON = new ObjectMapper();
-    private static final Path GOLDEN = Path.of("src", "test", "resources", "audio", "parity", "s1",
+    private static final Path GOLDEN = Path.of("src", "test", "resources", "audio", "contracts",
             "normalization-contract-v1.json");
 
     @TempDir

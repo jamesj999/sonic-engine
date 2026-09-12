@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 class TestS2AudioOracleComparator {
 
     @Test
+    @org.junit.jupiter.api.Tag("audio-reference")
     void recoversUpdateTicksAcrossTheSongLoadStall() throws Exception {
         List<S2AudioOracleComparator.ReferenceTick> ticks = anchorTicks();
         // The Saxman EHZ load masks interrupts across rows 10195-10200 and the
@@ -90,6 +91,7 @@ class TestS2AudioOracleComparator {
     }
 
     @Test
+    @org.junit.jupiter.api.Tag("audio-reference")
     void corruptedReferenceByteMovesTheFirstDivergence() throws Exception {
         List<S2AudioOracleComparator.ReferenceTick> ticks = anchorTicks();
         // A self-comparison built from the reference's own decoded ticks is the
@@ -119,6 +121,7 @@ class TestS2AudioOracleComparator {
     }
 
     @Test
+    @org.junit.jupiter.api.Tag("audio-reference")
     void corruptedEngineWriteIsReported() throws Exception {
         List<S2AudioOracleComparator.ReferenceTick> ticks = anchorTicks();
         List<S2OracleEngineCapture.EngineTick> mirrored = mirror(ticks);
@@ -150,6 +153,7 @@ class TestS2AudioOracleComparator {
     }
 
     @Test
+    @org.junit.jupiter.api.Tag("audio-reference")
     void engineComparisonRunsAndReportsDeterministically() throws Exception {
         File rom = RomTestUtils.ensureSonic2RomAvailable();
         assumeTrue(rom != null && rom.isFile(), "S2 REV01 ROM unavailable");

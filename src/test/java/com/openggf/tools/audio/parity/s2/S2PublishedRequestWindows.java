@@ -46,8 +46,7 @@ final class S2PublishedRequestWindows {
         }
 
         InputStream open() {
-            InputStream stream = S2PublishedRequestWindows.class
-                    .getResourceAsStream(resource);
+            InputStream stream = com.openggf.tests.AudioReferenceFixtures.open(resource);
             if (stream == null) {
                 throw new IllegalStateException(
                         "committed S2 request window is absent: " + resource);

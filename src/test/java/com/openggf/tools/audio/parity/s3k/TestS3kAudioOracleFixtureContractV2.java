@@ -32,8 +32,9 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * distinguish it from v1: rows are services rather than frames, and the
  * title-music load frame is one of the frames that carries no row at all.
  */
+@org.junit.jupiter.api.Tag("audio-reference")
 class TestS3kAudioOracleFixtureContractV2 {
-    private static final Path FIXTURE_DIR = Path.of("src/test/resources/audio/parity/s3k");
+    private static final Path FIXTURE_DIR = com.openggf.tests.AudioReferenceFixtures.require("audio/parity/s3k");
     private static final Path REFERENCE = FIXTURE_DIR.resolve("s3k-aiz1-intro-reference-v2.jsonl.gz");
     private static final Path METADATA = FIXTURE_DIR.resolve("s3k-aiz1-intro-metadata-v2.json");
 

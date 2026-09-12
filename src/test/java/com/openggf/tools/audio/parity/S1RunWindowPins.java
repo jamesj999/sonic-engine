@@ -5,7 +5,7 @@ import java.util.Map;
 /**
  * Pinned first divergence, or {@code MATCH}, for every committed per-song run
  * window, keyed by the fixture's path under
- * {@code src/test/resources/audio/parity/s1/runs}.
+ * {@code audio/parity/s1/runs} under the external fixture root.
  *
  * <p>Separate from {@link TestS1RunWindowAudioDriverOracle} so the pins read as
  * a table of measurements rather than as assertions buried in test code. Each

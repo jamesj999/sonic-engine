@@ -573,7 +573,9 @@ class TestBuildToolingGuard {
         NodeList argLines = pom.getElementsByTagName("argLine");
         for (int i = 0; i < argLines.getLength(); i++) {
             assertTrue(argLines.item(i).getTextContent().contains(
-                            "-Djava.io.tmpdir=\"${openggf.test.tmpdir}\""),
+                            "-Djava.io.tmpdir=\"${openggf.test.tmpdir}\"")
+                            || argLines.item(i).getTextContent().contains(
+                            "-Djava.io.tmpdir=\"${openggf.test.tmpdir}/fork-${surefire.forkNumber}\""),
                     "Surefire argLine must quote the target-local test temp path: "
                             + argLines.item(i).getTextContent().trim());
             assertTrue(argLines.item(i).getTextContent().contains(
@@ -735,6 +737,65 @@ class TestBuildToolingGuard {
     }
 
     @Test
+    void concurrentProfileMustIsolateProcessesAndRetainSerialJupiter() throws Exception {
+        Document pom = parsePom("pom.xml");
+        Element concurrent = profileById(pom, "test-concurrent");
+        assertNotNull(concurrent);
+        assertEquals("2", directChild(directChild(concurrent, "properties"),
+                "surefire.forkCount").getTextContent().trim());
+        assertEquals("false", concurrent.getElementsByTagName(
+                "junit.jupiter.execution.parallel.enabled").item(0).getTextContent().trim());
+        assertTrue(concurrent.getElementsByTagName("argLine").item(0).getTextContent()
+                .contains("/fork-${surefire.forkNumber}"));
+        Element guards = profileById(pom, "guards");
+        assertTrue((concurrent.compareDocumentPosition(guards) & Node.DOCUMENT_POSITION_FOLLOWING) != 0,
+                "guards must override concurrent capacity when profiles are combined");
+        String text = Files.readString(Path.of("pom.xml"));
+        for (int fork : List.of(1, 2)) {
+            assertTrue(text.contains("<mkdir dir=\"${openggf.test.tmpdir}/fork-" + fork + "\"/>"),
+                    "fork temp directories must exist before Surefire starts");
+        }
+    }
+
+    @Test
+    void publicAudioResourcesMustExcludeCapturedReferenceBodies() throws Exception {
+        Path resources = Path.of("src/test/resources");
+        var manifest = new com.fasterxml.jackson.databind.ObjectMapper().readTree(
+                resources.resolve("audio/contracts/external-fixtures-v1.json").toFile());
+        for (var file : manifest.path("files")) {
+            String member = file.path("path").asText();
+            if (!member.startsWith("audio/")) continue; // shared gameplay input movies are not audio payloads
+            if (member.equals("audio/nuked-opn2/port/expected.txt")) continue; // separate synthetic expectations
+            assertFalse(Files.exists(resources.resolve(member)),
+                    "captured audio payload must remain external: " + member);
+        }
+        Path port = resources.resolve("audio/nuked-opn2/port");
+        try (Stream<Path> scripts = Files.list(port)) {
+            assertFalse(scripts.map(path -> path.getFileName().toString())
+                    .anyMatch(name -> name.matches("(?:s1|s2|s3k)-.*")),
+                    "captured game scripts must not become public resources again");
+        }
+        assertEquals(580, Files.readAllLines(port.resolve("expected.txt")).size(),
+                "retain the independently pinned synthetic chip cases");
+    }
+
+    @Test
+    void deeperAudioLanesMustBeExplicit() throws Exception {
+        Document pom = parsePom("pom.xml");
+        String excluded = property(pom, "surefire.excludedGroups");
+        assertTrue(excluded.contains("audio-reference"));
+        assertTrue(excluded.contains("audio-stress"));
+        assertTrue(excluded.contains("audio-local-wave"));
+        for (String lane : List.of("audio-reference", "audio-stress", "audio-local-wave")) {
+            Element profile = profileById(pom, lane);
+            assertNotNull(profile);
+            assertEquals(lane, profile.getElementsByTagName("groups").item(0).getTextContent().trim());
+            assertFalse(profile.getElementsByTagName("excludedGroups").item(0)
+                    .getTextContent().contains(lane), "explicit lane must actually execute");
+        }
+    }
+
+    @Test
     void ordinarySurefireShouldUseSharedAlphabeticalRunOrder() throws Exception {
         Document pom = parsePom("pom.xml");
         Element projectProperties = directChild(pom.getDocumentElement(), "properties");
@@ -882,7 +943,7 @@ class TestBuildToolingGuard {
         }
         for (String requiredText : List.of(
                 "python3 tools/testing/run_categories.py --list",
-                "python3 tools/testing/run_categories.py --base develop --run",
+                "python3 tools/testing/run_categories.py --base <printed-pinned-base> --run",
                 "mvn -Dmse=off package",
                 "mvn -Dmse=off \"-Dtest=TestCollisionLogic\" test",
                 "mvn -Dmse=off -Pguards test -B",
@@ -4013,7 +4074,7 @@ class TestBuildToolingGuard {
                 gitOutput(Path.of("."), "ls-files", "-s", "--", "tools/tracechaser").strip());
 
         String pom = Files.readString(Path.of("pom.xml"));
-        assertTrue(pom.contains("<surefire.excludedGroups>tracechaser-integration</surefire.excludedGroups>"));
+        assertTrue(pom.contains("<surefire.excludedGroups>tracechaser-integration,audio-reference,audio-stress,audio-local-wave</surefire.excludedGroups>"));
         assertTrue(pom.contains("<excludedGroups>${surefire.excludedGroups}</excludedGroups>"));
         assertTrue(pom.contains("<id>tracechaser-integration</id>"));
         for (String agentGuide : List.of("AGENTS.md", "CLAUDE.md")) {
