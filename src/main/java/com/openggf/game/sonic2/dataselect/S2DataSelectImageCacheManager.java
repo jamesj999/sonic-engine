@@ -1,17 +1,14 @@
 package com.openggf.game.sonic2.dataselect;
 
 
-import com.openggf.game.session.EngineServices;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.openggf.camera.Camera;
 import com.openggf.configuration.SonicConfiguration;
 import com.openggf.configuration.SonicConfigurationService;
 import com.openggf.game.CrossGameFeatureProvider;
-import com.openggf.game.GameServices;
-import com.openggf.graphics.GraphicsManager;
 import com.openggf.graphics.RgbaImage;
+import com.openggf.game.dataselect.DataSelectPreviewCapture;
+import com.openggf.game.dataselect.PreviewCacheGenerationTask;
 import com.openggf.graphics.ScreenshotCapture;
-import com.openggf.level.LevelManager;
 import com.openggf.version.AppVersion;
 
 import java.io.IOException;
@@ -21,10 +18,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.function.Supplier;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
@@ -47,13 +41,14 @@ public class S2DataSelectImageCacheManager {
     private final ObjectMapper mapper;
     private final S2DataSelectImageGenerator generator;
 
-    private volatile CompletableFuture<Void> inFlight;
-    private volatile Throwable lastGenerationFailure;
+    private final PreviewCacheGenerationTask generationTask;
 
     public S2DataSelectImageCacheManager(Path cacheRoot,
                                          SonicConfigurationService config,
                                          Supplier<String> romSha256Supplier,
                                          ObjectMapper mapper) {
+        this.generationTask = new PreviewCacheGenerationTask(LOGGER,
+                "Failed to generate Sonic 2 donated data-select preview cache at " + cacheRoot);
         this.cacheRoot = Objects.requireNonNull(cacheRoot, "cacheRoot");
         this.config = Objects.requireNonNull(config, "config");
         this.romSha256Supplier = Objects.requireNonNull(romSha256Supplier, "romSha256Supplier");
@@ -72,23 +67,15 @@ public class S2DataSelectImageCacheManager {
      * Blocks until an in-flight generation job completes, if one is currently running.
      */
     public void awaitGenerationIfRunning() {
-        CompletableFuture<Void> future = inFlight;
-        if (future != null) {
-            try {
-                future.join();
-            } catch (CompletionException e) {
-                recordGenerationFailure(e);
-            }
-        }
+        generationTask.awaitIfRunning();
     }
 
     public boolean isGenerationRunning() {
-        CompletableFuture<Void> future = inFlight;
-        return future != null && !future.isDone();
+        return generationTask.isRunning();
     }
 
     public Throwable getLastGenerationFailure() {
-        return lastGenerationFailure;
+        return generationTask.lastFailure();
     }
 
     /**
@@ -158,56 +145,8 @@ public class S2DataSelectImageCacheManager {
         return Map.copyOf(previews);
     }
 
-    private synchronized void startGenerationIfEligible() {
-        if (!isEligibleForDonatedS3k()) {
-            return;
-        }
-        CompletableFuture<Void> current = inFlight;
-        if (current != null && !current.isDone()) {
-            return;
-        }
-        if (cacheValid()) {
-            return;
-        }
-
-        lastGenerationFailure = null;
-        CompletableFuture<Void> next = CompletableFuture.runAsync(() -> {
-            try {
-                generator.generateAll();
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        });
-        inFlight = next;
-        next.whenComplete((ignored, ignoredThrowable) -> {
-            if (ignoredThrowable != null) {
-                recordGenerationFailure(ignoredThrowable);
-            }
-            synchronized (S2DataSelectImageCacheManager.this) {
-                if (inFlight == next) {
-                    inFlight = null;
-                }
-            }
-        });
-    }
-
-    private synchronized void recordGenerationFailure(Throwable throwable) {
-        Throwable failure = unwrapCompletionException(throwable);
-        if (lastGenerationFailure == failure) {
-            return;
-        }
-        lastGenerationFailure = failure;
-        LOGGER.log(Level.WARNING,
-                "Failed to generate Sonic 2 donated data-select preview cache at " + cacheRoot,
-                failure);
-    }
-
-    private Throwable unwrapCompletionException(Throwable throwable) {
-        Throwable current = throwable;
-        while (current instanceof CompletionException && current.getCause() != null) {
-            current = current.getCause();
-        }
-        return current;
+    private void startGenerationIfEligible() {
+        generationTask.startIfNeeded(this::isEligibleForDonatedS3k, this::cacheValid, generator::generateAll);
     }
 
     private boolean isEligibleForDonatedS3k() {
@@ -219,37 +158,7 @@ public class S2DataSelectImageCacheManager {
         int[] spawnPoint = new com.openggf.game.sonic2.Sonic2ZoneRegistry().getStartPosition(zoneId, 0);
         int cameraLeftX = captureTarget != null ? captureTarget.cameraLeftX() : spawnPoint[0];
         int centreY = captureTarget != null ? captureTarget.centreY() : spawnPoint[1];
-        GraphicsManager graphics = EngineServices.current().graphics();
-        return graphics
-                .submitRenderThreadTask(() -> {
-                    LevelManager levelManager = GameServices.level();
-                    levelManager.loadZoneAndAct(zoneId, 0, com.openggf.game.LevelLoadMode.PREVIEW_CAPTURE);
-                    Camera camera = GameServices.camera();
-                    camera.setX((short) Math.max(camera.getMinX(), cameraLeftX));
-                    camera.setY((short) Math.max(camera.getMinY(), centreY - 96));
-                    // The camera jump above happens outside the normal per-frame update
-                    // tick, so parallax's cached FG vscroll offset and the object
-                    // placement window are still anchored to the load-time camera
-                    // position. Resync both before drawing, or the foreground tilemap
-                    // samples world Y=0 and no nearby objects/badniks are spawned.
-                    levelManager.recomputeParallaxAfterRewindRestore();
-                    levelManager.getObjectManager().postCameraPlacementUpdate(camera.getX());
-                    levelManager.drawWithRenderOptions(null, LevelManager.LevelRenderOptions.previewCapture());
-                    graphics.flush();
-                    int viewportX = graphics.getViewportX();
-                    int viewportY = graphics.getViewportY();
-                    int viewportWidth = graphics.getViewportWidth();
-                    int viewportHeight = graphics.getViewportHeight();
-                    if (viewportWidth <= 0 || viewportHeight <= 0) {
-                        return ScreenshotCapture.captureFramebuffer(320, 224);
-                    }
-                    return ScreenshotCapture.captureFramebufferRegion(
-                            viewportX,
-                            viewportY,
-                            viewportWidth,
-                            viewportHeight);
-                })
-                .join();
+        return DataSelectPreviewCapture.capture(zoneId, cameraLeftX, centreY);
     }
 
     private S2DataSelectImageManifest readManifest() {
